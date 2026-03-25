@@ -17,6 +17,8 @@ import { format } from "date-fns";
 import type { LucideIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { useDashboardData } from "@/hooks/useDashboardData";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 /* ── Animated Number ── */
 function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
@@ -258,6 +260,23 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const { kpis, last7, totals7, topProducts, topSellers, isLoading } = useDashboardData(dateRange);
 
+  // Resolve seller IDs to names
+  const sellerIds = useMemo(() => topSellers.map(s => s.sellerId), [topSellers]);
+  const { data: sellerProfiles = [] } = useQuery({
+    queryKey: ["dashboard-seller-profiles", sellerIds],
+    queryFn: async () => {
+      if (sellerIds.length === 0) return [];
+      const { data } = await supabase.from("profiles").select("user_id, name").in("user_id", sellerIds);
+      return data || [];
+    },
+    enabled: sellerIds.length > 0,
+  });
+  const resolvedTopSellers = useMemo(() => {
+    const nameMap: Record<string, string> = {};
+    sellerProfiles.forEach(p => { nameMap[p.user_id] = p.name; });
+    return topSellers.map(s => ({ ...s, name: nameMap[s.sellerId] || s.name }));
+  }, [topSellers, sellerProfiles]);
+
   const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 100) : 0;
 
   if (isLoading) {
@@ -396,14 +415,14 @@ export default function Dashboard() {
                 <h2 className="text-xs font-semibold">Top Sellers by Delivered Orders</h2>
               </div>
               <div className="divide-y">
-                {topSellers.map((s, i) => (
-                  <div key={s.name} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/10 transition-colors">
+                {resolvedTopSellers.map((s, i) => (
+                  <div key={s.sellerId} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/10 transition-colors">
                     <span className="text-[10px] font-bold text-muted-foreground/50 w-4 tabular-nums">{i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{s.name}</p>
                       <div className="mt-1 w-full h-1.5 bg-muted rounded-full overflow-hidden">
                         <div className="h-full rounded-full bg-primary transition-all duration-700"
-                          style={{ width: `${topSellers[0]?.delivered ? Math.round((s.delivered / topSellers[0].delivered) * 100) : 0}%` }} />
+                          style={{ width: `${resolvedTopSellers[0]?.delivered ? Math.round((s.delivered / resolvedTopSellers[0].delivered) * 100) : 0}%` }} />
                       </div>
                     </div>
                     <div className="text-right shrink-0">
