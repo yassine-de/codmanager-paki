@@ -53,7 +53,7 @@ function StatusBadge({ label, cls }: { label: string; cls: string }) {
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'id' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'confirmationStatus' | 'deliveryStatus';
+type ColumnKey = 'id' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean }[] = [
   { key: 'id', label: 'ID', defaultVisible: true },
@@ -64,6 +64,7 @@ const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean }[] =
   { key: 'city', label: 'City', defaultVisible: true },
   { key: 'phone', label: 'Phone', defaultVisible: true },
   { key: 'product', label: 'Product', defaultVisible: true },
+  { key: 'amount', label: 'Amount', defaultVisible: true },
   { key: 'confirmationStatus', label: 'Confirmation', defaultVisible: true },
   { key: 'deliveryStatus', label: 'Delivery', defaultVisible: true },
 ];
@@ -530,6 +531,7 @@ export default function Orders() {
                 {isCol('city') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">City</th>}
                 {isCol('phone') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Phone</th>}
                 {isCol('product') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Product</th>}
+                {isCol('amount') && <th className="text-right py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Amount</th>}
                 {isCol('confirmationStatus') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
                 {isCol('deliveryStatus') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
                 <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Actions</th>
@@ -550,6 +552,7 @@ export default function Orders() {
                   {isCol('city') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.city}</td>}
                   {isCol('phone') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{order.phone}</td>}
                   {isCol('product') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.products.map(p => p.name).join(', ')}</td>}
+                  {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} MAD</td>}
                   {isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} /></td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
                   <td className="py-2.5 px-4">
