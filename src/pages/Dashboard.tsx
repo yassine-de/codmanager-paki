@@ -17,6 +17,8 @@ import { format } from "date-fns";
 import type { LucideIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { useDashboardData } from "@/hooks/useDashboardData";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 /* ── Animated Number ── */
 function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
