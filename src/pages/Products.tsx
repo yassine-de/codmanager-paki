@@ -297,10 +297,13 @@ export default function Products() {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginated.map((product) => (
+                    {paginated.map((product) => {
+                      const isMissingLinks = missingLinksIds.has(product.id);
+                      return (
                       <tr
                         key={product.id}
-                        className="border-b last:border-b-0 hover:bg-muted/30 transition-colors"
+                        className={`border-b last:border-b-0 transition-colors ${isMissingLinks ? "bg-destructive/5 hover:bg-destructive/10" : "hover:bg-muted/30"}`}
+                        title={isMissingLinks ? "Missing required links (Product Link / Video Link)" : undefined}
                       >
                         <td className="py-2 px-4 font-mono text-xs text-muted-foreground">{product.id}</td>
                         <td className="py-2 px-3">
