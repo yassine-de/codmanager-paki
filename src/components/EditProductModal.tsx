@@ -1,12 +1,21 @@
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, ExternalLink, Video, Tag } from "lucide-react";
+import { Plus, Trash2, ExternalLink, Video, Tag, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { type Product, type ProductVariant, type ProductOffer } from "@/lib/products-data";
+import { supabase } from "@/integrations/supabase/client";
+
+const isValidUrl = (str: string): boolean => {
+  if (!str.trim()) return false;
+  // Accept URLs like google.com, www.google.com, https://google.com
+  const pattern = /^(https?:\/\/)?(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)$/i;
+  return pattern.test(str.trim());
+};
 
 interface EditProductModalProps {
   product: Product | null;
@@ -16,6 +25,7 @@ interface EditProductModalProps {
 }
 
 export function EditProductModal({ product, open, onOpenChange, onSave }: EditProductModalProps) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [seller, setSeller] = useState("");
   const [sku, setSku] = useState("");
@@ -48,6 +58,9 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
 
   if (!product) return null;
 
+  // Check if this is a DB product (UUID format)
+  const isDbProduct = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(product.id);
+
   const addVariant = () => {
     setVariants(prev => [...prev, { id: `VAR-${Date.now()}-${prev.length}`, name: "", sku: "", price, quantity: 0 }]);
   };
@@ -71,6 +84,19 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     if (!sku.trim()) errs.sku = "Required";
     if (price <= 0) errs.price = "Must be > 0";
     if (totalQty <= 0) errs.totalQty = "Must be > 0";
+    // Required links for DB products
+    if (isDbProduct) {
+      if (!storeLink.trim()) {
+        errs.storeLink = "Product link is required";
+      } else if (!isValidUrl(storeLink)) {
+        errs.storeLink = "Invalid URL format";
+      }
+      if (!videoLink.trim()) {
+        errs.videoLink = "Video link is required";
+      } else if (!isValidUrl(videoLink)) {
+        errs.videoLink = "Invalid URL format";
+      }
+    }
     variants.forEach((v, i) => {
       if (!v.name.trim()) errs[`v_name_${i}`] = "Required";
       if (v.price <= 0) errs[`v_price_${i}`] = "Must be > 0";
@@ -83,30 +109,60 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     return Object.keys(errs).length === 0;
   };
 
+  const dbUpdateMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("products")
+        .update({
+          name: name.trim(),
+          price: price,
+          quantity: totalQty,
+          product_url: storeLink.trim(),
+          video_url: videoLink.trim(),
+          image_url: image.trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", product!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["db-products"] });
+      onOpenChange(false);
+      toast.success("Product updated");
+    },
+    onError: () => {
+      toast.error("Failed to update product");
+    },
+  });
+
   const handleSave = () => {
     if (!validate()) return;
-    const qtyDiff = totalQty - product.totalQty;
-    onSave({
-      ...product,
-      name: name.trim(),
-      seller: seller.trim(),
-      sku: sku.trim(),
-      image: image.trim(),
-      price,
-      totalQty,
-      available: Math.max(0, product.available + qtyDiff),
-      variants: variants.map(v => ({
-        ...v,
-        name: v.name.trim(),
-        sku: v.sku.trim() || `${sku}-${v.name.trim().toUpperCase().replace(/\s/g, '')}`,
-      })),
-      storeLink: storeLink.trim(),
-      videoLink: videoLink.trim(),
-      lastSellingPrice,
-      offers,
-    });
-    onOpenChange(false);
-    toast.success("Product updated");
+    if (isDbProduct) {
+      dbUpdateMutation.mutate();
+    } else {
+      const qtyDiff = totalQty - product.totalQty;
+      onSave({
+        ...product,
+        name: name.trim(),
+        seller: seller.trim(),
+        sku: sku.trim(),
+        image: image.trim(),
+        price,
+        totalQty,
+        available: Math.max(0, product.available + qtyDiff),
+        variants: variants.map(v => ({
+          ...v,
+          name: v.name.trim(),
+          sku: v.sku.trim() || `${sku}-${v.name.trim().toUpperCase().replace(/\s/g, '')}`,
+        })),
+        storeLink: storeLink.trim(),
+        videoLink: videoLink.trim(),
+        lastSellingPrice,
+        offers,
+      });
+      onOpenChange(false);
+      toast.success("Product updated");
+    }
   };
 
   const sectionTitle = "text-xs font-semibold text-foreground uppercase tracking-wider mb-2";
@@ -136,7 +192,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Seller *</Label>
-                  <Input value={seller} onChange={e => setSeller(e.target.value)} className={`h-9 text-sm ${errors.seller ? "border-destructive" : ""}`} />
+                  <Input value={seller} onChange={e => setSeller(e.target.value)} className={`h-9 text-sm ${errors.seller ? "border-destructive" : ""}`} disabled={isDbProduct} />
                   {errors.seller && <p className="text-[11px] text-destructive">{errors.seller}</p>}
                 </div>
                 <div className="space-y-1.5">
@@ -146,7 +202,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">SKU *</Label>
-                  <Input value={sku} onChange={e => setSku(e.target.value)} className={`h-9 text-sm ${errors.sku ? "border-destructive" : ""}`} />
+                  <Input value={sku} onChange={e => setSku(e.target.value)} className={`h-9 text-sm ${errors.sku ? "border-destructive" : ""}`} disabled={isDbProduct} />
                   {errors.sku && <p className="text-[11px] text-destructive">{errors.sku}</p>}
                 </div>
                 <div className="space-y-1.5">
@@ -197,16 +253,28 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
               <h3 className={sectionTitle}>Links</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs flex items-center gap-1.5">
-                    <ExternalLink className="w-3 h-3 text-muted-foreground" /> Store Link
+                  <Label className={`text-xs flex items-center gap-1.5 ${errors.storeLink ? "text-destructive" : ""}`}>
+                    <ExternalLink className="w-3 h-3 text-muted-foreground" /> Product Link {isDbProduct && <span className="text-destructive">*</span>}
                   </Label>
-                  <Input value={storeLink} onChange={e => setStoreLink(e.target.value)} placeholder="https://store.com/product" className="h-9 text-sm" />
+                  <Input
+                    value={storeLink}
+                    onChange={e => setStoreLink(e.target.value)}
+                    placeholder="www.google.com, https://store.com/..."
+                    className={`h-9 text-sm ${errors.storeLink ? "border-destructive" : ""}`}
+                  />
+                  {errors.storeLink && <p className="text-[11px] text-destructive">{errors.storeLink}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs flex items-center gap-1.5">
-                    <Video className="w-3 h-3 text-muted-foreground" /> Video Link
+                  <Label className={`text-xs flex items-center gap-1.5 ${errors.videoLink ? "text-destructive" : ""}`}>
+                    <Video className="w-3 h-3 text-muted-foreground" /> Video Link {isDbProduct && <span className="text-destructive">*</span>}
                   </Label>
-                  <Input value={videoLink} onChange={e => setVideoLink(e.target.value)} placeholder="https://youtube.com/..." className="h-9 text-sm" />
+                  <Input
+                    value={videoLink}
+                    onChange={e => setVideoLink(e.target.value)}
+                    placeholder="www.youtube.com/..., https://..."
+                    className={`h-9 text-sm ${errors.videoLink ? "border-destructive" : ""}`}
+                  />
+                  {errors.videoLink && <p className="text-[11px] text-destructive">{errors.videoLink}</p>}
                 </div>
               </div>
             </div>
@@ -321,7 +389,10 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
 
         <DialogFooter className="px-5 py-3 border-t">
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button size="sm" onClick={handleSave}>Save Changes</Button>
+          <Button size="sm" onClick={handleSave} disabled={dbUpdateMutation.isPending}>
+            {dbUpdateMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+            Save Changes
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

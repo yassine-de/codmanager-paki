@@ -222,9 +222,11 @@ export type Database = {
           product_url: string | null
           quantity: number
           seller_id: string
+          seller_seen: boolean | null
           sku: string
           sourcing_request_id: string | null
           updated_at: string
+          video_url: string | null
         }
         Insert: {
           created_at?: string
@@ -236,9 +238,11 @@ export type Database = {
           product_url?: string | null
           quantity?: number
           seller_id: string
+          seller_seen?: boolean | null
           sku: string
           sourcing_request_id?: string | null
           updated_at?: string
+          video_url?: string | null
         }
         Update: {
           created_at?: string
@@ -250,9 +254,11 @@ export type Database = {
           product_url?: string | null
           quantity?: number
           seller_id?: string
+          seller_seen?: boolean | null
           sku?: string
           sourcing_request_id?: string | null
           updated_at?: string
+          video_url?: string | null
         }
         Relationships: [
           {
