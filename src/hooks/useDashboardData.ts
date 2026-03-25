@@ -75,8 +75,7 @@ function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
 
   // Rates
   const confirmationRate = total > 0 ? Math.round((confirmed / total) * 100) : 0;
-  const totalShipped = shipped + inTransit + withCourier + delivered + returned;
-  const deliveryRate = totalShipped > 0 ? Math.round((delivered / totalShipped) * 100) : 0;
+  const deliveryRate = confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0;
 
   // Financial
   // Delivered Amount = total of orders with delivery_status 'delivered' OR 'paid'
