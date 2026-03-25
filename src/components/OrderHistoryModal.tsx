@@ -1,22 +1,52 @@
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
-import {
-  PlusCircle, CheckCircle, Truck, Package, PhoneOff,
-  ArrowRightLeft, Hash, DollarSign, StickyNote, UserCheck, PhoneCall,
-} from "lucide-react";
-import type { OrderHistoryEvent } from "@/lib/data";
+import { supabase } from "@/integrations/supabase/client";
+import { Loader2, ArrowRightLeft, UserCheck, PlusCircle } from "lucide-react";
 
-const eventConfig: Record<OrderHistoryEvent['type'], { icon: React.ElementType; color: string }> = {
-  created: { icon: PlusCircle, color: 'text-[hsl(210,60%,52%)] bg-[hsl(210,60%,52%)]/10' },
-  status_change: { icon: ArrowRightLeft, color: 'text-[hsl(38,90%,55%)] bg-[hsl(38,90%,55%)]/10' },
-  confirmation: { icon: CheckCircle, color: 'text-[hsl(155,50%,42%)] bg-[hsl(155,50%,42%)]/10' },
-  delivery_update: { icon: Truck, color: 'text-[hsl(230,55%,55%)] bg-[hsl(230,55%,55%)]/10' },
-  quantity_change: { icon: Hash, color: 'text-[hsl(25,85%,55%)] bg-[hsl(25,85%,55%)]/10' },
-  price_change: { icon: DollarSign, color: 'text-[hsl(0,65%,52%)] bg-[hsl(0,65%,52%)]/10' },
-  note: { icon: StickyNote, color: 'text-[hsl(30,6%,50%)] bg-[hsl(30,6%,50%)]/10' },
-  assigned: { icon: UserCheck, color: 'text-[hsl(270,50%,55%)] bg-[hsl(270,50%,55%)]/10' },
-  call_attempt: { icon: PhoneCall, color: 'text-[hsl(185,55%,42%)] bg-[hsl(185,55%,42%)]/10' },
+interface HistoryEntry {
+  id: string;
+  order_id: string;
+  changed_by: string;
+  changed_by_role: string;
+  field_changed: string;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+  agent_name?: string;
+}
+
+const fieldLabels: Record<string, string> = {
+  confirmation_status: "Confirmation Status",
+  delivery_status: "Delivery Status",
+  customer_name: "Customer Name",
+  customer_phone: "Phone",
+  customer_city: "City",
+  customer_address: "Address",
+  product_name: "Product",
+  quantity: "Quantity",
+  price: "Price",
+  total_amount: "Total Amount",
+  note: "Note",
+  agent_id: "Assigned Agent",
+  shipping_status: "Shipping Status",
+  cancel_reason: "Cancel Reason",
+  postpone_date: "Postpone Date",
+};
+
+const fieldIcon = (field: string) => {
+  if (field === "agent_id") return UserCheck;
+  if (field === "created") return PlusCircle;
+  return ArrowRightLeft;
+};
+
+const fieldColor = (field: string) => {
+  if (field === "confirmation_status") return "text-info bg-info/10";
+  if (field === "delivery_status") return "text-success bg-success/10";
+  if (field === "agent_id") return "text-[hsl(270,50%,55%)] bg-[hsl(270,50%,55%)]/10";
+  if (field === "cancel_reason") return "text-destructive bg-destructive/10";
+  return "text-warning bg-warning/10";
 };
 
 interface Props {
@@ -24,11 +54,46 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   orderId: string;
   customerName: string;
-  history: OrderHistoryEvent[];
 }
 
-export default function OrderHistoryModal({ open, onOpenChange, orderId, customerName, history }: Props) {
-  const sorted = [...history].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+export default function OrderHistoryModal({ open, onOpenChange, orderId, customerName }: Props) {
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!open || !orderId) return;
+    const fetchHistory = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("order_history")
+        .select("*")
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching history:", error);
+        setHistory([]);
+        setLoading(false);
+        return;
+      }
+
+      // Resolve agent/user names
+      const userIds = [...new Set((data || []).map(h => h.changed_by))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, name")
+        .in("user_id", userIds);
+
+      const nameMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
+
+      setHistory((data || []).map(h => ({
+        ...h,
+        agent_name: nameMap.get(h.changed_by) || "Unknown",
+      })));
+      setLoading(false);
+    };
+    fetchHistory();
+  }, [open, orderId]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -41,54 +106,59 @@ export default function OrderHistoryModal({ open, onOpenChange, orderId, custome
         </DialogHeader>
         <ScrollArea className="max-h-[60vh]">
           <div className="px-5 py-4">
-            <div className="relative">
-              {/* Timeline line */}
-              <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : history.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No history recorded yet</p>
+            ) : (
+              <div className="relative">
+                <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
+                <div className="space-y-0">
+                  {history.map((event) => {
+                    const Icon = fieldIcon(event.field_changed);
+                    const color = fieldColor(event.field_changed);
+                    const label = fieldLabels[event.field_changed] || event.field_changed;
 
-              <div className="space-y-0">
-                {sorted.map((event, idx) => {
-                  const cfg = eventConfig[event.type];
-                  const Icon = cfg.icon;
-                  return (
-                    <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-                      {/* Icon */}
-                      <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${cfg.color}`}>
-                        <Icon className="w-3.5 h-3.5" />
-                      </div>
-                      {/* Content */}
-                      <div className="flex-1 min-w-0 pt-0.5">
-                        <p className="text-sm font-medium leading-snug">{event.description}</p>
-                        {(event.oldValue || event.newValue) && (
-                          <div className="flex items-center gap-1.5 mt-1">
-                            {event.oldValue && (
+                    return (
+                      <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
+                        <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${color}`}>
+                          <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="flex-1 min-w-0 pt-0.5">
+                          <p className="text-sm font-medium leading-snug">{label}</p>
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            {event.old_value && (
                               <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground line-through">
-                                {event.oldValue}
+                                {event.old_value}
                               </span>
                             )}
-                            {event.oldValue && event.newValue && <span className="text-muted-foreground text-[10px]">→</span>}
-                            {event.newValue && (
+                            {event.old_value && event.new_value && <span className="text-muted-foreground text-[10px]">→</span>}
+                            {event.new_value && (
                               <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                                {event.newValue}
+                                {event.new_value}
                               </span>
                             )}
                           </div>
-                        )}
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[11px] text-muted-foreground tabular-nums">
-                            {format(new Date(event.timestamp), 'dd MMM yyyy · HH:mm')}
-                          </span>
-                          {event.agent && (
-                            <span className="text-[11px] text-muted-foreground">
-                              by <span className="font-medium text-foreground/70">{event.agent}</span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[11px] text-muted-foreground tabular-nums">
+                              {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
                             </span>
-                          )}
+                            <span className="text-[11px] text-muted-foreground">
+                              by <span className="font-medium text-foreground/70">{event.agent_name}</span>
+                            </span>
+                            <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+                              {event.changed_by_role}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </ScrollArea>
       </DialogContent>
