@@ -226,6 +226,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                 <div className="space-y-1.5">
                   <Label className="text-xs">Selling Price (MAD)</Label>
                   <Input type="number" min={0} step={0.01} value={lastSellingPrice} onChange={e => setLastSellingPrice(Number(e.target.value))} className="h-9 text-sm" />
+                  <p className="text-[10px] text-muted-foreground mt-1">This price will be shown to the confirmation agent</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Total Quantity *</Label>

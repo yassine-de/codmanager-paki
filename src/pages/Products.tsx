@@ -288,6 +288,7 @@ export default function Products() {
                       <th className="text-left py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">SKU</th>
                       <th className="text-left py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Name</th>
                       <th className="text-right py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Price</th>
+                      <th className="text-right py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Selling Price</th>
                       <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Total Qty</th>
                       <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivered</th>
                       <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Shipped</th>
@@ -325,6 +326,7 @@ export default function Products() {
                         <td className="py-2 px-3 font-mono text-xs">{product.sku}</td>
                         <td className="py-2 px-3 text-xs font-medium max-w-[160px] truncate">{product.name}</td>
                         <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{product.price} MAD</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{product.lastSellingPrice} MAD</td>
                         <td className="py-2 px-3 text-center tabular-nums text-xs">{product.totalQty}</td>
                         <td className="py-2 px-3 text-center">
                           <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20">
@@ -435,6 +437,7 @@ export default function Products() {
                       </div>
                       <div className="flex items-center gap-3 mt-2 text-xs">
                         <span className="font-medium">{product.price} MAD</span>
+                        <span className="text-muted-foreground">Selling: {product.lastSellingPrice} MAD</span>
                         <span className="text-muted-foreground">Qty: {product.totalQty}</span>
                         <span className="text-muted-foreground">Avail: {product.available}</span>
                       </div>
