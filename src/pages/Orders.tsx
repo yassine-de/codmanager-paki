@@ -703,14 +703,13 @@ export default function Orders() {
         />
       )}
 
-      {/* History Modal - Admin only */}
-      {historyOrder && isAdmin && (
+      {/* History Modal */}
+      {historyOrder && (
         <OrderHistoryModal
           open={!!historyOrder}
           onOpenChange={(open) => !open && setHistoryOrder(null)}
           orderId={historyOrder.id}
           customerName={historyOrder.customer}
-          history={historyOrder.history}
         />
       )}
 

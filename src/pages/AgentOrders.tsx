@@ -274,15 +274,46 @@ const AgentOrders = () => {
 
       if (updateError) throw updateError;
 
-      // Log history
-      await supabase.from("order_history").insert({
-        order_id: currentOrder.order_id,
-        changed_by: authUser.id,
-        changed_by_role: "agent",
-        field_changed: "confirmation_status",
-        old_value: currentOrder.confirmation_status,
-        new_value: selectedStatus,
-      });
+      // Log all changes to history
+      const historyEntries: { order_id: string; changed_by: string; changed_by_role: string; field_changed: string; old_value: string | null; new_value: string | null }[] = [];
+
+      const trackChange = (field: string, oldVal: any, newVal: any) => {
+        const oldStr = oldVal != null ? String(oldVal) : null;
+        const newStr = newVal != null ? String(newVal) : null;
+        if (oldStr !== newStr) {
+          historyEntries.push({
+            order_id: currentOrder.order_id,
+            changed_by: authUser.id,
+            changed_by_role: "agent",
+            field_changed: field,
+            old_value: oldStr,
+            new_value: newStr,
+          });
+        }
+      };
+
+      trackChange("confirmation_status", currentOrder.confirmation_status, selectedStatus);
+      trackChange("customer_name", currentOrder.customer_name, editCustomer.name);
+      trackChange("customer_phone", currentOrder.customer_phone, editCustomer.phone);
+      trackChange("customer_city", currentOrder.customer_city, editCustomer.city);
+      trackChange("customer_address", currentOrder.customer_address, editCustomer.address);
+      trackChange("product_name", currentOrder.product_name, activeItems[0]?.name);
+      trackChange("quantity", currentOrder.quantity, activeItems.reduce((s, i) => s + i.qty, 0));
+      trackChange("price", currentOrder.price, activeItems[0]?.price);
+      trackChange("total_amount", currentOrder.total_amount, orderTotal);
+      if (selectedStatus === "confirmed") {
+        trackChange("delivery_status", currentOrder.delivery_status, shippingStatus === "shipped" ? "shipped" : "pending");
+      }
+      if (selectedStatus === "cancelled") {
+        trackChange("cancel_reason", currentOrder.cancel_reason, cancelReason === "other" ? note.trim() : cancelReason);
+      }
+      if (note.trim() && note.trim() !== (currentOrder.note || "")) {
+        trackChange("note", currentOrder.note, note.trim());
+      }
+
+      if (historyEntries.length > 0) {
+        await supabase.from("order_history").insert(historyEntries);
+      }
 
       toast.success(`Order ${currentOrder.order_id} → ${selectedStatus.toUpperCase()} ✅`, {
         duration: 3000,
