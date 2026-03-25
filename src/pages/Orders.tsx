@@ -19,7 +19,9 @@ import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import EditOrderModal from "@/components/EditOrderModal";
+import CreateOrderModal from "@/components/CreateOrderModal";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
+import { Plus } from "lucide-react";
 
 /* ── Status badge configs ── */
 const confirmationConfig: Record<ConfirmationStatus, { label: string; cls: string }> = {
@@ -147,6 +149,7 @@ export default function Orders() {
   
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sellerNames, setSellerNames] = useState<string[]>([]);
   const [productNames, setProductNames] = useState<string[]>([]);
@@ -343,6 +346,11 @@ export default function Orders() {
           <h1 className="text-2xl font-semibold">Orders</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Manage all your COD orders</p>
         </div>
+        {!isAdmin && (
+          <Button size="sm" className="gap-1.5" onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-4 h-4" /> Create Order
+          </Button>
+        )}
       </div>
 
       {/* Mini Sparkline KPIs */}
