@@ -294,11 +294,14 @@ export type Database = {
           created_at: string
           destination_country: string
           id: string
+          landed_price: number | null
           notes: string | null
+          product_image_url: string | null
           product_name: string
           product_url: string
           quantity: number
           seller_id: string
+          seller_price: number | null
           seller_validated: boolean | null
           shipping_cost: number | null
           shipping_method: string
@@ -311,11 +314,14 @@ export type Database = {
           created_at?: string
           destination_country?: string
           id?: string
+          landed_price?: number | null
           notes?: string | null
+          product_image_url?: string | null
           product_name: string
           product_url?: string
           quantity?: number
           seller_id: string
+          seller_price?: number | null
           seller_validated?: boolean | null
           shipping_cost?: number | null
           shipping_method?: string
@@ -328,11 +334,14 @@ export type Database = {
           created_at?: string
           destination_country?: string
           id?: string
+          landed_price?: number | null
           notes?: string | null
+          product_image_url?: string | null
           product_name?: string
           product_url?: string
           quantity?: number
           seller_id?: string
+          seller_price?: number | null
           seller_validated?: boolean | null
           shipping_cost?: number | null
           shipping_method?: string
