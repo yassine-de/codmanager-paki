@@ -83,6 +83,8 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       total_price: totalPrice,
       status,
       notes: notes.trim() || "",
+      payment_status: paymentStatus,
+      payment_method: paymentStatus === "paid" ? paymentMethod : null,
       updated_at: new Date().toISOString(),
       seller_seen: false,
     };
