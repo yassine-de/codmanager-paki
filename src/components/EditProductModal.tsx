@@ -26,6 +26,8 @@ interface EditProductModalProps {
 }
 
 export function EditProductModal({ product, open, onOpenChange, onSave }: EditProductModalProps) {
+  const { authUser } = useAuth();
+  const isSeller = authUser?.role === "seller";
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [seller, setSeller] = useState("");
