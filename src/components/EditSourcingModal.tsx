@@ -350,6 +350,12 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
                   </p>
                 </div>
               )}
+              {request.payment_status === "paid" && request.payment_date && (
+                <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2.5">
+                  <span className="text-xs text-muted-foreground">Payment Date</span>
+                  <span className="text-xs font-medium tabular-nums">{new Date(request.payment_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                </div>
+              )}
             </div>
 
             {/* Notes */}
