@@ -211,6 +211,59 @@ export type Database = {
         }
         Relationships: []
       }
+      products: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string | null
+          landed_price: number | null
+          name: string
+          price: number
+          product_url: string | null
+          quantity: number
+          seller_id: string
+          sku: string
+          sourcing_request_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          landed_price?: number | null
+          name: string
+          price?: number
+          product_url?: string | null
+          quantity?: number
+          seller_id: string
+          sku: string
+          sourcing_request_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          landed_price?: number | null
+          name?: string
+          price?: number
+          product_url?: string | null
+          quantity?: number
+          seller_id?: string
+          sku?: string
+          sourcing_request_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_sourcing_request_id_fkey"
+            columns: ["sourcing_request_id"]
+            isOneToOne: false
+            referencedRelation: "sourcing_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           active: boolean
@@ -297,6 +350,7 @@ export type Database = {
           id: string
           landed_price: number | null
           notes: string | null
+          product_created: boolean | null
           product_image_url: string | null
           product_name: string
           product_url: string
@@ -319,6 +373,7 @@ export type Database = {
           id?: string
           landed_price?: number | null
           notes?: string | null
+          product_created?: boolean | null
           product_image_url?: string | null
           product_name: string
           product_url?: string
@@ -341,6 +396,7 @@ export type Database = {
           id?: string
           landed_price?: number | null
           notes?: string | null
+          product_created?: boolean | null
           product_image_url?: string | null
           product_name?: string
           product_url?: string
@@ -408,6 +464,7 @@ export type Database = {
     }
     Functions: {
       generate_order_id: { Args: { p_seller_id: string }; Returns: string }
+      generate_product_sku: { Args: never; Returns: string }
       get_user_permissions: { Args: { _user_id: string }; Returns: string[] }
       get_user_role: {
         Args: { _user_id: string }
