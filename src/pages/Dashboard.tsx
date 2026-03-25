@@ -253,8 +253,9 @@ function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; 
 export default function Dashboard() {
   const { authUser } = useAuth();
   const isSeller = authUser?.role === "seller";
-  const navigate = useNavigate();
-  const { kpis, last7, totals7, topProducts, topSellers, isLoading } = useDashboardData();
+  const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const { kpis, last7, totals7, topProducts, topSellers, isLoading } = useDashboardData(dateRange);
 
   const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 100) : 0;
 
@@ -268,7 +269,14 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-[1400px]">
-      <FilterBar hideSeller={isSeller} />
+      <div className="sticky top-0 z-30 -mx-4 px-4 py-2.5 bg-background/80 backdrop-blur-xl border-b">
+        <DatePresetFilter
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+          preset={datePreset}
+          onPresetChange={setDatePreset}
+        />
+      </div>
 
       <div className="space-y-6 mt-4">
         {/* Header */}
