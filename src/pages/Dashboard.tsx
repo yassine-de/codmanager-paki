@@ -3,7 +3,7 @@ import {
   ShoppingCart, CheckCircle2, Truck, DollarSign, XCircle, RotateCcw,
   Sparkles, PhoneOff, CalendarClock, TrendingUp, TrendingDown,
   Package, Copy, PhoneForwarded, Navigation, UserCheck, Banknote,
-  Clock, Store, Award,
+  Clock, Store, Award, Loader2,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis,
@@ -11,11 +11,11 @@ import {
 } from "recharts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FilterBar } from "@/components/FilterBar";
-import { mockOrders, getKPIs, getTopProductsByDeliveryRate, getTopSellersByDelivered } from "@/lib/data";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { format, subDays, startOfDay, isAfter, eachDayOfInterval } from "date-fns";
+import { format } from "date-fns";
 import type { LucideIcon } from "lucide-react";
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 /* ── Animated Number ── */
 function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
@@ -40,36 +40,7 @@ function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; pr
   return <>{prefix}{display.toLocaleString()}{suffix}</>;
 }
 
-/* ── helpers ── */
-function getDailyData(numDays: number) {
-  const days = eachDayOfInterval({
-    start: startOfDay(subDays(new Date(), numDays - 1)),
-    end: startOfDay(new Date()),
-  });
-
-  return days.map((date) => {
-    const nextDay = new Date(date);
-    nextDay.setDate(nextDay.getDate() + 1);
-    const dayOrders = mockOrders.filter((o) => {
-      const created = new Date(o.createdAt);
-      return isAfter(created, date) && !isAfter(created, nextDay);
-    });
-    const total = dayOrders.length;
-    const confirmed = dayOrders.filter(o => ["confirmed", "shipped", "delivered", "in_transit", "with_courier"].includes(o.status)).length;
-    const shipped = dayOrders.filter(o => ["shipped", "delivered", "in_transit", "with_courier"].includes(o.status)).length;
-    const delivered = dayOrders.filter(o => o.status === "delivered").length;
-    return {
-      day: `${format(date, "EEE")}\n${format(date, "dd/MM")}`,
-      dayShort: format(date, "EEE"),
-      orders: total,
-      confirmed,
-      shipped,
-      delivered,
-      confirmationRate: total > 0 ? Math.round((confirmed / total) * 100) : 0,
-      deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
-    };
-  });
-}
+/* (daily data now computed in useDashboardData hook) */
 
 /* ── Section KPI Card ── */
 interface SectionKPIProps {
@@ -281,20 +252,18 @@ function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; 
 export default function Dashboard() {
   const { authUser } = useAuth();
   const isSeller = authUser?.role === "seller";
-  const kpis = getKPIs(mockOrders);
   const navigate = useNavigate();
-  const last7 = useMemo(() => getDailyData(7), []);
-
-  const totals7 = useMemo(() => ({
-    orders: last7.reduce((s, d) => s + d.orders, 0),
-    confirmed: last7.reduce((s, d) => s + d.confirmed, 0),
-    delivered: last7.reduce((s, d) => s + d.delivered, 0),
-  }), [last7]);
-
-  const topProducts = useMemo(() => getTopProductsByDeliveryRate(mockOrders).slice(0, 5), []);
-  const topSellers = useMemo(() => getTopSellersByDelivered(mockOrders).slice(0, 5), []);
+  const { kpis, last7, totals7, topProducts, topSellers, isLoading } = useDashboardData();
 
   const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 100) : 0;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[1400px]">
@@ -373,30 +342,30 @@ export default function Dashboard() {
         <div className="space-y-3">
           <SectionHeader icon={Truck} title="Delivery Performance" color="text-success" iconBg="bg-success/10" delay={280} />
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            <SectionKPI title="Confirmed" value={kpis.confirmed} percentage={pct(kpis.confirmed, kpis.total)}
+            <SectionKPI title="Pending" value={kpis.pending} percentage={pct(kpis.pending, kpis.total)}
               percentLabel="of total" icon={CheckCircle2} color="text-info" iconBg="bg-info/10" delay={290}
               onClick={() => navigate("/orders?delivery=pending")} />
-            <SectionKPI title="Shipped" value={kpis.shipped} percentage={pct(kpis.shipped, kpis.confirmed)}
-              percentLabel="of confirmed" icon={Package} color="text-primary" iconBg="bg-primary/10" delay={300}
+            <SectionKPI title="Shipped" value={kpis.shipped} percentage={pct(kpis.shipped, kpis.total)}
+              percentLabel="of total" icon={Package} color="text-primary" iconBg="bg-primary/10" delay={300}
               onClick={() => navigate("/orders?delivery=shipped")} />
-            <SectionKPI title="In Transit" value={kpis.inTransit} percentage={pct(kpis.inTransit, kpis.shipped)}
-              percentLabel="of shipped" icon={Navigation} color="text-info" iconBg="bg-info/10" delay={310}
+            <SectionKPI title="In Transit" value={kpis.inTransit} percentage={pct(kpis.inTransit, kpis.total)}
+              percentLabel="of total" icon={Navigation} color="text-info" iconBg="bg-info/10" delay={310}
               onClick={() => navigate("/orders?delivery=in_transit")} />
-            <SectionKPI title="With Courier" value={kpis.withCourier} percentage={pct(kpis.withCourier, kpis.shipped)}
-              percentLabel="of shipped" icon={UserCheck} color="text-primary" iconBg="bg-primary/10" delay={320}
+            <SectionKPI title="With Courier" value={kpis.withCourier} percentage={pct(kpis.withCourier, kpis.total)}
+              percentLabel="of total" icon={UserCheck} color="text-primary" iconBg="bg-primary/10" delay={320}
               onClick={() => navigate("/orders?delivery=with_courier")} />
             <SectionKPI title="Delivered" value={kpis.delivered} percentage={kpis.deliveryRate}
               percentLabel="of shipped" icon={Truck} color="text-success" iconBg="bg-success/10"
-              highlight change={7} delay={330}
+              highlight delay={330}
               onClick={() => navigate("/orders?delivery=delivered")} />
-            <SectionKPI title="Postponed" value={kpis.postponed} percentage={pct(kpis.postponed, kpis.shipped)}
-              percentLabel="of shipped" icon={CalendarClock} color="text-warning" iconBg="bg-warning/10" delay={340}
+            <SectionKPI title="Postponed" value={kpis.deliveryPostponed} percentage={pct(kpis.deliveryPostponed, kpis.total)}
+              percentLabel="of total" icon={CalendarClock} color="text-warning" iconBg="bg-warning/10" delay={340}
               onClick={() => navigate("/orders?delivery=postponed")} />
-            <SectionKPI title="Cancelled" value={kpis.cancelled} percentage={pct(kpis.cancelled, kpis.shipped)}
-              percentLabel="of shipped" icon={XCircle} color="text-destructive" iconBg="bg-destructive/10" delay={350}
+            <SectionKPI title="Cancelled" value={kpis.deliveryCancelled} percentage={pct(kpis.deliveryCancelled, kpis.total)}
+              percentLabel="of total" icon={XCircle} color="text-destructive" iconBg="bg-destructive/10" delay={350}
               onClick={() => navigate("/orders?delivery=cancelled")} />
-            <SectionKPI title="Returned" value={kpis.returned} percentage={pct(kpis.returned, kpis.shipped)}
-              percentLabel="of shipped" icon={RotateCcw} color="text-muted-foreground" iconBg="bg-muted" delay={360}
+            <SectionKPI title="Returned" value={kpis.returned} percentage={pct(kpis.returned, kpis.total)}
+              percentLabel="of total" icon={RotateCcw} color="text-muted-foreground" iconBg="bg-muted" delay={360}
               onClick={() => navigate("/orders?delivery=returned")} />
           </div>
         </div>
