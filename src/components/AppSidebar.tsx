@@ -20,14 +20,14 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const getNavItems = (orderCount: number) => [
+const getNavItems = (orderCount: number, sourcingUnseen: number) => [
   { title: "dashboard", url: "/", icon: LayoutDashboard },
   { title: "orders", url: "/orders", icon: ShoppingCart, badge: orderCount, permission: "access_to_orders", sellerVisible: true },
   { title: "products", url: "/products", icon: BoxIcon, permission: "access_to_products", sellerVisible: true },
   { title: "confirmations", url: "/confirmations", icon: Package, permission: "access_to_confirmations" },
   { title: "sourcing", url: "/sourcing", icon: Package2, permission: "access_to_sourcing" },
   { title: "invoices", url: "/invoices", icon: FileText, permission: "access_to_settings", sellerVisible: true },
-  { title: "sourcing", url: "/seller-sourcing", icon: Package2, sellerOnly: true },
+  { title: "sourcing", url: "/seller-sourcing", icon: Package2, sellerOnly: true, badge: sourcingUnseen > 0 ? sourcingUnseen : undefined },
   { title: "sheets", url: "/sheets", icon: FileSpreadsheet, sellerOnly: true },
   { title: "simulation", url: "/simulation", icon: Calculator, sellerOnly: true },
   { title: "My Dashboard", url: "/agent-dashboard", icon: LayoutDashboard, agentOnly: true },
@@ -66,15 +66,30 @@ export function AppSidebar() {
       if (error) throw error;
       return count || 0;
     },
-    refetchInterval: 30000, // refresh every 30s
+    refetchInterval: 30000,
   });
 
-  const navItems = getNavItems(orderCount);
+  // Fetch unseen sourcing requests count for sellers
+  const { data: sourcingUnseen = 0 } = useQuery({
+    queryKey: ["seller-sourcing-unseen", authUser?.id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("sourcing_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("seller_seen", false);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: isSeller && !!authUser,
+    refetchInterval: 15000,
+  });
+
+  const navItems = getNavItems(orderCount, sourcingUnseen);
 
   const visibleItems = navItems.filter((item: any) => {
     if (item.agentOnly) return isAgent;
     if (item.sellerOnly) return isSeller;
-    if (isAgent) return false; // agents only see agentOnly items
+    if (isAgent) return false;
     if (isSeller) return !item.permission || item.sellerVisible;
     return !item.permission || hasPermission(item.permission);
   });
@@ -112,7 +127,7 @@ export function AppSidebar() {
                   ? location.pathname === '/'
                   : location.pathname.startsWith(item.url);
                 return (
-                  <SidebarMenuItem key={item.title}>
+                  <SidebarMenuItem key={item.url}>
                     <SidebarMenuButton asChild isActive={isActive} className="h-8 text-xs">
                       <NavLink
                         to={item.url}
@@ -123,8 +138,13 @@ export function AppSidebar() {
                         <item.icon className="mr-1.5 h-3.5 w-3.5" />
                         {!collapsed && <span className="flex-1">{t(item.title)}</span>}
                         {!collapsed && item.badge != null && (
-                          <span className="ml-auto inline-flex items-center justify-center rounded-md bg-destructive px-1.5 py-0.5 text-[10px] font-semibold leading-none text-destructive-foreground">
+                          <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
                             {item.badge}
+                          </span>
+                        )}
+                        {collapsed && item.badge != null && (
+                          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center">
+                            {item.badge > 9 ? "9+" : item.badge}
                           </span>
                         )}
                       </NavLink>

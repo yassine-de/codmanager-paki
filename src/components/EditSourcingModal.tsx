@@ -81,6 +81,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
           status,
           notes: notes.trim() || "",
           updated_at: new Date().toISOString(),
+          seller_seen: false,
         })
         .eq("id", request.id);
       if (error) throw error;

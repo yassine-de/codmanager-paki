@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Package2, Plus, Check, X, ExternalLink, Loader2, ImageIcon } from "lucide-react";
@@ -42,6 +42,7 @@ interface SourcingRequest {
   seller_price: number | null;
   product_image_url: string | null;
   seller_validated: boolean | null;
+  seller_seen: boolean | null;
   created_at: string;
 }
 
@@ -64,6 +65,23 @@ export default function SellerSourcing() {
     },
     enabled: !!authUser,
   });
+
+  // Mark unseen requests as seen when page loads
+  useEffect(() => {
+    if (!authUser || requests.length === 0) return;
+    const unseenIds = requests.filter(r => r.seller_seen === false).map(r => r.id);
+    if (unseenIds.length === 0) return;
+
+    const markSeen = async () => {
+      await supabase
+        .from("sourcing_requests")
+        .update({ seller_seen: true })
+        .in("id", unseenIds);
+      // Refresh the sidebar badge count
+      queryClient.invalidateQueries({ queryKey: ["seller-sourcing-unseen"] });
+    };
+    markSeen();
+  }, [authUser, requests, queryClient]);
 
   const filtered = useMemo(() => {
     return requests.filter((r) => {
@@ -152,7 +170,8 @@ export default function SellerSourcing() {
               <TableHead>Shipping</TableHead>
               <TableHead className="text-center">Status</TableHead>
               <TableHead className="text-center">Validation</TableHead>
-              <TableHead className="text-right">Landing Price</TableHead>
+              <TableHead className="text-right">Unit Price</TableHead>
+              <TableHead className="text-right">Total</TableHead>
               <TableHead>Date</TableHead>
               <TableHead className="text-center">Link</TableHead>
               <TableHead className="text-center">Actions</TableHead>
@@ -161,7 +180,7 @@ export default function SellerSourcing() {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={12} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
@@ -171,9 +190,10 @@ export default function SellerSourcing() {
                 const vKey = req.seller_validated === true ? "validated" : req.seller_validated === false ? "cancelled" : "pending";
                 const vConfig = validationConfig[vKey];
                 const canValidate = req.status === "quoted" && req.seller_validated === null;
+                const isNew = req.seller_seen === false;
 
                 return (
-                  <TableRow key={req.id} className="text-xs">
+                  <TableRow key={req.id} className={`text-xs ${isNew ? "bg-primary/5" : ""}`}>
                     <TableCell className="pr-0">
                       {req.product_image_url ? (
                         <img src={req.product_image_url} alt="" className="w-8 h-8 rounded object-cover border" />
@@ -183,7 +203,12 @@ export default function SellerSourcing() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="font-medium max-w-[160px] truncate">{req.product_name}</TableCell>
+                    <TableCell className="font-medium max-w-[160px] truncate">
+                      <div className="flex items-center gap-1.5">
+                        {isNew && <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />}
+                        {req.product_name}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-center tabular-nums">{req.quantity}</TableCell>
                     <TableCell className="text-muted-foreground">{req.destination_country}</TableCell>
                     <TableCell className="text-muted-foreground">{shippingLabel(req.shipping_method)}</TableCell>
@@ -197,8 +222,11 @@ export default function SellerSourcing() {
                         {vConfig.label}
                       </span>
                     </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {(req.unit_price ?? 0) > 0 ? `${req.unit_price} MAD` : "—"}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {(req.seller_price ?? 0) > 0 ? `${req.seller_price} MAD` : "—"}
+                      {(req.total_price ?? 0) > 0 ? `${req.total_price} MAD` : "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground whitespace-nowrap">
                       {format(new Date(req.created_at), "dd MMM yyyy")}
