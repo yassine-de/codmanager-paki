@@ -258,6 +258,23 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const { kpis, last7, totals7, topProducts, topSellers, isLoading } = useDashboardData(dateRange);
 
+  // Resolve seller IDs to names
+  const sellerIds = useMemo(() => topSellers.map(s => s.sellerId), [topSellers]);
+  const { data: sellerProfiles = [] } = useQuery({
+    queryKey: ["dashboard-seller-profiles", sellerIds],
+    queryFn: async () => {
+      if (sellerIds.length === 0) return [];
+      const { data } = await supabase.from("profiles").select("user_id, name").in("user_id", sellerIds);
+      return data || [];
+    },
+    enabled: sellerIds.length > 0,
+  });
+  const resolvedTopSellers = useMemo(() => {
+    const nameMap: Record<string, string> = {};
+    sellerProfiles.forEach(p => { nameMap[p.user_id] = p.name; });
+    return topSellers.map(s => ({ ...s, name: nameMap[s.sellerId] || s.name }));
+  }, [topSellers, sellerProfiles]);
+
   const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 100) : 0;
 
   if (isLoading) {
