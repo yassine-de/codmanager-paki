@@ -2,9 +2,12 @@ import { useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, ShoppingCart, CheckCircle2, Truck, Package, TrendingUp, ImageOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { mockProducts } from "@/lib/products-data";
+import { mockProducts, type Product } from "@/lib/products-data";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 import { format, subDays } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 function randInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -13,8 +16,46 @@ function randInt(min: number, max: number) {
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { authUser } = useAuth();
 
-  const product = useMemo(() => mockProducts.find(p => p.id === id), [id]);
+  // Try mock products first
+  const mockProduct = useMemo(() => mockProducts.find(p => p.id === id), [id]);
+
+  // Fetch from DB if not in mock
+  const { data: dbProduct } = useQuery({
+    queryKey: ["product-detail", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("id", id!)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return {
+        id: data.id,
+        seller: authUser?.name || "Unknown",
+        sku: data.sku,
+        name: data.name,
+        image: data.image_url || "",
+        price: Number(data.price) || 0,
+        totalQty: data.quantity || 0,
+        delivered: 0,
+        shipped: 0,
+        available: data.quantity || 0,
+        createdAt: data.created_at,
+        variants: [],
+        storeLink: data.product_url || "",
+        videoLink: data.video_url || "",
+        lastSellingPrice: Number(data.price) || 0,
+        lastPrice: Number(data.landed_price) || 0,
+        offers: [],
+      } as Product;
+    },
+    enabled: !mockProduct && !!id,
+  });
+
+  const product = mockProduct || dbProduct;
 
   // Generate mock order stats for this product
   const stats = useMemo(() => {
