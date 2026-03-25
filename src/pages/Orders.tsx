@@ -405,7 +405,8 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
-            {/* Seller */}
+            {/* Seller - admin only */}
+            {isAdmin && (
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Seller</label>
               <SearchableSelect
@@ -417,6 +418,7 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
+            )}
             {/* Confirmation */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Confirmation</label>
@@ -453,7 +455,8 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
-            {/* Warehouse */}
+            {/* Warehouse - admin only */}
+            {isAdmin && (
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Warehouse</label>
               <SearchableSelect
@@ -465,6 +468,7 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
+            )}
             {/* Buttons */}
             <div className="flex items-end gap-2">
               <Button size="sm" className="h-9 px-4" onClick={applyFilters}>Apply</Button>
