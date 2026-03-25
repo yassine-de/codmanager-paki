@@ -45,6 +45,7 @@ export interface DbSourcingRequest {
   product_image_url: string | null;
   seller_validated: boolean | null;
   admin_seen: boolean | null;
+  product_created: boolean | null;
   created_at: string;
   updated_at: string;
 }
