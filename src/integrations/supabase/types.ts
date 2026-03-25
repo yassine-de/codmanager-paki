@@ -302,6 +302,7 @@ export type Database = {
           quantity: number
           seller_id: string
           seller_price: number | null
+          seller_seen: boolean | null
           seller_validated: boolean | null
           shipping_cost: number | null
           shipping_method: string
@@ -322,6 +323,7 @@ export type Database = {
           quantity?: number
           seller_id: string
           seller_price?: number | null
+          seller_seen?: boolean | null
           seller_validated?: boolean | null
           shipping_cost?: number | null
           shipping_method?: string
@@ -342,6 +344,7 @@ export type Database = {
           quantity?: number
           seller_id?: string
           seller_price?: number | null
+          seller_seen?: boolean | null
           seller_validated?: boolean | null
           shipping_cost?: number | null
           shipping_method?: string
