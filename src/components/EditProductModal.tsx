@@ -57,9 +57,6 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
   }
 
 
-  if (!product) return null;
-
-
   // Check if this is a DB product (UUID format)
   const isDbProduct = product ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(product.id) : false;
 
@@ -136,6 +133,8 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
       toast.error("Failed to update product");
     },
   });
+
+  if (!product) return null;
 
   const handleSave = () => {
     if (!validate()) return;
