@@ -291,6 +291,7 @@ export type Database = {
       }
       sourcing_requests: {
         Row: {
+          admin_seen: boolean | null
           created_at: string
           destination_country: string
           id: string
@@ -312,6 +313,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          admin_seen?: boolean | null
           created_at?: string
           destination_country?: string
           id?: string
@@ -333,6 +335,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          admin_seen?: boolean | null
           created_at?: string
           destination_country?: string
           id?: string
