@@ -75,9 +75,18 @@ function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
   const deliveryRate = totalShipped > 0 ? Math.round((delivered / totalShipped) * 100) : 0;
 
   // Financial
-  const revenue = orders.filter(o => o.delivery_status === 'delivered').reduce((s, o) => s + Number(o.total_amount), 0);
-  const paidAmount = revenue; // delivered = paid
-  const pendingAmount = 0;
+  // Delivered Amount = total of orders with delivery_status 'delivered' OR 'paid'
+  const revenue = orders
+    .filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid')
+    .reduce((s, o) => s + Number(o.total_amount), 0);
+  // Paid Amount = total of orders with delivery_status 'paid'
+  const paidAmount = orders
+    .filter(o => o.delivery_status === 'paid')
+    .reduce((s, o) => s + Number(o.total_amount), 0);
+  // Pending Amount = total of orders with delivery_status 'delivered' (delivered but not yet paid)
+  const pendingAmount = orders
+    .filter(o => o.delivery_status === 'delivered')
+    .reduce((s, o) => s + Number(o.total_amount), 0);
 
   return {
     total, newOrders, confirmed, noAnswer, postponed, cancelled, doubleOrders, wrongNumber,
