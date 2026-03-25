@@ -98,8 +98,23 @@ const Users = () => {
     setModalOpen(true);
   };
 
-  const openEdit = (user: UserData) => {
+  const openEdit = async (user: UserData) => {
     setEditingUser(user);
+
+    // Load agent product assignments
+    let agentProductScope: "all" | "specific" = "all";
+    let agentProducts: string[] = [];
+    if (user.role === "agent") {
+      const { data } = await supabase
+        .from("agent_products")
+        .select("product_name")
+        .eq("agent_id", user.user_id);
+      if (data && data.length > 0) {
+        agentProductScope = "specific";
+        agentProducts = data.map(d => d.product_name);
+      }
+    }
+
     setForm({
       name: user.name,
       email: user.email,
@@ -111,10 +126,21 @@ const Users = () => {
       rate_3kg: user.rates?.rate_3kg?.toString() || "",
       selectedPermissions: user.permissions || [],
       customRoleName: "",
-      agentProductScope: "all",
-      agentProducts: [],
+      agentProductScope,
+      agentProducts,
     });
     setModalOpen(true);
+  };
+
+  const saveAgentProducts = async (agentId: string) => {
+    // Delete existing assignments
+    await supabase.from("agent_products").delete().eq("agent_id", agentId);
+    // Insert new ones if specific scope
+    if (form.agentProductScope === "specific" && form.agentProducts.length > 0) {
+      await supabase.from("agent_products").insert(
+        form.agentProducts.map(name => ({ agent_id: agentId, product_name: name }))
+      );
+    }
   };
 
   const handleSave = async () => {
@@ -142,6 +168,12 @@ const Users = () => {
           },
         });
         if (error) throw error;
+
+        // Save agent product assignments
+        if (form.role === "agent") {
+          await saveAgentProducts(editingUser.user_id);
+        }
+
         toast.success("Utilisateur modifié");
       } else {
         const { data, error } = await supabase.functions.invoke("manage-users", {
@@ -161,6 +193,12 @@ const Users = () => {
           },
         });
         if (error || data?.error) throw new Error(data?.error || error?.message);
+
+        // Save agent product assignments for new user
+        if (form.role === "agent" && data?.userId) {
+          await saveAgentProducts(data.userId);
+        }
+
         toast.success("Utilisateur créé");
       }
       setModalOpen(false);
