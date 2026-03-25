@@ -60,7 +60,8 @@ function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
   const wrongNumber = orders.filter(o => o.confirmation_status === 'wrong_number').length;
 
   // Delivery status counts
-  const pending = orders.filter(o => o.delivery_status === 'pending').length;
+  // "Pending" = orders with delivery_status: with_courier, in_transit, postponed, no_answer
+  const pending = orders.filter(o => ['with_courier', 'in_transit', 'postponed', 'no_answer'].includes(o.delivery_status || '')).length;
   const shipped = orders.filter(o => o.delivery_status === 'shipped').length;
   const inTransit = orders.filter(o => o.delivery_status === 'in_transit').length;
   const withCourier = orders.filter(o => o.delivery_status === 'with_courier').length;

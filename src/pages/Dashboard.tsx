@@ -342,30 +342,33 @@ export default function Dashboard() {
         <div className="space-y-3">
           <SectionHeader icon={Truck} title="Delivery Performance" color="text-success" iconBg="bg-success/10" delay={280} />
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            <SectionKPI title="Pending" value={kpis.pending} percentage={pct(kpis.pending, kpis.total)}
-              percentLabel="of total" icon={CheckCircle2} color="text-info" iconBg="bg-info/10" delay={290}
-              onClick={() => navigate("/orders?delivery=pending")} />
+            <SectionKPI title="Delivered" value={kpis.delivered} percentage={kpis.deliveryRate}
+              percentLabel="of shipped" icon={Truck} color="text-success" iconBg="bg-success/10"
+              highlight delay={290}
+              onClick={() => navigate("/orders?delivery=delivered")} />
             <SectionKPI title="Shipped" value={kpis.shipped} percentage={pct(kpis.shipped, kpis.total)}
               percentLabel="of total" icon={Package} color="text-primary" iconBg="bg-primary/10" delay={300}
               onClick={() => navigate("/orders?delivery=shipped")} />
+            <SectionKPI title="Pending" value={kpis.pending} percentage={pct(kpis.pending, kpis.total)}
+              percentLabel="of total" icon={CheckCircle2} color="text-info" iconBg="bg-info/10" delay={310}
+              onClick={() => navigate("/orders?delivery=pending")} />
             <SectionKPI title="In Transit" value={kpis.inTransit} percentage={pct(kpis.inTransit, kpis.total)}
-              percentLabel="of total" icon={Navigation} color="text-info" iconBg="bg-info/10" delay={310}
+              percentLabel="of total" icon={Navigation} color="text-info" iconBg="bg-info/10" delay={320}
               onClick={() => navigate("/orders?delivery=in_transit")} />
             <SectionKPI title="With Courier" value={kpis.withCourier} percentage={pct(kpis.withCourier, kpis.total)}
-              percentLabel="of total" icon={UserCheck} color="text-primary" iconBg="bg-primary/10" delay={320}
+              percentLabel="of total" icon={UserCheck} color="text-primary" iconBg="bg-primary/10" delay={330}
               onClick={() => navigate("/orders?delivery=with_courier")} />
-            <SectionKPI title="Delivered" value={kpis.delivered} percentage={kpis.deliveryRate}
-              percentLabel="of shipped" icon={Truck} color="text-success" iconBg="bg-success/10"
-              highlight delay={330}
-              onClick={() => navigate("/orders?delivery=delivered")} />
             <SectionKPI title="Postponed" value={kpis.deliveryPostponed} percentage={pct(kpis.deliveryPostponed, kpis.total)}
               percentLabel="of total" icon={CalendarClock} color="text-warning" iconBg="bg-warning/10" delay={340}
               onClick={() => navigate("/orders?delivery=postponed")} />
+            <SectionKPI title="No Answer" value={kpis.deliveryNoAnswer} percentage={pct(kpis.deliveryNoAnswer, kpis.total)}
+              percentLabel="of total" icon={PhoneOff} color="text-warning" iconBg="bg-warning/10" delay={350}
+              onClick={() => navigate("/orders?delivery=no_answer")} />
             <SectionKPI title="Cancelled" value={kpis.deliveryCancelled} percentage={pct(kpis.deliveryCancelled, kpis.total)}
-              percentLabel="of total" icon={XCircle} color="text-destructive" iconBg="bg-destructive/10" delay={350}
+              percentLabel="of total" icon={XCircle} color="text-destructive" iconBg="bg-destructive/10" delay={360}
               onClick={() => navigate("/orders?delivery=cancelled")} />
             <SectionKPI title="Returned" value={kpis.returned} percentage={pct(kpis.returned, kpis.total)}
-              percentLabel="of total" icon={RotateCcw} color="text-muted-foreground" iconBg="bg-muted" delay={360}
+              percentLabel="of total" icon={RotateCcw} color="text-muted-foreground" iconBg="bg-muted" delay={370}
               onClick={() => navigate("/orders?delivery=returned")} />
           </div>
         </div>
