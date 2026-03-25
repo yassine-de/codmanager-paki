@@ -415,14 +415,14 @@ export default function Dashboard() {
                 <h2 className="text-xs font-semibold">Top Sellers by Delivered Orders</h2>
               </div>
               <div className="divide-y">
-                {topSellers.map((s, i) => (
-                  <div key={s.name} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/10 transition-colors">
+                {resolvedTopSellers.map((s, i) => (
+                  <div key={s.sellerId} className="px-4 py-2 flex items-center gap-3 hover:bg-muted/10 transition-colors">
                     <span className="text-[10px] font-bold text-muted-foreground/50 w-4 tabular-nums">{i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate">{s.name}</p>
                       <div className="mt-1 w-full h-1.5 bg-muted rounded-full overflow-hidden">
                         <div className="h-full rounded-full bg-primary transition-all duration-700"
-                          style={{ width: `${topSellers[0]?.delivered ? Math.round((s.delivered / topSellers[0].delivered) * 100) : 0}%` }} />
+                          style={{ width: `${resolvedTopSellers[0]?.delivered ? Math.round((s.delivered / resolvedTopSellers[0].delivered) * 100) : 0}%` }} />
                       </div>
                     </div>
                     <div className="text-right shrink-0">
