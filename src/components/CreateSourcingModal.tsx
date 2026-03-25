@@ -1,140 +1,150 @@
 import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Link2, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { type SourcingRequest } from "@/lib/sourcing-data";
 
-interface CreateSourcingModalProps {
+const countries = [
+  "Morocco", "Turkey", "China", "UAE", "Saudi Arabia", "Egypt",
+  "France", "Spain", "Germany", "USA", "UK", "India",
+];
+
+interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (request: SourcingRequest) => void;
 }
 
-export function CreateSourcingModal({ open, onOpenChange, onCreate }: CreateSourcingModalProps) {
-  const [seller, setSeller] = useState("");
+export function CreateSourcingModal({ open, onOpenChange }: Props) {
+  const queryClient = useQueryClient();
+  const [sellerId, setSellerId] = useState("");
   const [productName, setProductName] = useState("");
-  const [productImage, setProductImage] = useState("");
-  const [sourceLink, setSourceLink] = useState("");
   const [quantity, setQuantity] = useState<number | "">("");
-  const [unitPrice, setUnitPrice] = useState<number | "">("");
+  const [country, setCountry] = useState("");
+  const [shippingMethod, setShippingMethod] = useState("");
+  const [productUrl, setProductUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Fetch sellers for dropdown
+  const { data: sellers = [] } = useQuery({
+    queryKey: ["sellers-list"],
+    queryFn: async () => {
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "seller");
+      if (!roles || roles.length === 0) return [];
+      const sellerIds = roles.map(r => r.user_id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, name")
+        .in("user_id", sellerIds);
+      return profiles || [];
+    },
+  });
+
   const resetForm = () => {
-    setSeller("");
+    setSellerId("");
     setProductName("");
-    setProductImage("");
-    setSourceLink("");
     setQuantity("");
-    setUnitPrice("");
+    setCountry("");
+    setShippingMethod("");
+    setProductUrl("");
     setNotes("");
     setErrors({});
   };
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
-    if (!seller.trim()) errs.seller = "Seller is required";
+    if (!sellerId) errs.sellerId = "Seller is required";
     if (!productName.trim()) errs.productName = "Product name is required";
-    if (!sourceLink.trim()) errs.sourceLink = "Source link is required";
     if (!quantity || quantity <= 0) errs.quantity = "Quantity must be greater than 0";
-    if (quantity && !Number.isInteger(quantity)) errs.quantity = "Must be a whole number";
-    if (!unitPrice || unitPrice <= 0) errs.unitPrice = "Price must be greater than 0";
+    if (!country) errs.country = "Country is required";
+    if (!shippingMethod) errs.shippingMethod = "Shipping method is required";
+    if (!productUrl.trim()) errs.productUrl = "Product URL is required";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("sourcing_requests").insert({
+        seller_id: sellerId,
+        product_name: productName.trim(),
+        quantity: Number(quantity),
+        destination_country: country,
+        shipping_method: shippingMethod,
+        product_url: productUrl.trim(),
+        notes: notes.trim() || "",
+        status: "waiting_quote",
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-sourcing"] });
+      onOpenChange(false);
+      resetForm();
+      toast.success("Sourcing request created");
+    },
+    onError: () => {
+      toast.error("Failed to create request");
+    },
+  });
+
   const handleCreate = () => {
     if (!validate()) return;
-
-    const qty = Number(quantity);
-    const price = Number(unitPrice);
-    const now = new Date().toISOString();
-
-    const newRequest: SourcingRequest = {
-      id: `SRC-${String(Date.now()).slice(-6)}`,
-      seller: seller.trim(),
-      productName: productName.trim(),
-      productImage: productImage.trim() || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=80&h=80&fit=crop",
-      sourceLink: sourceLink.trim(),
-      quantity: qty,
-      unitPrice: price,
-      totalPrice: qty * price,
-      status: "pending",
-      paymentStatus: "unpaid",
-      paidAmount: 0,
-      createdAt: now,
-      updatedAt: now,
-      notes: notes.trim() || undefined,
-    };
-
-    onCreate(newRequest);
-    onOpenChange(false);
-    resetForm();
-    toast.success("Sourcing request created");
+    createMutation.mutate();
   };
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
-      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base">New Sourcing Request</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-1 h-5 rounded-full bg-primary" />
+            <span className="text-sm font-medium">Sourcing Informations</span>
+          </div>
+
           {/* Seller */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Seller *</Label>
-            <Input
-              value={seller}
-              onChange={e => setSeller(e.target.value)}
-              placeholder="e.g. Amine Shop"
-              className={`h-9 text-sm ${errors.seller ? "border-destructive" : ""}`}
-            />
-            {errors.seller && <p className="text-[11px] text-destructive">{errors.seller}</p>}
+            <Label className="text-xs font-medium">Seller *</Label>
+            <Select value={sellerId} onValueChange={setSellerId}>
+              <SelectTrigger className={`h-9 text-sm ${errors.sellerId ? "border-destructive" : ""}`}>
+                <SelectValue placeholder="Select Seller" />
+              </SelectTrigger>
+              <SelectContent>
+                {sellers.map(s => (
+                  <SelectItem key={s.user_id} value={s.user_id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.sellerId && <p className="text-[11px] text-destructive">{errors.sellerId}</p>}
           </div>
 
-          {/* Product Name */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">Product Name *</Label>
-            <Input
-              value={productName}
-              onChange={e => setProductName(e.target.value)}
-              placeholder="e.g. Wireless Earbuds Pro"
-              className={`h-9 text-sm ${errors.productName ? "border-destructive" : ""}`}
-            />
-            {errors.productName && <p className="text-[11px] text-destructive">{errors.productName}</p>}
-          </div>
-
-          {/* Product Image URL */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">Product Image URL <span className="text-muted-foreground">(optional)</span></Label>
-            <Input
-              value={productImage}
-              onChange={e => setProductImage(e.target.value)}
-              placeholder="https://..."
-              className="h-9 text-sm"
-            />
-          </div>
-
-          {/* Source Link */}
-          <div className="space-y-1.5">
-            <Label className="text-xs">Source Link (Alibaba / AliExpress) *</Label>
-            <Input
-              value={sourceLink}
-              onChange={e => setSourceLink(e.target.value)}
-              placeholder="https://www.alibaba.com/product/..."
-              className={`h-9 text-sm ${errors.sourceLink ? "border-destructive" : ""}`}
-            />
-            {errors.sourceLink && <p className="text-[11px] text-destructive">{errors.sourceLink}</p>}
-          </div>
-
-          {/* Quantity & Unit Price */}
+          {/* Product Name + Quantity */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Quantity *</Label>
+              <Label className="text-xs font-medium">Product Name *</Label>
+              <Input
+                value={productName}
+                onChange={e => setProductName(e.target.value)}
+                placeholder="e.g. Wireless Earbuds Pro"
+                className={`h-9 text-sm ${errors.productName ? "border-destructive" : ""}`}
+              />
+              {errors.productName && <p className="text-[11px] text-destructive">{errors.productName}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Quantity *</Label>
               <Input
                 type="number"
                 min={1}
@@ -146,38 +156,61 @@ export function CreateSourcingModal({ open, onOpenChange, onCreate }: CreateSour
               />
               {errors.quantity && <p className="text-[11px] text-destructive">{errors.quantity}</p>}
             </div>
+          </div>
+
+          {/* Country + Shipping Method */}
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Unit Price (MAD) *</Label>
-              <Input
-                type="number"
-                min={0.01}
-                step={0.01}
-                value={unitPrice}
-                onChange={e => setUnitPrice(e.target.value ? Number(e.target.value) : "")}
-                placeholder="0.00"
-                className={`h-9 text-sm ${errors.unitPrice ? "border-destructive" : ""}`}
-              />
-              {errors.unitPrice && <p className="text-[11px] text-destructive">{errors.unitPrice}</p>}
+              <Label className="text-xs font-medium">Destination Country *</Label>
+              <Select value={country} onValueChange={setCountry}>
+                <SelectTrigger className={`h-9 text-sm ${errors.country ? "border-destructive" : ""}`}>
+                  <SelectValue placeholder="Select Country" />
+                </SelectTrigger>
+                <SelectContent>
+                  {countries.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.country && <p className="text-[11px] text-destructive">{errors.country}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Shipping Method *</Label>
+              <Select value={shippingMethod} onValueChange={setShippingMethod}>
+                <SelectTrigger className={`h-9 text-sm ${errors.shippingMethod ? "border-destructive" : ""}`}>
+                  <SelectValue placeholder="Not Selected" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sea">By Sea 🚢</SelectItem>
+                  <SelectItem value="air">By Air ✈️</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.shippingMethod && <p className="text-[11px] text-destructive">{errors.shippingMethod}</p>}
             </div>
           </div>
 
-          {/* Total Preview */}
-          {quantity && unitPrice ? (
-            <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2.5">
-              <span className="text-xs text-muted-foreground">Total</span>
-              <span className="text-sm font-semibold tabular-nums">
-                {(Number(quantity) * Number(unitPrice)).toLocaleString()} MAD
-              </span>
+          {/* Product URL */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Product URL *</Label>
+            <div className="relative">
+              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={productUrl}
+                onChange={e => setProductUrl(e.target.value)}
+                placeholder="https://www.alibaba.com/product/..."
+                className={`h-9 text-sm pl-9 ${errors.productUrl ? "border-destructive" : ""}`}
+              />
             </div>
-          ) : null}
+            {errors.productUrl && <p className="text-[11px] text-destructive">{errors.productUrl}</p>}
+          </div>
 
           {/* Notes */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Notes <span className="text-muted-foreground">(optional)</span></Label>
+            <Label className="text-xs font-medium">Notes <span className="text-muted-foreground">(optional)</span></Label>
             <Textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="Add any notes..."
+              placeholder="Add any notes or special requirements..."
               className="text-sm min-h-[70px] resize-none"
               maxLength={500}
             />
@@ -186,7 +219,10 @@ export function CreateSourcingModal({ open, onOpenChange, onCreate }: CreateSour
 
         <DialogFooter className="gap-2">
           <Button variant="outline" size="sm" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
-          <Button size="sm" onClick={handleCreate}>Create Request</Button>
+          <Button size="sm" onClick={handleCreate} disabled={createMutation.isPending}>
+            {createMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+            Create Request
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

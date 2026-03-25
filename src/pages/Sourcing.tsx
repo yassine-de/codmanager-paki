@@ -1,14 +1,8 @@
 import { useState, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus } from "lucide-react";
-import {
-  mockSourcingRequests,
-  sourcingStatusConfig,
-  paymentStatusConfig,
-  type SourcingRequest,
-  type SourcingStatus,
-  type PaymentStatus,
-} from "@/lib/sourcing-data";
+import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { EditSourcingModal } from "@/components/EditSourcingModal";
 import { CreateSourcingModal } from "@/components/CreateSourcingModal";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -17,37 +11,115 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
+const statusConfig: Record<string, { label: string; color: string }> = {
+  waiting_quote: { label: "Waiting Quote", color: "bg-warning/15 text-warning border-warning/25" },
+  quoted: { label: "Quoted", color: "bg-info/15 text-info border-info/25" },
+  validated: { label: "Validated", color: "bg-success/15 text-success border-success/25" },
+  cancelled: { label: "Cancelled", color: "bg-destructive/15 text-destructive border-destructive/25" },
+  ordered: { label: "Ordered", color: "bg-primary/15 text-primary border-primary/25" },
+  shipped: { label: "Shipped", color: "bg-primary/15 text-primary border-primary/25" },
+  received: { label: "Received", color: "bg-success/15 text-success border-success/25" },
+};
+
+const validationConfig: Record<string, { label: string; color: string }> = {
+  validated: { label: "Validated", color: "bg-success/15 text-success border-success/25" },
+  cancelled: { label: "Cancelled", color: "bg-destructive/15 text-destructive border-destructive/25" },
+  pending: { label: "Pending", color: "bg-muted text-muted-foreground border-border" },
+};
+
+export interface DbSourcingRequest {
+  id: string;
+  seller_id: string;
+  product_name: string;
+  quantity: number;
+  destination_country: string;
+  shipping_method: string;
+  product_url: string;
+  notes: string | null;
+  status: string;
+  unit_price: number | null;
+  shipping_cost: number | null;
+  total_price: number | null;
+  seller_validated: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function Sourcing() {
-  const [requests, setRequests] = useState<SourcingRequest[]>(mockSourcingRequests);
+  const queryClient = useQueryClient();
   const [sellerFilter, setSellerFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [validationFilter, setValidationFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [editRequest, setEditRequest] = useState<SourcingRequest | null>(null);
+  const [editRequest, setEditRequest] = useState<DbSourcingRequest | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const sellers = useMemo(() => [...new Set(requests.map(r => r.seller))].sort(), [requests]);
+  // Fetch sourcing requests
+  const { data: requests = [], isLoading } = useQuery({
+    queryKey: ["admin-sourcing"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sourcing_requests")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as DbSourcingRequest[];
+    },
+  });
+
+  // Fetch seller profiles for name display
+  const sellerIds = useMemo(() => [...new Set(requests.map(r => r.seller_id))], [requests]);
+  const { data: sellerProfiles = [] } = useQuery({
+    queryKey: ["seller-profiles", sellerIds],
+    queryFn: async () => {
+      if (sellerIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, name")
+        .in("user_id", sellerIds);
+      if (error) throw error;
+      return data;
+    },
+    enabled: sellerIds.length > 0,
+  });
+
+  const sellerNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    sellerProfiles.forEach(p => { map[p.user_id] = p.name; });
+    return map;
+  }, [sellerProfiles]);
+
+  const sellerOptions = useMemo(() => {
+    return sellerIds.map(id => ({
+      value: id,
+      label: sellerNameMap[id] || id.slice(0, 8),
+    })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [sellerIds, sellerNameMap]);
 
   const filtered = useMemo(() => {
     return requests.filter(r => {
-      if (sellerFilter !== "all" && r.seller !== sellerFilter) return false;
+      if (sellerFilter !== "all" && r.seller_id !== sellerFilter) return false;
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
-      if (paymentFilter !== "all" && r.paymentStatus !== paymentFilter) return false;
+      if (validationFilter === "validated" && r.seller_validated !== true) return false;
+      if (validationFilter === "cancelled" && r.seller_validated !== false) return false;
+      if (validationFilter === "pending" && r.seller_validated !== null) return false;
       return true;
     });
-  }, [requests, sellerFilter, statusFilter, paymentFilter]);
+  }, [requests, sellerFilter, statusFilter, validationFilter]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const handleSave = (updated: SourcingRequest) => {
-    setRequests(prev => prev.map(r => r.id === updated.id ? updated : r));
-  };
+  const shippingLabel = (m: string) => m === "air" ? "By Air ✈️" : "By Sea 🚢";
 
-  const handleCreate = (newReq: SourcingRequest) => {
-    setRequests(prev => [newReq, ...prev]);
-  };
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -62,33 +134,35 @@ export default function Sourcing() {
         </Button>
       </div>
 
-      {/* Filters + toolbar */}
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3">
         <SearchableSelect
           value={sellerFilter}
           onValueChange={v => { setSellerFilter(v); setPage(1); }}
-          options={sellers.map(s => ({ value: s, label: s }))}
+          options={sellerOptions}
           placeholder="Seller"
           allLabel="All Sellers"
           className="w-[160px]"
         />
-
         <SearchableSelect
           value={statusFilter}
           onValueChange={v => { setStatusFilter(v); setPage(1); }}
-          options={(Object.keys(sourcingStatusConfig) as SourcingStatus[]).map(s => ({ value: s, label: sourcingStatusConfig[s].label }))}
+          options={Object.entries(statusConfig).map(([k, v]) => ({ value: k, label: v.label }))}
           placeholder="Status"
           allLabel="All Status"
-          className="w-[140px]"
+          className="w-[150px]"
         />
-
         <SearchableSelect
-          value={paymentFilter}
-          onValueChange={v => { setPaymentFilter(v); setPage(1); }}
-          options={(Object.keys(paymentStatusConfig) as PaymentStatus[]).map(s => ({ value: s, label: paymentStatusConfig[s].label }))}
-          placeholder="Payment"
-          allLabel="All Payment"
-          className="w-[140px]"
+          value={validationFilter}
+          onValueChange={v => { setValidationFilter(v); setPage(1); }}
+          options={[
+            { value: "validated", label: "Validated" },
+            { value: "cancelled", label: "Cancelled" },
+            { value: "pending", label: "Pending" },
+          ]}
+          placeholder="Validation"
+          allLabel="All Validation"
+          className="w-[150px]"
         />
 
         <div className="ml-auto flex items-center gap-2">
@@ -107,73 +181,84 @@ export default function Sourcing() {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[50px]">Image</TableHead>
               <TableHead>Product</TableHead>
               <TableHead>Seller</TableHead>
               <TableHead className="text-center">Qty</TableHead>
+              <TableHead>Country</TableHead>
+              <TableHead>Shipping</TableHead>
+              <TableHead className="text-center">Status</TableHead>
+              <TableHead className="text-center">Validation</TableHead>
               <TableHead className="text-right">Unit Price</TableHead>
               <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead className="text-center">Payment</TableHead>
-              <TableHead className="text-right">Paid</TableHead>
               <TableHead>Date</TableHead>
               <TableHead className="text-center">Link</TableHead>
               <TableHead className="text-center w-[70px]">Edit</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginated.map(req => {
-              const sConfig = sourcingStatusConfig[req.status];
-              const pConfig = paymentStatusConfig[req.paymentStatus];
+            {paginated.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={12} className="text-center py-10 text-muted-foreground text-sm">
+                  No sourcing requests found.
+                </TableCell>
+              </TableRow>
+            ) : (
+              paginated.map(req => {
+                const sConfig = statusConfig[req.status] || statusConfig.waiting_quote;
+                const vKey = req.seller_validated === true ? "validated" : req.seller_validated === false ? "cancelled" : "pending";
+                const vConfig = validationConfig[vKey];
 
-              return (
-                <TableRow key={req.id} className="text-xs">
-                  <TableCell className="p-2">
-                    <img src={req.productImage} alt={req.productName} className="w-9 h-9 rounded-md object-cover" />
-                  </TableCell>
-                  <TableCell className="font-medium max-w-[140px] truncate">{req.productName}</TableCell>
-                  <TableCell className="text-muted-foreground">{req.seller}</TableCell>
-                  <TableCell className="text-center tabular-nums">{req.quantity}</TableCell>
-                  <TableCell className="text-right tabular-nums">{req.unitPrice} MAD</TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">{req.totalPrice} MAD</TableCell>
-                  <TableCell className="text-center">
-                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${sConfig.color}`}>
-                      {sConfig.label}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${pConfig.color}`}>
-                      {pConfig.label}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{req.paidAmount} MAD</TableCell>
-                  <TableCell className="text-muted-foreground whitespace-nowrap">
-                    {format(new Date(req.createdAt), "dd MMM yyyy")}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <a href={req.sourceLink} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center w-7 h-7 rounded-md text-info hover:bg-info/10 transition-colors">
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      </TooltipTrigger>
-                      <TooltipContent>Open source link</TooltipContent>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-warning hover:bg-warning/10" onClick={() => setEditRequest(req)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Edit request</TooltipContent>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                return (
+                  <TableRow key={req.id} className="text-xs">
+                    <TableCell className="font-medium max-w-[160px] truncate">{req.product_name}</TableCell>
+                    <TableCell className="text-muted-foreground">{sellerNameMap[req.seller_id] || "—"}</TableCell>
+                    <TableCell className="text-center tabular-nums">{req.quantity}</TableCell>
+                    <TableCell className="text-muted-foreground">{req.destination_country}</TableCell>
+                    <TableCell className="text-muted-foreground">{shippingLabel(req.shipping_method)}</TableCell>
+                    <TableCell className="text-center">
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${sConfig.color}`}>
+                        {sConfig.label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${vConfig.color}`}>
+                        {vConfig.label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {(req.unit_price ?? 0) > 0 ? `${req.unit_price} MAD` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      {(req.total_price ?? 0) > 0 ? `${req.total_price} MAD` : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
+                      {format(new Date(req.created_at), "dd MMM yyyy")}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <a href={req.product_url} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-md text-info hover:bg-info/10 transition-colors">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </TooltipTrigger>
+                        <TooltipContent>Open product link</TooltipContent>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-warning hover:bg-warning/10" onClick={() => setEditRequest(req)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit request</TooltipContent>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
           </TableBody>
         </Table>
       </div>
@@ -206,7 +291,6 @@ export default function Sourcing() {
       <CreateSourcingModal
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreate={handleCreate}
       />
 
       {/* Edit Modal */}
@@ -214,7 +298,6 @@ export default function Sourcing() {
         request={editRequest}
         open={!!editRequest}
         onOpenChange={open => { if (!open) setEditRequest(null); }}
-        onSave={handleSave}
       />
     </div>
   );
