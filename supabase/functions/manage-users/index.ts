@@ -452,7 +452,8 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("manage-users error:", JSON.stringify(error, Object.getOwnPropertyNames(error || {})));
+    const message = error instanceof Error ? error.message : (typeof error === "object" && error !== null && "message" in error) ? (error as any).message : JSON.stringify(error);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
