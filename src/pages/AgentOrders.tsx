@@ -103,29 +103,52 @@ const AgentOrders = () => {
     : [];
   const orderTotal = activeItems.reduce((s, p) => s + p.qty * p.price, 0);
 
-  // Fetch count of available new orders
+  // Fetch agent's assigned products + count of available orders
   useEffect(() => {
-    const fetchCount = async () => {
-      const { count } = await supabase
+    if (!authUser) return;
+    const init = async () => {
+      // Check if agent has specific product assignments
+      const { data: agentProds } = await supabase
+        .from("agent_products")
+        .select("product_name")
+        .eq("agent_id", authUser.id);
+
+      const prodNames = agentProds && agentProds.length > 0
+        ? agentProds.map(p => p.product_name)
+        : null; // null = all products
+      setAssignedProducts(prodNames);
+
+      // Count available orders (filtered by assigned products)
+      let query = supabase
         .from("orders")
         .select("id", { count: "exact", head: true })
         .eq("confirmation_status", "new")
         .is("agent_id", null);
+      if (prodNames) {
+        query = query.in("product_name", prodNames);
+      }
+      const { count } = await query;
       setNewOrderCount(count || 0);
     };
-    fetchCount();
-  }, []);
+    init();
+  }, [authUser]);
 
   const handleStart = async () => {
     setLoading(true);
     try {
-      // Fetch unassigned new orders
-      const { data, error } = await supabase
+      // Fetch unassigned new orders, filtered by assigned products
+      let query = supabase
         .from("orders")
         .select("*")
         .eq("confirmation_status", "new")
         .is("agent_id", null)
         .order("created_at", { ascending: true });
+
+      if (assignedProducts) {
+        query = query.in("product_name", assignedProducts);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       if (!data || data.length === 0) {
