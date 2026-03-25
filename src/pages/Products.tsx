@@ -20,7 +20,6 @@ export default function Products() {
   const queryClient = useQueryClient();
   const isAdmin = authUser?.role === "admin";
   const isSeller = authUser?.role === "seller";
-  const isAdmin = authUser?.role === "admin";
   const [localProducts, setLocalProducts] = useState<Product[]>(mockProducts);
 
   // Fetch DB products (RLS ensures sellers only see their own)
