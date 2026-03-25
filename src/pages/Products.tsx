@@ -198,10 +198,12 @@ export default function Products() {
                 </span>
               )}
             </Button>
-            <Button size="sm" className="h-9 gap-1.5" onClick={() => setCreateOpen(true)}>
-              <Plus className="w-3.5 h-3.5" />
-              Create Product
-            </Button>
+            {isAdmin && (
+              <Button size="sm" className="h-9 gap-1.5" onClick={() => setCreateOpen(true)}>
+                <Plus className="w-3.5 h-3.5" />
+                Create Product
+              </Button>
+            )}
           </div>
         </div>
 
@@ -270,10 +272,12 @@ export default function Products() {
               <p className="text-xs text-muted-foreground mb-4">
                 Try adjusting your search or filters
               </p>
-              <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-                <Plus className="w-3.5 h-3.5" />
-                Create Product
-              </Button>
+              {isAdmin && (
+                <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
+                  <Plus className="w-3.5 h-3.5" />
+                  Create Product
+                </Button>
+              )}
             </div>
           ) : (
             <>
