@@ -205,6 +205,7 @@ export default function Orders() {
   }, []);
 
   // Filters state
+  const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [filterProduct, setFilterProduct] = useState('all');
   const [filterSeller, setFilterSeller] = useState('all');
@@ -379,19 +380,12 @@ export default function Orders() {
             {/* Date Range */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Date Range</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className={cn("w-full justify-start text-left h-9 text-xs font-normal", !dateRange?.from && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-                    {dateRange?.from ? (
-                      dateRange.to ? `${format(dateRange.from, 'dd/MM')} – ${format(dateRange.to, 'dd/MM')}` : format(dateRange.from, 'dd MMM yyyy')
-                    ) : "Select dates"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="range" selected={dateRange} onSelect={setDateRange} numberOfMonths={2} className="p-3 pointer-events-auto" />
-                </PopoverContent>
-              </Popover>
+              <DatePresetFilter
+                dateRange={dateRange}
+                onDateRangeChange={setDateRange}
+                preset={datePreset}
+                onPresetChange={setDatePreset}
+              />
             </div>
             {/* Product */}
             <div className="space-y-1">
