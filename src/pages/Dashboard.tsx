@@ -209,7 +209,7 @@ function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; 
     return { label: `${v}%`, x: cx + outerR * Math.cos(angle), y: cy - outerR * Math.sin(angle) };
   });
 
-  const status = animatedRate <= 40 ? "Poor" : animatedRate <= 70 ? "Average" : "Good";
+  const status = animatedRate < 50 ? "Needs Improvement" : animatedRate < 60 ? "Good" : "Excellent";
 
   return (
     <div className="bg-card rounded-xl border overflow-hidden animate-slide-up hover:shadow-lg transition-all duration-300"
