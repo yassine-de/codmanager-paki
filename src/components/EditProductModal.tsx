@@ -56,10 +56,9 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     setErrors({});
   }
 
-  if (!product) return null;
 
   // Check if this is a DB product (UUID format)
-  const isDbProduct = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(product.id);
+  const isDbProduct = product ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(product.id) : false;
 
   const addVariant = () => {
     setVariants(prev => [...prev, { id: `VAR-${Date.now()}-${prev.length}`, name: "", sku: "", price, quantity: 0 }]);
@@ -134,6 +133,8 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
       toast.error("Failed to update product");
     },
   });
+
+  if (!product) return null;
 
   const handleSave = () => {
     if (!validate()) return;
