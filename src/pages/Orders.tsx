@@ -156,6 +156,8 @@ export default function Orders() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   // Fetch orders from database
   useEffect(() => {
     const fetchOrders = async () => {
@@ -207,7 +209,7 @@ export default function Orders() {
     };
 
     fetchOrders();
-  }, []);
+  }, [refreshKey]);
 
   // Filters state
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
@@ -716,7 +718,7 @@ export default function Orders() {
       <CreateOrderModal
         open={showCreateModal}
         onOpenChange={setShowCreateModal}
-        onCreated={() => window.location.reload()}
+        onCreated={() => setRefreshKey(k => k + 1)}
       />
     </div>
     </TooltipProvider>
