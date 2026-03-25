@@ -117,6 +117,7 @@ function generateProduct(i: number): Product {
     storeLink: Math.random() > 0.3 ? `https://store.example.com/product/${sku}` : '',
     videoLink: Math.random() > 0.4 ? `https://youtube.com/watch?v=${sku}` : '',
     lastSellingPrice,
+    lastPrice: lastSellingPrice + randInt(-10, 20),
     offers,
   };
 }
