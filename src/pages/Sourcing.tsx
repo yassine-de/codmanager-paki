@@ -71,6 +71,21 @@ export default function Sourcing() {
     },
   });
 
+  // Mark unseen requests as seen when admin views the page
+  useEffect(() => {
+    if (requests.length === 0) return;
+    const unseenIds = requests.filter(r => r.admin_seen === false).map(r => r.id);
+    if (unseenIds.length === 0) return;
+    const markSeen = async () => {
+      await supabase
+        .from("sourcing_requests")
+        .update({ admin_seen: true })
+        .in("id", unseenIds);
+      queryClient.invalidateQueries({ queryKey: ["admin-sourcing-unseen"] });
+    };
+    markSeen();
+  }, [requests, queryClient]);
+
   const sellerIds = useMemo(() => [...new Set(requests.map(r => r.seller_id))], [requests]);
   const { data: sellerProfiles = [] } = useQuery({
     queryKey: ["seller-profiles", sellerIds],
