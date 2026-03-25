@@ -118,7 +118,17 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
 
       if (error) throw error;
 
-      toast.success(`Order ${orderId} created successfully`);
+      toast.success(`Order ${orderId} created successfully! 🎉`, {
+        description: `${customerName.trim()} — ${mainItem.productName} × ${totalQty}`,
+        duration: 5000,
+        style: {
+          background: "hsl(155, 50%, 96%)",
+          border: "1px solid hsl(155, 50%, 42%)",
+          color: "hsl(155, 50%, 25%)",
+          fontWeight: 600,
+          fontSize: "14px",
+        },
+      });
       resetForm();
       onOpenChange(false);
       onCreated?.();
