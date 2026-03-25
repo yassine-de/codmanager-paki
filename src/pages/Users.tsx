@@ -132,7 +132,18 @@ const Users = () => {
     setModalOpen(true);
   };
 
-  const handleSave = async () => {
+  const saveAgentProducts = async (agentId: string) => {
+    // Delete existing assignments
+    await supabase.from("agent_products").delete().eq("agent_id", agentId);
+    // Insert new ones if specific scope
+    if (form.agentProductScope === "specific" && form.agentProducts.length > 0) {
+      await supabase.from("agent_products").insert(
+        form.agentProducts.map(name => ({ agent_id: agentId, product_name: name }))
+      );
+    }
+  };
+
+
     if (!form.name || !form.email || (!editingUser && !form.password)) {
       toast.error("Remplis tous les champs obligatoires");
       return;
