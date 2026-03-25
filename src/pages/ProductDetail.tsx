@@ -9,9 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-function randInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+// Using real data from orders table
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -57,14 +55,35 @@ export default function ProductDetail() {
 
   const product = mockProduct || dbProduct;
 
-  // Generate mock order stats for this product
+  // Fetch real orders for this product from DB
+  const { data: productOrders = [] } = useQuery({
+    queryKey: ["product-orders", product?.name, product?.id],
+    queryFn: async () => {
+      if (!product) return [];
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("product_name", product.name)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!product?.name,
+  });
+
+  // Compute real stats from orders
   const stats = useMemo(() => {
     if (!product) return null;
-    const totalOrders = randInt(20, 300);
-    const confirmed = Math.round(totalOrders * (randInt(55, 95) / 100));
-    const delivered = Math.round(confirmed * (randInt(50, 90) / 100));
-    const cancelled = totalOrders - confirmed;
-    const totalSales = delivered * product.price;
+    const totalOrders = productOrders.length;
+    const confirmed = productOrders.filter(o =>
+      ['confirmed', 'shipped', 'delivered'].includes(o.confirmation_status)
+    ).length;
+    const deliveredOrders = productOrders.filter(o => o.delivery_status === 'delivered');
+    const delivered = deliveredOrders.length;
+    const cancelled = productOrders.filter(o =>
+      ['cancelled', 'no_answer', 'wrong_number', 'double'].includes(o.confirmation_status)
+    ).length;
+    const totalSales = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
     const avgOrderValue = totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0;
 
     return {
@@ -77,22 +96,26 @@ export default function ProductDetail() {
       totalSales,
       avgOrderValue,
     };
-  }, [product]);
+  }, [product, productOrders]);
 
-  // Generate daily shipping data for last 30 days
+  // Compute real daily data from orders (last 30 days)
   const dailyData = useMemo(() => {
     if (!product) return [];
     return Array.from({ length: 30 }, (_, i) => {
       const date = subDays(new Date(), 29 - i);
+      const dayStr = format(date, "yyyy-MM-dd");
+      const dayOrders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr);
+      const shipped = dayOrders.filter(o => ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status || '')).length;
+      const delivered = dayOrders.filter(o => o.delivery_status === 'delivered').length;
       return {
         date: format(date, "dd MMM"),
         shortDate: format(date, "dd"),
-        shipped: randInt(0, Math.ceil(product.shipped / 10) + 3),
-        delivered: randInt(0, Math.ceil(product.delivered / 12) + 2),
-        orders: randInt(0, 12),
+        shipped,
+        delivered,
+        orders: dayOrders.length,
       };
     });
-  }, [product]);
+  }, [product, productOrders]);
 
   if (!product) {
     return (
@@ -107,16 +130,21 @@ export default function ProductDetail() {
     );
   }
 
+  // Compute real shipped/delivered counts from orders
+  const realShipped = productOrders.filter(o => ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status || '')).length;
+  const realDelivered = productOrders.filter(o => o.delivery_status === 'delivered').length;
+  const realAvailable = Math.max(0, product.totalQty - realShipped - realDelivered);
+
   const inventoryData = [
     { label: "Total", value: product.totalQty, color: "hsl(30, 10%, 12%)" },
-    { label: "In Stock", value: product.available, color: "hsl(210, 60%, 52%)" },
-    { label: "Shipped", value: product.shipped, color: "hsl(270, 50%, 55%)" },
-    { label: "Delivered", value: product.delivered, color: "hsl(155, 50%, 42%)" },
+    { label: "In Stock", value: realAvailable, color: "hsl(210, 60%, 52%)" },
+    { label: "Shipped", value: realShipped, color: "hsl(270, 50%, 55%)" },
+    { label: "Delivered", value: realDelivered, color: "hsl(155, 50%, 42%)" },
   ];
 
-  const inventoryPercent = product.totalQty > 0 ? (product.available / product.totalQty) * 100 : 0;
-  const shippedPercent = product.totalQty > 0 ? (product.shipped / product.totalQty) * 100 : 0;
-  const deliveredPercent = product.totalQty > 0 ? (product.delivered / product.totalQty) * 100 : 0;
+  const inventoryPercent = product.totalQty > 0 ? (realAvailable / product.totalQty) * 100 : 0;
+  const shippedPercent = product.totalQty > 0 ? (realShipped / product.totalQty) * 100 : 0;
+  const deliveredPercent = product.totalQty > 0 ? (realDelivered / product.totalQty) * 100 : 0;
 
   return (
     <div className="space-y-5 max-w-7xl animate-fade-in">
