@@ -217,9 +217,8 @@ export default function Sourcing() {
               <TableHead>Country</TableHead>
               <TableHead className="text-center">Status</TableHead>
               <TableHead className="text-center">Validation</TableHead>
-              <TableHead className="text-right">Landed</TableHead>
-              <TableHead className="text-right">Seller Price</TableHead>
               <TableHead className="text-center">Payment</TableHead>
+              <TableHead>Payment Date</TableHead>
               <TableHead className="text-center">Link</TableHead>
               <TableHead className="text-center w-[70px]">Edit</TableHead>
             </TableRow>
@@ -227,7 +226,7 @@ export default function Sourcing() {
           <TableBody>
             {paginated.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={15} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={14} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
@@ -272,12 +271,6 @@ export default function Sourcing() {
                         {vConfig.label}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {(req.landed_price ?? 0) > 0 ? `${req.landed_price} MAD` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {(req.seller_price ?? 0) > 0 ? `${req.seller_price} MAD` : "—"}
-                    </TableCell>
                     <TableCell className="text-center">
                       {(() => {
                         const pConfig = paymentConfig[req.payment_status] || paymentConfig.unpaid;
@@ -293,6 +286,9 @@ export default function Sourcing() {
                           </Tooltip>
                         );
                       })()}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground whitespace-nowrap">
+                      {req.payment_date ? format(new Date(req.payment_date), "dd MMM yyyy") : "—"}
                     </TableCell>
                     <TableCell className="text-center">
                       <Tooltip>
