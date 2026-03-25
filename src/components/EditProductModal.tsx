@@ -53,7 +53,8 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
         .from("products")
         .update({
           name: name.trim(),
-          price: price,
+          price: lastSellingPrice,
+          landed_price: price,
           quantity: totalQty,
           product_url: storeLink.trim(),
           video_url: videoLink.trim(),
