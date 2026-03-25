@@ -74,7 +74,8 @@ function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
   const deliveryPostponed = orders.filter(o => o.delivery_status === 'postponed').length;
 
   // Rates
-  const confirmationRate = total > 0 ? Math.round((confirmed / total) * 100) : 0;
+  const confirmableTotal = total - newOrders - doubleOrders;
+  const confirmationRate = confirmableTotal > 0 ? Math.round((confirmed / confirmableTotal) * 100) : 0;
   const deliveryRate = confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0;
 
   // Financial
