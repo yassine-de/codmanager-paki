@@ -46,6 +46,8 @@ export interface DbSourcingRequest {
   seller_validated: boolean | null;
   admin_seen: boolean | null;
   product_created: boolean | null;
+  payment_status: string;
+  payment_method: string | null;
   created_at: string;
   updated_at: string;
 }
