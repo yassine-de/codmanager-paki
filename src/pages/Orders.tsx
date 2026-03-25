@@ -696,7 +696,58 @@ export default function Orders() {
           open={!!editOrder}
           onOpenChange={(open) => !open && setEditOrder(null)}
           order={editOrder}
-          onSave={(updated) => {
+          onSave={async (updated) => {
+            // Update in DB
+            const dbUpdate: Record<string, any> = {
+              customer_name: updated.customer,
+              customer_phone: updated.phone,
+              customer_city: updated.city,
+              customer_address: updated.address,
+              confirmation_status: updated.confirmationStatus,
+              delivery_status: updated.deliveryStatus,
+              note: updated.notes || '',
+              quantity: updated.products.reduce((s, p) => s + p.qty, 0),
+              price: updated.products[0]?.price || 0,
+              total_amount: updated.total,
+              product_name: updated.products[0]?.name || '',
+              updated_at: new Date().toISOString(),
+            };
+
+            const { error } = await supabase
+              .from('orders')
+              .update(dbUpdate)
+              .eq('order_id', updated.id);
+
+            if (error) {
+              console.error('Failed to update order in DB:', error);
+            }
+
+            // Track history
+            const historyEntries: any[] = [];
+            const trackChange = (field: string, oldVal: any, newVal: any) => {
+              if (String(oldVal ?? '') !== String(newVal ?? '')) {
+                historyEntries.push({
+                  order_id: updated.id,
+                  changed_by: authUser?.id,
+                  changed_by_role: authUser?.role || 'admin',
+                  field_changed: field,
+                  old_value: String(oldVal ?? ''),
+                  new_value: String(newVal ?? ''),
+                });
+              }
+            };
+            trackChange('confirmation_status', editOrder.confirmationStatus, updated.confirmationStatus);
+            trackChange('delivery_status', editOrder.deliveryStatus, updated.deliveryStatus);
+            trackChange('customer_name', editOrder.customer, updated.customer);
+            trackChange('customer_phone', editOrder.phone, updated.phone);
+            trackChange('customer_city', editOrder.city, updated.city);
+            trackChange('total_amount', editOrder.total, updated.total);
+            trackChange('note', editOrder.notes, updated.notes);
+
+            if (historyEntries.length > 0) {
+              await supabase.from('order_history').insert(historyEntries);
+            }
+
             setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
             setEditOrder(null);
           }}
