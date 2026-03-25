@@ -324,6 +324,9 @@ export default function Dashboard() {
         <div className="space-y-3">
           <SectionHeader icon={CheckCircle2} title="Confirmation Performance" color="text-info" iconBg="bg-info/10" delay={200} />
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <SectionKPI title="Total Orders" value={kpis.total} percentage={100}
+              percentLabel="all orders" icon={ShoppingCart} color="text-foreground" iconBg="bg-muted"
+              delay={205} onClick={() => navigate("/orders")} />
             <SectionKPI title="New Orders" value={kpis.newOrders} percentage={pct(kpis.newOrders, kpis.total)}
               percentLabel="of total" icon={Sparkles} color="text-info" iconBg="bg-info/10" change={12} delay={210}
               onClick={() => navigate("/orders?confirmation=new")} />
