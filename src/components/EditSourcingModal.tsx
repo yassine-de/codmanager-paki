@@ -37,6 +37,8 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   const [quantity, setQuantity] = useState(0);
   const [status, setStatus] = useState("waiting_quote");
   const [notes, setNotes] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("unpaid");
+  const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showProductConfirm, setShowProductConfirm] = useState(false);
 
@@ -50,6 +52,8 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     setQuantity(request.quantity);
     setStatus(request.status);
     setNotes(request.notes ?? "");
+    setPaymentStatus(request.payment_status ?? "unpaid");
+    setPaymentMethod(request.payment_method ?? null);
     setErrors({});
   }
 
