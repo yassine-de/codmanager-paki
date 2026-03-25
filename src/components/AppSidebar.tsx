@@ -57,6 +57,20 @@ export function AppSidebar() {
   const isSeller = authUser?.role === "seller";
   const isAgent = authUser?.role === "agent";
 
+  const { data: orderCount = 0 } = useQuery({
+    queryKey: ["sidebar-order-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true });
+      if (error) throw error;
+      return count || 0;
+    },
+    refetchInterval: 30000, // refresh every 30s
+  });
+
+  const navItems = getNavItems(orderCount);
+
   const visibleItems = navItems.filter((item: any) => {
     if (item.agentOnly) return isAgent;
     if (item.sellerOnly) return isSeller;
