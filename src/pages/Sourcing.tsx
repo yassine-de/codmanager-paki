@@ -229,9 +229,10 @@ export default function Sourcing() {
                 const profit = (req.seller_price ?? 0) > 0 && (req.landed_price ?? 0) > 0
                   ? (req.seller_price! - req.landed_price!)
                   : null;
+                const isReceivedNoProduct = req.status === "received" && req.product_created === false;
 
                 return (
-                  <TableRow key={req.id} className="text-xs">
+                  <TableRow key={req.id} className={`text-xs ${isReceivedNoProduct ? "bg-destructive/5 hover:bg-destructive/10" : ""}`}>
                     <TableCell className="pr-0">
                       {req.product_image_url ? (
                         <img src={req.product_image_url} alt="" className="w-8 h-8 rounded object-cover border" />
