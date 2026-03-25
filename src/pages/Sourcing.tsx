@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2, ImageIcon } from "lucide-react";
@@ -44,6 +44,7 @@ export interface DbSourcingRequest {
   seller_price: number | null;
   product_image_url: string | null;
   seller_validated: boolean | null;
+  admin_seen: boolean | null;
   created_at: string;
   updated_at: string;
 }
