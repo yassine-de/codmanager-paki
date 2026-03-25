@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Filter, X, Pencil, Plus, Package, ImageOff, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Layers, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,9 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function Products() {
   const navigate = useNavigate();
   const { authUser } = useAuth();
+  const queryClient = useQueryClient();
+  const isAdmin = authUser?.role === "admin";
+  const isSeller = authUser?.role === "seller";
   const isAdmin = authUser?.role === "admin";
   const [localProducts, setLocalProducts] = useState<Product[]>(mockProducts);
 
