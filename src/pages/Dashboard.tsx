@@ -40,36 +40,7 @@ function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; pr
   return <>{prefix}{display.toLocaleString()}{suffix}</>;
 }
 
-/* ── helpers ── */
-function getDailyData(numDays: number) {
-  const days = eachDayOfInterval({
-    start: startOfDay(subDays(new Date(), numDays - 1)),
-    end: startOfDay(new Date()),
-  });
-
-  return days.map((date) => {
-    const nextDay = new Date(date);
-    nextDay.setDate(nextDay.getDate() + 1);
-    const dayOrders = mockOrders.filter((o) => {
-      const created = new Date(o.createdAt);
-      return isAfter(created, date) && !isAfter(created, nextDay);
-    });
-    const total = dayOrders.length;
-    const confirmed = dayOrders.filter(o => ["confirmed", "shipped", "delivered", "in_transit", "with_courier"].includes(o.status)).length;
-    const shipped = dayOrders.filter(o => ["shipped", "delivered", "in_transit", "with_courier"].includes(o.status)).length;
-    const delivered = dayOrders.filter(o => o.status === "delivered").length;
-    return {
-      day: `${format(date, "EEE")}\n${format(date, "dd/MM")}`,
-      dayShort: format(date, "EEE"),
-      orders: total,
-      confirmed,
-      shipped,
-      delivered,
-      confirmationRate: total > 0 ? Math.round((confirmed / total) * 100) : 0,
-      deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
-    };
-  });
-}
+/* (daily data now computed in useDashboardData hook) */
 
 /* ── Section KPI Card ── */
 interface SectionKPIProps {
