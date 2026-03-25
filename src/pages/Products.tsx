@@ -12,12 +12,15 @@ import { mockProducts, productSellers, type Product } from "@/lib/products-data"
 import { CreateProductModal } from "@/components/CreateProductModal";
 import { EditProductModal } from "@/components/EditProductModal";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Products() {
   const navigate = useNavigate();
+  const { authUser } = useAuth();
+  const isAdmin = authUser?.role === "admin";
   const [localProducts, setLocalProducts] = useState<Product[]>(mockProducts);
 
-  // Fetch DB products
+  // Fetch DB products (RLS ensures sellers only see their own)
   const { data: dbProducts = [] } = useQuery({
     queryKey: ["db-products"],
     queryFn: async () => {
@@ -30,7 +33,7 @@ export default function Products() {
     },
   });
 
-  // Fetch seller profiles for DB products
+  // Fetch seller profiles for DB products (admin only needs this)
   const dbSellerIds = useMemo(() => [...new Set(dbProducts.map(p => p.seller_id))], [dbProducts]);
   const { data: dbSellerProfiles = [] } = useQuery({
     queryKey: ["product-seller-profiles", dbSellerIds],
@@ -43,7 +46,7 @@ export default function Products() {
       if (error) throw error;
       return data;
     },
-    enabled: dbSellerIds.length > 0,
+    enabled: dbSellerIds.length > 0 && isAdmin,
   });
 
   const dbSellerNameMap = useMemo(() => {
@@ -52,11 +55,11 @@ export default function Products() {
     return map;
   }, [dbSellerProfiles]);
 
-  // Merge mock + DB products
+  // Merge: admin sees mock + DB, seller sees only their DB products
   const products = useMemo(() => {
     const dbMapped: Product[] = dbProducts.map(p => ({
       id: p.id,
-      seller: dbSellerNameMap[p.seller_id] || "Unknown",
+      seller: dbSellerNameMap[p.seller_id] || authUser?.name || "Unknown",
       sku: p.sku,
       name: p.name,
       image: p.image_url || "",
@@ -72,8 +75,9 @@ export default function Products() {
       lastSellingPrice: Number(p.price) || 0,
       offers: [],
     }));
-    return [...dbMapped, ...localProducts];
-  }, [dbProducts, dbSellerNameMap, localProducts]);
+    // Sellers only see DB products, admins see both
+    return isAdmin ? [...dbMapped, ...localProducts] : dbMapped;
+  }, [dbProducts, dbSellerNameMap, localProducts, isAdmin, authUser]);
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
