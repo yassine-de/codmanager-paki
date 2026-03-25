@@ -28,6 +28,7 @@ export interface Product {
   storeLink: string;
   videoLink: string;
   lastSellingPrice: number;
+  lastPrice: number;
   offers: ProductOffer[];
 }
 
