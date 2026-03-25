@@ -10,6 +10,7 @@ import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { Order, ConfirmationStatus, DeliveryStatus } from "@/lib/data";
 import { sellerNames, productNames } from "@/lib/data";
+import { useAuth } from "@/contexts/AuthContext";
 
 const confirmationOptions: { value: ConfirmationStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -43,6 +44,9 @@ interface Props {
 }
 
 export default function EditOrderModal({ open, onOpenChange, order, onSave }: Props) {
+  const { authUser } = useAuth();
+  const isSeller = authUser?.role === 'seller';
+
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
