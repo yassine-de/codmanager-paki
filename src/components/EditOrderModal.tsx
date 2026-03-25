@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,9 @@ import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { Order, ConfirmationStatus, DeliveryStatus } from "@/lib/data";
 import { sellerNames, productNames } from "@/lib/data";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const confirmationOptions: { value: ConfirmationStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -43,6 +46,21 @@ interface Props {
 }
 
 export default function EditOrderModal({ open, onOpenChange, order, onSave }: Props) {
+  const { authUser } = useAuth();
+  const isSeller = authUser?.role === 'seller';
+
+  // Fetch seller's own products for the dropdown
+  const { data: sellerProducts } = useQuery({
+    queryKey: ['seller-products', authUser?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('products').select('name').eq('seller_id', authUser!.id);
+      return data?.map(p => p.name) || [];
+    },
+    enabled: isSeller && !!authUser?.id,
+  });
+
+  const availableProductNames = isSeller ? (sellerProducts || []) : productNames;
+
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
@@ -81,7 +99,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
   };
 
   const addProduct = () => {
-    setProducts(prev => [...prev, { name: productNames[0], qty: 1, price: 100 }]);
+    setProducts(prev => [...prev, { name: availableProductNames[0] || '', qty: 1, price: 100 }]);
   };
 
   const total = products.reduce((s, p) => s + p.qty * p.price, 0);
@@ -199,7 +217,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                       <Select value={p.name} onValueChange={v => updateProduct(idx, 'name', v)}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {productNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                          {availableProductNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -242,7 +260,8 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
               </div>
             </div>
 
-            {/* Order Status */}
+            {/* Order Status - hidden for sellers */}
+            {!isSeller && (
             <div>
               <h3 className={sectionTitle}>Order Status</h3>
               <div className="grid grid-cols-2 gap-3">
@@ -286,10 +305,12 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                 </div>
               </div>
             </div>
+            )}
 
             {/* Upsell + Notes */}
             <div>
               <h3 className={sectionTitle}>Additional</h3>
+              {!isSeller && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className={fieldLabel}>Upsell</Label>
@@ -302,6 +323,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                   </Select>
                 </div>
               </div>
+              )}
               <div className="mt-3">
                 <Label className={fieldLabel}>Notes</Label>
                 <Textarea
