@@ -1,6 +1,7 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Search, Filter, X, Pencil, Plus, Package, ImageOff, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Layers, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,10 +11,69 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { mockProducts, productSellers, type Product } from "@/lib/products-data";
 import { CreateProductModal } from "@/components/CreateProductModal";
 import { EditProductModal } from "@/components/EditProductModal";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Products() {
   const navigate = useNavigate();
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [localProducts, setLocalProducts] = useState<Product[]>(mockProducts);
+
+  // Fetch DB products
+  const { data: dbProducts = [] } = useQuery({
+    queryKey: ["db-products"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch seller profiles for DB products
+  const dbSellerIds = useMemo(() => [...new Set(dbProducts.map(p => p.seller_id))], [dbProducts]);
+  const { data: dbSellerProfiles = [] } = useQuery({
+    queryKey: ["product-seller-profiles", dbSellerIds],
+    queryFn: async () => {
+      if (dbSellerIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, name")
+        .in("user_id", dbSellerIds);
+      if (error) throw error;
+      return data;
+    },
+    enabled: dbSellerIds.length > 0,
+  });
+
+  const dbSellerNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    dbSellerProfiles.forEach(p => { map[p.user_id] = p.name; });
+    return map;
+  }, [dbSellerProfiles]);
+
+  // Merge mock + DB products
+  const products = useMemo(() => {
+    const dbMapped: Product[] = dbProducts.map(p => ({
+      id: p.id,
+      seller: dbSellerNameMap[p.seller_id] || "Unknown",
+      sku: p.sku,
+      name: p.name,
+      image: p.image_url || "",
+      price: Number(p.price) || 0,
+      totalQty: p.quantity || 0,
+      delivered: 0,
+      shipped: 0,
+      available: p.quantity || 0,
+      createdAt: p.created_at,
+      variants: [],
+      storeLink: p.product_url || "",
+      videoLink: "",
+      lastSellingPrice: Number(p.price) || 0,
+      offers: [],
+    }));
+    return [...dbMapped, ...localProducts];
+  }, [dbProducts, dbSellerNameMap, localProducts]);
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -70,11 +130,11 @@ export default function Products() {
   }, [search, appliedSeller, pageSize]);
 
   const handleCreate = (product: Product) => {
-    setProducts((prev) => [product, ...prev]);
+    setLocalProducts((prev) => [product, ...prev]);
   };
 
   const handleEdit = (updated: Product) => {
-    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    setLocalProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   };
 
   return (
