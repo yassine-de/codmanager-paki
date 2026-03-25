@@ -162,13 +162,14 @@ export function useDashboardData(dateRange?: DateRange) {
     delivered: last7.reduce((s, d) => s + d.delivered, 0),
   }), [last7]);
 
-  // Top products by delivery rate
+  // Top products by delivery rate (same logic as delivery performance: delivered / total shipped)
   const topProducts = useMemo(() => {
-    const map: Record<string, { total: number; delivered: number; confirmed: number }> = {};
+    const map: Record<string, { total: number; delivered: number; shipped: number; confirmed: number }> = {};
     orders.forEach(o => {
-      if (!map[o.product_name]) map[o.product_name] = { total: 0, delivered: 0, confirmed: 0 };
+      if (!map[o.product_name]) map[o.product_name] = { total: 0, delivered: 0, shipped: 0, confirmed: 0 };
       map[o.product_name].total += o.quantity;
-      if (o.delivery_status === 'delivered') map[o.product_name].delivered += o.quantity;
+      if (['delivered', 'paid'].includes(o.delivery_status || '')) map[o.product_name].delivered += o.quantity;
+      if (['shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'].includes(o.delivery_status || '')) map[o.product_name].shipped += o.quantity;
       if (o.confirmation_status === 'confirmed') map[o.product_name].confirmed += o.quantity;
     });
     return Object.entries(map)
@@ -176,11 +177,12 @@ export function useDashboardData(dateRange?: DateRange) {
         name,
         total: d.total,
         delivered: d.delivered,
+        shipped: d.shipped,
         confirmed: d.confirmed,
-        deliveryRate: d.total > 0 ? Math.round((d.delivered / d.total) * 100) : 0,
+        deliveryRate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0,
         confirmationRate: d.total > 0 ? Math.round((d.confirmed / d.total) * 100) : 0,
       }))
-      .sort((a, b) => b.total - a.total)
+      .sort((a, b) => b.deliveryRate - a.deliveryRate)
       .slice(0, 5);
   }, [orders]);
 
