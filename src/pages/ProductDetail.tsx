@@ -83,7 +83,7 @@ export default function ProductDetail() {
     const cancelled = productOrders.filter(o =>
       ['cancelled', 'no_answer', 'wrong_number', 'double'].includes(o.confirmation_status)
     ).length;
-    const totalSales = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+    const totalSales = productOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
     const avgOrderValue = totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0;
 
     return {
