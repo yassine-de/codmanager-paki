@@ -101,6 +101,7 @@ export default function SellerSourcing() {
           seller_validated: validated,
           status: validated ? "validated" : "cancelled",
           updated_at: new Date().toISOString(),
+          admin_seen: false,
         })
         .eq("id", id);
       if (error) throw error;

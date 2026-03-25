@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2, ImageIcon } from "lucide-react";
@@ -44,6 +44,7 @@ export interface DbSourcingRequest {
   seller_price: number | null;
   product_image_url: string | null;
   seller_validated: boolean | null;
+  admin_seen: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -69,6 +70,21 @@ export default function Sourcing() {
       return data as DbSourcingRequest[];
     },
   });
+
+  // Mark unseen requests as seen when admin views the page
+  useEffect(() => {
+    if (requests.length === 0) return;
+    const unseenIds = requests.filter(r => r.admin_seen === false).map(r => r.id);
+    if (unseenIds.length === 0) return;
+    const markSeen = async () => {
+      await supabase
+        .from("sourcing_requests")
+        .update({ admin_seen: true })
+        .in("id", unseenIds);
+      queryClient.invalidateQueries({ queryKey: ["admin-sourcing-unseen"] });
+    };
+    markSeen();
+  }, [requests, queryClient]);
 
   const sellerIds = useMemo(() => [...new Set(requests.map(r => r.seller_id))], [requests]);
   const { data: sellerProfiles = [] } = useQuery({
