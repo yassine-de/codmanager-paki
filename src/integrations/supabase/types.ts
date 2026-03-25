@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_products: {
+        Row: {
+          agent_id: string
+          created_at: string
+          id: string
+          product_name: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          id?: string
+          product_name: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          id?: string
+          product_name?: string
+        }
+        Relationships: []
+      }
       integration_errors: {
         Row: {
           created_at: string
