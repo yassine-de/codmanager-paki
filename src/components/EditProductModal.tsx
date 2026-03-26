@@ -169,6 +169,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
         lastSellingPrice,
         lastPrice,
         offers,
+        weight,
       });
       onOpenChange(false);
       toast.success("Product updated");
