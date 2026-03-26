@@ -602,11 +602,21 @@ export default function Invoices() {
                         <TableCell className="text-right tabular-nums text-destructive">-{d.totalFees.toFixed(2)}</TableCell>
                         <TableCell className="text-right tabular-nums font-bold text-success">{d.netPayable.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">MAD</span></TableCell>
                         <TableCell className="text-center">
+                          <Button
+                            variant="outline" size="sm"
+                            className="h-7 text-[10px] gap-1 border-success/30 text-success hover:bg-success/10"
+                            onClick={() => finalizeMutation.mutate(d)}
+                            disabled={finalizeMutation.isPending}
+                          >
+                            <CheckCircle2 className="h-3 w-3" /> Ready
+                          </Button>
+                        </TableCell>
+                        <TableCell className="text-center">
                           <Badge variant="outline" className="text-[10px] border-warning/30 text-warning bg-warning/10">Draft</Badge>
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground/40">—</TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-center gap-0.5">
+                          <div className="flex items-center justify-center">
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:bg-info/10" onClick={() => openDetail(row)}>
@@ -614,19 +624,6 @@ export default function Invoices() {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent className="text-[10px]">View Orders</TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost" size="icon"
-                                  className="h-7 w-7 text-success hover:bg-success/10"
-                                  onClick={() => finalizeMutation.mutate(d)}
-                                  disabled={finalizeMutation.isPending}
-                                >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-[10px]">Ready (Finalize)</TooltipContent>
                             </Tooltip>
                           </div>
                         </TableCell>
