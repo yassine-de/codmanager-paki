@@ -3,11 +3,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, ArrowRightLeft, UserCheck, PlusCircle, Package, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
+import {
+  Loader2, ArrowRightLeft, UserCheck, PlusCircle, Package,
+  ArrowDownCircle, ArrowUpCircle, CheckCircle2, XCircle, LogIn, LogOut, RefreshCw
+} from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface TimelineEntry {
   id: string;
-  type: "order_change" | "addon";
+  type: "order_change" | "addon" | "status_change" | "order_added" | "order_removed";
   created_at: string;
   // Order change fields
   order_id?: string;
@@ -133,6 +137,37 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
             reason: a.reason,
           });
         });
+
+        // 3. Fetch invoice history (status changes + order movements)
+        const { data: invHistory } = await supabase
+          .from("invoice_history")
+          .select("*")
+          .eq("invoice_id", invoiceId)
+          .order("created_at", { ascending: false });
+
+        // Resolve changed_by names
+        const invUserIds = [...new Set((invHistory || []).filter(h => h.changed_by).map(h => h.changed_by))];
+        let invNameMap = new Map<string, string>();
+        if (invUserIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("user_id, name")
+            .in("user_id", invUserIds);
+          invNameMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
+        }
+
+        (invHistory || []).forEach((h: any) => {
+          entries.push({
+            id: h.id,
+            type: h.event_type as TimelineEntry["type"],
+            created_at: h.created_at,
+            order_id: h.order_id,
+            field_changed: h.field_changed,
+            old_value: h.old_value,
+            new_value: h.new_value,
+            agent_name: h.changed_by ? invNameMap.get(h.changed_by) || "Unknown" : undefined,
+          });
+        });
       }
 
       // Sort by date desc
@@ -144,6 +179,173 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
     fetchAll();
   }, [open, invoiceId, orderIds]);
 
+  const orderMovements = timeline.filter(e => e.type === "order_added" || e.type === "order_removed");
+  const statusChanges = timeline.filter(e => e.type === "status_change");
+  const otherEvents = timeline.filter(e => e.type === "order_change" || e.type === "addon");
+
+  const renderEvent = (event: TimelineEntry) => {
+    // Status change
+    if (event.type === "status_change") {
+      const statusLabel = (v: string | null | undefined) => {
+        if (v === "draft") return "Draft";
+        if (v === "ready") return "Ready";
+        if (v === "paid") return "Paid";
+        return v || "—";
+      };
+      return (
+        <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
+          <div className="relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 text-info bg-info/10">
+            <RefreshCw className="w-3.5 h-3.5" />
+          </div>
+          <div className="flex-1 min-w-0 pt-0.5">
+            <p className="text-sm font-medium leading-snug">Invoice Status Changed</p>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground line-through">
+                {statusLabel(event.old_value)}
+              </span>
+              <span className="text-muted-foreground text-[10px]">→</span>
+              <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                {statusLabel(event.new_value)}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
+              </span>
+              {event.agent_name && (
+                <span className="text-[11px] text-muted-foreground">
+                  by <span className="font-medium text-foreground/70">{event.agent_name}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Order added / removed
+    if (event.type === "order_added" || event.type === "order_removed") {
+      const isAdded = event.type === "order_added";
+      return (
+        <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
+          <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${isAdded ? "text-success bg-success/10" : "text-destructive bg-destructive/10"}`}>
+            {isAdded ? <LogIn className="w-3.5 h-3.5" /> : <LogOut className="w-3.5 h-3.5" />}
+          </div>
+          <div className="flex-1 min-w-0 pt-0.5">
+            <p className="text-sm font-medium leading-snug">
+              Order {isAdded ? "Added" : "Removed"}
+            </p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold font-mono ${isAdded ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+                {event.order_id}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
+              </span>
+              {event.agent_name && (
+                <span className="text-[11px] text-muted-foreground">
+                  by <span className="font-medium text-foreground/70">{event.agent_name}</span>
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Addon
+    if (event.type === "addon") {
+      const isIn = event.addon_type === "in";
+      const AddonIcon = isIn ? ArrowDownCircle : ArrowUpCircle;
+      const addonColor = isIn ? "text-success bg-success/10" : "text-destructive bg-destructive/10";
+      return (
+        <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
+          <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${addonColor}`}>
+            <AddonIcon className="w-3.5 h-3.5" />
+          </div>
+          <div className="flex-1 min-w-0 pt-0.5">
+            <p className="text-sm font-medium leading-snug">
+              Addon — {isIn ? "Bonus" : "Deduction"}
+            </p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold ${isIn ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
+                {isIn ? "+" : "-"}{event.amount?.toFixed(2)} MAD
+              </span>
+              {event.reason && (
+                <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {event.reason}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Order change
+    const Icon = fieldIcon(event.field_changed || "");
+    const color = fieldColor(event.field_changed || "");
+    const label = fieldLabels[event.field_changed || ""] || event.field_changed;
+
+    return (
+      <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
+        <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${color}`}>
+          <Icon className="w-3.5 h-3.5" />
+        </div>
+        <div className="flex-1 min-w-0 pt-0.5">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium leading-snug">{label}</p>
+            <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{event.order_id}</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {event.old_value && (
+              <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground line-through">
+                {event.old_value}
+              </span>
+            )}
+            {event.old_value && event.new_value && <span className="text-muted-foreground text-[10px]">→</span>}
+            {event.new_value && (
+              <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                {event.new_value}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              by <span className="font-medium text-foreground/70">{event.agent_name}</span>
+            </span>
+            <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+              {event.changed_by_role}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTimeline = (events: TimelineEntry[]) => (
+    events.length === 0 ? (
+      <p className="text-sm text-muted-foreground text-center py-8">No events recorded</p>
+    ) : (
+      <div className="relative">
+        <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
+        <div className="space-y-0">
+          {events.map(renderEvent)}
+        </div>
+      </div>
+    )
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] p-0 gap-0">
@@ -154,101 +356,47 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
             <span className="text-xs font-normal text-muted-foreground">— {invoiceNumber}</span>
           </DialogTitle>
         </DialogHeader>
-        <ScrollArea className="max-h-[60vh]">
-          <div className="px-5 py-4">
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : timeline.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No history recorded yet</p>
-            ) : (
-              <div className="relative">
-                <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
-                <div className="space-y-0">
-                  {timeline.map((event) => {
-                    if (event.type === "addon") {
-                      const isIn = event.addon_type === "in";
-                      const AddonIcon = isIn ? ArrowDownCircle : ArrowUpCircle;
-                      const addonColor = isIn ? "text-success bg-success/10" : "text-destructive bg-destructive/10";
 
-                      return (
-                        <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-                          <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${addonColor}`}>
-                            <AddonIcon className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="flex-1 min-w-0 pt-0.5">
-                            <p className="text-sm font-medium leading-snug">
-                              Addon — {isIn ? "Bonus" : "Deduction"}
-                            </p>
-                            <div className="flex items-center gap-1.5 mt-1">
-                              <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold ${isIn ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                                {isIn ? "+" : "-"}{event.amount?.toFixed(2)} MAD
-                              </span>
-                              {event.reason && (
-                                <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                  {event.reason}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[11px] text-muted-foreground tabular-nums">
-                                {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    // Order change
-                    const Icon = fieldIcon(event.field_changed || "");
-                    const color = fieldColor(event.field_changed || "");
-                    const label = fieldLabels[event.field_changed || ""] || event.field_changed;
-
-                    return (
-                      <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-                        <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${color}`}>
-                          <Icon className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="flex-1 min-w-0 pt-0.5">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium leading-snug">{label}</p>
-                            <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{event.order_id}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                            {event.old_value && (
-                              <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground line-through">
-                                {event.old_value}
-                              </span>
-                            )}
-                            {event.old_value && event.new_value && <span className="text-muted-foreground text-[10px]">→</span>}
-                            {event.new_value && (
-                              <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                                {event.new_value}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[11px] text-muted-foreground tabular-nums">
-                              {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground">
-                              by <span className="font-medium text-foreground/70">{event.agent_name}</span>
-                            </span>
-                            <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-                              {event.changed_by_role}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        </ScrollArea>
+        ) : (
+          <Tabs defaultValue="all" className="w-full">
+            <div className="px-5 pt-3">
+              <TabsList className="w-full h-8">
+                <TabsTrigger value="all" className="text-[11px] flex-1">
+                  All ({timeline.length})
+                </TabsTrigger>
+                <TabsTrigger value="orders" className="text-[11px] flex-1">
+                  Orders ({orderMovements.length})
+                </TabsTrigger>
+                <TabsTrigger value="status" className="text-[11px] flex-1">
+                  Status ({statusChanges.length})
+                </TabsTrigger>
+                <TabsTrigger value="details" className="text-[11px] flex-1">
+                  Details ({otherEvents.length})
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <ScrollArea className="max-h-[55vh]">
+              <div className="px-5 py-4">
+                <TabsContent value="all" className="mt-0">
+                  {renderTimeline(timeline)}
+                </TabsContent>
+                <TabsContent value="orders" className="mt-0">
+                  {renderTimeline(orderMovements)}
+                </TabsContent>
+                <TabsContent value="status" className="mt-0">
+                  {renderTimeline(statusChanges)}
+                </TabsContent>
+                <TabsContent value="details" className="mt-0">
+                  {renderTimeline(otherEvents)}
+                </TabsContent>
+              </div>
+            </ScrollArea>
+          </Tabs>
+        )}
       </DialogContent>
     </Dialog>
   );
