@@ -48,12 +48,13 @@ interface DbAddon {
   created_at: string;
 }
 
-function calculateFee(weight: number, rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null): number {
-  if (!rates) return 0;
-  if (weight <= 1) return rates.rate_1kg;
-  if (weight <= 2) return rates.rate_2kg;
-  if (weight <= 3) return rates.rate_3kg;
-  return rates.rate_3kg_plus ?? 6;
+function calculateFeeFromWeight(weightText: string | null, rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null): number {
+  if (!rates || !weightText) return 0;
+  if (weightText === "up_to_1kg") return rates.rate_1kg;
+  if (weightText === "up_to_2kg") return rates.rate_2kg;
+  if (weightText === "up_to_3kg") return rates.rate_3kg;
+  if (weightText === "more_than_3kg") return rates.rate_3kg_plus ?? 6;
+  return 0;
 }
 
 export default function Invoices() {
@@ -76,6 +77,7 @@ export default function Invoices() {
   const [detailSellerName, setDetailSellerName] = useState("");
   const [detailSellerRates, setDetailSellerRates] = useState<any>(null);
   const [detailIsDraft, setDetailIsDraft] = useState(false);
+  const [detailSellerId, setDetailSellerId] = useState<string>("");
   const [detailDraftOrders, setDetailDraftOrders] = useState<any[]>([]);
 
   // Addon dialog
@@ -125,7 +127,7 @@ export default function Invoices() {
       if (invoiceIds.length === 0) return [];
       const { data, error } = await supabase
         .from("orders")
-        .select("id, invoice_id, price, quantity, weight")
+        .select("id, invoice_id, price, quantity, product_name, seller_id")
         .in("invoice_id", invoiceIds);
       if (error) throw error;
       return data;
@@ -192,6 +194,34 @@ export default function Invoices() {
     return map;
   }, [sellerRatesData]);
 
+  // Fetch products to get weight info
+  const { data: allProducts = [] } = useQuery({
+    queryKey: ["products-for-invoices", allSellerIds],
+    queryFn: async () => {
+      if (allSellerIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("products")
+        .select("name, seller_id, weight")
+        .in("seller_id", allSellerIds);
+      if (error) throw error;
+      return data as { name: string; seller_id: string; weight: string | null }[];
+    },
+    enabled: allSellerIds.length > 0,
+  });
+
+  // Map: "sellerId|productName" -> weight text
+  const productWeightMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    allProducts.forEach(p => {
+      map[`${p.seller_id}|${p.name}`] = p.weight;
+    });
+    return map;
+  }, [allProducts]);
+
+  const getProductWeight = (sellerId: string, productName: string): string | null => {
+    return productWeightMap[`${sellerId}|${productName}`] || null;
+  };
+
   // Compute draft invoices (grouped unassigned orders by seller)
   const draftInvoices = useMemo(() => {
     const grouped: Record<string, typeof unassignedOrders> = {};
@@ -202,7 +232,7 @@ export default function Invoices() {
     return Object.entries(grouped).map(([sellerId, orders]) => {
       const rates = sellerRatesMap[sellerId] || null;
       const totalAmount = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
-      const totalFees = orders.reduce((sum, o) => sum + calculateFee(o.weight || 0, rates), 0);
+      const totalFees = orders.reduce((sum, o) => sum + calculateFeeFromWeight(getProductWeight(sellerId, o.product_name), rates), 0);
       return {
         id: `draft-${sellerId}`,
         sellerId,
@@ -213,7 +243,7 @@ export default function Invoices() {
         netPayable: totalAmount - totalFees,
       };
     });
-  }, [unassignedOrders, sellerRatesMap]);
+  }, [unassignedOrders, sellerRatesMap, productWeightMap]);
 
   // Compute invoice summaries
   const invoiceSummaries = useMemo(() => {
@@ -228,7 +258,7 @@ export default function Invoices() {
       const orders = ordersBySeller[inv.id] || [];
       const rates = sellerRatesMap[inv.seller_id] || null;
       const totalAmount = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
-      const totalFees = orders.reduce((sum, o) => sum + calculateFee(o.weight || 0, rates), 0);
+      const totalFees = orders.reduce((sum, o) => sum + calculateFeeFromWeight(getProductWeight(inv.seller_id, o.product_name), rates), 0);
       const addons = addonsByInvoice[inv.id] || [];
       const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0);
       return {
@@ -241,7 +271,7 @@ export default function Invoices() {
         sellerName: sellerNameMap[inv.seller_id] || inv.seller_id.slice(0, 8),
       };
     });
-  }, [invoices, invoiceOrders, sellerRatesMap, addonsByInvoice, sellerNameMap]);
+  }, [invoices, invoiceOrders, sellerRatesMap, addonsByInvoice, sellerNameMap, productWeightMap]);
 
   // Combined list: drafts first, then invoices
   type CombinedRow = { type: "draft"; data: typeof draftInvoices[0] } | { type: "invoice"; data: typeof invoiceSummaries[0] };
@@ -405,6 +435,7 @@ export default function Invoices() {
     const sellerId = row.type === "draft" ? row.data.sellerId : row.data.seller_id;
     setDetailSellerName(sellerNameMap[sellerId] || "—");
     setDetailSellerRates(sellerRatesMap[sellerId] || null);
+    setDetailSellerId(sellerId);
     if (row.type === "draft") {
       setDetailInvoiceId(null);
       setDetailInvoiceNumber("Draft Invoice");
@@ -813,6 +844,7 @@ export default function Invoices() {
         invoiceId={detailInvoiceId}
         invoiceNumber={detailInvoiceNumber}
         sellerName={detailSellerName}
+        sellerId={detailSellerId}
         sellerRates={detailSellerRates}
         isDraft={detailIsDraft}
         draftOrders={detailDraftOrders}

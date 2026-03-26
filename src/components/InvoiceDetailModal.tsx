@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,18 +14,27 @@ interface Props {
   invoiceId: string | null;
   invoiceNumber: string;
   sellerName: string;
-  sellerRates: { rate_1kg: number; rate_2kg: number; rate_3kg: number } | null;
+  sellerId?: string;
+  sellerRates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null;
   isDraft?: boolean;
   draftOrders?: any[];
 }
 
-function calculateFee(weight: number, rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null): number {
-  if (!rates) return 0;
-  if (weight <= 1) return rates.rate_1kg;
-  if (weight <= 2) return rates.rate_2kg;
-  if (weight <= 3) return rates.rate_3kg;
-  return rates.rate_3kg_plus ?? 6;
+function calculateFeeFromWeight(weightText: string | null, rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null): number {
+  if (!rates || !weightText) return 0;
+  if (weightText === "up_to_1kg") return rates.rate_1kg;
+  if (weightText === "up_to_2kg") return rates.rate_2kg;
+  if (weightText === "up_to_3kg") return rates.rate_3kg;
+  if (weightText === "more_than_3kg") return rates.rate_3kg_plus ?? 6;
+  return 0;
 }
+
+const weightLabels: Record<string, string> = {
+  up_to_1kg: "≤1kg",
+  up_to_2kg: "≤2kg",
+  up_to_3kg: "≤3kg",
+  more_than_3kg: ">3kg",
+};
 
 const deliveryStatusConfig: Record<string, { label: string; color: string }> = {
   pending: { label: "Pending", color: "bg-muted text-muted-foreground" },
@@ -38,7 +48,7 @@ const deliveryStatusConfig: Record<string, { label: string; color: string }> = {
   postponed: { label: "Postponed", color: "bg-warning/15 text-warning" },
 };
 
-export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumber, sellerName, sellerRates, isDraft, draftOrders }: Props) {
+export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumber, sellerName, sellerId, sellerRates, isDraft, draftOrders }: Props) {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["invoice-orders", invoiceId],
     queryFn: async () => {
@@ -56,8 +66,34 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
 
   const displayOrders = isDraft ? (draftOrders || []) : orders;
 
+  // Determine seller ID from orders if not passed
+  const resolvedSellerId = sellerId || (displayOrders.length > 0 ? displayOrders[0].seller_id : null);
+
+  // Fetch products to get weight
+  const { data: products = [] } = useQuery({
+    queryKey: ["products-for-invoice-detail", resolvedSellerId],
+    queryFn: async () => {
+      if (!resolvedSellerId) return [];
+      const { data, error } = await supabase
+        .from("products")
+        .select("name, weight")
+        .eq("seller_id", resolvedSellerId);
+      if (error) throw error;
+      return data as { name: string; weight: string | null }[];
+    },
+    enabled: !!resolvedSellerId && open,
+  });
+
+  const productWeightMap = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    products.forEach(p => { map[p.name] = p.weight; });
+    return map;
+  }, [products]);
+
+  const getWeight = (productName: string) => productWeightMap[productName] || null;
+
   const totalAmount = displayOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
-  const totalFees = displayOrders.reduce((sum, o) => sum + calculateFee(o.weight || 0, sellerRates), 0);
+  const totalFees = displayOrders.reduce((sum, o) => sum + calculateFeeFromWeight(getWeight(o.product_name), sellerRates), 0);
   const netPayable = totalAmount - totalFees;
 
   return (
@@ -101,7 +137,8 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
                     </TableRow>
                   ) : (
                     displayOrders.map(order => {
-                      const fee = calculateFee(order.weight || 0, sellerRates);
+                      const wText = getWeight(order.product_name);
+                      const fee = calculateFeeFromWeight(wText, sellerRates);
                       const amount = order.price * order.quantity;
                       const statusCfg = deliveryStatusConfig[order.delivery_status || "pending"] || deliveryStatusConfig.pending;
                       return (
@@ -111,7 +148,15 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
                           <TableCell className="text-muted-foreground">{order.customer_phone}</TableCell>
                           <TableCell className="max-w-[150px] truncate">{order.product_name}</TableCell>
                           <TableCell className="text-center tabular-nums">{order.quantity}</TableCell>
-                          <TableCell className="text-center tabular-nums">{(order.weight || 0).toFixed(1)} kg</TableCell>
+                          <TableCell className="text-center">
+                            {wText ? (
+                              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
+                                {weightLabels[wText] || wText}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-center">
                             <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${statusCfg.color}`}>
                               {statusCfg.label}
