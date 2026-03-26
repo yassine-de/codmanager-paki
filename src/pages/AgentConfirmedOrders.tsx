@@ -200,16 +200,40 @@ const AgentConfirmedOrders = () => {
             All orders you've processed — {filteredOrders.length} total
           </p>
         </div>
-        <div className="relative w-full md:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search orders..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 text-xs pl-9"
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={filterConfirmation} onValueChange={setFilterConfirmation}>
+            <SelectTrigger className="h-9 w-[150px] text-xs">
+              <SelectValue placeholder="Confirmation" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Confirmation</SelectItem>
+              {CONFIRMATION_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterDelivery} onValueChange={setFilterDelivery}>
+            <SelectTrigger className="h-9 w-[150px] text-xs">
+              <SelectValue placeholder="Delivery" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Delivery</SelectItem>
+              <SelectItem value="none">No Status</SelectItem>
+              {Object.entries(deliveryBadge).map(([key, val]) => (
+                <SelectItem key={key} value={key}>{val.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="relative w-full md:w-56">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search orders..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 text-xs pl-9"
+            />
+          </div>
         </div>
-      </div>
 
       <Card>
         <CardContent className="p-0">
