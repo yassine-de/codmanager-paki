@@ -1,34 +1,14 @@
-import { mockOrders, sellerNames, productNames, type Order } from "@/lib/data";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from "recharts";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { KPICard } from "@/components/KPICard";
-import { Truck, Package, CheckCircle2, XCircle, PhoneOff, Clock, AlertTriangle, RotateCcw, Navigation, Users, MapPin, ChevronDown, ChevronUp } from "lucide-react";
+import { Truck, Package, CheckCircle2, XCircle, PhoneOff, Clock, AlertTriangle, RotateCcw, Navigation, Users, MapPin, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
 import { DateRange } from "react-day-picker";
-
-const agentNames = ['Karim B.', 'Sara M.', 'Youssef H.', 'Nadia K.', 'Omar T.'];
-const followUpAgents = ['Hakim R.', 'Layla Z.', 'Mehdi A.', 'Soukaina B.', 'Anas F.'];
-
-function getConfirmationAgent(order: Order): string {
-  const ev = order.history.find(h => h.type === 'confirmation' || h.type === 'assigned');
-  return ev?.agent || agentNames[Math.floor(Math.random() * agentNames.length)];
-}
-
-function getFollowUpAgent(_order: Order): string {
-  return followUpAgents[Math.floor(Math.random() * followUpAgents.length)];
-}
-
-function getDeliveryDays(order: Order): number | null {
-  if (order.shippedAt && order.deliveredAt) {
-    return Math.max(1, Math.round((new Date(order.deliveredAt).getTime() - new Date(order.shippedAt).getTime()) / 86400000));
-  }
-  return null;
-}
-
-/* Removed standalone RadialGauge — inlined bigger version below */
+import { supabase } from "@/integrations/supabase/client";
 
 const rateColor = (rate: number) => rate >= 70 ? 'hsl(155, 50%, 42%)' : rate >= 40 ? 'hsl(38, 90%, 55%)' : 'hsl(0, 65%, 52%)';
 const rateBadge = (rate: number) => rate >= 70 ? "bg-success/10 text-success" : rate >= 40 ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive";
@@ -40,84 +20,105 @@ export default function DeliveryAnalytics() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [expandedCity, setExpandedCity] = useState<string | null>(null);
 
+  const { data: orders = [], isLoading } = useQuery({
+    queryKey: ["delivery-analytics-orders"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, agent_id, customer_city, created_at, confirmed_at, delivered_at, shipping_status")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: profiles = [] } = useQuery({
+    queryKey: ["profiles-for-analytics"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("profiles").select("user_id, name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const profileNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    profiles.forEach(p => { map[p.user_id] = p.name; });
+    return map;
+  }, [profiles]);
+
+  const sellerOptions = useMemo(() => {
+    const ids = new Set(orders.map(o => o.seller_id));
+    return [...ids].map(id => ({ value: id, label: profileNameMap[id] || id.slice(0, 8) })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [orders, profileNameMap]);
+
+  const productOptions = useMemo(() => {
+    const names = new Set(orders.map(o => o.product_name).filter(Boolean));
+    return [...names].map(n => ({ value: n, label: n })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [orders]);
+
   const filteredOrders = useMemo(() => {
-    let orders = [...mockOrders];
-    if (sellerFilter !== "all") orders = orders.filter(o => o.seller === sellerFilter);
-    if (productFilter !== "all") orders = orders.filter(o => o.products.some(p => p.name === productFilter));
-    if (dateRange?.from) orders = orders.filter(o => new Date(o.createdAt) >= dateRange.from!);
-    if (dateRange?.to) orders = orders.filter(o => new Date(o.createdAt) <= dateRange.to!);
-    return orders;
-  }, [sellerFilter, productFilter, dateRange]);
+    let filtered = [...orders];
+    if (sellerFilter !== "all") filtered = filtered.filter(o => o.seller_id === sellerFilter);
+    if (productFilter !== "all") filtered = filtered.filter(o => o.product_name === productFilter);
+    if (dateRange?.from) filtered = filtered.filter(o => new Date(o.created_at) >= dateRange.from!);
+    if (dateRange?.to) filtered = filtered.filter(o => new Date(o.created_at) <= dateRange.to!);
+    return filtered;
+  }, [orders, sellerFilter, productFilter, dateRange]);
 
-  // KPIs
+  // Only orders that have been shipped (have a delivery_status)
+  const shippedStatuses = ["shipped", "pending", "delivered"];
+
   const stats = useMemo(() => {
-    const shipped = filteredOrders.filter(o => ['shipped', 'in_transit', 'with_courier', 'delivered', 'returned'].includes(o.status)).length;
-    const delivered = filteredOrders.filter(o => o.status === 'delivered').length;
-    const noAnswer = filteredOrders.filter(o => o.status === 'no_answer').length;
-    const returned = filteredOrders.filter(o => o.status === 'returned').length;
-    const inTransit = filteredOrders.filter(o => o.status === 'in_transit').length;
-    const withCourier = filteredOrders.filter(o => o.status === 'with_courier').length;
-    const outForDelivery = withCourier;
+    const shipped = filteredOrders.filter(o => o.delivery_status && shippedStatuses.includes(o.delivery_status)).length;
+    const delivered = filteredOrders.filter(o => o.delivery_status === "delivered").length;
+    const pending = filteredOrders.filter(o => o.delivery_status === "pending").length;
+    const shippedOnly = filteredOrders.filter(o => o.delivery_status === "shipped").length;
 
-    const deliveryTimes = filteredOrders.map(getDeliveryDays).filter(Boolean) as number[];
+    // Compute avg delivery time
+    const deliveryTimes = filteredOrders
+      .filter(o => o.confirmed_at && o.delivered_at)
+      .map(o => {
+        const days = Math.max(1, Math.round((new Date(o.delivered_at!).getTime() - new Date(o.confirmed_at!).getTime()) / 86400000));
+        return days;
+      });
     const avgDeliveryTime = deliveryTimes.length > 0 ? (deliveryTimes.reduce((a, b) => a + b, 0) / deliveryTimes.length).toFixed(1) : '—';
 
     return {
       shipped,
       delivered,
       deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
-      noAnswer,
-      noAnswerRate: shipped > 0 ? Math.round((noAnswer / shipped) * 100) : 0,
-      returned,
-      returnRate: shipped > 0 ? Math.round((returned / shipped) * 100) : 0,
-      inTransit,
-      inTransitRate: shipped > 0 ? Math.round((inTransit / shipped) * 100) : 0,
-      outForDelivery,
-      outForDeliveryRate: shipped > 0 ? Math.round((outForDelivery / shipped) * 100) : 0,
+      pending,
+      pendingRate: shipped > 0 ? Math.round((pending / shipped) * 100) : 0,
+      shippedOnly,
+      shippedOnlyRate: shipped > 0 ? Math.round((shippedOnly / shipped) * 100) : 0,
       avgDeliveryTime,
     };
   }, [filteredOrders]);
 
-  // Delivery by confirmation agents
+  // Delivery by confirmation agent
   const byConfAgent = useMemo(() => {
-    const map: Record<string, { shipped: number; delivered: number; returned: number }> = {};
+    const map: Record<string, { shipped: number; delivered: number }> = {};
     filteredOrders.forEach(o => {
-      const agent = getConfirmationAgent(o);
-      if (!map[agent]) map[agent] = { shipped: 0, delivered: 0, returned: 0 };
-      if (['shipped', 'in_transit', 'with_courier', 'delivered', 'returned'].includes(o.status)) map[agent].shipped++;
-      if (o.status === 'delivered') map[agent].delivered++;
-      if (o.status === 'returned') map[agent].returned++;
+      const agentId = o.agent_id;
+      if (!agentId) return;
+      if (!map[agentId]) map[agentId] = { shipped: 0, delivered: 0 };
+      if (o.delivery_status && shippedStatuses.includes(o.delivery_status)) map[agentId].shipped++;
+      if (o.delivery_status === "delivered") map[agentId].delivered++;
     });
     return Object.entries(map)
-      .map(([name, d]) => ({ name, ...d, rate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0 }))
+      .map(([id, d]) => ({ name: profileNameMap[id] || id.slice(0, 8), ...d, rate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0 }))
       .sort((a, b) => b.rate - a.rate);
-  }, [filteredOrders]);
-
-  // Delivery by follow-up agents
-  const byFollowUp = useMemo(() => {
-    const map: Record<string, { shipped: number; delivered: number; returned: number }> = {};
-    filteredOrders.forEach(o => {
-      const agent = getFollowUpAgent(o);
-      if (!map[agent]) map[agent] = { shipped: 0, delivered: 0, returned: 0 };
-      if (['shipped', 'in_transit', 'with_courier', 'delivered', 'returned'].includes(o.status)) map[agent].shipped++;
-      if (o.status === 'delivered') map[agent].delivered++;
-      if (o.status === 'returned') map[agent].returned++;
-    });
-    return Object.entries(map)
-      .map(([name, d]) => ({ name, ...d, rate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0 }))
-      .sort((a, b) => b.rate - a.rate);
-  }, [filteredOrders]);
+  }, [filteredOrders, profileNameMap]);
 
   // Delivery by product
   const byProduct = useMemo(() => {
-    const map: Record<string, { shipped: number; delivered: number; returned: number }> = {};
+    const map: Record<string, { shipped: number; delivered: number }> = {};
     filteredOrders.forEach(o => {
-      o.products.forEach(p => {
-        if (!map[p.name]) map[p.name] = { shipped: 0, delivered: 0, returned: 0 };
-        if (['shipped', 'in_transit', 'with_courier', 'delivered', 'returned'].includes(o.status)) map[p.name].shipped++;
-        if (o.status === 'delivered') map[p.name].delivered++;
-        if (o.status === 'returned') map[p.name].returned++;
-      });
+      const name = o.product_name || "Unknown";
+      if (!map[name]) map[name] = { shipped: 0, delivered: 0 };
+      if (o.delivery_status && shippedStatuses.includes(o.delivery_status)) map[name].shipped++;
+      if (o.delivery_status === "delivered") map[name].delivered++;
     });
     return Object.entries(map)
       .map(([name, d]) => ({ name, ...d, rate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0 }))
@@ -126,26 +127,31 @@ export default function DeliveryAnalytics() {
 
   // Delivery by city
   const byCity = useMemo(() => {
-    const map: Record<string, { shipped: number; delivered: number; returned: number; processing: number; noAnswer: number }> = {};
+    const map: Record<string, { shipped: number; delivered: number; pending: number }> = {};
     filteredOrders.forEach(o => {
-      if (!map[o.city]) map[o.city] = { shipped: 0, delivered: 0, returned: 0, processing: 0, noAnswer: 0 };
-      if (['shipped', 'in_transit', 'with_courier', 'delivered', 'returned'].includes(o.status)) map[o.city].shipped++;
-      if (o.status === 'delivered') map[o.city].delivered++;
-      if (o.status === 'returned') map[o.city].returned++;
-      if (['in_transit', 'with_courier', 'shipped'].includes(o.status)) map[o.city].processing++;
-      if (o.status === 'no_answer') map[o.city].noAnswer++;
+      const city = o.customer_city || "Unknown";
+      if (!map[city]) map[city] = { shipped: 0, delivered: 0, pending: 0 };
+      if (o.delivery_status && shippedStatuses.includes(o.delivery_status)) map[city].shipped++;
+      if (o.delivery_status === "delivered") map[city].delivered++;
+      if (o.delivery_status === "pending" || o.delivery_status === "shipped") map[city].pending++;
     });
     return Object.entries(map)
       .map(([city, d]) => {
-        const deliveryTimes = filteredOrders
-          .filter(o => o.city === city)
-          .map(getDeliveryDays)
-          .filter(Boolean) as number[];
-        const avgTime = deliveryTimes.length > 0 ? (deliveryTimes.reduce((a, b) => a + b, 0) / deliveryTimes.length).toFixed(1) : '—';
+        const cityOrders = filteredOrders.filter(o => (o.customer_city || "Unknown") === city && o.confirmed_at && o.delivered_at);
+        const times = cityOrders.map(o => Math.max(1, Math.round((new Date(o.delivered_at!).getTime() - new Date(o.confirmed_at!).getTime()) / 86400000)));
+        const avgTime = times.length > 0 ? (times.reduce((a, b) => a + b, 0) / times.length).toFixed(1) : '—';
         return { city, ...d, rate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0, avgTime };
       })
       .sort((a, b) => b.shipped - a.shipped);
   }, [filteredOrders]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -157,9 +163,9 @@ export default function DeliveryAnalytics() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3 bg-card rounded-lg border p-4">
         <SearchableSelect value={sellerFilter} onValueChange={setSellerFilter}
-          options={sellerNames.map(s => ({ value: s, label: s }))} placeholder="Seller" allLabel="All Sellers" className="w-[160px]" />
+          options={sellerOptions} placeholder="Seller" allLabel="All Sellers" className="w-[160px]" />
         <SearchableSelect value={productFilter} onValueChange={setProductFilter}
-          options={productNames.map(p => ({ value: p, label: p }))} placeholder="Product" allLabel="All Products" className="w-[160px]" />
+          options={productOptions} placeholder="Product" allLabel="All Products" className="w-[160px]" />
         <DatePresetFilter dateRange={dateRange} onDateRangeChange={setDateRange} preset={datePreset} onPresetChange={setDatePreset} />
         {(sellerFilter !== "all" || productFilter !== "all" || dateRange) && (
           <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setSellerFilter("all"); setProductFilter("all"); setDatePreset("maximum"); setDateRange(undefined); }}>
@@ -172,15 +178,11 @@ export default function DeliveryAnalytics() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard title="Shipped Orders" value={stats.shipped} icon={Package} iconBg="bg-info/10" iconColor="text-info" delay={0} />
         <KPICard title="Delivered" value={stats.delivered} subtitle={`${stats.deliveryRate}% rate`} icon={CheckCircle2} iconBg="bg-success/10" iconColor="text-success" delay={50} />
-        <KPICard title="No Answer" value={stats.noAnswer} subtitle={`${stats.noAnswerRate}% of shipped`} icon={PhoneOff} iconBg="bg-warning/10" iconColor="text-warning" delay={100} />
-        <KPICard title="Returned" value={stats.returned} subtitle={`${stats.returnRate}% rate`} icon={RotateCcw} iconBg="bg-destructive/10" iconColor="text-destructive" delay={150} />
-        <KPICard title="In Transit" value={stats.inTransit} subtitle={`${stats.inTransitRate}% of shipped`} icon={Navigation} iconBg="bg-info/10" iconColor="text-info" delay={200} />
-        <KPICard title="Out for Delivery" value={stats.outForDelivery} subtitle={`${stats.outForDeliveryRate}% of shipped`} icon={Truck} iconBg="bg-primary/10" iconColor="text-primary" delay={250} />
-        <KPICard title="Avg Delivery Time" value={`${stats.avgDeliveryTime} days`} icon={Clock} iconBg="bg-muted" iconColor="text-muted-foreground" delay={300} />
-        <KPICard title="Return Rate" value={`${stats.returnRate}%`} icon={XCircle} iconBg="bg-destructive/10" iconColor="text-destructive" delay={350} />
+        <KPICard title="Pending" value={stats.pending} subtitle={`${stats.pendingRate}% of shipped`} icon={Clock} iconBg="bg-warning/10" iconColor="text-warning" delay={100} />
+        <KPICard title="Avg Delivery Time" value={`${stats.avgDeliveryTime} days`} icon={Clock} iconBg="bg-muted" iconColor="text-muted-foreground" delay={150} />
       </div>
 
-      {/* Delivery Rate Gauge — Full Width, Bigger */}
+      {/* Delivery Rate Gauge */}
       <div className="bg-card rounded-xl border overflow-hidden animate-slide-up hover:shadow-lg transition-all duration-300" style={{ animationDelay: '100ms' }}>
         <div className="flex flex-col items-center justify-center px-4 py-6">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Overall Delivery Rate</h2>
@@ -232,15 +234,11 @@ export default function DeliveryAnalytics() {
                   className="text-[11px] font-semibold uppercase tracking-[0.08em]" fill="hsl(30,6%,55%)">Delivery Rate</text>
                 <text x={cx} y={cy + 22} textAnchor="middle" dominantBaseline="middle"
                   className="text-[10px] font-bold" fill={statusColor}>{status}</text>
-                {/* Stats below gauge */}
                 <text x={cx - 70} y={cy + 48} textAnchor="middle" className="text-[10px] font-medium" fill="hsl(30,6%,55%)">
                   {stats.shipped} Shipped
                 </text>
                 <text x={cx} y={cy + 48} textAnchor="middle" className="text-[10px] font-medium" fill="hsl(155,50%,42%)">
                   {stats.delivered} Delivered
-                </text>
-                <text x={cx + 70} y={cy + 48} textAnchor="middle" className="text-[10px] font-medium" fill="hsl(0,65%,52%)">
-                  {stats.returned} Returned
                 </text>
               </svg>
             );
@@ -248,7 +246,7 @@ export default function DeliveryAnalytics() {
         </div>
       </div>
 
-      {/* Status Distribution — Legend-based, no label overlap */}
+      {/* Status Distribution */}
       <div className="bg-card rounded-xl border p-5 animate-slide-up" style={{ animationDelay: '120ms' }}>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Status Distribution</h2>
         <div className="flex flex-col md:flex-row items-center gap-6">
@@ -258,18 +256,14 @@ export default function DeliveryAnalytics() {
                 <Pie
                   data={[
                     { name: 'Delivered', value: stats.delivered },
-                    { name: 'In Transit', value: stats.inTransit },
-                    { name: 'Out for Delivery', value: stats.outForDelivery },
-                    { name: 'Returned', value: stats.returned },
-                    { name: 'No Answer', value: stats.noAnswer },
+                    { name: 'Pending', value: stats.pending },
+                    { name: 'Shipped', value: stats.shippedOnly },
                   ].filter(d => d.value > 0)}
                   cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value"
                 >
                   <Cell fill="hsl(155, 50%, 42%)" />
-                  <Cell fill="hsl(210, 60%, 52%)" />
                   <Cell fill="hsl(38, 90%, 55%)" />
-                  <Cell fill="hsl(0, 65%, 52%)" />
-                  <Cell fill="hsl(30, 10%, 55%)" />
+                  <Cell fill="hsl(210, 60%, 52%)" />
                 </Pie>
                 <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
               </PieChart>
@@ -278,10 +272,8 @@ export default function DeliveryAnalytics() {
           <div className="w-full md:w-1/2 space-y-2.5">
             {[
               { name: 'Delivered', value: stats.delivered, color: 'hsl(155, 50%, 42%)', pct: stats.deliveryRate },
-              { name: 'In Transit', value: stats.inTransit, color: 'hsl(210, 60%, 52%)', pct: stats.inTransitRate },
-              { name: 'Out for Delivery', value: stats.outForDelivery, color: 'hsl(38, 90%, 55%)', pct: stats.outForDeliveryRate },
-              { name: 'Returned', value: stats.returned, color: 'hsl(0, 65%, 52%)', pct: stats.returnRate },
-              { name: 'No Answer', value: stats.noAnswer, color: 'hsl(30, 10%, 55%)', pct: stats.noAnswerRate },
+              { name: 'Pending', value: stats.pending, color: 'hsl(38, 90%, 55%)', pct: stats.pendingRate },
+              { name: 'Shipped', value: stats.shippedOnly, color: 'hsl(210, 60%, 52%)', pct: stats.shippedOnlyRate },
             ].filter(d => d.value > 0).map((item) => (
               <div key={item.name} className="flex items-center gap-3">
                 <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
@@ -295,172 +287,129 @@ export default function DeliveryAnalytics() {
       </div>
 
       {/* Performance by Confirmation Agents */}
-      <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '140ms' }}>
-        <div className="flex items-center gap-2 mb-4">
-          <Users className="h-4 w-4 text-info" />
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Delivery by Confirmation Agents</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-muted-foreground text-xs">
-                <th className="text-left py-2 pr-4">Rank</th>
-                <th className="text-left py-2 pr-4">Agent</th>
-                <th className="text-right py-2 pr-4">Shipped</th>
-                <th className="text-right py-2 pr-4">Delivered</th>
-                <th className="text-right py-2 pr-4">Returned</th>
-                <th className="text-right py-2">Del. Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byConfAgent.map((a, i) => (
-                <tr key={a.name} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                  <td className="py-2.5 pr-4">
-                    <span className={cn("inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold",
-                      i === 0 ? "bg-warning/20 text-warning" : i === 1 ? "bg-muted text-muted-foreground" : "text-muted-foreground"
-                    )}>{i + 1}</span>
-                  </td>
-                  <td className="py-2.5 pr-4 font-medium">{a.name}</td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums">{a.shipped}</td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums text-success">{a.delivered}</td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums text-destructive">{a.returned}</td>
-                  <td className="py-2.5 text-right">
-                    <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", rateBadge(a.rate))}>{a.rate}%</span>
-                  </td>
+      {byConfAgent.length > 0 && (
+        <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '140ms' }}>
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="h-4 w-4 text-info" />
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Delivery by Confirmation Agents</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-muted-foreground text-xs">
+                  <th className="text-left py-2 pr-4">Rank</th>
+                  <th className="text-left py-2 pr-4">Agent</th>
+                  <th className="text-right py-2 pr-4">Shipped</th>
+                  <th className="text-right py-2 pr-4">Delivered</th>
+                  <th className="text-right py-2">Del. Rate</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Performance by Follow Up Agents */}
-      <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '160ms' }}>
-        <div className="flex items-center gap-2 mb-4">
-          <AlertTriangle className="h-4 w-4 text-warning" />
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Delivery by Follow Up Agents</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-muted-foreground text-xs">
-                <th className="text-left py-2 pr-4">Rank</th>
-                <th className="text-left py-2 pr-4">Agent</th>
-                <th className="text-right py-2 pr-4">Shipped</th>
-                <th className="text-right py-2 pr-4">Delivered</th>
-                <th className="text-right py-2 pr-4">Returned</th>
-                <th className="text-right py-2">Del. Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byFollowUp.map((a, i) => (
-                <tr key={a.name} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                  <td className="py-2.5 pr-4">
-                    <span className={cn("inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold",
-                      i === 0 ? "bg-warning/20 text-warning" : i === 1 ? "bg-muted text-muted-foreground" : "text-muted-foreground"
-                    )}>{i + 1}</span>
-                  </td>
-                  <td className="py-2.5 pr-4 font-medium">{a.name}</td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums">{a.shipped}</td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums text-success">{a.delivered}</td>
-                  <td className="py-2.5 pr-4 text-right tabular-nums text-destructive">{a.returned}</td>
-                  <td className="py-2.5 text-right">
-                    <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", rateBadge(a.rate))}>{a.rate}%</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Delivery by Product Chart */}
-      <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '180ms' }}>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Delivery Rate by Product</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={byProduct} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" unit="%" />
-            <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" width={120} />
-            <Tooltip formatter={(v: number) => `${v}%`} contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
-            <Bar dataKey="rate" radius={[0, 4, 4, 0]} name="Delivery Rate">
-              {byProduct.map((entry) => (<Cell key={entry.name} fill={rateColor(entry.rate)} />))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Delivery by City — Expandable */}
-      <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '200ms' }}>
-        <div className="flex items-center gap-2 mb-4">
-          <MapPin className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Delivery Rate by City</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-muted-foreground text-xs">
-                <th className="text-left py-2 pr-4">City</th>
-                <th className="text-right py-2 pr-4">Shipped</th>
-                <th className="text-right py-2 pr-4">Processing</th>
-                <th className="text-right py-2 pr-4">Delivered</th>
-                <th className="text-right py-2 pr-4">Returned</th>
-                <th className="text-right py-2 pr-4">Rate</th>
-                <th className="text-right py-2 pr-4">Avg Time</th>
-                <th className="text-right py-2 w-8"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {byCity.map((c) => (
-                <>
-                  <tr key={c.city} className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => setExpandedCity(expandedCity === c.city ? null : c.city)}>
-                    <td className="py-2.5 pr-4 font-medium">{c.city}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums">{c.shipped}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums text-info">{c.processing}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums text-success">{c.delivered}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums text-destructive">{c.returned}</td>
-                    <td className="py-2.5 pr-4 text-right">
-                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", rateBadge(c.rate))}>{c.rate}%</span>
+              </thead>
+              <tbody>
+                {byConfAgent.map((a, i) => (
+                  <tr key={a.name} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                    <td className="py-2.5 pr-4">
+                      <span className={cn("inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold",
+                        i === 0 ? "bg-warning/20 text-warning" : i === 1 ? "bg-muted text-muted-foreground" : "text-muted-foreground"
+                      )}>{i + 1}</span>
                     </td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums text-muted-foreground">{c.avgTime}d</td>
+                    <td className="py-2.5 pr-4 font-medium">{a.name}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{a.shipped}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums text-success">{a.delivered}</td>
                     <td className="py-2.5 text-right">
-                      {expandedCity === c.city ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", rateBadge(a.rate))}>{a.rate}%</span>
                     </td>
                   </tr>
-                  {expandedCity === c.city && (
-                    <tr key={`${c.city}-detail`}>
-                      <td colSpan={8} className="bg-muted/30 px-6 py-3">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                          <div className="bg-card rounded-lg border p-3">
-                            <p className="text-muted-foreground font-medium mb-1">Total Shipped</p>
-                            <p className="text-lg font-bold">{c.shipped}</p>
-                          </div>
-                          <div className="bg-card rounded-lg border p-3">
-                            <p className="text-muted-foreground font-medium mb-1">Delivered</p>
-                            <p className="text-lg font-bold text-success">{c.delivered}</p>
-                            <p className="text-muted-foreground mt-0.5">{c.rate}% delivery rate</p>
-                          </div>
-                          <div className="bg-card rounded-lg border p-3">
-                            <p className="text-muted-foreground font-medium mb-1">Returned</p>
-                            <p className="text-lg font-bold text-destructive">{c.returned}</p>
-                            <p className="text-muted-foreground mt-0.5">{c.shipped > 0 ? Math.round((c.returned / c.shipped) * 100) : 0}% return rate</p>
-                          </div>
-                          <div className="bg-card rounded-lg border p-3">
-                            <p className="text-muted-foreground font-medium mb-1">Avg Delivery</p>
-                            <p className="text-lg font-bold">{c.avgTime} days</p>
-                            <p className="text-muted-foreground mt-0.5">{c.processing} still processing</p>
-                          </div>
-                        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery by Product Chart */}
+      {byProduct.length > 0 && (
+        <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '180ms' }}>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Delivery Rate by Product</h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={byProduct} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" unit="%" />
+              <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" width={120} />
+              <Tooltip formatter={(v: number) => `${v}%`} contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
+              <Bar dataKey="rate" radius={[0, 4, 4, 0]} name="Delivery Rate">
+                {byProduct.map((entry) => (<Cell key={entry.name} fill={rateColor(entry.rate)} />))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Delivery by City */}
+      {byCity.length > 0 && (
+        <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '200ms' }}>
+          <div className="flex items-center gap-2 mb-4">
+            <MapPin className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Delivery Rate by City</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-muted-foreground text-xs">
+                  <th className="text-left py-2 pr-4">City</th>
+                  <th className="text-right py-2 pr-4">Shipped</th>
+                  <th className="text-right py-2 pr-4">Pending</th>
+                  <th className="text-right py-2 pr-4">Delivered</th>
+                  <th className="text-right py-2 pr-4">Rate</th>
+                  <th className="text-right py-2 pr-4">Avg Time</th>
+                  <th className="text-right py-2 w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {byCity.map((c) => (
+                  <>
+                    <tr key={c.city} className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => setExpandedCity(expandedCity === c.city ? null : c.city)}>
+                      <td className="py-2.5 pr-4 font-medium">{c.city}</td>
+                      <td className="py-2.5 pr-4 text-right tabular-nums">{c.shipped}</td>
+                      <td className="py-2.5 pr-4 text-right tabular-nums text-info">{c.pending}</td>
+                      <td className="py-2.5 pr-4 text-right tabular-nums text-success">{c.delivered}</td>
+                      <td className="py-2.5 pr-4 text-right">
+                        <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", rateBadge(c.rate))}>{c.rate}%</span>
+                      </td>
+                      <td className="py-2.5 pr-4 text-right tabular-nums text-muted-foreground">{c.avgTime}d</td>
+                      <td className="py-2.5 text-right">
+                        {expandedCity === c.city ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
                       </td>
                     </tr>
-                  )}
-                </>
-              ))}
-            </tbody>
-          </table>
+                    {expandedCity === c.city && (
+                      <tr key={`${c.city}-detail`}>
+                        <td colSpan={7} className="bg-muted/30 px-6 py-3">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+                            <div className="bg-card rounded-lg border p-3">
+                              <p className="text-muted-foreground font-medium mb-1">Total Shipped</p>
+                              <p className="text-lg font-bold">{c.shipped}</p>
+                            </div>
+                            <div className="bg-card rounded-lg border p-3">
+                              <p className="text-muted-foreground font-medium mb-1">Delivered</p>
+                              <p className="text-lg font-bold text-success">{c.delivered}</p>
+                              <p className="text-muted-foreground mt-0.5">{c.rate}% delivery rate</p>
+                            </div>
+                            <div className="bg-card rounded-lg border p-3">
+                              <p className="text-muted-foreground font-medium mb-1">Avg Delivery</p>
+                              <p className="text-lg font-bold">{c.avgTime} days</p>
+                              <p className="text-muted-foreground mt-0.5">{c.pending} still pending</p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
