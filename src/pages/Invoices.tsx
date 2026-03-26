@@ -754,6 +754,7 @@ export default function Invoices() {
                               } else if (inv.status === "draft") {
                                 // Manually finalize draft DB invoice to ready
                                 supabase.from("invoices").update({ status: "ready", finalized_at: new Date().toISOString() } as any).eq("id", inv.id).then(() => {
+                                  logInvoiceHistory(inv.id, "status_change", "status", "draft", "ready");
                                   queryClient.invalidateQueries({ queryKey: ["invoices"] });
                                   toast.success("Invoice marked as Ready");
                                 });
