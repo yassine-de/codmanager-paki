@@ -1,14 +1,12 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, RefreshCw, Search, Eye, ExternalLink, AlertTriangle, Loader2, Mail, Save } from "lucide-react";
+import { Plus, Pencil, Trash2, RefreshCw, Search, Eye, ExternalLink, AlertTriangle, Loader2, Mail, Save, FileSpreadsheet, Database, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -50,6 +48,7 @@ const Integrations = () => {
   const [serviceEmail, setServiceEmail] = useState("");
   const [serviceEmailSaving, setServiceEmailSaving] = useState(false);
   const [serviceEmailLoaded, setServiceEmailLoaded] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Create/Edit modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -74,7 +73,6 @@ const Integrations = () => {
 
   const saveServiceEmail = async () => {
     setServiceEmailSaving(true);
-    // Upsert
     const { error } = await supabase
       .from("app_settings")
       .upsert(
@@ -87,6 +85,13 @@ const Integrations = () => {
       toast.success("Service account email saved");
     }
     setServiceEmailSaving(false);
+  };
+
+  const copyEmail = () => {
+    navigator.clipboard.writeText(serviceEmail);
+    setCopied(true);
+    toast.success("Email copied!");
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const fetchSheets = async () => {
@@ -210,238 +215,345 @@ const Integrations = () => {
       (s.seller_name || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  const totalOrders = sheets.reduce((s, sh) => s + sh.orders_count, 0);
+  const totalErrors = sheets.reduce((s, sh) => s + sh.errors_count, 0);
+  const activeSheets = sheets.filter((s) => s.active).length;
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-foreground tracking-tight">Integrations</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Manage Google Sheets connected to the system for automatic order import
-        </p>
+    <div className="max-w-[1200px] space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Integrations</h1>
+          <p className="text-muted-foreground text-xs mt-0.5">
+            Manage Google Sheets connected to the system for automatic order import
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={triggerSync} className="gap-1.5">
+            <RefreshCw className="w-3.5 h-3.5" />
+            Import Now
+          </Button>
+          <Button size="sm" onClick={openCreate} className="gap-1.5">
+            <Plus className="w-3.5 h-3.5" />
+            Create
+          </Button>
+        </div>
       </div>
 
-      {/* Service Account Email Setting */}
+      {/* Service Account Email */}
       {serviceEmailLoaded && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs font-medium">Google Service Account Email</Label>
-                <p className="text-[10px] text-muted-foreground">
-                  Sellers must share their Google Sheet with this email (read access) for automatic import
-                </p>
-                <div className="flex items-center gap-2 mt-1">
-                  <Input
-                    className="h-8 text-xs flex-1 max-w-md"
-                    placeholder="service-account@project.iam.gserviceaccount.com"
-                    value={serviceEmail}
-                    onChange={(e) => setServiceEmail(e.target.value)}
-                  />
-                  <Button size="sm" className="h-8 text-xs gap-1" onClick={saveServiceEmail} disabled={serviceEmailSaving}>
-                    {serviceEmailSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                    Save
-                  </Button>
-                </div>
-              </div>
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center gap-3">
+          <div className="bg-primary/10 rounded-lg p-2">
+            <Mail className="w-4 h-4 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0 space-y-1">
+            <p className="text-xs font-semibold">Google Service Account Email</p>
+            <div className="flex items-center gap-2">
+              <Input
+                className="h-8 text-xs flex-1 max-w-md"
+                placeholder="service-account@project.iam.gserviceaccount.com"
+                value={serviceEmail}
+                onChange={(e) => setServiceEmail(e.target.value)}
+              />
+              <Button size="sm" className="h-8 text-xs gap-1" onClick={saveServiceEmail} disabled={serviceEmailSaving}>
+                {serviceEmailSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                Save
+              </Button>
+              {serviceEmail && (
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1 shrink-0" onClick={copyEmail}>
+                  {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
-      {/* Search + Actions */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="relative max-w-xs flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search by name, sheet, seller..." className="pl-9 h-9 text-xs" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {/* KPI Cards */}
+      {!loading && sheets.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-card border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <FileSpreadsheet className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-medium">Active Sheets</span>
+            </div>
+            <p className="text-2xl font-bold">{activeSheets}</p>
+          </div>
+          <div className="bg-card border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Database className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-medium">Total Imported</span>
+            </div>
+            <p className="text-2xl font-bold">{totalOrders}</p>
+          </div>
+          <div className="bg-card border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-medium">Errors</span>
+            </div>
+            <p className={`text-2xl font-bold ${totalErrors > 0 ? "text-destructive" : ""}`}>{totalErrors}</p>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="h-9 text-xs gap-1.5" onClick={triggerSync}>
-            <RefreshCw className="h-3.5 w-3.5" /> Import Now
-          </Button>
-          <Button size="sm" className="h-9 text-xs gap-1.5 bg-primary" onClick={openCreate}>
-            <Plus className="h-3.5 w-3.5" /> Create
-          </Button>
-        </div>
+      )}
+
+      {/* Search */}
+      <div className="relative max-w-xs">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input placeholder="Search by name, sheet, seller..." className="pl-9 h-9 text-xs" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      {/* Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="rounded-md border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40">
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider">ID</TableHead>
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider">Seller</TableHead>
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider">Name</TableHead>
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider">Sheet Name</TableHead>
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider">Orders</TableHead>
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider">
-                    <span className="bg-accent/60 px-2 py-0.5 rounded">Errors</span>
-                  </TableHead>
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider">Last Row</TableHead>
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider">Last Check</TableHead>
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider">Status</TableHead>
-                  <TableHead className="text-[11px] font-semibold h-10 uppercase tracking-wider text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
-                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-                    </TableCell>
-                  </TableRow>
-                ) : filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12 text-xs text-muted-foreground">
-                      No integrations found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filtered.map((sheet, idx) => (
-                    <TableRow key={sheet.id} className="hover:bg-muted/30">
-                      <TableCell className="text-xs font-medium py-3">{idx + 1}</TableCell>
-                      <TableCell className="text-xs py-3">
+      {/* Sheets Table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed rounded-xl bg-muted/20">
+          <div className="bg-muted rounded-full p-4 mb-4">
+            <FileSpreadsheet className="w-8 h-8 text-muted-foreground/40" />
+          </div>
+          <p className="text-sm font-semibold text-muted-foreground">No integrations found</p>
+          <p className="text-xs text-muted-foreground/60 mt-1 max-w-[280px]">
+            Click "Create" to connect a Google Sheet for a seller
+          </p>
+        </div>
+      ) : (
+        <div className="bg-card border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-muted/40 border-b">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">ID</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Seller</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Name</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Sheet Name</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Orders</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">With Errors</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Last Check</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((sheet, idx) => (
+                  <tr key={sheet.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-4 text-sm text-muted-foreground">{idx + 1}</td>
+                    <td className="px-4 py-4">
+                      <span className="text-sm font-medium">
                         {sheet.seller_name === "Unassigned" ? (
                           <span className="italic text-muted-foreground">Not Selected</span>
                         ) : sheet.seller_name}
-                      </TableCell>
-                      <TableCell className="text-xs py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium">{sheet.name}</span>
-                          {sheet.sheet_url && (
-                            <a href={sheet.sheet_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium">{sheet.name}</span>
+                        {sheet.sheet_url && (
+                          <a href={sheet.sheet_url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="w-3.5 h-3.5 text-primary hover:text-primary/80" />
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 text-sm text-muted-foreground">{sheet.sheet_name || "—"}</td>
+                    <td className="px-4 py-4">
+                      <span className="text-sm font-bold text-primary">{sheet.orders_count}</span>
+                    </td>
+                    <td className="px-4 py-4">
+                      {sheet.errors_count > 0 ? (
+                        <button
+                          onClick={() => viewErrors(sheet)}
+                          className="inline-flex items-center gap-1.5 text-destructive hover:underline"
+                        >
+                          <span className="text-sm font-medium">{sheet.errors_count}</span>
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <span className="text-sm">0</span>
+                          <Eye className="w-3.5 h-3.5 opacity-40" />
                         </div>
-                      </TableCell>
-                      <TableCell className="text-xs py-3">{sheet.sheet_name}</TableCell>
-                      <TableCell className="py-3">
-                        <span className="text-xs font-semibold text-emerald-600">{sheet.orders_count}</span>
-                      </TableCell>
-                      <TableCell className="py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-xs font-semibold ${sheet.errors_count > 0 ? "text-red-500" : "text-muted-foreground"}`}>
-                            {sheet.errors_count}
-                          </span>
-                          {sheet.errors_count > 0 && (
-                            <button onClick={() => viewErrors(sheet)} className="text-muted-foreground hover:text-primary transition-colors" title="View errors">
-                              <Eye className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs py-3 text-muted-foreground">{sheet.last_imported_row}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground py-3">
-                        {sheet.last_check ? formatDistanceToNow(new Date(sheet.last_check), { addSuffix: true }) : "Never"}
-                      </TableCell>
-                      <TableCell className="py-3">
-                        <Badge className={`text-[10px] ${sheet.active ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-red-100 text-red-700 border-red-200"}`}>
-                          {sheet.active ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-purple-50 hover:bg-purple-100" onClick={() => openEdit(sheet)} title="Edit">
-                            <Pencil className="h-3.5 w-3.5 text-purple-600" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-red-50 hover:bg-red-100" onClick={() => deleteSheet(sheet.id)} title="Delete">
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap">
+                      {sheet.last_check
+                        ? formatDistanceToNow(new Date(sheet.last_check), { addSuffix: true })
+                        : "Never"}
+                    </td>
+                    <td className="px-4 py-4">
+                      <Badge
+                        className={`text-[11px] font-medium ${
+                          sheet.active
+                            ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                        variant="outline"
+                      >
+                        {sheet.active ? "Active" : "Inactive"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary/20"
+                          onClick={() => openEdit(sheet)}
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20"
+                          onClick={() => deleteSheet(sheet.id)}
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
 
       {/* Create/Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-sm">{editing ? "Edit Integration" : "New Integration"}</DialogTitle>
+            <DialogTitle className="text-base">{editing ? "Edit Integration" : "New Integration"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Seller</Label>
+              <Label className="text-xs">Seller *</Label>
               <Select value={form.seller_id} onValueChange={(v) => setForm((f) => ({ ...f, seller_id: v }))}>
-                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select a seller" /></SelectTrigger>
+                <SelectTrigger className="text-sm"><SelectValue placeholder="Select a seller" /></SelectTrigger>
                 <SelectContent>
                   {sellers.map((s) => (
-                    <SelectItem key={s.user_id} value={s.user_id} className="text-xs">{s.name}</SelectItem>
+                    <SelectItem key={s.user_id} value={s.user_id} className="text-sm">{s.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Integration Name</Label>
-              <Input className="h-9 text-xs" placeholder="e.g. Main Orders Sheet" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+              <Label className="text-xs">Integration Name *</Label>
+              <Input className="text-sm" placeholder="e.g. Main Orders Sheet" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Sheet Name</Label>
-              <Input className="h-9 text-xs" placeholder="e.g. Sheet1" value={form.sheet_name} onChange={(e) => setForm((f) => ({ ...f, sheet_name: e.target.value }))} />
+              <Input className="text-sm" placeholder="e.g. Sheet1" value={form.sheet_name} onChange={(e) => setForm((f) => ({ ...f, sheet_name: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Sheet URL</Label>
-              <Input className="h-9 text-xs" placeholder="https://docs.google.com/spreadsheets/d/..." value={form.sheet_url} onChange={(e) => setForm((f) => ({ ...f, sheet_url: e.target.value }))} />
+              <Label className="text-xs">Google Sheet URL *</Label>
+              <Input className="text-sm" placeholder="https://docs.google.com/spreadsheets/d/..." value={form.sheet_url} onChange={(e) => setForm((f) => ({ ...f, sheet_url: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" className="text-xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button size="sm" className="text-xs" onClick={saveSheet}>{editing ? "Save" : "Create"}</Button>
+            <Button variant="outline" size="sm" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={saveSheet}>{editing ? "Save Changes" : "Create"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Errors Modal */}
       <Dialog open={errorsModalOpen} onOpenChange={setErrorsModalOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle className="text-sm flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-              Errors — {errorsSheet?.name}
+            <DialogTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              Failed Orders — {errorsSheet?.name}
+              {errors.length > 0 && (
+                <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-[11px]">
+                  {errors.length} error{errors.length > 1 ? "s" : ""}
+                </Badge>
+              )}
             </DialogTitle>
           </DialogHeader>
-          {errorsLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : errors.length === 0 ? (
-            <div className="text-center py-8 text-xs text-muted-foreground">No errors found</div>
-          ) : (
-            <div className="rounded-md border overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/40">
-                    <TableHead className="text-[11px] font-semibold h-9">#</TableHead>
-                    <TableHead className="text-[11px] font-semibold h-9">Data</TableHead>
-                    <TableHead className="text-[11px] font-semibold h-9">Error</TableHead>
-                    <TableHead className="text-[11px] font-semibold h-9">Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {errors.map((err, idx) => (
-                    <TableRow key={err.id} className="hover:bg-muted/30">
-                      <TableCell className="text-xs py-2">{idx + 1}</TableCell>
-                      <TableCell className="text-xs py-2 max-w-[200px]">
-                        <pre className="text-[10px] bg-muted/50 p-1.5 rounded overflow-x-auto max-h-20">
-                          {JSON.stringify(err.order_data, null, 2)}
-                        </pre>
-                      </TableCell>
-                      <TableCell className="text-xs py-2 text-red-600 font-medium">{err.error_message}</TableCell>
-                      <TableCell className="text-xs py-2 text-muted-foreground">{new Date(err.created_at).toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+          <div className="flex-1 overflow-auto -mx-6 px-6">
+            {errorsLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : errors.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="bg-emerald-500/10 rounded-full p-3 mb-3">
+                  <FileSpreadsheet className="w-6 h-6 text-emerald-500" />
+                </div>
+                <p className="text-sm font-medium">No errors found</p>
+                <p className="text-xs text-muted-foreground mt-1">All orders imported successfully</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {errors.map((err, idx) => {
+                  const od = err.order_data as Record<string, unknown> | null;
+                  return (
+                    <div key={err.id} className="border rounded-xl overflow-hidden">
+                      <div className="bg-destructive/5 border-b border-destructive/15 px-4 py-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="bg-destructive/15 text-destructive text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          <p className="text-xs font-semibold text-destructive">{err.error_message}</p>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                          {formatDistanceToNow(new Date(err.created_at), { addSuffix: true })}
+                        </span>
+                      </div>
+                      {od && (
+                        <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2">
+                          {od.customer_name && (
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Customer</p>
+                              <p className="text-xs font-medium mt-0.5">{String(od.customer_name)}</p>
+                            </div>
+                          )}
+                          {od.phone && (
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Phone</p>
+                              <p className="text-xs font-medium mt-0.5">{String(od.phone)}</p>
+                            </div>
+                          )}
+                          {od.city && (
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">City</p>
+                              <p className="text-xs font-medium mt-0.5">{String(od.city)}</p>
+                            </div>
+                          )}
+                          {od.product_name && (
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Product</p>
+                              <p className="text-xs font-medium mt-0.5">{String(od.product_name)}</p>
+                            </div>
+                          )}
+                          {od.sku && (
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">SKU</p>
+                              <p className="text-xs font-mono font-medium mt-0.5 text-destructive">{String(od.sku)}</p>
+                            </div>
+                          )}
+                          {od.quantity && (
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Qty × Price</p>
+                              <p className="text-xs font-medium mt-0.5">
+                                {String(od.quantity)} × {od.unit_price ? String(od.unit_price) : "—"} MAD
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
