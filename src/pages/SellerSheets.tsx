@@ -207,45 +207,7 @@ export default function SellerSheets() {
         </div>
       )}
 
-      {/* Template Preview */}
-      <div className="bg-card border rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4 text-primary" />
-            <span className="text-xs font-semibold">Required Sheet Format</span>
-          </div>
-          <Button variant="ghost" size="sm" onClick={downloadTemplate} className="gap-1.5 text-xs h-7">
-            <Download className="w-3 h-3" />
-            Download CSV
-          </Button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-muted/50">
-                {TEMPLATE_HEADERS.map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {EXAMPLE_ROWS.map((row, i) => (
-                <tr key={i} className="border-t border-border/50">
-                  {row.map((cell, j) => (
-                    <td key={j} className="px-3 py-2 whitespace-nowrap text-muted-foreground/80">
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Sheets List */}
+      {/* Sheets Table */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -261,76 +223,99 @@ export default function SellerSheets() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {sheets.map((sheet) => (
-            <div
-              key={sheet.id}
-              className="bg-card border rounded-xl p-4 hover:border-primary/30 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className={`rounded-lg p-2 shrink-0 ${sheet.active ? "bg-primary/10" : "bg-muted"}`}>
-                    <FileSpreadsheet className={`w-4 h-4 ${sheet.active ? "text-primary" : "text-muted-foreground"}`} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold truncate">{sheet.name}</h3>
-                      <Badge variant={sheet.active ? "default" : "secondary"} className="text-[10px] shrink-0">
+        <div className="bg-card border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-muted/40 border-b">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">ID</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Name</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Sheet Name</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Orders</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">With Errors</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Last Check</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sheets.map((sheet, idx) => (
+                  <tr key={sheet.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-4 text-sm text-muted-foreground">{idx + 1}</td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium">{sheet.name}</span>
+                        {sheet.sheet_url && (
+                          <a href={sheet.sheet_url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="w-3.5 h-3.5 text-primary hover:text-primary/80" />
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 text-sm text-muted-foreground">{sheet.sheet_name || "—"}</td>
+                    <td className="px-4 py-4">
+                      <span className="text-sm font-bold text-primary">{sheet.orders_count}</span>
+                    </td>
+                    <td className="px-4 py-4">
+                      {sheet.errors_count > 0 ? (
+                        <button
+                          onClick={() => viewErrors(sheet)}
+                          className="inline-flex items-center gap-1.5 text-destructive hover:underline"
+                        >
+                          <span className="text-sm font-medium">{sheet.errors_count}</span>
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <span className="text-sm">0</span>
+                          <Eye className="w-3.5 h-3.5 opacity-40" />
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap">
+                      {sheet.last_check
+                        ? formatDistanceToNow(new Date(sheet.last_check), { addSuffix: true })
+                        : "Never"}
+                    </td>
+                    <td className="px-4 py-4">
+                      <Badge
+                        className={`text-[11px] font-medium ${
+                          sheet.active
+                            ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/20"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                        variant="outline"
+                      >
                         {sheet.active ? "Active" : "Inactive"}
                       </Badge>
-                    </div>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-xs text-muted-foreground truncate">{sheet.sheet_name || "Default sheet"}</span>
-                      {sheet.sheet_url && (
-                        <a href={sheet.sheet_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                          <ArrowUpRight className="w-3 h-3 text-primary hover:text-primary/80" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  {sheet.errors_count > 0 && (
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => viewErrors(sheet)}>
-                      <Eye className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={fetchSheets}>
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Stats row */}
-              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border/50">
-                <div className="flex items-center gap-1.5">
-                  <Database className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Orders:</span>
-                  <span className="text-xs font-semibold">{sheet.orders_count}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <TrendingUp className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Last row:</span>
-                  <span className="text-xs font-semibold">{sheet.last_imported_row}</span>
-                </div>
-                {sheet.errors_count > 0 && (
-                  <button
-                    onClick={() => viewErrors(sheet)}
-                    className="flex items-center gap-1.5 text-destructive hover:underline"
-                  >
-                    <AlertTriangle className="w-3 h-3" />
-                    <span className="text-xs font-semibold">{sheet.errors_count} errors</span>
-                  </button>
-                )}
-                <div className="ml-auto text-[10px] text-muted-foreground/60">
-                  {sheet.last_check
-                    ? `Synced ${formatDistanceToNow(new Date(sheet.last_check), { addSuffix: true })}`
-                    : "Never synced"}
-                </div>
-              </div>
-            </div>
-          ))}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary/20"
+                          onClick={fetchSheets}
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </Button>
+                        {sheet.errors_count > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
+                            onClick={() => viewErrors(sheet)}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
