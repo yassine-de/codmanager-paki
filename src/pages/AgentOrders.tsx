@@ -361,6 +361,11 @@ const AgentOrders = () => {
     // Try to find and claim next unclaimed order
     while (nextIdx < orderQueue.length) {
       const nextOrder = orderQueue[nextIdx];
+      // If already assigned to this agent, just move to it
+      if (nextOrder.agent_id === authUser?.id) {
+        setCurrentIndex(nextIdx);
+        return;
+      }
       const claimed = await claimOrder(nextOrder);
       if (claimed) {
         setCurrentIndex(nextIdx);
