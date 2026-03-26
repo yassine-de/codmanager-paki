@@ -396,6 +396,9 @@ export default function Invoices() {
         .eq("id", invoiceId);
       if (error) throw error;
       await logInvoiceHistory(invoiceId, "status_change", "status", currentStatus, newStatus);
+      if (!isPaid) {
+        await logInvoiceHistory(invoiceId, "status_change", "paid_at", null, new Date().toISOString());
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });

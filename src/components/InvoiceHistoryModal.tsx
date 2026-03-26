@@ -42,6 +42,8 @@ const fieldLabels: Record<string, string> = {
   shipping_status: "Shipping Status",
   cancel_reason: "Cancel Reason",
   postpone_date: "Postpone Date",
+  status: "Invoice Status",
+  paid_at: "Payment Date",
 };
 
 const fieldIcon = (field: string) => {
@@ -186,27 +188,41 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
   const renderEvent = (event: TimelineEntry) => {
     // Status change
     if (event.type === "status_change") {
+      const isPaidAt = event.field_changed === "paid_at";
       const statusLabel = (v: string | null | undefined) => {
         if (v === "draft") return "Draft";
         if (v === "ready") return "Ready";
         if (v === "paid") return "Paid";
         return v || "—";
       };
+      const formatValue = (v: string | null | undefined) => {
+        if (isPaidAt && v) {
+          try { return format(new Date(v), "dd MMM yyyy · HH:mm"); } catch { return v; }
+        }
+        return statusLabel(v);
+      };
+      const eventLabel = isPaidAt ? "Payment Date Recorded" : "Invoice Status Changed";
+      const EventIcon = isPaidAt ? CheckCircle2 : RefreshCw;
+      const eventColor = isPaidAt ? "text-success bg-success/10" : "text-info bg-info/10";
       return (
         <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-          <div className="relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 text-info bg-info/10">
-            <RefreshCw className="w-3.5 h-3.5" />
+          <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${eventColor}`}>
+            <EventIcon className="w-3.5 h-3.5" />
           </div>
           <div className="flex-1 min-w-0 pt-0.5">
-            <p className="text-sm font-medium leading-snug">Invoice Status Changed</p>
+            <p className="text-sm font-medium leading-snug">{eventLabel}</p>
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground line-through">
-                {statusLabel(event.old_value)}
-              </span>
-              <span className="text-muted-foreground text-[10px]">→</span>
-              <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                {statusLabel(event.new_value)}
-              </span>
+              {event.old_value && (
+                <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground line-through">
+                  {formatValue(event.old_value)}
+                </span>
+              )}
+              {event.old_value && event.new_value && <span className="text-muted-foreground text-[10px]">→</span>}
+              {event.new_value && (
+                <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                  {formatValue(event.new_value)}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-[11px] text-muted-foreground tabular-nums">
