@@ -735,6 +735,14 @@ export type Database = {
     Functions: {
       generate_order_id: { Args: { p_seller_id: string }; Returns: string }
       generate_product_sku: { Args: never; Returns: string }
+      get_agent_rankings: {
+        Args: never
+        Returns: {
+          agent_id: string
+          agent_name: string
+          confirmed_count: number
+        }[]
+      }
       get_user_permissions: { Args: { _user_id: string }; Returns: string[] }
       get_user_role: {
         Args: { _user_id: string }

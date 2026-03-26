@@ -89,19 +89,25 @@ const AgentDashboard = () => {
     { name: "Cancelled", value: stats.cancelled, color: COLORS.cancelled },
   ];
 
-  // Agent ranking (mock)
-  const agentRanking = useMemo(() => {
-    const agents = ["Karim B.", "Sara M.", "Youssef H.", "Nadia K.", "Omar T.", agentName];
-    return agents
-      .map((name) => ({
-        name,
-        confirmed: Math.floor(Math.random() * 50) + 10,
-        isCurrentAgent: name === agentName,
-      }))
-      .sort((a, b) => b.confirmed - a.confirmed);
-  }, [agentName]);
+  // Agent ranking (real data)
+  const { data: rankingData = [] } = useQuery({
+    queryKey: ["agent-rankings"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_agent_rankings");
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
-  const currentRank = agentRanking.findIndex((a) => a.isCurrentAgent) + 1;
+  const agentRanking = useMemo(() => {
+    return rankingData.map((r: any) => ({
+      name: r.agent_name,
+      confirmed: Number(r.confirmed_count),
+      isCurrentAgent: r.agent_id === userId,
+    }));
+  }, [rankingData, userId]);
+
+  const currentRank = agentRanking.findIndex((a: any) => a.isCurrentAgent) + 1;
 
   // Top products by confirmation rate
   const topByConfirmation = useMemo(() => {
