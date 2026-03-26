@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { KPICard } from "@/components/KPICard";
-import { Phone, CheckCircle2, PhoneCall, Clock, XCircle, AlertTriangle, Truck, Users, ShoppingCart, Loader2 } from "lucide-react";
+import { Phone, CheckCircle2, PhoneCall, Clock, XCircle, AlertTriangle, Truck, Users, ShoppingCart, Loader2, Timer, Hourglass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
@@ -45,6 +45,20 @@ export default function ConfirmationAnalytics() {
     queryKey: ["agent-roles-analytics"],
     queryFn: async () => {
       const { data, error } = await supabase.from("user_roles").select("user_id").eq("role", "agent");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch order history for time calculations
+  const { data: orderHistory = [] } = useQuery({
+    queryKey: ["order-history-for-analytics"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("order_history")
+        .select("order_id, field_changed, old_value, new_value, created_at")
+        .in("field_changed", ["confirmation_status", "agent_id"])
+        .order("created_at", { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -112,6 +126,79 @@ export default function ConfirmationAnalytics() {
       deliveredRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
     };
   }, [filteredOrders]);
+
+  // Time-based KPIs: First Call Avg & Handling Time
+  const timeStats = useMemo(() => {
+    // Build maps from order_history
+    // First status change per order (first time confirmation_status changed from 'new')
+    const firstStatusChangeMap: Record<string, string> = {};
+    // Agent claim time per order (when agent_id was set)
+    const agentClaimMap: Record<string, string> = {};
+    // First status change after agent claim
+    const firstChangeAfterClaimMap: Record<string, string> = {};
+
+    orderHistory.forEach(h => {
+      if (h.field_changed === "confirmation_status" && h.old_value === "new" && !firstStatusChangeMap[h.order_id]) {
+        firstStatusChangeMap[h.order_id] = h.created_at;
+      }
+      if (h.field_changed === "agent_id" && !h.old_value && h.new_value && !agentClaimMap[h.order_id]) {
+        agentClaimMap[h.order_id] = h.created_at;
+      }
+    });
+
+    // Find first status change AFTER agent claim
+    orderHistory.forEach(h => {
+      if (h.field_changed === "confirmation_status" && agentClaimMap[h.order_id] && !firstChangeAfterClaimMap[h.order_id]) {
+        const claimTime = new Date(agentClaimMap[h.order_id]).getTime();
+        const changeTime = new Date(h.created_at).getTime();
+        if (changeTime >= claimTime) {
+          firstChangeAfterClaimMap[h.order_id] = h.created_at;
+        }
+      }
+    });
+
+    // Build order created_at map from filtered orders
+    const orderCreatedMap: Record<string, string> = {};
+    const filteredOrderIds = new Set<string>();
+    filteredOrders.forEach(o => {
+      orderCreatedMap[o.order_id] = o.created_at;
+      filteredOrderIds.add(o.order_id);
+    });
+
+    // First Call Avg: time from created_at to first status change
+    let firstCallTotalMs = 0;
+    let firstCallCount = 0;
+    for (const [orderId, changeTime] of Object.entries(firstStatusChangeMap)) {
+      if (!filteredOrderIds.has(orderId) || !orderCreatedMap[orderId]) continue;
+      const diff = new Date(changeTime).getTime() - new Date(orderCreatedMap[orderId]).getTime();
+      if (diff > 0) { firstCallTotalMs += diff; firstCallCount++; }
+    }
+
+    // Handling Time: time from agent claim to first status change after claim
+    let handlingTotalMs = 0;
+    let handlingCount = 0;
+    for (const [orderId, changeTime] of Object.entries(firstChangeAfterClaimMap)) {
+      if (!filteredOrderIds.has(orderId) || !agentClaimMap[orderId]) continue;
+      const diff = new Date(changeTime).getTime() - new Date(agentClaimMap[orderId]).getTime();
+      if (diff > 0) { handlingTotalMs += diff; handlingCount++; }
+    }
+
+    const formatDuration = (ms: number) => {
+      const totalMinutes = Math.round(ms / 60000);
+      if (totalMinutes < 60) return `${totalMinutes}m`;
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      if (hours < 24) return `${hours}h ${mins}m`;
+      const days = Math.floor(hours / 24);
+      const remHours = hours % 24;
+      return `${days}d ${remHours}h`;
+    };
+
+    return {
+      firstCallAvg: firstCallCount > 0 ? formatDuration(firstCallTotalMs / firstCallCount) : "N/A",
+      handlingTime: handlingCount > 0 ? formatDuration(handlingTotalMs / handlingCount) : "N/A",
+    };
+  }, [orderHistory, filteredOrders]);
 
   // Agent scores
   const agentScores = useMemo(() => {
@@ -238,13 +325,15 @@ export default function ConfirmationAnalytics() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
         <KPICard title="Total Orders" value={stats.total} icon={ShoppingCart} iconBg="bg-primary/10" iconColor="text-primary" delay={0} />
         <KPICard title="Confirmed" value={stats.confirmed} subtitle={`${stats.confirmationRate}% rate`} icon={CheckCircle2} iconBg="bg-success/10" iconColor="text-success" delay={50} />
         <KPICard title="Answered Rate" value={`${stats.answeredRate}%`} icon={PhoneCall} iconBg="bg-primary/10" iconColor="text-primary" delay={100} />
         <KPICard title="Cancelled" value={stats.cancelled} subtitle={`${stats.cancelledRate}% rate`} icon={XCircle} iconBg="bg-destructive/10" iconColor="text-destructive" delay={150} />
         <KPICard title="Reported (Postponed)" value={stats.postponed} subtitle={`${stats.postponedRate}% rate`} icon={AlertTriangle} iconBg="bg-warning/10" iconColor="text-warning" delay={200} />
         <KPICard title="Delivered" value={stats.delivered} subtitle={`${stats.deliveredRate}% delivery rate`} icon={Truck} iconBg="bg-success/10" iconColor="text-success" delay={250} />
+        <KPICard title="First Call Avg" value={timeStats.firstCallAvg} icon={Timer} iconBg="bg-accent/10" iconColor="text-accent-foreground" delay={300} />
+        <KPICard title="Handling Time" value={timeStats.handlingTime} icon={Hourglass} iconBg="bg-accent/10" iconColor="text-accent-foreground" delay={350} />
       </div>
 
       {/* Agent Scores Table */}
