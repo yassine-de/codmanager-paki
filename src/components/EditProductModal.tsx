@@ -260,6 +260,29 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
               </div>
             </div>
 
+            {/* Weight */}
+            <div>
+              <h3 className={sectionTitle}>
+                <span className="flex items-center gap-1.5">
+                  <Weight className="w-3.5 h-3.5 text-muted-foreground" />
+                  Weight
+                </span>
+              </h3>
+              <div className="w-1/2">
+                <Select value={weight} onValueChange={setWeight}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select weight bracket" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="up_to_1kg">Up to 1 kg</SelectItem>
+                    <SelectItem value="up_to_2kg">Up to 2 kg</SelectItem>
+                    <SelectItem value="up_to_3kg">Up to 3 kg</SelectItem>
+                    <SelectItem value="more_than_3kg">More than 3 kg</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             {/* Links */}
             <div>
               <h3 className={sectionTitle}>Links</h3>
