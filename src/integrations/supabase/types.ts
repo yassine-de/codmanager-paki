@@ -109,6 +109,77 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_addons: {
+        Row: {
+          amount: number
+          created_at: string | null
+          id: string
+          invoice_id: string
+          reason: string
+          type: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string | null
+          id?: string
+          invoice_id: string
+          reason?: string
+          type?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          id?: string
+          invoice_id?: string
+          reason?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_addons_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          created_at: string | null
+          finalized_at: string | null
+          id: string
+          invoice_number: string
+          paid_at: string | null
+          paid_by: string | null
+          payment_proof_url: string | null
+          seller_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string | null
+          finalized_at?: string | null
+          id?: string
+          invoice_number?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_proof_url?: string | null
+          seller_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string | null
+          finalized_at?: string | null
+          id?: string
+          invoice_number?: string
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_proof_url?: string | null
+          seller_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       order_history: {
         Row: {
           changed_by: string
@@ -158,6 +229,7 @@ export type Database = {
           delivery_status: string | null
           fragile: boolean | null
           id: string
+          invoice_id: string | null
           last_price: number | null
           note: string | null
           offers: string | null
@@ -175,6 +247,7 @@ export type Database = {
           total_amount: number
           updated_at: string
           video_url: string | null
+          weight: number | null
         }
         Insert: {
           agent_id?: string | null
@@ -191,6 +264,7 @@ export type Database = {
           delivery_status?: string | null
           fragile?: boolean | null
           id?: string
+          invoice_id?: string | null
           last_price?: number | null
           note?: string | null
           offers?: string | null
@@ -208,6 +282,7 @@ export type Database = {
           total_amount?: number
           updated_at?: string
           video_url?: string | null
+          weight?: number | null
         }
         Update: {
           agent_id?: string | null
@@ -224,6 +299,7 @@ export type Database = {
           delivery_status?: string | null
           fragile?: boolean | null
           id?: string
+          invoice_id?: string | null
           last_price?: number | null
           note?: string | null
           offers?: string | null
@@ -241,8 +317,17 @@ export type Database = {
           total_amount?: number
           updated_at?: string
           video_url?: string | null
+          weight?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "orders_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       permissions: {
         Row: {
