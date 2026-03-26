@@ -47,13 +47,25 @@ const CONFIRMATION_OPTIONS = [
   { value: "wrong_number", label: "Wrong Number" },
 ];
 
+interface EditForm {
+  customer_name: string;
+  customer_phone: string;
+  customer_city: string;
+  customer_address: string;
+  product_name: string;
+  price: number;
+  quantity: number;
+  confirmation_status: string;
+  note: string;
+}
+
 const AgentConfirmedOrders = () => {
   const { authUser } = useAuth();
   const userId = authUser?.id;
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [editOrder, setEditOrder] = useState<any>(null);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<EditForm>({
     customer_name: "",
     customer_phone: "",
     customer_city: "",
@@ -82,33 +94,59 @@ const AgentConfirmedOrders = () => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
-      const confirmed_at = status === "confirmed" ? new Date().toISOString() : null;
+    mutationFn: async () => {
+      if (!editOrder) return;
+      const totalAmount = editForm.price * editForm.quantity;
+      const confirmed_at = editForm.confirmation_status === "confirmed" ? new Date().toISOString() : null;
+
       const { error } = await supabase
         .from("orders")
-        .update({ confirmation_status: status, confirmed_at })
-        .eq("id", orderId);
+        .update({
+          customer_name: editForm.customer_name.trim(),
+          customer_phone: editForm.customer_phone.trim(),
+          customer_city: editForm.customer_city.trim(),
+          customer_address: editForm.customer_address.trim(),
+          product_name: editForm.product_name.trim(),
+          price: editForm.price,
+          quantity: editForm.quantity,
+          total_amount: totalAmount,
+          confirmation_status: editForm.confirmation_status,
+          confirmed_at,
+          note: editForm.note.trim(),
+        })
+        .eq("id", editOrder.id);
       if (error) throw error;
 
-      // Log history
+      // Log changed fields
       if (userId) {
-        await supabase.from("order_history").insert({
-          order_id: editOrder?.order_id,
-          changed_by: userId,
-          changed_by_role: "agent",
-          field_changed: "confirmation_status",
-          old_value: editOrder?.confirmation_status,
-          new_value: status,
-        });
+        const changes: { field: string; old_val: string; new_val: string }[] = [];
+        const fields: (keyof EditForm)[] = ["customer_name", "customer_phone", "customer_city", "product_name", "price", "quantity", "confirmation_status"];
+        for (const f of fields) {
+          if (String(editOrder[f]) !== String(editForm[f])) {
+            changes.push({ field: f, old_val: String(editOrder[f]), new_val: String(editForm[f]) });
+          }
+        }
+        if (changes.length > 0) {
+          await supabase.from("order_history").insert(
+            changes.map((c) => ({
+              order_id: editOrder.order_id,
+              changed_by: userId,
+              changed_by_role: "agent",
+              field_changed: c.field,
+              old_value: c.old_val,
+              new_value: c.new_val,
+            }))
+          );
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agent-treated-orders"] });
       queryClient.invalidateQueries({ queryKey: ["agent-dashboard-orders"] });
-      toast.success("Status updated successfully");
+      toast.success("Order updated successfully");
       setEditOrder(null);
     },
-    onError: () => toast.error("Failed to update status"),
+    onError: () => toast.error("Failed to update order"),
   });
 
   const filteredOrders = useMemo(() => {
@@ -124,21 +162,25 @@ const AgentConfirmedOrders = () => {
     );
   }, [orders, search]);
 
-  const canEdit = (order: any) => {
-    return !SHIPPED_STATUSES.includes(order.delivery_status || "");
-  };
+  const canEdit = (order: any) => !SHIPPED_STATUSES.includes(order.delivery_status || "");
 
   const openEdit = (order: any) => {
     setEditOrder(order);
-    setNewStatus(order.confirmation_status);
+    setEditForm({
+      customer_name: order.customer_name || "",
+      customer_phone: order.customer_phone || "",
+      customer_city: order.customer_city || "",
+      customer_address: order.customer_address || "",
+      product_name: order.product_name || "",
+      price: Number(order.price) || 0,
+      quantity: order.quantity || 1,
+      confirmation_status: order.confirmation_status || "",
+      note: order.note || "",
+    });
   };
 
-  const handleSave = () => {
-    if (!editOrder || !newStatus || newStatus === editOrder.confirmation_status) {
-      setEditOrder(null);
-      return;
-    }
-    updateMutation.mutate({ orderId: editOrder.id, status: newStatus });
+  const updateField = (field: keyof EditForm, value: string | number) => {
+    setEditForm((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -253,41 +295,141 @@ const AgentConfirmedOrders = () => {
         </CardContent>
       </Card>
 
-      {/* Edit Status Dialog */}
+      {/* Edit Order Dialog */}
       <Dialog open={!!editOrder} onOpenChange={(open) => !open && setEditOrder(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-base">Edit Order — {editOrder?.order_id}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label className="text-xs font-medium">Confirmation Status</Label>
-              <Select value={newStatus} onValueChange={setNewStatus}>
-                <SelectTrigger className="h-9 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CONFIRMATION_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs font-medium text-muted-foreground">Delivery Status (read-only)</Label>
-              <div className="h-9 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">
-                {editOrder?.delivery_status
-                  ? (deliveryBadge[editOrder.delivery_status]?.label || editOrder.delivery_status)
-                  : "—"}
+          <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+            {/* Customer Info */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Customer Info</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Name</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={editForm.customer_name}
+                    onChange={(e) => updateField("customer_name", e.target.value)}
+                    maxLength={100}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Phone</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={editForm.customer_phone}
+                    onChange={(e) => updateField("customer_phone", e.target.value)}
+                    maxLength={20}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">City</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={editForm.customer_city}
+                    onChange={(e) => updateField("customer_city", e.target.value)}
+                    maxLength={100}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Address</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={editForm.customer_address}
+                    onChange={(e) => updateField("customer_address", e.target.value)}
+                    maxLength={200}
+                  />
+                </div>
               </div>
+            </div>
+
+            {/* Product Info */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Product Info</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Product Name</Label>
+                <Input
+                  className="h-9 text-sm"
+                  value={editForm.product_name}
+                  onChange={(e) => updateField("product_name", e.target.value)}
+                  maxLength={200}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Price (MAD)</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    type="number"
+                    min={0}
+                    value={editForm.price}
+                    onChange={(e) => updateField("price", Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Quantity</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    type="number"
+                    min={1}
+                    value={editForm.quantity}
+                    onChange={(e) => updateField("quantity", Math.max(1, Number(e.target.value)))}
+                  />
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Total: <span className="font-semibold text-foreground">{(editForm.price * editForm.quantity).toFixed(2)} MAD</span>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Confirmation Status</Label>
+                  <Select value={editForm.confirmation_status} onValueChange={(v) => updateField("confirmation_status", v)}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONFIRMATION_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Delivery Status (read-only)</Label>
+                  <div className="h-9 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">
+                    {editOrder?.delivery_status
+                      ? (deliveryBadge[editOrder.delivery_status]?.label || editOrder.delivery_status)
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Note */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Note</Label>
+              <Input
+                className="h-9 text-sm"
+                value={editForm.note}
+                onChange={(e) => updateField("note", e.target.value)}
+                maxLength={500}
+                placeholder="Optional note..."
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setEditOrder(null)}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? "Saving..." : "Save"}
+            <Button size="sm" onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
