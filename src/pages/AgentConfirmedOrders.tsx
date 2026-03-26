@@ -64,6 +64,8 @@ const AgentConfirmedOrders = () => {
   const userId = authUser?.id;
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [filterConfirmation, setFilterConfirmation] = useState<string>("all");
+  const [filterDelivery, setFilterDelivery] = useState<string>("all");
   const [editOrder, setEditOrder] = useState<any>(null);
   const [editForm, setEditForm] = useState<EditForm>({
     customer_name: "",
