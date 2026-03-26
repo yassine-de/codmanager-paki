@@ -42,6 +42,8 @@ const fieldLabels: Record<string, string> = {
   shipping_status: "Shipping Status",
   cancel_reason: "Cancel Reason",
   postpone_date: "Postpone Date",
+  status: "Invoice Status",
+  paid_at: "Payment Date",
 };
 
 const fieldIcon = (field: string) => {
