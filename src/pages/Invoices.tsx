@@ -673,7 +673,11 @@ export default function Invoices() {
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted"
-                                  onClick={() => toast.info("No history for draft invoices")}>
+                                  onClick={() => {
+                                    setHistoryInvoiceId(null);
+                                    setHistoryInvoiceNumber("Draft");
+                                    setHistoryOrderIds(d.orders.map((o: any) => o.order_id));
+                                  }}>
                                   <History className="h-3.5 w-3.5" />
                                 </Button>
                               </TooltipTrigger>
@@ -801,7 +805,12 @@ export default function Invoices() {
                               )}
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                                    onClick={() => {
+                                      setHistoryInvoiceId(inv.id);
+                                      setHistoryInvoiceNumber(inv.invoice_number);
+                                      setHistoryOrderIds(undefined);
+                                    }}>
                                     <History className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
