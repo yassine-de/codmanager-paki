@@ -46,6 +46,16 @@ export default function SellerSheets() {
   const [errorsSheet, setErrorsSheet] = useState<Sheet | null>(null);
   const [errors, setErrors] = useState<SheetError[]>([]);
   const [errorsLoading, setErrorsLoading] = useState(false);
+  const [serviceEmail, setServiceEmail] = useState("");
+
+  const fetchServiceEmail = async () => {
+    const { data } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "google_service_account_email")
+      .maybeSingle();
+    if (data) setServiceEmail(data.value);
+  };
 
   const fetchSheets = async () => {
     if (!user) return;
