@@ -469,6 +469,7 @@ export type Database = {
           rate_1kg: number
           rate_2kg: number
           rate_3kg: number
+          rate_3kg_plus: number
           user_id: string
         }
         Insert: {
@@ -476,6 +477,7 @@ export type Database = {
           rate_1kg?: number
           rate_2kg?: number
           rate_3kg?: number
+          rate_3kg_plus?: number
           user_id: string
         }
         Update: {
@@ -483,6 +485,7 @@ export type Database = {
           rate_1kg?: number
           rate_2kg?: number
           rate_3kg?: number
+          rate_3kg_plus?: number
           user_id?: string
         }
         Relationships: []
@@ -502,6 +505,7 @@ export type Database = {
           product_image_url: string | null
           product_name: string
           product_url: string
+          product_weight: string | null
           quantity: number
           seller_id: string
           seller_price: number | null
@@ -528,6 +532,7 @@ export type Database = {
           product_image_url?: string | null
           product_name: string
           product_url?: string
+          product_weight?: string | null
           quantity?: number
           seller_id: string
           seller_price?: number | null
@@ -554,6 +559,7 @@ export type Database = {
           product_image_url?: string | null
           product_name?: string
           product_url?: string
+          product_weight?: string | null
           quantity?: number
           seller_id?: string
           seller_price?: number | null
