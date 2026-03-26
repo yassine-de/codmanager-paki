@@ -124,7 +124,18 @@ export default function SellerSheets() {
           <p className="text-muted-foreground text-xs mt-0.5">
             Link your Google Sheets to import orders automatically
           </p>
+      </div>
+
+      {/* Service account email info */}
+      {serviceEmail && (
+        <div className="bg-muted/50 border rounded-lg p-3 flex items-start gap-2">
+          <Mail className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+          <div>
+            <p className="text-xs font-medium">Share your Google Sheet with this email for automatic import:</p>
+            <p className="text-xs text-primary font-mono mt-0.5 select-all">{serviceEmail}</p>
+          </div>
         </div>
+      )}
         <Button size="sm" onClick={() => setLinkOpen(true)} className="gap-1.5">
           <Plus className="w-3.5 h-3.5" />
           Link Sheet
