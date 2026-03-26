@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { User, Mail, Phone, CreditCard, Wallet, Star, Loader2, Save } from "lucide-react";
+import { User, Mail, Phone, CreditCard, Wallet, Star, Loader2, Save, Settings } from "lucide-react";
 
 interface PaymentMethod {
   id?: string;
@@ -26,7 +26,6 @@ export default function SellerSettings() {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
 
-  // Fetch payment methods
   const { data: paymentMethods, isLoading } = useQuery({
     queryKey: ["seller-payment-methods", authUser?.id],
     queryFn: async () => {
@@ -67,7 +66,6 @@ export default function SellerSettings() {
         setBinanceWallet(binance.binance_wallet_address || "");
       }
 
-      // If neither exists yet, default CIH on
       if (!cih && !binance) {
         setCihEnabled(true);
         setCihDefault(true);
@@ -78,25 +76,19 @@ export default function SellerSettings() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!authUser) throw new Error("Not authenticated");
-
-      // At least one must be enabled
       if (!cihEnabled && !binanceEnabled) {
-        throw new Error("يجب تفعيل طريقة دفع واحدة على الأقل");
+        throw new Error("At least one payment method must be enabled");
       }
-
-      // At least one must be default
       if (!cihDefault && !binanceDefault) {
-        throw new Error("يجب اختيار طريقة دفع افتراضية");
+        throw new Error("Please select a default payment method");
       }
 
-      // Delete existing
       await supabase
         .from("seller_payment_methods")
         .delete()
         .eq("user_id", authUser.id);
 
       const toInsert: any[] = [];
-
       if (cihEnabled) {
         toInsert.push({
           user_id: authUser.id,
@@ -106,7 +98,6 @@ export default function SellerSettings() {
           cih_rib: cihRib || null,
         });
       }
-
       if (binanceEnabled) {
         toInsert.push({
           user_id: authUser.id,
@@ -126,10 +117,10 @@ export default function SellerSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["seller-payment-methods"] });
-      toast.success("تم حفظ إعدادات الدفع بنجاح");
+      toast.success("Payment settings saved successfully");
     },
     onError: (err: any) => {
-      toast.error(err.message || "خطأ أثناء الحفظ");
+      toast.error(err.message || "Failed to save settings");
     },
   });
 
@@ -175,74 +166,95 @@ export default function SellerSettings() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">الإعدادات</h1>
-        <p className="text-sm text-muted-foreground mt-1">معلوماتك الشخصية وإعدادات الدفع</p>
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+          <Settings className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold text-foreground tracking-tight">Settings</h1>
+          <p className="text-xs text-muted-foreground">Your profile and payment preferences</p>
+        </div>
       </div>
 
       {/* Profile Info */}
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base flex items-center gap-2">
-            <User className="h-4 w-4" />
-            المعلومات الشخصية
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2 text-foreground">
+            <User className="h-4 w-4 text-muted-foreground" />
+            Personal Information
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              <User className="h-3.5 w-3.5" /> الاسم
-            </Label>
-            <Input value={authUser?.name || ""} disabled className="bg-muted/50" />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              <Mail className="h-3.5 w-3.5" /> البريد الإلكتروني
-            </Label>
-            <Input value={authUser?.email || ""} disabled className="bg-muted/50" />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              <Phone className="h-3.5 w-3.5" /> رقم الهاتف
-            </Label>
-            <Input value={authUser?.phone || ""} disabled className="bg-muted/50" />
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <User className="h-3 w-3" /> Name
+              </Label>
+              <div className="h-9 px-3 flex items-center rounded-md border border-border bg-muted/40 text-sm text-foreground">
+                {authUser?.name || "—"}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Phone className="h-3 w-3" /> Phone
+              </Label>
+              <div className="h-9 px-3 flex items-center rounded-md border border-border bg-muted/40 text-sm text-foreground">
+                {authUser?.phone || "—"}
+              </div>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Mail className="h-3 w-3" /> Email
+              </Label>
+              <div className="h-9 px-3 flex items-center rounded-md border border-border bg-muted/40 text-sm text-foreground">
+                {authUser?.email || "—"}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Payment Options */}
-      <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Wallet className="h-4 w-4" />
-            طرق الدفع
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium flex items-center gap-2 text-foreground">
+            <Wallet className="h-4 w-4 text-muted-foreground" />
+            Payment Methods
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            اختر طريقة أو أكثر. الطريقة الافتراضية هي التي تظهر في الفاتورة.
+            Enable one or more methods. The default method will appear on your invoices.
           </p>
         </CardHeader>
-        <CardContent className="space-y-5">
+        <CardContent className="space-y-4">
           {/* CIH */}
-          <div className={`rounded-lg border p-4 space-y-4 transition-colors ${cihEnabled ? "border-primary/30 bg-primary/5" : "border-border"}`}>
+          <div className={`rounded-xl border p-4 space-y-3 transition-all duration-200 ${cihEnabled ? "border-primary/20 bg-primary/[0.03] shadow-sm" : "border-border bg-card"}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <CreditCard className="h-5 w-5 text-primary" />
-                <span className="font-medium text-sm">CIH Bank</span>
-                {cihDefault && (
-                  <Badge variant="secondary" className="text-[10px] gap-1 px-1.5">
-                    <Star className="h-2.5 w-2.5" /> افتراضي
-                  </Badge>
-                )}
+              <div className="flex items-center gap-2.5">
+                <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${cihEnabled ? "bg-primary/10" : "bg-muted"}`}>
+                  <CreditCard className={`h-4 w-4 ${cihEnabled ? "text-primary" : "text-muted-foreground"}`} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm text-foreground">CIH Bank</span>
+                    {cihDefault && (
+                      <Badge variant="secondary" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
+                        <Star className="h-2.5 w-2.5" /> Default
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">Bank transfer</span>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {cihEnabled && !cihDefault && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-xs h-7"
+                    className="text-[11px] h-7 text-muted-foreground hover:text-foreground"
                     onClick={() => handleSetDefault("cih")}
                   >
-                    تعيين كافتراضي
+                    Set as default
                   </Button>
                 )}
                 <Switch
@@ -254,22 +266,24 @@ export default function SellerSettings() {
             </div>
             {cihEnabled && (
               <>
-                <Separator />
-                <div className="grid gap-3">
+                <Separator className="bg-border/60" />
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">اسم صاحب الحساب</Label>
+                    <Label className="text-xs text-muted-foreground">Account Holder Name</Label>
                     <Input
-                      placeholder="الاسم الكامل"
+                      placeholder="Full name"
                       value={cihAccountName}
                       onChange={(e) => setCihAccountName(e.target.value)}
+                      className="h-9 text-sm"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">RIB</Label>
+                    <Label className="text-xs text-muted-foreground">RIB</Label>
                     <Input
-                      placeholder="رقم الحساب البنكي (RIB)"
+                      placeholder="Bank account number"
                       value={cihRib}
                       onChange={(e) => setCihRib(e.target.value)}
+                      className="h-9 text-sm"
                     />
                   </div>
                 </div>
@@ -278,26 +292,33 @@ export default function SellerSettings() {
           </div>
 
           {/* Binance */}
-          <div className={`rounded-lg border p-4 space-y-4 transition-colors ${binanceEnabled ? "border-primary/30 bg-primary/5" : "border-border"}`}>
+          <div className={`rounded-xl border p-4 space-y-3 transition-all duration-200 ${binanceEnabled ? "border-primary/20 bg-primary/[0.03] shadow-sm" : "border-border bg-card"}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Wallet className="h-5 w-5 text-amber-500" />
-                <span className="font-medium text-sm">Binance</span>
-                {binanceDefault && (
-                  <Badge variant="secondary" className="text-[10px] gap-1 px-1.5">
-                    <Star className="h-2.5 w-2.5" /> افتراضي
-                  </Badge>
-                )}
+              <div className="flex items-center gap-2.5">
+                <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${binanceEnabled ? "bg-warning/10" : "bg-muted"}`}>
+                  <Wallet className={`h-4 w-4 ${binanceEnabled ? "text-warning" : "text-muted-foreground"}`} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm text-foreground">Binance</span>
+                    {binanceDefault && (
+                      <Badge variant="secondary" className="text-[10px] gap-0.5 px-1.5 py-0 h-4 font-normal">
+                        <Star className="h-2.5 w-2.5" /> Default
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">Crypto payment</span>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {binanceEnabled && !binanceDefault && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-xs h-7"
+                    className="text-[11px] h-7 text-muted-foreground hover:text-foreground"
                     onClick={() => handleSetDefault("binance")}
                   >
-                    تعيين كافتراضي
+                    Set as default
                   </Button>
                 )}
                 <Switch
@@ -309,22 +330,24 @@ export default function SellerSettings() {
             </div>
             {binanceEnabled && (
               <>
-                <Separator />
-                <div className="grid gap-3">
+                <Separator className="bg-border/60" />
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Binance ID</Label>
+                    <Label className="text-xs text-muted-foreground">Binance ID</Label>
                     <Input
-                      placeholder="Binance ID"
+                      placeholder="Your Binance ID"
                       value={binanceId}
                       onChange={(e) => setBinanceId(e.target.value)}
+                      className="h-9 text-sm"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Wallet Address</Label>
+                    <Label className="text-xs text-muted-foreground">Wallet Address</Label>
                     <Input
-                      placeholder="عنوان المحفظة"
+                      placeholder="Wallet address"
                       value={binanceWallet}
                       onChange={(e) => setBinanceWallet(e.target.value)}
+                      className="h-9 text-sm"
                     />
                   </div>
                 </div>
@@ -335,14 +358,14 @@ export default function SellerSettings() {
           <Button
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
-            className="w-full"
+            className="w-full h-10 font-medium"
           >
             {saveMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            حفظ الإعدادات
+            Save Settings
           </Button>
         </CardContent>
       </Card>
