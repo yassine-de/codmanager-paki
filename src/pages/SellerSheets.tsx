@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, ExternalLink, Eye, Loader2, FileSpreadsheet, RefreshCw, AlertTriangle, Mail, Download, ArrowUpRight, Database, TrendingUp } from "lucide-react";
+import { Plus, ExternalLink, Eye, Loader2, FileSpreadsheet, RefreshCw, AlertTriangle, Mail, Download, ArrowUpRight, Database, TrendingUp, Pencil, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -69,11 +69,16 @@ export default function SellerSheets() {
   const [linkOpen, setLinkOpen] = useState(false);
   const [form, setForm] = useState({ name: "", sheet_name: "", sheet_url: "" });
   const [saving, setSaving] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSheet, setEditSheet] = useState<Sheet | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", sheet_name: "", sheet_url: "" });
+  const [editSaving, setEditSaving] = useState(false);
   const [errorsOpen, setErrorsOpen] = useState(false);
   const [errorsSheet, setErrorsSheet] = useState<Sheet | null>(null);
   const [errors, setErrors] = useState<SheetError[]>([]);
   const [errorsLoading, setErrorsLoading] = useState(false);
   const [serviceEmail, setServiceEmail] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const fetchServiceEmail = async () => {
     const { data } = await supabase
@@ -128,6 +133,39 @@ export default function SellerSheets() {
     setSaving(false);
   };
 
+  const openEdit = (sheet: Sheet) => {
+    setEditSheet(sheet);
+    setEditForm({ name: sheet.name, sheet_name: sheet.sheet_name, sheet_url: sheet.sheet_url });
+    setEditOpen(true);
+  };
+
+  const handleEdit = async () => {
+    if (!editSheet || !editForm.name || !editForm.sheet_url) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    setEditSaving(true);
+    const { error } = await supabase
+      .from("integration_sheets")
+      .update({ name: editForm.name, sheet_name: editForm.sheet_name, sheet_url: editForm.sheet_url })
+      .eq("id", editSheet.id);
+    if (error) {
+      toast.error("Error updating sheet");
+    } else {
+      toast.success("Sheet updated successfully");
+      setEditOpen(false);
+      fetchSheets();
+    }
+    setEditSaving(false);
+  };
+
+  const copyEmail = () => {
+    navigator.clipboard.writeText(serviceEmail);
+    setCopied(true);
+    toast.success("Email copied!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const viewErrors = async (sheet: Sheet) => {
     setErrorsSheet(sheet);
     setErrorsOpen(true);
@@ -169,7 +207,7 @@ export default function SellerSheets() {
 
       {/* Service account email */}
       {serviceEmail && (
-        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3">
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center gap-3">
           <div className="bg-primary/10 rounded-lg p-2">
             <Mail className="w-4 h-4 text-primary" />
           </div>
@@ -177,6 +215,15 @@ export default function SellerSheets() {
             <p className="text-xs font-semibold">Share your Google Sheet with this email:</p>
             <p className="text-sm text-primary font-mono mt-1 select-all truncate">{serviceEmail}</p>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={copyEmail}
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
         </div>
       )}
 
@@ -295,7 +342,17 @@ export default function SellerSheets() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 rounded-full bg-primary/10 text-primary hover:bg-primary/20"
+                          onClick={() => openEdit(sheet)}
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
                           onClick={fetchSheets}
+                          title="Refresh"
                         >
                           <RefreshCw className="w-3.5 h-3.5" />
                         </Button>
@@ -303,8 +360,9 @@ export default function SellerSheets() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 rounded-full bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
+                            className="h-8 w-8 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20"
                             onClick={() => viewErrors(sheet)}
+                            title="View errors"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </Button>
