@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, ExternalLink, Eye, Loader2, FileSpreadsheet, RefreshCw, AlertTriangle } from "lucide-react";
+import { Plus, ExternalLink, Eye, Loader2, FileSpreadsheet, RefreshCw, AlertTriangle, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
