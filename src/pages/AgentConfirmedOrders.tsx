@@ -53,7 +53,17 @@ const AgentConfirmedOrders = () => {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [editOrder, setEditOrder] = useState<any>(null);
-  const [newStatus, setNewStatus] = useState("");
+  const [editForm, setEditForm] = useState({
+    customer_name: "",
+    customer_phone: "",
+    customer_city: "",
+    customer_address: "",
+    product_name: "",
+    price: 0,
+    quantity: 1,
+    confirmation_status: "",
+    note: "",
+  });
 
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["agent-treated-orders", userId],
