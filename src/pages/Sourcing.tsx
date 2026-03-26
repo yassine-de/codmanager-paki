@@ -32,6 +32,13 @@ const validationConfig: Record<string, { label: string; color: string }> = {
   pending: { label: "Pending", color: "bg-muted text-muted-foreground border-border" },
 };
 
+const weightConfig: Record<string, { label: string; short: string }> = {
+  up_to_1kg: { label: "Up to 1kg", short: "≤1kg" },
+  up_to_2kg: { label: "Up to 2kg", short: "≤2kg" },
+  up_to_3kg: { label: "Up to 3kg", short: "≤3kg" },
+  more_than_3kg: { label: "More than 3kg", short: ">3kg" },
+};
+
 export interface DbSourcingRequest {
   id: string;
   seller_id: string;
@@ -51,6 +58,7 @@ export interface DbSourcingRequest {
   seller_validated: boolean | null;
   admin_seen: boolean | null;
   product_created: boolean | null;
+  product_weight: string | null;
   payment_status: string;
   payment_method: string | null;
   payment_date: string | null;
@@ -212,6 +220,7 @@ export default function Sourcing() {
               <TableHead>Product</TableHead>
               <TableHead>Seller</TableHead>
               <TableHead className="text-center">Qty</TableHead>
+              <TableHead className="text-center">Weight</TableHead>
               <TableHead className="text-right">Unit Price</TableHead>
               <TableHead className="text-right">Total Price</TableHead>
               <TableHead>Country</TableHead>
@@ -226,7 +235,7 @@ export default function Sourcing() {
           <TableBody>
             {paginated.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={14} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={15} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
@@ -254,6 +263,15 @@ export default function Sourcing() {
                     <TableCell className="font-medium max-w-[140px] truncate">{req.product_name}</TableCell>
                     <TableCell className="text-muted-foreground">{sellerNameMap[req.seller_id] || "—"}</TableCell>
                     <TableCell className="text-center tabular-nums">{req.quantity}</TableCell>
+                    <TableCell className="text-center">
+                      {req.product_weight ? (
+                        <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium bg-accent text-accent-foreground">
+                          {weightConfig[req.product_weight]?.short || "—"}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {(req.unit_price ?? 0) > 0 ? `${req.unit_price} MAD` : "—"}
                     </TableCell>
