@@ -144,6 +144,50 @@ export type Database = {
           },
         ]
       }
+      invoice_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          event_type: string
+          field_changed: string | null
+          id: string
+          invoice_id: string
+          new_value: string | null
+          old_value: string | null
+          order_id: string | null
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          event_type?: string
+          field_changed?: string | null
+          id?: string
+          invoice_id: string
+          new_value?: string | null
+          old_value?: string | null
+          order_id?: string | null
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          event_type?: string
+          field_changed?: string | null
+          id?: string
+          invoice_id?: string
+          new_value?: string | null
+          old_value?: string | null
+          order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_history_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           created_at: string | null
