@@ -11,8 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { mockProducts } from "@/lib/products-data";
-import { mockOrders } from "@/lib/data";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -39,30 +37,14 @@ function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 2, classNa
   return <span className={className}>{prefix}{display.toFixed(decimals)}{suffix}</span>;
 }
 
-/* ── Compute product metrics from orders ── */
-function getProductMetrics(productName: string, dateRange?: DateRange) {
-  let productOrders = mockOrders.filter(o => o.products.some(p => p.name === productName));
-  
-  if (dateRange?.from) {
-    productOrders = productOrders.filter(o => {
-      const d = new Date(o.createdAt);
-      if (dateRange.from && d < dateRange.from) return false;
-      if (dateRange.to && d > new Date(dateRange.to.getTime() + 86400000 - 1)) return false;
-      return true;
-    });
-  }
-
-  const totalOrders = productOrders.length;
-  if (totalOrders === 0) return { confirmationRate: 0.45, deliveryRate: 0.65, totalLeads: 0 };
-
-  const confirmed = productOrders.filter(o => ['confirmed', 'shipped', 'delivered'].includes(o.status)).length;
-  const delivered = productOrders.filter(o => o.status === 'delivered').length;
-
-  return {
-    confirmationRate: totalOrders > 0 ? confirmed / totalOrders : 0.45,
-    deliveryRate: confirmed > 0 ? delivered / confirmed : 0.65,
-    totalLeads: totalOrders,
-  };
+interface RealProduct {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  landed_price: number | null;
+  image_url: string | null;
+  weight: string | null;
 }
 
 /* ── Default weight options (fallback) ── */
