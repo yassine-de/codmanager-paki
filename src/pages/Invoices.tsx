@@ -2,8 +2,8 @@ import { useState, useMemo } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
-  FileText, Search, RotateCcw, Eye, CalendarDays, Store, CreditCard, CheckCircle2, XCircle,
-  Wallet, Clock, History, PlusCircle, ArrowDownCircle, ArrowUpCircle, Upload, Printer, Download,
+  FileText, Search, RotateCcw, Eye, CalendarDays, Store, CreditCard, CheckCircle2, PlusCircle,
+  Wallet, Clock, ArrowDownCircle, ArrowUpCircle,
   Loader2, ChevronLeft, ChevronRight, Package
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -565,6 +565,7 @@ export default function Invoices() {
                 <TableHead className="text-[11px] font-semibold text-right">Amount</TableHead>
                 <TableHead className="text-[11px] font-semibold text-right">Fees</TableHead>
                 <TableHead className="text-[11px] font-semibold text-right">Net Payable</TableHead>
+                {!isSeller && <TableHead className="text-[11px] font-semibold text-center">Ready</TableHead>}
                 <TableHead className="text-[11px] font-semibold text-center">Status</TableHead>
                 {!isSeller && <TableHead className="text-[11px] font-semibold text-center">Payment</TableHead>}
                 <TableHead className="text-[11px] font-semibold text-center">Actions</TableHead>
@@ -573,7 +574,7 @@ export default function Invoices() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isSeller ? 8 : 10} className="text-center text-xs text-muted-foreground py-16">
+                  <TableCell colSpan={isSeller ? 8 : 11} className="text-center text-xs text-muted-foreground py-16">
                     <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
                     <p className="font-medium">{t("no_invoices")}</p>
                   </TableCell>
@@ -601,11 +602,21 @@ export default function Invoices() {
                         <TableCell className="text-right tabular-nums text-destructive">-{d.totalFees.toFixed(2)}</TableCell>
                         <TableCell className="text-right tabular-nums font-bold text-success">{d.netPayable.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">MAD</span></TableCell>
                         <TableCell className="text-center">
+                          <Button
+                            variant="outline" size="sm"
+                            className="h-7 text-[10px] gap-1 border-success/30 text-success hover:bg-success/10"
+                            onClick={() => finalizeMutation.mutate(d)}
+                            disabled={finalizeMutation.isPending}
+                          >
+                            <CheckCircle2 className="h-3 w-3" /> Ready
+                          </Button>
+                        </TableCell>
+                        <TableCell className="text-center">
                           <Badge variant="outline" className="text-[10px] border-warning/30 text-warning bg-warning/10">Draft</Badge>
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground/40">—</TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-center gap-0.5">
+                          <div className="flex items-center justify-center">
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:bg-info/10" onClick={() => openDetail(row)}>
@@ -613,19 +624,6 @@ export default function Invoices() {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent className="text-[10px]">View Orders</TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost" size="icon"
-                                  className="h-7 w-7 text-success hover:bg-success/10"
-                                  onClick={() => finalizeMutation.mutate(d)}
-                                  disabled={finalizeMutation.isPending}
-                                >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-[10px]">Ready (Finalize)</TooltipContent>
                             </Tooltip>
                           </div>
                         </TableCell>
@@ -656,6 +654,22 @@ export default function Invoices() {
                       <TableCell className="text-right tabular-nums">{inv.totalAmount.toLocaleString()} <span className="text-muted-foreground text-[10px]">MAD</span></TableCell>
                       <TableCell className="text-right tabular-nums text-destructive">-{inv.totalFees.toFixed(2)}</TableCell>
                       <TableCell className="text-right tabular-nums font-bold text-success">{inv.netPayable.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">MAD</span></TableCell>
+                      {!isSeller && (
+                        <TableCell className="text-center">
+                          {inv.status === "ready" && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-warning hover:bg-warning/10"
+                                  onClick={() => toggleReadyMutation.mutate({ invoiceId: inv.id, currentStatus: inv.status })}>
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent className="text-[10px]">Revert to Draft</TooltipContent>
+                            </Tooltip>
+                          )}
+                          {inv.status === "paid" && <span className="text-[10px] text-muted-foreground">—</span>}
+                        </TableCell>
+                      )}
                       <TableCell className="text-center">
                         {inv.status === "ready" && <Badge variant="outline" className="text-[10px] border-info/30 text-info bg-info/10">Ready</Badge>}
                         {inv.status === "paid" && <Badge variant="outline" className="text-[10px] border-success/30 text-success bg-success/10">Paid</Badge>}
@@ -676,7 +690,7 @@ export default function Invoices() {
                         </TableCell>
                       )}
                       <TableCell>
-                        <div className="flex items-center justify-center gap-0.5">
+                        <div className="flex items-center justify-center">
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:bg-info/10" onClick={() => openDetail(row)}>
@@ -685,78 +699,6 @@ export default function Invoices() {
                             </TooltipTrigger>
                             <TooltipContent className="text-[10px]">View Orders</TooltipContent>
                           </Tooltip>
-                          {!isSeller && (
-                            <>
-                              {inv.status === "ready" && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-warning hover:bg-warning/10"
-                                      onClick={() => toggleReadyMutation.mutate({ invoiceId: inv.id, currentStatus: inv.status })}>
-                                      <RotateCcw className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="text-[10px]">Revert to Draft</TooltipContent>
-                                </Tooltip>
-                              )}
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10"
-                                    onClick={() => { setAddonInvoiceId(inv.id); setAddonType("in"); setAddonAmount(""); setAddonReason(""); }}>
-                                    <PlusCircle className="h-3.5 w-3.5" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-[10px]">{t("add_addon")}</TooltipContent>
-                              </Tooltip>
-                              {proofUrl ? (
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10">
-                                          <Eye className="h-3.5 w-3.5" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="text-[10px]">{t("proof")}</TooltipContent>
-                                    </Tooltip>
-                                  </DialogTrigger>
-                                  <DialogContent className="max-w-md">
-                                    <DialogHeader><DialogTitle className="text-sm">{t("proof")} — {inv.invoice_number}</DialogTitle></DialogHeader>
-                                    <img src={proofUrl} alt="Payment proof" className="w-full rounded-lg border" />
-                                  </DialogContent>
-                                </Dialog>
-                              ) : (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <label className="cursor-pointer">
-                                      <input type="file" accept="image/*" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) uploadProofMutation.mutate({ invoiceId: inv.id, file }); }} />
-                                      <div className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-warning/10 text-warning transition-colors">
-                                        <Upload className="h-3.5 w-3.5" />
-                                      </div>
-                                    </label>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="text-[10px]">Upload proof</TooltipContent>
-                                </Tooltip>
-                              )}
-                            </>
-                          )}
-                          {isSeller && proofUrl && (
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10">
-                                      <Eye className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="text-[10px]">{t("proof")}</TooltipContent>
-                                </Tooltip>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-md">
-                                <DialogHeader><DialogTitle className="text-sm">{t("proof")} — {inv.invoice_number}</DialogTitle></DialogHeader>
-                                <img src={proofUrl} alt="Payment proof" className="w-full rounded-lg border" />
-                              </DialogContent>
-                            </Dialog>
-                          )}
                         </div>
                       </TableCell>
                     </TableRow>
