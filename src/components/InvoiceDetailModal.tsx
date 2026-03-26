@@ -18,11 +18,12 @@ interface Props {
   draftOrders?: any[];
 }
 
-function calculateFee(weight: number, rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number } | null): number {
+function calculateFee(weight: number, rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null): number {
   if (!rates) return 0;
   if (weight <= 1) return rates.rate_1kg;
   if (weight <= 2) return rates.rate_2kg;
-  return rates.rate_3kg;
+  if (weight <= 3) return rates.rate_3kg;
+  return rates.rate_3kg_plus ?? 6;
 }
 
 const deliveryStatusConfig: Record<string, { label: string; color: string }> = {
