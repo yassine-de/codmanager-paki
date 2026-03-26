@@ -127,6 +127,79 @@ export default function ConfirmationAnalytics() {
     };
   }, [filteredOrders]);
 
+  // Time-based KPIs: First Call Avg & Handling Time
+  const timeStats = useMemo(() => {
+    // Build maps from order_history
+    // First status change per order (first time confirmation_status changed from 'new')
+    const firstStatusChangeMap: Record<string, string> = {};
+    // Agent claim time per order (when agent_id was set)
+    const agentClaimMap: Record<string, string> = {};
+    // First status change after agent claim
+    const firstChangeAfterClaimMap: Record<string, string> = {};
+
+    orderHistory.forEach(h => {
+      if (h.field_changed === "confirmation_status" && h.old_value === "new" && !firstStatusChangeMap[h.order_id]) {
+        firstStatusChangeMap[h.order_id] = h.created_at;
+      }
+      if (h.field_changed === "agent_id" && !h.old_value && h.new_value && !agentClaimMap[h.order_id]) {
+        agentClaimMap[h.order_id] = h.created_at;
+      }
+    });
+
+    // Find first status change AFTER agent claim
+    orderHistory.forEach(h => {
+      if (h.field_changed === "confirmation_status" && agentClaimMap[h.order_id] && !firstChangeAfterClaimMap[h.order_id]) {
+        const claimTime = new Date(agentClaimMap[h.order_id]).getTime();
+        const changeTime = new Date(h.created_at).getTime();
+        if (changeTime >= claimTime) {
+          firstChangeAfterClaimMap[h.order_id] = h.created_at;
+        }
+      }
+    });
+
+    // Build order created_at map from filtered orders
+    const orderCreatedMap: Record<string, string> = {};
+    const filteredOrderIds = new Set<string>();
+    filteredOrders.forEach(o => {
+      orderCreatedMap[o.order_id] = o.created_at;
+      filteredOrderIds.add(o.order_id);
+    });
+
+    // First Call Avg: time from created_at to first status change
+    let firstCallTotalMs = 0;
+    let firstCallCount = 0;
+    for (const [orderId, changeTime] of Object.entries(firstStatusChangeMap)) {
+      if (!filteredOrderIds.has(orderId) || !orderCreatedMap[orderId]) continue;
+      const diff = new Date(changeTime).getTime() - new Date(orderCreatedMap[orderId]).getTime();
+      if (diff > 0) { firstCallTotalMs += diff; firstCallCount++; }
+    }
+
+    // Handling Time: time from agent claim to first status change after claim
+    let handlingTotalMs = 0;
+    let handlingCount = 0;
+    for (const [orderId, changeTime] of Object.entries(firstChangeAfterClaimMap)) {
+      if (!filteredOrderIds.has(orderId) || !agentClaimMap[orderId]) continue;
+      const diff = new Date(changeTime).getTime() - new Date(agentClaimMap[orderId]).getTime();
+      if (diff > 0) { handlingTotalMs += diff; handlingCount++; }
+    }
+
+    const formatDuration = (ms: number) => {
+      const totalMinutes = Math.round(ms / 60000);
+      if (totalMinutes < 60) return `${totalMinutes}m`;
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      if (hours < 24) return `${hours}h ${mins}m`;
+      const days = Math.floor(hours / 24);
+      const remHours = hours % 24;
+      return `${days}d ${remHours}h`;
+    };
+
+    return {
+      firstCallAvg: firstCallCount > 0 ? formatDuration(firstCallTotalMs / firstCallCount) : "N/A",
+      handlingTime: handlingCount > 0 ? formatDuration(handlingTotalMs / handlingCount) : "N/A",
+    };
+  }, [orderHistory, filteredOrders]);
+
   // Agent scores
   const agentScores = useMemo(() => {
     const map: Record<string, { total: number; answered: number; confirmed: number; delivered: number; shipped: number }> = {};
