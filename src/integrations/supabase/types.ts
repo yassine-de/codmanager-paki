@@ -366,6 +366,7 @@ export type Database = {
           sourcing_request_id: string | null
           updated_at: string
           video_url: string | null
+          weight: string | null
         }
         Insert: {
           created_at?: string
@@ -382,6 +383,7 @@ export type Database = {
           sourcing_request_id?: string | null
           updated_at?: string
           video_url?: string | null
+          weight?: string | null
         }
         Update: {
           created_at?: string
@@ -398,6 +400,7 @@ export type Database = {
           sourcing_request_id?: string | null
           updated_at?: string
           video_url?: string | null
+          weight?: string | null
         }
         Relationships: [
           {
