@@ -565,6 +565,7 @@ export default function Invoices() {
                 <TableHead className="text-[11px] font-semibold text-right">Amount</TableHead>
                 <TableHead className="text-[11px] font-semibold text-right">Fees</TableHead>
                 <TableHead className="text-[11px] font-semibold text-right">Net Payable</TableHead>
+                {!isSeller && <TableHead className="text-[11px] font-semibold text-center">Ready</TableHead>}
                 <TableHead className="text-[11px] font-semibold text-center">Status</TableHead>
                 {!isSeller && <TableHead className="text-[11px] font-semibold text-center">Payment</TableHead>}
                 <TableHead className="text-[11px] font-semibold text-center">Actions</TableHead>
