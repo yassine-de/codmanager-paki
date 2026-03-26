@@ -92,9 +92,26 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
 
   const getWeight = (productName: string) => productWeightMap[productName] || null;
 
+  // Fetch addons for this invoice
+  const { data: addons = [] } = useQuery({
+    queryKey: ["invoice-addons-detail", invoiceId],
+    queryFn: async () => {
+      if (!invoiceId) return [];
+      const { data, error } = await supabase
+        .from("invoice_addons")
+        .select("*")
+        .eq("invoice_id", invoiceId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as { id: string; type: string; amount: number; reason: string; created_at: string | null }[];
+    },
+    enabled: !!invoiceId && open,
+  });
+
   const totalAmount = displayOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
   const totalFees = displayOrders.reduce((sum, o) => sum + calculateFeeFromWeight(getWeight(o.product_name), sellerRates), 0);
-  const netPayable = totalAmount - totalFees;
+  const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0);
+  const netPayable = totalAmount - totalFees + addonNet;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
