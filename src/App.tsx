@@ -25,6 +25,7 @@ import Invoices from "./pages/Invoices";
 import SellerSheets from "./pages/SellerSheets";
 import SellerSourcing from "./pages/SellerSourcing";
 import Simulation from "./pages/Simulation";
+import SellerSettings from "./pages/SellerSettings";
 import AgentDashboard from "./pages/AgentDashboard";
 import AgentOrders from "./pages/AgentOrders";
 import AgentConfirmedOrders from "./pages/AgentConfirmedOrders";
@@ -98,6 +99,7 @@ function AppRoutes() {
         <Route path="/sheets" element={<ProtectedRoute><SellerSheets /></ProtectedRoute>} />
         <Route path="/seller-sourcing" element={<ProtectedRoute><SellerSourcing /></ProtectedRoute>} />
         <Route path="/simulation" element={<ProtectedRoute><Simulation /></ProtectedRoute>} />
+        <Route path="/seller-settings" element={<ProtectedRoute><SellerSettings /></ProtectedRoute>} />
         <Route path="/agent-dashboard" element={<ProtectedRoute><AgentDashboard /></ProtectedRoute>} />
         <Route path="/agent-orders" element={<ProtectedRoute><AgentOrders /></ProtectedRoute>} />
         <Route path="/agent-confirmed" element={<ProtectedRoute><AgentConfirmedOrders /></ProtectedRoute>} />

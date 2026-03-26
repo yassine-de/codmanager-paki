@@ -510,6 +510,45 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_payment_methods: {
+        Row: {
+          binance_id: string | null
+          binance_wallet_address: string | null
+          cih_account_name: string | null
+          cih_rib: string | null
+          created_at: string
+          id: string
+          is_default: boolean
+          method: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          binance_id?: string | null
+          binance_wallet_address?: string | null
+          cih_account_name?: string | null
+          cih_rib?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          method: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          binance_id?: string | null
+          binance_wallet_address?: string | null
+          cih_account_name?: string | null
+          cih_rib?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          method?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       seller_rates: {
         Row: {
           id: string
