@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import {
   FileText, Search, RotateCcw, Eye, CalendarDays, Store, CreditCard, CheckCircle2, PlusCircle,
   Wallet, Clock, ArrowDownCircle, ArrowUpCircle, Upload, History,
-  Loader2, ChevronLeft, ChevronRight, Package
+  Loader2, ChevronLeft, ChevronRight, Package, Download, Printer
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -640,6 +640,7 @@ export default function Invoices() {
                 {!isSeller && <TableHead className="text-[11px] font-semibold text-center">Ready</TableHead>}
                 <TableHead className="text-[11px] font-semibold text-center">Status</TableHead>
                 {!isSeller && <TableHead className="text-[11px] font-semibold text-center">Payment</TableHead>}
+                {isSeller && <TableHead className="text-[11px] font-semibold text-center">Payment</TableHead>}
                 <TableHead className="text-[11px] font-semibold text-center">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -769,7 +770,7 @@ export default function Invoices() {
                         </TableCell>
                       )}
                       <TableCell className="text-center">
-                        {inv.status === "draft" && <Badge variant="outline" className="text-[10px] border-warning/30 text-warning bg-warning/10">Draft</Badge>}
+                      {inv.status === "draft" && <Badge variant="outline" className="text-[10px] border-warning/30 text-warning bg-warning/10">Draft</Badge>}
                         {inv.status === "ready" && <Badge variant="outline" className="text-[10px] border-info/30 text-info bg-info/10">Ready</Badge>}
                         {inv.status === "paid" && <Badge variant="outline" className="text-[10px] border-success/30 text-success bg-success/10">Paid</Badge>}
                       </TableCell>
@@ -786,6 +787,16 @@ export default function Invoices() {
                               {inv.status === "paid" ? t("paid") : t("not_paid")}
                             </span>
                           </div>
+                        </TableCell>
+                      )}
+                      {isSeller && (
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className={`text-[10px] ${inv.status === "paid" ? "border-success/30 text-success bg-success/10" : "border-destructive/30 text-destructive bg-destructive/10"}`}>
+                            {inv.status === "paid" ? t("paid") : t("not_paid")}
+                          </Badge>
+                          {inv.status === "paid" && inv.paid_at && (
+                            <p className="text-[9px] text-muted-foreground mt-0.5">{format(new Date(inv.paid_at), "dd MMM yyyy")}</p>
+                          )}
                         </TableCell>
                       )}
                       <TableCell>
@@ -854,23 +865,46 @@ export default function Invoices() {
                               </Tooltip>
                             </>
                           )}
-                          {isSeller && proofUrl && (
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10">
-                                      <Eye className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="text-[10px]">{t("proof")}</TooltipContent>
-                                </Tooltip>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-md">
-                                <DialogHeader><DialogTitle className="text-sm">{t("proof")} — {inv.invoice_number}</DialogTitle></DialogHeader>
-                                <img src={proofUrl} alt="Payment proof" className="w-full rounded-lg border" />
-                              </DialogContent>
-                            </Dialog>
+                          {isSeller && (
+                            <>
+                              {proofUrl && (
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10">
+                                          <Eye className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="text-[10px]">{t("proof")}</TooltipContent>
+                                    </Tooltip>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-md">
+                                    <DialogHeader><DialogTitle className="text-sm">{t("proof")} — {inv.invoice_number}</DialogTitle></DialogHeader>
+                                    <img src={proofUrl} alt="Payment proof" className="w-full rounded-lg border" />
+                                  </DialogContent>
+                                </Dialog>
+                              )}
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" onClick={() => {
+                                    openDetail(row);
+                                    setTimeout(() => window.print(), 500);
+                                  }}>
+                                    <Printer className="h-3.5 w-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-[10px]">Print</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted" onClick={() => openDetail(row)}>
+                                    <Download className="h-3.5 w-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-[10px]">Download</TooltipContent>
+                              </Tooltip>
+                            </>
                           )}
                         </div>
                       </TableCell>
