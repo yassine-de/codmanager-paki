@@ -152,17 +152,20 @@ const AgentConfirmedOrders = () => {
   });
 
   const filteredOrders = useMemo(() => {
-    if (!search) return orders;
-    const q = search.toLowerCase();
-    return orders.filter(
-      (o: any) =>
+    return orders.filter((o: any) => {
+      if (filterConfirmation !== "all" && o.confirmation_status !== filterConfirmation) return false;
+      if (filterDelivery !== "all" && (o.delivery_status || "none") !== filterDelivery) return false;
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return (
         o.order_id?.toLowerCase().includes(q) ||
         o.customer_name?.toLowerCase().includes(q) ||
         o.customer_city?.toLowerCase().includes(q) ||
         o.customer_phone?.includes(q) ||
         o.product_name?.toLowerCase().includes(q)
-    );
-  }, [orders, search]);
+      );
+    });
+  }, [orders, search, filterConfirmation, filterDelivery]);
 
   const canEdit = (order: any) => !SHIPPED_STATUSES.includes(order.delivery_status || "");
 
