@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Package } from "lucide-react";
+import { Loader2, Package, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
 
 interface Props {
   open: boolean;
