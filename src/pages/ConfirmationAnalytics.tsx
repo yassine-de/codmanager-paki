@@ -200,19 +200,38 @@ export default function ConfirmationAnalytics() {
     };
   }, [orderHistory, filteredOrders]);
 
-  // Agent scores
+  // Agent scores — delivery tracked by the agent who CONFIRMED the order
   const agentScores = useMemo(() => {
-    const map: Record<string, { total: number; answered: number; confirmed: number; delivered: number; shipped: number }> = {};
+    // Build a map: order_id -> agent who confirmed it (from order_history)
+    const confirmedByAgent: Record<string, string> = {};
+    orderHistory.forEach(h => {
+      if (h.field_changed === "confirmation_status" && h.new_value === "confirmed" && !confirmedByAgent[h.order_id]) {
+        // The agent who made the change — find from orders
+        const order = orders.find(o => o.order_id === h.order_id);
+        if (order?.agent_id) confirmedByAgent[h.order_id] = order.agent_id;
+      }
+    });
+
+    const map: Record<string, { total: number; answered: number; confirmed: number; delivered: number }> = {};
     orders.forEach(o => {
       const agentId = o.agent_id;
       if (!agentId) return;
-      if (!map[agentId]) map[agentId] = { total: 0, answered: 0, confirmed: 0, delivered: 0, shipped: 0 };
+      if (!map[agentId]) map[agentId] = { total: 0, answered: 0, confirmed: 0, delivered: 0 };
       map[agentId].total++;
       if (["confirmed", "cancelled", "reported"].includes(o.confirmation_status) || o.postpone_date !== null) map[agentId].answered++;
       if (o.confirmation_status === "confirmed") map[agentId].confirmed++;
-      if (o.delivery_status === "delivered") map[agentId].delivered++;
-      if (o.delivery_status && ["shipped", "pending", "delivered"].includes(o.delivery_status)) map[agentId].shipped++;
     });
+
+    // Count delivered orders per confirming agent
+    orders.forEach(o => {
+      if (o.delivery_status === "delivered") {
+        const confirmingAgent = confirmedByAgent[o.order_id] || o.agent_id;
+        if (confirmingAgent && map[confirmingAgent]) {
+          map[confirmingAgent].delivered++;
+        }
+      }
+    });
+
     return Object.entries(map)
       .map(([id, d]) => ({
         id,
@@ -221,10 +240,10 @@ export default function ConfirmationAnalytics() {
         confirmed: d.confirmed,
         confirmationRate: d.answered > 0 ? Math.round((d.confirmed / d.answered) * 100) : 0,
         delivered: d.delivered,
-        deliveryRate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0,
+        deliveryRate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
       }))
       .sort((a, b) => b.confirmationRate - a.confirmationRate);
-  }, [orders, profileNameMap]);
+  }, [orders, orderHistory, profileNameMap]);
 
   // Cancel reasons
   const cancelData = useMemo(() => {
