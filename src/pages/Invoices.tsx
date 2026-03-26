@@ -623,6 +623,24 @@ export default function Invoices() {
                               </TooltipTrigger>
                               <TooltipContent className="text-[10px]">View Orders</TooltipContent>
                             </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10"
+                                  onClick={() => toast.info("Finalize the invoice first to add addons")}>
+                                  <PlusCircle className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent className="text-[10px]">{t("add_addon")}</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                                  onClick={() => toast.info("No history for draft invoices")}>
+                                  <History className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent className="text-[10px]">History</TooltipContent>
+                            </Tooltip>
                           </div>
                         </TableCell>
                       </TableRow>
