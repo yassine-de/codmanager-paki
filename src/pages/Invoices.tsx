@@ -754,6 +754,14 @@ export default function Invoices() {
                                   <TooltipContent className="text-[10px]">Upload proof</TooltipContent>
                                 </Tooltip>
                               )}
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted">
+                                    <History className="h-3.5 w-3.5" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="text-[10px]">History</TooltipContent>
+                              </Tooltip>
                             </>
                           )}
                           {isSeller && proofUrl && (
