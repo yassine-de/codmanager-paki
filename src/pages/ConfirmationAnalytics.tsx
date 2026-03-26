@@ -94,7 +94,7 @@ export default function ConfirmationAnalytics() {
     const total = filteredOrders.length;
     const confirmed = filteredOrders.filter(o => o.confirmation_status === "confirmed").length;
     const cancelled = filteredOrders.filter(o => o.confirmation_status === "cancelled").length;
-    const answered = filteredOrders.filter(o => !["new", "no_answer", "wrong_number"].includes(o.confirmation_status)).length;
+    const answered = filteredOrders.filter(o => ["confirmed", "cancelled", "reported"].includes(o.confirmation_status) || o.postpone_date !== null).length;
     const postponed = filteredOrders.filter(o => o.postpone_date !== null).length;
     const delivered = filteredOrders.filter(o => o.delivery_status === "delivered").length;
     const shipped = filteredOrders.filter(o => o.delivery_status && ["shipped", "pending", "delivered"].includes(o.delivery_status)).length;
