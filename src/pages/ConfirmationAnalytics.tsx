@@ -102,7 +102,7 @@ export default function ConfirmationAnalytics() {
     return {
       total,
       confirmed,
-      confirmationRate: total > 0 ? Math.round((confirmed / total) * 100) : 0,
+      confirmationRate: answered > 0 ? Math.round((confirmed / answered) * 100) : 0,
       answeredRate: total > 0 ? Math.round((answered / total) * 100) : 0,
       cancelled,
       cancelledRate: total > 0 ? Math.round((cancelled / total) * 100) : 0,
