@@ -335,6 +335,20 @@ export default function Invoices() {
     })).sort((a, b) => a.label.localeCompare(b.label));
   }, [allSellerIds, sellerNameMap]);
 
+  // Helper: log invoice history
+  const logInvoiceHistory = async (invoiceId: string, eventType: string, fieldChanged: string | null, oldValue: string | null, newValue: string | null, orderId: string | null = null) => {
+    if (!authUser) return;
+    await supabase.from("invoice_history").insert({
+      invoice_id: invoiceId,
+      event_type: eventType,
+      field_changed: fieldChanged,
+      old_value: oldValue,
+      new_value: newValue,
+      order_id: orderId,
+      changed_by: authUser.id,
+    } as any);
+  };
+
   // Finalize draft mutation
   const finalizeMutation = useMutation({
     mutationFn: async (draft: typeof draftInvoices[0]) => {
@@ -350,6 +364,12 @@ export default function Invoices() {
         .update({ invoice_id: invoice.id } as any)
         .in("id", orderIds);
       if (updateError) throw updateError;
+      // Log status change
+      await logInvoiceHistory(invoice.id, "status_change", "status", "draft", "ready");
+      // Log each order added
+      for (const o of draft.orders) {
+        await logInvoiceHistory(invoice.id, "order_added", null, null, null, o.order_id);
+      }
       return invoice;
     },
     onSuccess: () => {
@@ -365,15 +385,17 @@ export default function Invoices() {
   const togglePaidMutation = useMutation({
     mutationFn: async ({ invoiceId, currentStatus }: { invoiceId: string; currentStatus: string }) => {
       const isPaid = currentStatus === "paid";
+      const newStatus = isPaid ? "ready" : "paid";
       const { error } = await supabase
         .from("invoices")
         .update({
-          status: isPaid ? "ready" : "paid",
+          status: newStatus,
           paid_at: isPaid ? null : new Date().toISOString(),
           paid_by: isPaid ? null : "CIH",
         } as any)
         .eq("id", invoiceId);
       if (error) throw error;
+      await logInvoiceHistory(invoiceId, "status_change", "status", currentStatus, newStatus);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
@@ -385,7 +407,13 @@ export default function Invoices() {
   const toggleReadyMutation = useMutation({
     mutationFn: async ({ invoiceId, currentStatus }: { invoiceId: string; currentStatus: string }) => {
       if (currentStatus === "ready") {
+        // Log removed orders before deleting
+        const { data: removedOrders } = await supabase.from("orders").select("order_id").eq("invoice_id", invoiceId);
         // Un-ready: remove orders from invoice, delete invoice
+        await logInvoiceHistory(invoiceId, "status_change", "status", "ready", "draft");
+        for (const o of (removedOrders || [])) {
+          await logInvoiceHistory(invoiceId, "order_removed", null, null, null, o.order_id);
+        }
         const { error: orderErr } = await supabase
           .from("orders")
           .update({ invoice_id: null } as any)
