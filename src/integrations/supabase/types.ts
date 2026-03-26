@@ -35,6 +35,27 @@ export type Database = {
         }
         Relationships: []
       }
+      app_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          value?: string
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
+      }
       integration_errors: {
         Row: {
           created_at: string
@@ -74,6 +95,7 @@ export type Database = {
           errors_count: number
           id: string
           last_check: string | null
+          last_imported_row: number
           name: string
           orders_count: number
           seller_id: string
@@ -87,6 +109,7 @@ export type Database = {
           errors_count?: number
           id?: string
           last_check?: string | null
+          last_imported_row?: number
           name: string
           orders_count?: number
           seller_id: string
@@ -100,6 +123,7 @@ export type Database = {
           errors_count?: number
           id?: string
           last_check?: string | null
+          last_imported_row?: number
           name?: string
           orders_count?: number
           seller_id?: string
