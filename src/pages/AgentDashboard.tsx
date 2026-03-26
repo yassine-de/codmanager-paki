@@ -212,33 +212,64 @@ const AgentDashboard = () => {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Status Distribution Pie */}
+        {/* Status Distribution — Modern custom design */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">📊 Status Distribution</CardTitle>
           </CardHeader>
-          <CardContent className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={3} dataKey="value" label={false}>
-                  {pieData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: number, name: string) => [`${value}`, name]} />
-                <Legend
-                  verticalAlign="bottom"
-                  iconType="circle"
-                  iconSize={10}
-                  formatter={(value: string, entry: any) => {
-                    const total = pieData.reduce((s, d) => s + d.value, 0);
-                    const item = pieData.find(d => d.name === value);
-                    const pct = total > 0 && item ? Math.round((item.value / total) * 100) : 0;
-                    return `${value} ${pct}%`;
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+          <CardContent>
+            {(() => {
+              const total = pieData.reduce((s, d) => s + d.value, 0);
+              return (
+                <div className="space-y-4">
+                  {/* Donut center stat */}
+                  <div className="flex items-center justify-center py-2">
+                    <div className="relative">
+                      <ResponsiveContainer width={180} height={180}>
+                        <PieChart>
+                          <Pie
+                            data={total > 0 ? pieData : [{ name: "Empty", value: 1, color: "hsl(var(--muted))" }]}
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={80}
+                            innerRadius={58}
+                            paddingAngle={total > 0 ? 4 : 0}
+                            dataKey="value"
+                            stroke="none"
+                          >
+                            {(total > 0 ? pieData : [{ name: "Empty", value: 1, color: "hsl(var(--muted))" }]).map((entry, i) => (
+                              <Cell key={i} fill={entry.color} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-3xl font-bold text-foreground">{total}</span>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Total</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Legend bars */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {pieData.map((item) => {
+                      const pct = total > 0 ? Math.round((item.value / total) * 100) : 0;
+                      return (
+                        <div key={item.name} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
+                          <div className="h-8 w-1 rounded-full" style={{ backgroundColor: item.color }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] text-muted-foreground truncate">{item.name}</p>
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-lg font-bold text-foreground">{item.value}</span>
+                              <span className="text-[10px] text-muted-foreground">{pct}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 
