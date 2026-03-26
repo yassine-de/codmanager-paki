@@ -654,18 +654,16 @@ export default function Invoices() {
                       <TableCell className="text-right tabular-nums font-bold text-success">{inv.netPayable.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">MAD</span></TableCell>
                       {!isSeller && (
                         <TableCell className="text-center">
-                          {inv.status === "ready" && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-warning hover:bg-warning/10"
-                                  onClick={() => toggleReadyMutation.mutate({ invoiceId: inv.id, currentStatus: inv.status })}>
-                                  <RotateCcw className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-[10px]">Revert to Draft</TooltipContent>
-                            </Tooltip>
-                          )}
-                          {inv.status === "paid" && <span className="text-[10px] text-muted-foreground">—</span>}
+                          <Switch
+                            checked={inv.status === "ready" || inv.status === "paid"}
+                            onCheckedChange={() => {
+                              if (inv.status === "ready") {
+                                toggleReadyMutation.mutate({ invoiceId: inv.id, currentStatus: inv.status });
+                              }
+                            }}
+                            disabled={inv.status === "paid"}
+                            className="data-[state=checked]:bg-success scale-90"
+                          />
                         </TableCell>
                       )}
                       <TableCell className="text-center">
