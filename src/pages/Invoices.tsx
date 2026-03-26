@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   FileText, Search, RotateCcw, Eye, CalendarDays, Store, CreditCard, CheckCircle2, PlusCircle,
-  Wallet, Clock, ArrowDownCircle, ArrowUpCircle, Upload,
+  Wallet, Clock, ArrowDownCircle, ArrowUpCircle, Upload, History,
   Loader2, ChevronLeft, ChevronRight, Package
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
