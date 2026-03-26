@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, ExternalLink, Eye, Loader2, FileSpreadsheet, RefreshCw, AlertTriangle, Mail } from "lucide-react";
+import { Plus, ExternalLink, Eye, Loader2, FileSpreadsheet, RefreshCw, AlertTriangle, Mail, Download, ArrowUpRight, Database, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
@@ -19,6 +18,7 @@ interface Sheet {
   orders_count: number;
   errors_count: number;
   last_check: string | null;
+  last_imported_row: number;
   active: boolean;
   created_at: string;
 }
@@ -31,17 +31,44 @@ interface SheetError {
   created_at: string;
 }
 
+const TEMPLATE_HEADERS = [
+  "Order ID",
+  "Customer Name",
+  "Phone Number",
+  "Address",
+  "City",
+  "Product Name",
+  "SKU",
+  "Quantity",
+  "Unit Price",
+  "Total Amount",
+];
+
+const EXAMPLE_ROWS = [
+  ["ORD-001", "Ahmed Benali", "0612345678", "Rue 10 Hay Salam", "Casablanca", "T-Shirt Premium", "PRD-00012", "2", "99.00", "198.00"],
+  ["ORD-002", "Fatima Zahra", "0698765432", "Av Mohammed V N°5", "Rabat", "Sneakers Sport", "PRD-00045", "1", "350.00", "350.00"],
+  ["ORD-003", "Youssef El Amrani", "0655443322", "Quartier Industriel", "Fès", "Sac à dos", "PRD-00008", "3", "120.00", "360.00"],
+];
+
+function downloadTemplate() {
+  const rows = [TEMPLATE_HEADERS, ...EXAMPLE_ROWS];
+  const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "orders_template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function SellerSheets() {
   const { user } = useAuth();
   const [sheets, setSheets] = useState<Sheet[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Link modal
   const [linkOpen, setLinkOpen] = useState(false);
   const [form, setForm] = useState({ name: "", sheet_name: "", sheet_url: "" });
   const [saving, setSaving] = useState(false);
-
-  // Errors modal
   const [errorsOpen, setErrorsOpen] = useState(false);
   const [errorsSheet, setErrorsSheet] = useState<Sheet | null>(null);
   const [errors, setErrors] = useState<SheetError[]>([]);
@@ -65,7 +92,6 @@ export default function SellerSheets() {
       .select("*")
       .eq("seller_id", user.id)
       .order("created_at", { ascending: true });
-
     if (error) {
       toast.error("Error loading sheets");
     } else {
@@ -115,6 +141,10 @@ export default function SellerSheets() {
     setErrorsLoading(false);
   };
 
+  const totalOrders = sheets.reduce((s, sh) => s + sh.orders_count, 0);
+  const totalErrors = sheets.reduce((s, sh) => s + sh.errors_count, 0);
+  const activeSheets = sheets.filter((s) => s.active).length;
+
   return (
     <div className="max-w-[1200px] space-y-6">
       {/* Header */}
@@ -124,103 +154,183 @@ export default function SellerSheets() {
           <p className="text-muted-foreground text-xs mt-0.5">
             Link your Google Sheets to import orders automatically
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-1.5">
+            <Download className="w-3.5 h-3.5" />
+            Template
+          </Button>
+          <Button size="sm" onClick={() => setLinkOpen(true)} className="gap-1.5">
+            <Plus className="w-3.5 h-3.5" />
+            Link Sheet
+          </Button>
+        </div>
       </div>
 
-      {/* Service account email info */}
+      {/* Service account email */}
       {serviceEmail && (
-        <div className="bg-muted/50 border rounded-lg p-3 flex items-start gap-2">
-          <Mail className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-          <div>
-            <p className="text-xs font-medium">Share your Google Sheet with this email for automatic import:</p>
-            <p className="text-xs text-primary font-mono mt-0.5 select-all">{serviceEmail}</p>
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3">
+          <div className="bg-primary/10 rounded-lg p-2">
+            <Mail className="w-4 h-4 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold">Share your Google Sheet with this email:</p>
+            <p className="text-sm text-primary font-mono mt-1 select-all truncate">{serviceEmail}</p>
           </div>
         </div>
       )}
-        <Button size="sm" onClick={() => setLinkOpen(true)} className="gap-1.5">
-          <Plus className="w-3.5 h-3.5" />
-          Link Sheet
-        </Button>
+
+      {/* KPI Cards */}
+      {!loading && sheets.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-card border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <FileSpreadsheet className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-medium">Active Sheets</span>
+            </div>
+            <p className="text-2xl font-bold">{activeSheets}</p>
+          </div>
+          <div className="bg-card border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Database className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-medium">Total Imported</span>
+            </div>
+            <p className="text-2xl font-bold">{totalOrders}</p>
+          </div>
+          <div className="bg-card border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground font-medium">Errors</span>
+            </div>
+            <p className={`text-2xl font-bold ${totalErrors > 0 ? "text-destructive" : ""}`}>{totalErrors}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Template Preview */}
+      <div className="bg-card border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-primary" />
+            <span className="text-xs font-semibold">Required Sheet Format</span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={downloadTemplate} className="gap-1.5 text-xs h-7">
+            <Download className="w-3 h-3" />
+            Download CSV
+          </Button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-muted/50">
+                {TEMPLATE_HEADERS.map((h) => (
+                  <th key={h} className="px-3 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {EXAMPLE_ROWS.map((row, i) => (
+                <tr key={i} className="border-t border-border/50">
+                  {row.map((cell, j) => (
+                    <td key={j} className="px-3 py-2 whitespace-nowrap text-muted-foreground/80">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Sheets list */}
+      {/* Sheets List */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       ) : sheets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <FileSpreadsheet className="w-10 h-10 text-muted-foreground/30 mb-3" />
-          <p className="text-sm font-medium text-muted-foreground">No sheets linked yet</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">
-            Click "Link Sheet" to connect your Google Sheet
+        <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed rounded-xl bg-muted/20">
+          <div className="bg-muted rounded-full p-4 mb-4">
+            <FileSpreadsheet className="w-8 h-8 text-muted-foreground/40" />
+          </div>
+          <p className="text-sm font-semibold text-muted-foreground">No sheets linked yet</p>
+          <p className="text-xs text-muted-foreground/60 mt-1 max-w-[280px]">
+            Click "Link Sheet" to connect your Google Sheet and start importing orders automatically
           </p>
         </div>
       ) : (
-        <div className="bg-card rounded-xl border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs">Name</TableHead>
-                <TableHead className="text-xs">Sheet</TableHead>
-                <TableHead className="text-xs text-center">Orders</TableHead>
-                <TableHead className="text-xs text-center">Errors</TableHead>
-                <TableHead className="text-xs text-center">Status</TableHead>
-                <TableHead className="text-xs">Last Sync</TableHead>
-                <TableHead className="text-xs text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sheets.map((sheet) => (
-                <TableRow key={sheet.id}>
-                  <TableCell className="text-xs font-medium">{sheet.name}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      {sheet.sheet_name || "—"}
+        <div className="space-y-3">
+          {sheets.map((sheet) => (
+            <div
+              key={sheet.id}
+              className="bg-card border rounded-xl p-4 hover:border-primary/30 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className={`rounded-lg p-2 shrink-0 ${sheet.active ? "bg-primary/10" : "bg-muted"}`}>
+                    <FileSpreadsheet className={`w-4 h-4 ${sheet.active ? "text-primary" : "text-muted-foreground"}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold truncate">{sheet.name}</h3>
+                      <Badge variant={sheet.active ? "default" : "secondary"} className="text-[10px] shrink-0">
+                        {sheet.active ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-xs text-muted-foreground truncate">{sheet.sheet_name || "Default sheet"}</span>
                       {sheet.sheet_url && (
-                        <a href={sheet.sheet_url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="w-3 h-3 text-primary" />
+                        <a href={sheet.sheet_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                          <ArrowUpRight className="w-3 h-3 text-primary hover:text-primary/80" />
                         </a>
                       )}
                     </div>
-                  </TableCell>
-                  <TableCell className="text-xs text-center font-medium">{sheet.orders_count}</TableCell>
-                  <TableCell className="text-xs text-center">
-                    {sheet.errors_count > 0 ? (
-                      <button onClick={() => viewErrors(sheet)}
-                        className="inline-flex items-center gap-1 text-destructive hover:underline">
-                        <AlertTriangle className="w-3 h-3" />
-                        {sheet.errors_count}
-                      </button>
-                    ) : (
-                      <span className="text-muted-foreground">0</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant={sheet.active ? "default" : "secondary"} className="text-[10px]">
-                      {sheet.active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {sheet.last_check
-                      ? formatDistanceToNow(new Date(sheet.last_check), { addSuffix: true })
-                      : "Never"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {sheet.errors_count > 0 && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => viewErrors(sheet)}>
-                          <Eye className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fetchSheets}>
-                        <RefreshCw className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  {sheet.errors_count > 0 && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => viewErrors(sheet)}>
+                      <Eye className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={fetchSheets}>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Stats row */}
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border/50">
+                <div className="flex items-center gap-1.5">
+                  <Database className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Orders:</span>
+                  <span className="text-xs font-semibold">{sheet.orders_count}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Last row:</span>
+                  <span className="text-xs font-semibold">{sheet.last_imported_row}</span>
+                </div>
+                {sheet.errors_count > 0 && (
+                  <button
+                    onClick={() => viewErrors(sheet)}
+                    className="flex items-center gap-1.5 text-destructive hover:underline"
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    <span className="text-xs font-semibold">{sheet.errors_count} errors</span>
+                  </button>
+                )}
+                <div className="ml-auto text-[10px] text-muted-foreground/60">
+                  {sheet.last_check
+                    ? `Synced ${formatDistanceToNow(new Date(sheet.last_check), { addSuffix: true })}`
+                    : "Never synced"}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -273,9 +383,7 @@ export default function SellerSheets() {
       <Dialog open={errorsOpen} onOpenChange={setErrorsOpen}>
         <DialogContent className="max-w-2xl max-h-[70vh] overflow-auto">
           <DialogHeader>
-            <DialogTitle className="text-base">
-              Errors — {errorsSheet?.name}
-            </DialogTitle>
+            <DialogTitle className="text-base">Errors — {errorsSheet?.name}</DialogTitle>
           </DialogHeader>
           {errorsLoading ? (
             <div className="flex items-center justify-center py-10">
