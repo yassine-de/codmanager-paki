@@ -253,38 +253,57 @@ export default function SellerSourcing() {
                       </Tooltip>
                     </TableCell>
                     <TableCell className="text-center">
-                      {canValidate ? (
-                        <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-1">
+                        {/* Edit button - only before validation */}
+                        {req.seller_validated === null && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-7 w-7 text-success hover:bg-success/10"
-                                onClick={() => validateMutation.mutate({ id: req.id, validated: true })}
+                                className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                onClick={() => setEditRequest(req)}
                               >
-                                <Check className="h-3.5 w-3.5" />
+                                <Pencil className="h-3.5 w-3.5" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Validate</TooltipContent>
+                            <TooltipContent>Edit</TooltipContent>
                           </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                onClick={() => validateMutation.mutate({ id: req.id, validated: false })}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Cancel</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground">—</span>
-                      )}
+                        )}
+                        {canValidate && (
+                          <>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-success hover:bg-success/10"
+                                  onClick={() => validateMutation.mutate({ id: req.id, validated: true })}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Validate</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                  onClick={() => validateMutation.mutate({ id: req.id, validated: false })}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Cancel</TooltipContent>
+                            </Tooltip>
+                          </>
+                        )}
+                        {!canValidate && req.seller_validated !== null && (
+                          <span className="text-[10px] text-muted-foreground">—</span>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
