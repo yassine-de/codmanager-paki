@@ -842,6 +842,14 @@ export default function Invoices() {
                                   <DialogContent className="max-w-md">
                                     <DialogHeader><DialogTitle className="text-sm">{t("proof")} — {inv.invoice_number}</DialogTitle></DialogHeader>
                                     <img src={proofUrl} alt="Payment proof" className="w-full rounded-lg border" />
+                                    <div className="flex justify-end pt-2">
+                                      <label className="cursor-pointer">
+                                        <input type="file" accept="image/*" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) uploadProofMutation.mutate({ invoiceId: inv.id, file }); }} />
+                                        <Button variant="outline" size="sm" className="gap-1.5" asChild>
+                                          <span><Upload className="h-3.5 w-3.5" /> Replace Proof</span>
+                                        </Button>
+                                      </label>
+                                    </div>
                                   </DialogContent>
                                 </Dialog>
                               ) : (
