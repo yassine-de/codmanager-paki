@@ -159,7 +159,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       price: 0,
       landed_price: landedPrice || 0,
       quantity: quantity,
-      product_url: request.product_url || "",
+      product_url: "",
       sourcing_request_id: request.id,
       weight: productWeight || null,
       variants: request.variants || null,
