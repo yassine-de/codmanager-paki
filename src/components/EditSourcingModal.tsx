@@ -30,6 +30,22 @@ interface EditSourcingModalProps {
 
 export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingModalProps) {
   const queryClient = useQueryClient();
+
+  // Fetch source product info if this sourcing came from an existing product
+  const sourceProductId = (request as any)?.source_product_id;
+  const { data: sourceProduct } = useQuery({
+    queryKey: ["source-product", sourceProductId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, sku, price, landed_price, image_url, quantity")
+        .eq("id", sourceProductId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!sourceProductId,
+  });
   const [unitPrice, setUnitPrice] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
   const [landedPrice, setLandedPrice] = useState(0);
