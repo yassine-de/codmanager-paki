@@ -192,24 +192,30 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
               </Table>
 
               {/* Summary */}
-              {displayOrders.length > 0 && (
+              {(displayOrders.length > 0 || addons.length > 0) && (
                 <div className="border-t px-5 py-4 space-y-2">
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Total Orders</span>
                     <span className="font-semibold">{displayOrders.length}</span>
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Total Amount (price × qty)</span>
-                    <span className="font-semibold tabular-nums">{totalAmount.toLocaleString()} MAD</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Total Fees (shipping rates)</span>
-                    <span className="font-semibold tabular-nums text-destructive">-{totalFees.toFixed(2)} MAD</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">COD Fees (5%)</span>
-                    <span className="font-semibold tabular-nums text-destructive">-{codFees.toFixed(2)} MAD</span>
-                  </div>
+                  {totalAmount > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Total Amount (price × qty)</span>
+                      <span className="font-semibold tabular-nums">{totalAmount.toLocaleString()} MAD</span>
+                    </div>
+                  )}
+                  {totalFees > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Total Fees (shipping rates)</span>
+                      <span className="font-semibold tabular-nums text-destructive">-{totalFees.toFixed(2)} MAD</span>
+                    </div>
+                  )}
+                  {codFees > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">COD Fees (5%)</span>
+                      <span className="font-semibold tabular-nums text-destructive">-{codFees.toFixed(2)} MAD</span>
+                    </div>
+                  )}
                   {/* Addons breakdown */}
                   {addons.length > 0 && (
                     <div className="border-t pt-2 space-y-1.5">
