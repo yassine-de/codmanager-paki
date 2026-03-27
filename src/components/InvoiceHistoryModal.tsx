@@ -364,7 +364,7 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] p-0 gap-0">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] p-0 gap-0 flex flex-col">
         <DialogHeader className="px-5 pt-5 pb-3 border-b">
           <DialogTitle className="text-base font-semibold flex items-center gap-2">
             <Package className="h-4 w-4 text-primary" />
@@ -395,7 +395,7 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
                 </TabsTrigger>
               </TabsList>
             </div>
-            <ScrollArea className="max-h-[55vh]">
+            <ScrollArea className="flex-1 overflow-auto" style={{ maxHeight: "calc(85vh - 120px)" }}>
               <div className="px-5 py-4">
                 <TabsContent value="all" className="mt-0">
                   {renderTimeline(timeline)}
