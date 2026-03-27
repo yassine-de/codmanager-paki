@@ -100,6 +100,48 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       .update(updateData)
       .eq("id", request.id);
     if (error) throw error;
+
+    // Auto-add deduction to draft invoice when paid via "from_invoice"
+    if (
+      paymentStatus === "paid" &&
+      paymentMethod === "from_invoice" &&
+      request.payment_status !== "paid" &&
+      totalPrice > 0
+    ) {
+      // Find or create draft invoice for this seller
+      let draftInvoiceId: string | null = null;
+      const { data: draftInvoice } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("seller_id", request.seller_id)
+        .eq("status", "draft")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (draftInvoice) {
+        draftInvoiceId = draftInvoice.id;
+      } else {
+        const { data: newInvoice, error: invErr } = await supabase
+          .from("invoices")
+          .insert({ seller_id: request.seller_id, status: "draft" })
+          .select("id")
+          .single();
+        if (invErr) throw invErr;
+        draftInvoiceId = newInvoice.id;
+      }
+
+      // Add deduction addon
+      const { error: addonErr } = await supabase
+        .from("invoice_addons")
+        .insert({
+          invoice_id: draftInvoiceId,
+          type: "out",
+          amount: totalPrice,
+          reason: `Sourcing: ${request.product_name}`,
+        });
+      if (addonErr) throw addonErr;
+    }
   };
 
   const createProduct = async () => {
