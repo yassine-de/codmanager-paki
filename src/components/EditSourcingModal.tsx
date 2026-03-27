@@ -184,19 +184,76 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     if (error) throw error;
   };
 
+  const addStockToExistingProduct = async () => {
+    if (!request || !sourceProductId) return;
+    // Get current product quantity
+    const { data: prod, error: fetchErr } = await supabase
+      .from("products")
+      .select("quantity, variants")
+      .eq("id", sourceProductId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const currentQty = prod.quantity || 0;
+    const newQty = currentQty + quantity;
+
+    // If sourcing has variants, merge quantities into existing product variants
+    const updateData: Record<string, unknown> = {
+      quantity: newQty,
+      updated_at: new Date().toISOString(),
+      seller_seen: false,
+    };
+
+    // Update landed_price if set
+    if (landedPrice > 0) {
+      updateData.landed_price = landedPrice;
+    }
+    if (productWeight) {
+      updateData.weight = productWeight;
+    }
+
+    // Merge variant quantities
+    if (request.variants && Array.isArray(request.variants) && prod.variants && Array.isArray(prod.variants)) {
+      const existingVariants = prod.variants as any[];
+      const sourcingVariants = request.variants as any[];
+      const mergedVariants = existingVariants.map((ev: any) => {
+        const match = sourcingVariants.find((sv: any) => sv.name === ev.name);
+        if (!match) return ev;
+        if (ev.subVariants && match.subVariants) {
+          const mergedSubs = ev.subVariants.map((esv: any) => {
+            const subMatch = match.subVariants.find((ssv: any) => ssv.name === esv.name);
+            return subMatch ? { ...esv, quantity: (esv.quantity || 0) + (subMatch.quantity || 0) } : esv;
+          });
+          return { ...ev, quantity: (ev.quantity || 0) + (match.quantity || 0), subVariants: mergedSubs };
+        }
+        return { ...ev, quantity: (ev.quantity || 0) + (match.quantity || 0) };
+      });
+      updateData.variants = mergedVariants;
+    }
+
+    const { error } = await supabase.from("products").update(updateData).eq("id", sourceProductId);
+    if (error) throw error;
+  };
+
   const updateMutation = useMutation({
-    mutationFn: async ({ withProduct }: { withProduct?: boolean } = {}) => {
-      if (withProduct) {
+    mutationFn: async ({ withProduct, addStock }: { withProduct?: boolean; addStock?: boolean } = {}) => {
+      if (addStock) {
+        await addStockToExistingProduct();
+        await doUpdate(true);
+      } else if (withProduct) {
         await createProduct();
         await doUpdate(true);
       } else {
         await doUpdate(withProduct === false ? false : undefined);
       }
     },
-    onSuccess: (_, { withProduct }) => {
+    onSuccess: (_, { addStock, withProduct }) => {
       queryClient.invalidateQueries({ queryKey: ["admin-sourcing"] });
+      queryClient.invalidateQueries({ queryKey: ["source-product"] });
       onOpenChange(false);
-      if (withProduct) {
+      if (addStock) {
+        toast.success("Request updated & stock added to product");
+      } else if (withProduct) {
         toast.success("Request updated & product created");
       } else {
         toast.success("Request updated successfully");
@@ -237,14 +294,14 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
 
   const handleSave = () => {
     if (!validate()) return;
-    // If status changed to received and product not yet created, show confirmation
     const wasReceived = request?.status === "received";
     const isNowReceived = status === "received";
     const alreadyCreated = request?.product_created === true;
+    const isExistingProduct = !!sourceProductId;
 
     if (isNowReceived && !wasReceived && !alreadyCreated) {
       if (!productWeight) {
-        toast.error("Product weight is required before creating a product");
+        toast.error("Product weight is required");
         setErrors(prev => ({ ...prev, productWeight: "Weight is required" }));
         return;
       }
@@ -254,9 +311,15 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     updateMutation.mutate({});
   };
 
-  const handleProductConfirm = (yes: boolean) => {
+  const handleProductConfirm = (action: "create" | "addStock" | "no") => {
     setShowProductConfirm(false);
-    updateMutation.mutate({ withProduct: yes ? true : false });
+    if (action === "addStock") {
+      updateMutation.mutate({ addStock: true });
+    } else if (action === "create") {
+      updateMutation.mutate({ withProduct: true });
+    } else {
+      updateMutation.mutate({ withProduct: false });
+    }
   };
 
   if (!request) return null;
@@ -547,26 +610,38 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
         </DialogContent>
       </Dialog>
 
-      {/* Product Creation Confirmation */}
+      {/* Product Confirmation - different for existing vs new */}
       <AlertDialog open={showProductConfirm} onOpenChange={setShowProductConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <PackageCheck className="h-5 w-5 text-primary" />
-              Create Product?
+              {sourceProductId ? "Add Stock to Product?" : "Create Product?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              The sourcing request for <strong>{request.product_name}</strong> has been received. 
-              Do you want to automatically create a product for this seller?
+              {sourceProductId ? (
+                <>
+                  This sourcing request is linked to an existing product: <strong>{sourceProduct?.name || request.product_name}</strong>.
+                  Do you want to add <strong>{quantity} units</strong> to the existing product stock?
+                </>
+              ) : (
+                <>
+                  The sourcing request for <strong>{request.product_name}</strong> has been received.
+                  Do you want to automatically create a product for this seller?
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => handleProductConfirm(false)} disabled={updateMutation.isPending}>
+            <AlertDialogCancel onClick={() => handleProductConfirm("no")} disabled={updateMutation.isPending}>
               No
             </AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleProductConfirm(true)} disabled={updateMutation.isPending}>
+            <AlertDialogAction
+              onClick={() => handleProductConfirm(sourceProductId ? "addStock" : "create")}
+              disabled={updateMutation.isPending}
+            >
               {updateMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Yes, Create Product
+              {sourceProductId ? "Yes, Add Stock" : "Yes, Create Product"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
