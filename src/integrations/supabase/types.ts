@@ -626,6 +626,7 @@ export type Database = {
           seller_validated: boolean | null
           shipping_cost: number | null
           shipping_method: string
+          source_product_id: string | null
           status: string
           total_price: number | null
           unit_price: number | null
@@ -654,6 +655,7 @@ export type Database = {
           seller_validated?: boolean | null
           shipping_cost?: number | null
           shipping_method?: string
+          source_product_id?: string | null
           status?: string
           total_price?: number | null
           unit_price?: number | null
@@ -682,13 +684,22 @@ export type Database = {
           seller_validated?: boolean | null
           shipping_cost?: number | null
           shipping_method?: string
+          source_product_id?: string | null
           status?: string
           total_price?: number | null
           unit_price?: number | null
           updated_at?: string
           variants?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sourcing_requests_source_product_id_fkey"
+            columns: ["source_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_permissions: {
         Row: {

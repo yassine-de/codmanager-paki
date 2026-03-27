@@ -1,0 +1,1 @@
+ALTER TABLE public.sourcing_requests ADD COLUMN source_product_id uuid REFERENCES public.products(id) ON DELETE SET NULL DEFAULT NULL;
