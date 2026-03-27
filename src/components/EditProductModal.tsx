@@ -86,9 +86,9 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     setPrice(product.price);
     setTotalQty(product.totalQty);
     setVariants(product.variants.map(v => ({ ...v })));
-    setStoreLink(product.storeLink || "");
+    setStoreLink(isSeller ? "" : (product.storeLink || ""));
     setVideoLink(product.videoLink || "");
-    setLastSellingPrice(product.lastSellingPrice || 0);
+    setLastSellingPrice(isSeller ? 0 : (product.lastSellingPrice || 0));
     setLastPrice(product.lastPrice || 0);
     setOffers(product.offers?.map(o => ({ ...o })) || []);
     setWeight(product.weight || "");
@@ -128,6 +128,9 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
         errs.videoLink = "Video link is required";
       } else if (!isValidUrl(videoLink)) {
         errs.videoLink = "Invalid URL format";
+      }
+      if (isSeller && lastSellingPrice <= 0) {
+        errs.sellingPrice = "Selling price is required";
       }
     }
     variants.forEach((v, i) => {
