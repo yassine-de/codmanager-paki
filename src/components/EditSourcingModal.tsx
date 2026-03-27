@@ -247,10 +247,13 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
         await doUpdate(withProduct === false ? false : undefined);
       }
     },
-    onSuccess: (_, { withProduct }) => {
+    onSuccess: (_, { addStock, withProduct }) => {
       queryClient.invalidateQueries({ queryKey: ["admin-sourcing"] });
+      queryClient.invalidateQueries({ queryKey: ["source-product"] });
       onOpenChange(false);
-      if (withProduct) {
+      if (addStock) {
+        toast.success("Request updated & stock added to product");
+      } else if (withProduct) {
         toast.success("Request updated & product created");
       } else {
         toast.success("Request updated successfully");
