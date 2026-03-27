@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ExternalLink, Loader2, MapPin, Ship, ImageIcon, PackageCheck, Layers } from "lucide-react";
+import { ExternalLink, Loader2, MapPin, Ship, ImageIcon, PackageCheck, Layers, Package, Info } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { DbSourcingRequest } from "@/pages/Sourcing";
@@ -30,6 +30,22 @@ interface EditSourcingModalProps {
 
 export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingModalProps) {
   const queryClient = useQueryClient();
+
+  // Fetch source product info if this sourcing came from an existing product
+  const sourceProductId = (request as any)?.source_product_id;
+  const { data: sourceProduct } = useQuery({
+    queryKey: ["source-product", sourceProductId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, sku, price, landed_price, image_url, quantity")
+        .eq("id", sourceProductId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!sourceProductId,
+  });
   const [unitPrice, setUnitPrice] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
   const [landedPrice, setLandedPrice] = useState(0);
@@ -282,7 +298,44 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
               </div>
             </div>
 
-            {/* Variants Display (read-only) */}
+            {/* Existing Product Info */}
+            {sourceProduct && (
+              <div className="rounded-xl border border-info/25 bg-info/5 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Package className="h-3.5 w-3.5 text-info" />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-info">Existing Product</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {sourceProduct.image_url ? (
+                    <img src={sourceProduct.image_url} alt="" className="w-10 h-10 rounded-lg object-cover border" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg border bg-muted flex items-center justify-center">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate">{sourceProduct.name}</p>
+                    <p className="text-[10px] text-muted-foreground">SKU: {sourceProduct.sku} · Stock: {sourceProduct.quantity}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border bg-background px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground">Selling Price</p>
+                    <p className="text-sm font-bold tabular-nums">{(sourceProduct.price ?? 0).toLocaleString()} MAD</p>
+                  </div>
+                  <div className="rounded-lg border bg-background px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground">Buying Price</p>
+                    <p className="text-sm font-bold tabular-nums">{(sourceProduct.landed_price ?? 0).toLocaleString()} MAD</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-1.5 mt-1">
+                  <Info className="h-3 w-3 text-info mt-0.5 shrink-0" />
+                  <p className="text-[10px] text-info/80">This sourcing request was created from an existing product in the seller's catalog.</p>
+                </div>
+              </div>
+            )}
+
+
             {request.variants && Array.isArray(request.variants) && (request.variants as any[]).length > 0 && (
               <div className="rounded-xl border bg-muted/20 p-3 space-y-2">
                 <div className="flex items-center gap-2">

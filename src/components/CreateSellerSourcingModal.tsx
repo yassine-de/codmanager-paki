@@ -241,7 +241,7 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
           }))
         : null;
 
-      const { error } = await supabase.from("sourcing_requests").insert({
+      const insertData: Record<string, unknown> = {
         seller_id: authUser!.id,
         product_name: productName.trim(),
         quantity: Number(quantity),
@@ -254,7 +254,11 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
         admin_seen: false,
         product_image_url: productImageUrl,
         variants: variantsData as any,
-      });
+      };
+      if (productType === "existing" && selectedProductId) {
+        insertData.source_product_id = selectedProductId;
+      }
+      const { error } = await supabase.from("sourcing_requests").insert(insertData as any);
       if (error) throw error;
     },
     onSuccess: (_, autoValidate) => {
