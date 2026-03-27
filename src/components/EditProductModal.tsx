@@ -440,7 +440,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                       <div className="grid grid-cols-3 gap-2">
                         <div className="space-y-1">
                           <Label className="text-[10px] text-muted-foreground">Name *</Label>
-                          <Input value={variant.name} onChange={e => updateVariant(i, "name", e.target.value)} placeholder="e.g. Black, XL" className={`h-8 text-xs ${errors[`v_name_${i}`] ? "border-destructive" : ""}`} />
+                          <Input value={variant.name} onChange={e => updateVariant(i, "name", e.target.value)} placeholder="e.g. Black, XL" className={`h-8 text-xs ${errors[`v_name_${i}`] ? "border-destructive" : ""}`} disabled={isSeller} />
                         </div>
                         <div className="space-y-1">
                           <Label className="text-[10px] text-muted-foreground">Price (MAD)</Label>
