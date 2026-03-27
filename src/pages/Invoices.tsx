@@ -373,40 +373,7 @@ export default function Invoices() {
     },
   });
 
-  // Finalize draft then open addon dialog (creates as draft, not ready)
-  const finalizeAndAddonMutation = useMutation({
-    mutationFn: async (draft: typeof draftInvoices[0]) => {
-      const { data: invoice, error: invError } = await supabase
-        .from("invoices")
-        .insert({ seller_id: draft.sellerId, status: "draft" } as any)
-        .select()
-        .single();
-      if (invError) throw invError;
-      const orderIds = draft.orders.map(o => o.id);
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({ invoice_id: invoice.id } as any)
-        .in("id", orderIds);
-      if (updateError) throw updateError;
-      // Log order additions
-      for (const o of draft.orders) {
-        await logInvoiceHistory(invoice.id, "order_added", null, null, null, o.order_id);
-      }
-      return invoice;
-    },
-    onSuccess: (invoice) => {
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["unassigned-delivered-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["invoice-orders-summary"] });
-      toast.success("Invoice created as draft");
-      // Open addon dialog with the new invoice ID
-      setAddonInvoiceId(invoice.id);
-      setAddonType("in");
-      setAddonAmount("");
-      setAddonReason("");
-    },
-    onError: () => toast.error("Failed to create invoice"),
-  });
+  // No more finalizeAndAddonMutation - addons can be added directly to DB draft invoices
 
   // Add addon
   const addAddonMutation = useMutation({
@@ -442,22 +409,14 @@ export default function Invoices() {
     },
   });
 
-  const openDetail = (row: CombinedRow) => {
-    const sellerId = row.type === "draft" ? row.data.sellerId : row.data.seller_id;
-    setDetailSellerName(sellerNameMap[sellerId] || "—");
-    setDetailSellerRates(sellerRatesMap[sellerId] || null);
-    setDetailSellerId(sellerId);
-    if (row.type === "draft") {
-      setDetailInvoiceId(null);
-      setDetailInvoiceNumber("Draft Invoice");
-      setDetailIsDraft(true);
-      setDetailDraftOrders(row.data.orders);
-    } else {
-      setDetailInvoiceId(row.data.id);
-      setDetailInvoiceNumber(row.data.invoice_number);
-      setDetailIsDraft(false);
-      setDetailDraftOrders([]);
-    }
+  const openDetail = (inv: typeof invoiceSummaries[0]) => {
+    setDetailSellerName(sellerNameMap[inv.seller_id] || "—");
+    setDetailSellerRates(sellerRatesMap[inv.seller_id] || null);
+    setDetailSellerId(inv.seller_id);
+    setDetailInvoiceId(inv.id);
+    setDetailInvoiceNumber(inv.status === "draft" ? "Draft Invoice" : inv.invoice_number);
+    setDetailIsDraft(false);
+    setDetailDraftOrders([]);
   };
 
   const handleReset = () => {
@@ -594,84 +553,14 @@ export default function Invoices() {
                 </TableRow>
               ) : (
                 paginated.map((row) => {
-                  if (row.type === "draft") {
-                    const d = row.data;
-                    return (
-                      <TableRow key={d.id} className="text-xs bg-warning/5 hover:bg-warning/10">
-                        <TableCell className="font-semibold text-warning">Draft</TableCell>
-                        <TableCell className="text-muted-foreground">—</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <div className="h-5 w-5 rounded-md bg-accent flex items-center justify-center shrink-0">
-                              <Store className="h-3 w-3 text-muted-foreground" />
-                            </div>
-                            <span className="font-medium">{sellerNameMap[d.sellerId] || "—"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-accent text-[11px] font-semibold">{d.ordersCount}</span>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{d.totalAmount.toLocaleString()} <span className="text-muted-foreground text-[10px]">MAD</span></TableCell>
-                        <TableCell className="text-right tabular-nums text-destructive">-{d.totalFees.toFixed(2)}</TableCell>
-                        <TableCell className="text-right tabular-nums text-destructive">-{d.codFees.toFixed(2)}</TableCell>
-                        <TableCell className="text-right tabular-nums font-bold text-success">{d.netPayable.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">MAD</span></TableCell>
-                        <TableCell className="text-center">
-                          <Switch
-                            checked={false}
-                            onCheckedChange={() => finalizeMutation.mutate(d)}
-                            disabled={finalizeMutation.isPending}
-                            className="data-[state=checked]:bg-success scale-90"
-                          />
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className="text-[10px] border-warning/30 text-warning bg-warning/10">Draft</Badge>
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground/40">—</TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center gap-0.5">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:bg-info/10" onClick={() => openDetail(row)}>
-                                  <Eye className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-[10px]">View Orders</TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10"
-                                  onClick={() => finalizeAndAddonMutation.mutate(d)}
-                                  disabled={finalizeAndAddonMutation.isPending}>
-                                  <PlusCircle className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-[10px]">{t("add_addon")}</TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted"
-                                  onClick={() => {
-                                    setHistoryInvoiceId(null);
-                                    setHistoryInvoiceNumber("Draft");
-                                    setHistoryOrderIds(d.orders.map((o: any) => o.order_id));
-                                  }}>
-                                  <History className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-[10px]">History</TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }
-
-                  // Finalized invoice
                   const inv = row.data;
                   const proofUrl = inv.payment_proof_url;
+                  const isDraft = inv.status === "draft";
                   return (
-                    <TableRow key={inv.id} className="text-xs">
-                      <TableCell className="font-semibold text-primary">{inv.invoice_number}</TableCell>
+                    <TableRow key={inv.id} className={`text-xs ${isDraft ? "bg-warning/5 hover:bg-warning/10" : ""}`}>
+                      <TableCell className={`font-semibold ${isDraft ? "text-warning" : "text-primary"}`}>
+                        {isDraft ? "Draft" : inv.invoice_number}
+                      </TableCell>
                       <TableCell className="text-muted-foreground text-[11px]">{format(new Date(inv.created_at), "dd MMM yyyy")}</TableCell>
                       {!isSeller && (
                         <TableCell>
