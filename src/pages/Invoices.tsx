@@ -876,16 +876,16 @@ export default function Invoices() {
                             <>
                               {proofUrl && (
                                 <Dialog>
-                                  <DialogTrigger asChild>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <DialogTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-7 w-7 text-success hover:bg-success/10">
                                           <Eye className="h-3.5 w-3.5" />
                                         </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="text-[10px]">{t("proof")}</TooltipContent>
-                                    </Tooltip>
-                                  </DialogTrigger>
+                                      </DialogTrigger>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-[10px]">{t("proof")}</TooltipContent>
+                                  </Tooltip>
                                   <DialogContent className="max-w-md">
                                     <DialogHeader><DialogTitle className="text-sm">{t("proof")} — {inv.invoice_number}</DialogTitle></DialogHeader>
                                     <img src={proofUrl} alt="Payment proof" className="w-full rounded-lg border" />
