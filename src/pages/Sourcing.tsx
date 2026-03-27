@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2, ImageIcon } from "lucide-react";
+import { SourcingVariantsBadge } from "@/components/SourcingVariantsBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { EditSourcingModal } from "@/components/EditSourcingModal";
 import { CreateSourcingModal } from "@/components/CreateSourcingModal";
@@ -64,6 +65,7 @@ export interface DbSourcingRequest {
   payment_date: string | null;
   created_at: string;
   updated_at: string;
+  variants: any[] | null;
 }
 
 export default function Sourcing() {
@@ -262,7 +264,12 @@ export default function Sourcing() {
                     </TableCell>
                     <TableCell className="font-medium max-w-[140px] truncate">{req.product_name}</TableCell>
                     <TableCell className="text-muted-foreground">{sellerNameMap[req.seller_id] || "—"}</TableCell>
-                    <TableCell className="text-center tabular-nums">{req.quantity}</TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="tabular-nums">{req.quantity}</span>
+                        <SourcingVariantsBadge variants={req.variants} />
+                      </div>
+                    </TableCell>
                     <TableCell className="text-center">
                       {req.product_weight ? (
                         <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium bg-accent text-accent-foreground">

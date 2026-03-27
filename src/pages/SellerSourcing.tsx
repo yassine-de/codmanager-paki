@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Package2, Plus, Check, X, ExternalLink, Loader2, ImageIcon } from "lucide-react";
+import { SourcingVariantsBadge } from "@/components/SourcingVariantsBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -44,6 +45,7 @@ interface SourcingRequest {
   seller_validated: boolean | null;
   seller_seen: boolean | null;
   created_at: string;
+  variants: any[] | null;
 }
 
 export default function SellerSourcing() {
@@ -210,7 +212,12 @@ export default function SellerSourcing() {
                         {req.product_name}
                       </div>
                     </TableCell>
-                    <TableCell className="text-center tabular-nums">{req.quantity}</TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="tabular-nums">{req.quantity}</span>
+                        <SourcingVariantsBadge variants={req.variants} />
+                      </div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{req.destination_country}</TableCell>
                     <TableCell className="text-muted-foreground">{shippingLabel(req.shipping_method)}</TableCell>
                     <TableCell className="text-center">
