@@ -141,29 +141,15 @@ export default function Invoices() {
     enabled: invoiceIds.length > 0,
   });
 
-  // Fetch unassigned delivered orders (drafts) - admin only
-  const { data: unassignedOrders = [], isLoading: loadingDrafts } = useQuery({
-    queryKey: ["unassigned-delivered-orders"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("delivery_status", "delivered")
-        .is("invoice_id", null)
-        .order("delivered_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    enabled: !isSeller,
-  });
+  // No more virtual drafts - DB trigger auto-creates draft invoices
+  const loadingDrafts = false;
 
   // Fetch all seller profiles
   const allSellerIds = useMemo(() => {
     const ids = new Set<string>();
     invoices.forEach(i => ids.add(i.seller_id));
-    unassignedOrders.forEach(o => ids.add(o.seller_id));
     return [...ids];
-  }, [invoices, unassignedOrders]);
+  }, [invoices]);
 
   const { data: sellerProfiles = [] } = useQuery({
     queryKey: ["seller-profiles-invoices", allSellerIds],
@@ -228,42 +214,17 @@ export default function Invoices() {
     return productWeightMap[`${sellerId}|${productName}`] || null;
   };
 
-  // Compute draft invoices (grouped unassigned orders by seller)
-  const draftInvoices = useMemo(() => {
-    const grouped: Record<string, typeof unassignedOrders> = {};
-    unassignedOrders.forEach(order => {
-      if (!grouped[order.seller_id]) grouped[order.seller_id] = [];
-      grouped[order.seller_id].push(order);
-    });
-    return Object.entries(grouped).map(([sellerId, orders]) => {
-      const rates = sellerRatesMap[sellerId] || null;
-      const totalAmount = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
-      const totalFees = orders.reduce((sum, o) => sum + calculateFeeFromWeight(getProductWeight(sellerId, o.product_name), rates), 0);
-      const codFees = totalAmount * 0.05;
-      return {
-        id: `draft-${sellerId}`,
-        sellerId,
-        orders,
-        ordersCount: orders.length,
-        totalAmount,
-        totalFees,
-        codFees,
-        netPayable: totalAmount - totalFees - codFees,
-      };
-    });
-  }, [unassignedOrders, sellerRatesMap, productWeightMap]);
-
-  // Compute invoice summaries
+  // Compute invoice summaries (all invoices including drafts from DB)
   const invoiceSummaries = useMemo(() => {
-    const ordersBySeller: Record<string, typeof invoiceOrders> = {};
+    const ordersByInvoice: Record<string, typeof invoiceOrders> = {};
     invoiceOrders.forEach(o => {
       const key = o.invoice_id!;
-      if (!ordersBySeller[key]) ordersBySeller[key] = [];
-      ordersBySeller[key].push(o);
+      if (!ordersByInvoice[key]) ordersByInvoice[key] = [];
+      ordersByInvoice[key].push(o);
     });
 
     return invoices.map(inv => {
-      const orders = ordersBySeller[inv.id] || [];
+      const orders = ordersByInvoice[inv.id] || [];
       const rates = sellerRatesMap[inv.seller_id] || null;
       const totalAmount = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
       const totalFees = orders.reduce((sum, o) => sum + calculateFeeFromWeight(getProductWeight(inv.seller_id, o.product_name), rates), 0);
@@ -283,42 +244,30 @@ export default function Invoices() {
     });
   }, [invoices, invoiceOrders, sellerRatesMap, addonsByInvoice, sellerNameMap, productWeightMap]);
 
-  // Combined list: drafts first, then invoices
-  type CombinedRow = { type: "draft"; data: typeof draftInvoices[0] } | { type: "invoice"; data: typeof invoiceSummaries[0] };
-
+  // All invoices as rows (no more virtual drafts)
   const combined = useMemo(() => {
-    const rows: CombinedRow[] = [];
-    if (!isSeller) {
-      draftInvoices.forEach(d => rows.push({ type: "draft", data: d }));
-    }
-    invoiceSummaries
+    return invoiceSummaries
       .filter(inv => isSeller ? inv.status !== "draft" : true)
-      .forEach(inv => rows.push({ type: "invoice", data: inv }));
-    return rows;
-  }, [draftInvoices, invoiceSummaries, isSeller]);
+      .map(inv => ({ type: "invoice" as const, data: inv }));
+  }, [invoiceSummaries, isSeller]);
 
   // Filters
   const filtered = useMemo(() => {
     return combined.filter(row => {
-      const sellerId = row.type === "draft" ? row.data.sellerId : row.data.seller_id;
+      const sellerId = row.data.seller_id;
       const sellerName = sellerNameMap[sellerId] || "";
       if (sellerFilter !== "all" && sellerId !== sellerFilter) return false;
       if (statusFilter !== "all") {
-      if (statusFilter === "draft" && row.type !== "draft" && !(row.type === "invoice" && row.data.status === "draft")) return false;
-      if (statusFilter !== "draft" && (row.type === "draft" || row.data.status !== statusFilter)) return false;
+        if (row.data.status !== statusFilter) return false;
       }
       if (dateRange?.from) {
-        const date = new Date(row.type === "draft" ? Date.now() : row.data.created_at);
+        const date = new Date(row.data.created_at);
         if (date < dateRange.from) return false;
         if (dateRange.to && date > dateRange.to) return false;
       }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        if (row.type === "draft") {
-          if (!sellerName.toLowerCase().includes(q) && !"draft".includes(q)) return false;
-        } else {
-          if (!row.data.invoice_number.toLowerCase().includes(q) && !sellerName.toLowerCase().includes(q)) return false;
-        }
+        if (!row.data.invoice_number.toLowerCase().includes(q) && !sellerName.toLowerCase().includes(q) && !row.data.status.toLowerCase().includes(q)) return false;
       }
       return true;
     });
@@ -328,9 +277,9 @@ export default function Invoices() {
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Stats
-  const totalAmount = filtered.reduce((s, r) => s + (r.type === "draft" ? r.data.netPayable : r.data.netPayable), 0);
-  const paidAmount = filtered.filter(r => r.type === "invoice" && r.data.status === "paid").reduce((s, r) => s + (r as any).data.netPayable, 0);
-  const needToPay = filtered.filter(r => r.type === "invoice" && r.data.status === "ready").reduce((s, r) => s + (r as any).data.netPayable, 0);
+  const totalAmount = filtered.reduce((s, r) => s + r.data.netPayable, 0);
+  const paidAmount = filtered.filter(r => r.data.status === "paid").reduce((s, r) => s + r.data.netPayable, 0);
+  const needToPay = filtered.filter(r => r.data.status === "ready").reduce((s, r) => s + r.data.netPayable, 0);
 
   const sellerOptions = useMemo(() => {
     return allSellerIds.map(id => ({
@@ -353,32 +302,18 @@ export default function Invoices() {
     } as any);
   };
 
-  // Finalize draft mutation
+  // Finalize draft invoice → mark as ready
   const finalizeMutation = useMutation({
-    mutationFn: async (draft: typeof draftInvoices[0]) => {
-      const { data: invoice, error: invError } = await supabase
+    mutationFn: async (invoiceId: string) => {
+      const { error } = await supabase
         .from("invoices")
-        .insert({ seller_id: draft.sellerId, status: "ready", finalized_at: new Date().toISOString() } as any)
-        .select()
-        .single();
-      if (invError) throw invError;
-      const orderIds = draft.orders.map(o => o.id);
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({ invoice_id: invoice.id } as any)
-        .in("id", orderIds);
-      if (updateError) throw updateError;
-      // Log status change
-      await logInvoiceHistory(invoice.id, "status_change", "status", "draft", "ready");
-      // Log each order added
-      for (const o of draft.orders) {
-        await logInvoiceHistory(invoice.id, "order_added", null, null, null, o.order_id);
-      }
-      return invoice;
+        .update({ status: "ready", finalized_at: new Date().toISOString() } as any)
+        .eq("id", invoiceId);
+      if (error) throw error;
+      await logInvoiceHistory(invoiceId, "status_change", "status", "draft", "ready");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["unassigned-delivered-orders"] });
       queryClient.invalidateQueries({ queryKey: ["invoice-orders-summary"] });
       toast.success("Invoice finalized and sent to seller");
     },
@@ -410,68 +345,26 @@ export default function Invoices() {
     },
   });
 
-  // Toggle ready (un-ready a ready invoice)
+  // Toggle ready (un-ready a ready invoice → revert to draft)
   const toggleReadyMutation = useMutation({
     mutationFn: async ({ invoiceId, currentStatus }: { invoiceId: string; currentStatus: string }) => {
       if (currentStatus === "ready") {
-        // Log removed orders before deleting
-        const { data: removedOrders } = await supabase.from("orders").select("order_id").eq("invoice_id", invoiceId);
-        // Un-ready: remove orders from invoice, delete invoice
         await logInvoiceHistory(invoiceId, "status_change", "status", "ready", "draft");
-        for (const o of (removedOrders || [])) {
-          await logInvoiceHistory(invoiceId, "order_removed", null, null, null, o.order_id);
-        }
-        const { error: orderErr } = await supabase
-          .from("orders")
-          .update({ invoice_id: null } as any)
-          .eq("invoice_id", invoiceId);
-        if (orderErr) throw orderErr;
-        const { error: delErr } = await supabase.from("invoices").delete().eq("id", invoiceId);
-        if (delErr) throw delErr;
+        const { error } = await supabase
+          .from("invoices")
+          .update({ status: "draft", finalized_at: null } as any)
+          .eq("id", invoiceId);
+        if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["unassigned-delivered-orders"] });
       queryClient.invalidateQueries({ queryKey: ["invoice-orders-summary"] });
       toast.success("Invoice reverted to draft");
     },
   });
 
-  // Finalize draft then open addon dialog (creates as draft, not ready)
-  const finalizeAndAddonMutation = useMutation({
-    mutationFn: async (draft: typeof draftInvoices[0]) => {
-      const { data: invoice, error: invError } = await supabase
-        .from("invoices")
-        .insert({ seller_id: draft.sellerId, status: "draft" } as any)
-        .select()
-        .single();
-      if (invError) throw invError;
-      const orderIds = draft.orders.map(o => o.id);
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({ invoice_id: invoice.id } as any)
-        .in("id", orderIds);
-      if (updateError) throw updateError;
-      // Log order additions
-      for (const o of draft.orders) {
-        await logInvoiceHistory(invoice.id, "order_added", null, null, null, o.order_id);
-      }
-      return invoice;
-    },
-    onSuccess: (invoice) => {
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["unassigned-delivered-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["invoice-orders-summary"] });
-      toast.success("Invoice created as draft");
-      // Open addon dialog with the new invoice ID
-      setAddonInvoiceId(invoice.id);
-      setAddonType("in");
-      setAddonAmount("");
-      setAddonReason("");
-    },
-    onError: () => toast.error("Failed to create invoice"),
-  });
+  // No more finalizeAndAddonMutation - addons can be added directly to DB draft invoices
 
   // Add addon
   const addAddonMutation = useMutation({
@@ -507,22 +400,14 @@ export default function Invoices() {
     },
   });
 
-  const openDetail = (row: CombinedRow) => {
-    const sellerId = row.type === "draft" ? row.data.sellerId : row.data.seller_id;
-    setDetailSellerName(sellerNameMap[sellerId] || "—");
-    setDetailSellerRates(sellerRatesMap[sellerId] || null);
-    setDetailSellerId(sellerId);
-    if (row.type === "draft") {
-      setDetailInvoiceId(null);
-      setDetailInvoiceNumber("Draft Invoice");
-      setDetailIsDraft(true);
-      setDetailDraftOrders(row.data.orders);
-    } else {
-      setDetailInvoiceId(row.data.id);
-      setDetailInvoiceNumber(row.data.invoice_number);
-      setDetailIsDraft(false);
-      setDetailDraftOrders([]);
-    }
+  const openDetail = (inv: typeof invoiceSummaries[0]) => {
+    setDetailSellerName(sellerNameMap[inv.seller_id] || "—");
+    setDetailSellerRates(sellerRatesMap[inv.seller_id] || null);
+    setDetailSellerId(inv.seller_id);
+    setDetailInvoiceId(inv.id);
+    setDetailInvoiceNumber(inv.status === "draft" ? "Draft Invoice" : inv.invoice_number);
+    setDetailIsDraft(false);
+    setDetailDraftOrders([]);
   };
 
   const handleReset = () => {
@@ -659,84 +544,14 @@ export default function Invoices() {
                 </TableRow>
               ) : (
                 paginated.map((row) => {
-                  if (row.type === "draft") {
-                    const d = row.data;
-                    return (
-                      <TableRow key={d.id} className="text-xs bg-warning/5 hover:bg-warning/10">
-                        <TableCell className="font-semibold text-warning">Draft</TableCell>
-                        <TableCell className="text-muted-foreground">—</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <div className="h-5 w-5 rounded-md bg-accent flex items-center justify-center shrink-0">
-                              <Store className="h-3 w-3 text-muted-foreground" />
-                            </div>
-                            <span className="font-medium">{sellerNameMap[d.sellerId] || "—"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-accent text-[11px] font-semibold">{d.ordersCount}</span>
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{d.totalAmount.toLocaleString()} <span className="text-muted-foreground text-[10px]">MAD</span></TableCell>
-                        <TableCell className="text-right tabular-nums text-destructive">-{d.totalFees.toFixed(2)}</TableCell>
-                        <TableCell className="text-right tabular-nums text-destructive">-{d.codFees.toFixed(2)}</TableCell>
-                        <TableCell className="text-right tabular-nums font-bold text-success">{d.netPayable.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">MAD</span></TableCell>
-                        <TableCell className="text-center">
-                          <Switch
-                            checked={false}
-                            onCheckedChange={() => finalizeMutation.mutate(d)}
-                            disabled={finalizeMutation.isPending}
-                            className="data-[state=checked]:bg-success scale-90"
-                          />
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant="outline" className="text-[10px] border-warning/30 text-warning bg-warning/10">Draft</Badge>
-                        </TableCell>
-                        <TableCell className="text-center text-muted-foreground/40">—</TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center gap-0.5">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:bg-info/10" onClick={() => openDetail(row)}>
-                                  <Eye className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-[10px]">View Orders</TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10"
-                                  onClick={() => finalizeAndAddonMutation.mutate(d)}
-                                  disabled={finalizeAndAddonMutation.isPending}>
-                                  <PlusCircle className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-[10px]">{t("add_addon")}</TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted"
-                                  onClick={() => {
-                                    setHistoryInvoiceId(null);
-                                    setHistoryInvoiceNumber("Draft");
-                                    setHistoryOrderIds(d.orders.map((o: any) => o.order_id));
-                                  }}>
-                                  <History className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="text-[10px]">History</TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }
-
-                  // Finalized invoice
                   const inv = row.data;
                   const proofUrl = inv.payment_proof_url;
+                  const isDraft = inv.status === "draft";
                   return (
-                    <TableRow key={inv.id} className="text-xs">
-                      <TableCell className="font-semibold text-primary">{inv.invoice_number}</TableCell>
+                    <TableRow key={inv.id} className={`text-xs ${isDraft ? "bg-warning/5 hover:bg-warning/10" : ""}`}>
+                      <TableCell className={`font-semibold ${isDraft ? "text-warning" : "text-primary"}`}>
+                        {isDraft ? "Draft" : inv.invoice_number}
+                      </TableCell>
                       <TableCell className="text-muted-foreground text-[11px]">{format(new Date(inv.created_at), "dd MMM yyyy")}</TableCell>
                       {!isSeller && (
                         <TableCell>
@@ -763,12 +578,7 @@ export default function Invoices() {
                               if (inv.status === "ready") {
                                 toggleReadyMutation.mutate({ invoiceId: inv.id, currentStatus: inv.status });
                               } else if (inv.status === "draft") {
-                                // Manually finalize draft DB invoice to ready
-                                supabase.from("invoices").update({ status: "ready", finalized_at: new Date().toISOString() } as any).eq("id", inv.id).then(() => {
-                                  logInvoiceHistory(inv.id, "status_change", "status", "draft", "ready");
-                                  queryClient.invalidateQueries({ queryKey: ["invoices"] });
-                                  toast.success("Invoice marked as Ready");
-                                });
+                                finalizeMutation.mutate(inv.id);
                               }
                             }}
                             disabled={inv.status === "paid"}
@@ -810,14 +620,15 @@ export default function Invoices() {
                         <div className="flex items-center justify-center gap-0.5">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:bg-info/10" onClick={() => openDetail(row)}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:bg-info/10" onClick={() => openDetail(inv)}>
                                 <Eye className="h-3.5 w-3.5" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent className="text-[10px]">View Orders</TooltipContent>
                           </Tooltip>
                           {!isSeller && (
-                            <>
+                             <>
+                              {isDraft && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10"
@@ -827,6 +638,7 @@ export default function Invoices() {
                                 </TooltipTrigger>
                                 <TooltipContent className="text-[10px]">{t("add_addon")}</TooltipContent>
                               </Tooltip>
+                              )}
                               {proofUrl ? (
                                 <Dialog>
                                   <Tooltip>
@@ -903,7 +715,7 @@ export default function Invoices() {
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" onClick={() => {
-                                    openDetail(row);
+                                    openDetail(inv);
                                     setTimeout(() => window.print(), 500);
                                   }}>
                                     <Printer className="h-3.5 w-3.5" />
@@ -913,7 +725,7 @@ export default function Invoices() {
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted" onClick={() => openDetail(row)}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted" onClick={() => openDetail(inv)}>
                                     <Download className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
