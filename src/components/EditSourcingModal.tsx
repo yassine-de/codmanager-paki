@@ -271,6 +271,11 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
                           ))}
                         </div>
                       )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Validate Product Button - shows when received but product not created */}
             {canValidateProduct && (
