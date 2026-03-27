@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import {
   Play, ChevronRight, Phone, PhoneOff, MessageCircle, User, MapPin, Package, DollarSign,
   Video, Store, Tag, StickyNote, CalendarIcon, ExternalLink, AlertCircle, Zap,
-  Pencil, Plus, Trash2, X, Check, Loader2
+  Pencil, Plus, Trash2, X, Check, Loader2, Clock, RotateCcw, Copy, AlertTriangle
 } from "lucide-react";
 
 const CANCEL_REASONS = [
@@ -29,6 +29,9 @@ const CANCEL_REASONS = [
 ];
 
 const NO_ANSWER_MAX_ATTEMPTS = 9;
+const RETRY_COOLDOWN_MS = 30 * 60 * 1000; // 30 min
+const RETRY_AGING_MS = 2 * 60 * 60 * 1000; // 2 hours → urgent
+const NEW_TO_RETRY_RATIO = 3; // 3 new then 1 retry
 
 const statusColors: Record<string, string> = {
   confirmed: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
@@ -59,6 +62,8 @@ interface DbOrder {
   attempt_count: number;
   cancel_reason: string | null;
   postpone_date: string | null;
+  postpone_note: string | null;
+  original_agent_id: string | null;
   shipping_status: string | null;
   store_url: string | null;
   video_url: string | null;
@@ -67,7 +72,11 @@ interface DbOrder {
   last_price: number | null;
   created_at: string;
   updated_at: string;
-  _isFollowUp?: boolean; // local flag, not from DB
+  // local flags
+  _isFollowUp?: boolean;
+  _isPostponedReassign?: boolean;
+  _isDuplicate?: boolean;
+  _duplicateGroup?: DbOrder[];
 }
 
 const AgentOrders = () => {
@@ -79,8 +88,9 @@ const AgentOrders = () => {
   const [orderQueue, setOrderQueue] = useState<DbOrder[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [newOrderCount, setNewOrderCount] = useState(0);
-  const [noAnswerCount, setNoAnswerCount] = useState(0);
-  const [assignedProducts, setAssignedProducts] = useState<string[] | null>(null); // null = all
+  const [retryCount, setRetryCount] = useState(0);
+  const [duplicateCount, setDuplicateCount] = useState(0);
+  const [assignedProducts, setAssignedProducts] = useState<string[] | null>(null);
 
   // Editable customer info
   const [editCustomer, setEditCustomer] = useState({ name: "", phone: "", city: "", address: "" });
@@ -96,21 +106,23 @@ const AgentOrders = () => {
   const [note, setNote] = useState("");
   const [postponeDate, setPostponeDate] = useState<Date | undefined>();
   const [postponeTime, setPostponeTime] = useState("10:00 AM");
+  const [postponeNote, setPostponeNote] = useState("");
   const [shippingStatus, setShippingStatus] = useState("");
+
+  // Track new/retry assignment count for balanced distribution
+  const [newAssignedCount, setNewAssignedCount] = useState(0);
 
   const currentOrder = orderQueue[currentIndex];
 
-  // Effective items
   const activeItems = editItems.length > 0 ? editItems : currentOrder
     ? [{ name: currentOrder.product_name, qty: currentOrder.quantity, price: Number(currentOrder.price) }]
     : [];
   const orderTotal = activeItems.reduce((s, p) => s + p.qty * p.price, 0);
 
-  // Fetch agent's assigned products + count of available orders
+  // Fetch agent's assigned products + counts
   useEffect(() => {
     if (!authUser) return;
     const init = async () => {
-      // Check if agent has specific product assignments
       const { data: agentProds } = await supabase
         .from("agent_products")
         .select("product_name")
@@ -118,99 +130,206 @@ const AgentOrders = () => {
 
       const prodNames = agentProds && agentProds.length > 0
         ? agentProds.map(p => p.product_name)
-        : null; // null = all products
+        : null;
       setAssignedProducts(prodNames);
 
-      // Count available new orders
+      // Count new orders
       let newQuery = supabase
         .from("orders")
         .select("id", { count: "exact", head: true })
         .eq("confirmation_status", "new")
         .is("agent_id", null);
-      if (prodNames) {
-        newQuery = newQuery.in("product_name", prodNames);
-      }
+      if (prodNames) newQuery = newQuery.in("product_name", prodNames);
       const { count: newCount } = await newQuery;
       setNewOrderCount(newCount || 0);
 
-      // Count no_answer orders assigned to this agent (for follow-up)
+      // Count retries (no_answer + postponed ready)
+      const now = new Date().toISOString();
       let naQuery = supabase
         .from("orders")
         .select("id", { count: "exact", head: true })
         .eq("confirmation_status", "no_answer")
         .eq("agent_id", authUser.id)
         .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS);
-      if (prodNames) {
-        naQuery = naQuery.in("product_name", prodNames);
-      }
+      if (prodNames) naQuery = naQuery.in("product_name", prodNames);
       const { count: naCount } = await naQuery;
-      setNoAnswerCount(naCount || 0);
+
+      let ppQuery = supabase
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .eq("confirmation_status", "postponed")
+        .lte("postpone_date", now);
+      // Postponed orders either assigned to this agent or unassigned (from inactive agents)
+      if (prodNames) ppQuery = ppQuery.in("product_name", prodNames);
+      const { count: ppCount } = await ppQuery;
+
+      setRetryCount((naCount || 0) + (ppCount || 0));
+
+      // Count duplicates (orders with same phone+product, status=new)
+      // We'll just show a rough count
+      setDuplicateCount(0); // Will be calculated on fetch
     };
     init();
   }, [authUser]);
 
-  // Helper to fetch prioritized orders
+  // ─── SMART QUEUE: Fetch prioritized orders ───
   const fetchPrioritizedOrders = async (): Promise<DbOrder[]> => {
     const userId = authUser!.id;
+    const now = new Date();
+    const cooldownCutoff = new Date(now.getTime() - RETRY_COOLDOWN_MS).toISOString();
+    const agingCutoff = new Date(now.getTime() - RETRY_AGING_MS).toISOString();
 
-    // 1) Orders already assigned to this agent that are still "new"
+    // ── 1. DUPLICATES (highest priority) ──
+    // Find orders with same phone+product that are "new" and unassigned
+    let dupQuery = supabase
+      .from("orders")
+      .select("*")
+      .eq("confirmation_status", "new")
+      .is("agent_id", null)
+      .order("created_at", { ascending: true });
+    if (assignedProducts) dupQuery = dupQuery.in("product_name", assignedProducts);
+    const { data: allNewOrders } = await dupQuery;
+
+    const newOrders = (allNewOrders || []) as DbOrder[];
+
+    // Detect duplicates: group by phone+product
+    const phoneProductMap: Record<string, DbOrder[]> = {};
+    for (const o of newOrders) {
+      const key = `${o.customer_phone.replace(/\s/g, "")}::${o.product_name}`;
+      if (!phoneProductMap[key]) phoneProductMap[key] = [];
+      phoneProductMap[key].push(o);
+    }
+
+    const duplicateGroups: DbOrder[][] = [];
+    const nonDuplicateNew: DbOrder[] = [];
+    for (const [, group] of Object.entries(phoneProductMap)) {
+      if (group.length > 1) {
+        duplicateGroups.push(group);
+      } else {
+        nonDuplicateNew.push(group[0]);
+      }
+    }
+
+    // Also get new orders already assigned to this agent
     let myNewQuery = supabase
       .from("orders")
       .select("*")
       .eq("confirmation_status", "new")
       .eq("agent_id", userId)
       .order("created_at", { ascending: true });
+    if (assignedProducts) myNewQuery = myNewQuery.in("product_name", assignedProducts);
+    const { data: myNewData } = await myNewQuery;
+    const myNewOrders = (myNewData || []) as DbOrder[];
 
-    // 2) Unassigned new orders
-    let unassignedQuery = supabase
-      .from("orders")
-      .select("*")
-      .eq("confirmation_status", "new")
-      .is("agent_id", null)
-      .order("created_at", { ascending: true });
-
-    if (assignedProducts) {
-      myNewQuery = myNewQuery.in("product_name", assignedProducts);
-      unassignedQuery = unassignedQuery.in("product_name", assignedProducts);
-    }
-
-    const [myNewResult, unassignedResult] = await Promise.all([myNewQuery, unassignedQuery]);
-    if (myNewResult.error) throw myNewResult.error;
-    if (unassignedResult.error) throw unassignedResult.error;
-
-    const newOrders = [...(myNewResult.data || []), ...(unassignedResult.data || [])] as DbOrder[];
-
-    // 3) No-answer follow-ups assigned to this agent, sorted by attempt_count ASC then updated_at ASC (oldest first)
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    // ── 2. RETRIES: No Answer (cooled down) ──
     let noAnswerQuery = supabase
       .from("orders")
       .select("*")
       .eq("confirmation_status", "no_answer")
       .eq("agent_id", userId)
       .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS)
+      .lt("updated_at", cooldownCutoff)
       .order("attempt_count", { ascending: true })
       .order("updated_at", { ascending: true });
+    if (assignedProducts) noAnswerQuery = noAnswerQuery.in("product_name", assignedProducts);
+    const { data: noAnswerData } = await noAnswerQuery;
 
-    if (assignedProducts) {
-      noAnswerQuery = noAnswerQuery.in("product_name", assignedProducts);
-    }
+    // Also get urgent no-answer retries (aged >2h) — these get boosted priority
+    let urgentNaQuery = supabase
+      .from("orders")
+      .select("*")
+      .eq("confirmation_status", "no_answer")
+      .eq("agent_id", userId)
+      .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS)
+      .lt("updated_at", agingCutoff)
+      .order("updated_at", { ascending: true });
+    if (assignedProducts) urgentNaQuery = urgentNaQuery.in("product_name", assignedProducts);
+    const { data: urgentNaData } = await urgentNaQuery;
 
-    // If there are new orders, only get no_answer orders older than 1h (cooldown)
-    // If no new orders, get ALL no_answer orders immediately
-    if (newOrders.length > 0) {
-      noAnswerQuery = noAnswerQuery.lt("updated_at", oneHourAgo);
-    }
+    const urgentRetries = ((urgentNaData || []) as DbOrder[]).map(o => ({ ...o, _isFollowUp: true }));
+    const normalRetries = ((noAnswerData || []) as DbOrder[])
+      .filter(o => !urgentRetries.find(u => u.id === o.id))
+      .map(o => ({ ...o, _isFollowUp: true }));
 
-    const noAnswerResult = await noAnswerQuery;
-    if (noAnswerResult.error) throw noAnswerResult.error;
+    // ── 3. POSTPONED (due now) ──
+    const nowIso = now.toISOString();
 
-    const noAnswerOrders = ((noAnswerResult.data || []) as DbOrder[]).map(o => ({
+    // Postponed assigned to THIS agent
+    let myPostQuery = supabase
+      .from("orders")
+      .select("*")
+      .eq("confirmation_status", "postponed")
+      .eq("agent_id", userId)
+      .lte("postpone_date", nowIso)
+      .order("postpone_date", { ascending: true });
+    if (assignedProducts) myPostQuery = myPostQuery.in("product_name", assignedProducts);
+    const { data: myPostData } = await myPostQuery;
+    const myPostponed = ((myPostData || []) as DbOrder[]).map(o => ({ ...o, _isFollowUp: true }));
+
+    // Postponed from OTHER agents (unassigned / reassigned to queue)
+    let otherPostQuery = supabase
+      .from("orders")
+      .select("*")
+      .eq("confirmation_status", "postponed")
+      .is("agent_id", null)
+      .lte("postpone_date", nowIso)
+      .order("postpone_date", { ascending: true });
+    if (assignedProducts) otherPostQuery = otherPostQuery.in("product_name", assignedProducts);
+    const { data: otherPostData } = await otherPostQuery;
+    const otherPostponed = ((otherPostData || []) as DbOrder[]).map(o => ({
       ...o,
       _isFollowUp: true,
+      _isPostponedReassign: true,
     }));
 
-    // Combined queue: new orders first, then no-answer follow-ups
-    return [...newOrders, ...noAnswerOrders];
+    // ── 4. BUILD BALANCED QUEUE ──
+    const allRetries = [...urgentRetries, ...myPostponed, ...otherPostponed, ...normalRetries];
+
+    // Flatten duplicate groups — mark first of each group, attach group
+    const duplicateOrders: DbOrder[] = [];
+    for (const group of duplicateGroups) {
+      const first = { ...group[0], _isDuplicate: true, _duplicateGroup: group };
+      duplicateOrders.push(first);
+      // The rest will be assigned together when the first is processed
+    }
+
+    // Build balanced queue: duplicates first, then 3:1 new:retry ratio
+    const queue: DbOrder[] = [];
+
+    // Already-assigned orders first (agent's own pending work)
+    queue.push(...myNewOrders);
+
+    // Duplicates always highest priority
+    queue.push(...duplicateOrders);
+
+    // Interleave new and retries with 3:1 ratio
+    let newIdx = 0;
+    let retryIdx = 0;
+    const allNew = nonDuplicateNew;
+
+    while (newIdx < allNew.length || retryIdx < allRetries.length) {
+      // Every 4th order should be a retry (3 new : 1 retry)
+      const shouldDoRetry = (newIdx > 0 && newIdx % NEW_TO_RETRY_RATIO === 0 && retryIdx < allRetries.length)
+        || newIdx >= allNew.length;
+
+      if (shouldDoRetry && retryIdx < allRetries.length) {
+        queue.push(allRetries[retryIdx]);
+        retryIdx++;
+      } else if (newIdx < allNew.length) {
+        queue.push(allNew[newIdx]);
+        newIdx++;
+      } else {
+        break;
+      }
+    }
+
+    // Append any remaining retries
+    while (retryIdx < allRetries.length) {
+      queue.push(allRetries[retryIdx]);
+      retryIdx++;
+    }
+
+    return queue;
   };
 
   const handleStart = async () => {
@@ -227,13 +346,12 @@ const AgentOrders = () => {
       setOrderQueue(data);
       setCurrentIndex(0);
       setStarted(true);
+      setNewAssignedCount(0);
 
-      // Claim the first order (only if not already assigned to this agent)
       const firstOrder = data[0];
       if (!firstOrder.agent_id || firstOrder.agent_id !== authUser!.id) {
         await claimOrder(firstOrder);
       } else {
-        // Already ours — init edit state
         setEditItems([{ name: firstOrder.product_name, qty: firstOrder.quantity, price: Number(firstOrder.price) }]);
         setEditCustomer({
           name: firstOrder.customer_name,
@@ -244,9 +362,10 @@ const AgentOrders = () => {
         resetForm();
       }
 
-      const newCount = data.filter(o => o.confirmation_status === "new").length;
+      const newCount = data.filter(o => !o._isFollowUp && !o._isDuplicate).length;
       const followUpCount = data.filter(o => o._isFollowUp).length;
-      toast.success(`${newCount} new + ${followUpCount} follow-up orders — Let's go! 🚀`);
+      const dupCount = data.filter(o => o._isDuplicate).length;
+      toast.success(`${newCount} new + ${followUpCount} retries + ${dupCount} duplicates — Let's go! 🚀`);
     } catch (err: any) {
       toast.error(err.message || "Failed to load orders");
     } finally {
@@ -258,25 +377,44 @@ const AgentOrders = () => {
     if (!authUser) return false;
     setClaiming(true);
     try {
-      // If this is a follow-up order already assigned to us, no need to claim
+      // If already assigned to us, just init
       if (order.agent_id === authUser.id) {
-        setEditItems([{ name: order.product_name, qty: order.quantity, price: Number(order.price) }]);
-        setEditCustomer({
-          name: order.customer_name,
-          phone: order.customer_phone,
-          city: order.customer_city,
-          address: order.customer_address || "",
-        });
-        setEditingCustomer(false);
-        setEditMode(false);
-        resetForm();
+        initOrderState(order);
         return true;
       }
 
-      // Try to claim by setting agent_id — only works if still unassigned (RLS enforces this)
+      // If it's a duplicate group, claim all orders in the group
+      if (order._isDuplicate && order._duplicateGroup) {
+        const ids = order._duplicateGroup.map(o => o.id);
+        const { data, error } = await supabase
+          .from("orders")
+          .update({ agent_id: authUser.id } as any)
+          .in("id", ids)
+          .is("agent_id", null)
+          .select();
+
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          toast.warning(`Duplicate orders were already taken`);
+          return false;
+        }
+
+        // Set confirmation_status to indicate duplicate detection
+        // Mark them as "double" suggestion for agent
+        initOrderState(order);
+        toast.info(`📋 ${data.length} duplicate orders assigned together`, { duration: 4000 });
+        return true;
+      }
+
+      // For postponed orders from another agent, claim and track original
+      const updatePayload: Record<string, any> = { agent_id: authUser.id };
+      if (order._isPostponedReassign && order.original_agent_id === null) {
+        // Keep the original_agent_id if already set, otherwise we don't override
+      }
+
       const { data, error } = await supabase
         .from("orders")
-        .update({ agent_id: authUser.id })
+        .update(updatePayload as any)
         .eq("id", order.id)
         .is("agent_id", null)
         .select()
@@ -284,23 +422,11 @@ const AgentOrders = () => {
 
       if (error) throw error;
       if (!data) {
-        // Another agent already claimed this order
         toast.warning(`Order ${order.order_id} was already taken by another agent`);
         return false;
       }
 
-      // Update local state
-      const updatedOrder = data as DbOrder;
-      setEditItems([{ name: updatedOrder.product_name, qty: updatedOrder.quantity, price: Number(updatedOrder.price) }]);
-      setEditCustomer({
-        name: updatedOrder.customer_name,
-        phone: updatedOrder.customer_phone,
-        city: updatedOrder.customer_city,
-        address: updatedOrder.customer_address || "",
-      });
-      setEditingCustomer(false);
-      setEditMode(false);
-      resetForm();
+      initOrderState(data as DbOrder);
       return true;
     } catch (err: any) {
       toast.error("Failed to claim order");
@@ -310,12 +436,26 @@ const AgentOrders = () => {
     }
   };
 
+  const initOrderState = (order: DbOrder) => {
+    setEditItems([{ name: order.product_name, qty: order.quantity, price: Number(order.price) }]);
+    setEditCustomer({
+      name: order.customer_name,
+      phone: order.customer_phone,
+      city: order.customer_city,
+      address: order.customer_address || "",
+    });
+    setEditingCustomer(false);
+    setEditMode(false);
+    resetForm();
+  };
+
   const resetForm = () => {
     setSelectedStatus("");
     setCancelReason("");
     setNote("");
     setPostponeDate(undefined);
     setPostponeTime("10:00 AM");
+    setPostponeNote("");
     setShippingStatus("");
     setEditMode(false);
     setEditingCustomer(false);
@@ -328,16 +468,18 @@ const AgentOrders = () => {
       if (!cancelReason) return false;
       if (cancelReason === "other" && !note.trim()) return false;
     }
-    if (selectedStatus === "postponed" && (!postponeDate || !postponeTime.split(":")[1]?.replace(/ (AM|PM)/, ""))) return false;
+    if (selectedStatus === "postponed") {
+      if (!postponeDate || !postponeTime.split(":")[1]?.replace(/ (AM|PM)/, "")) return false;
+      if (!postponeNote.trim()) return false; // REQUIRED note for postponed
+    }
     return true;
-  }, [selectedStatus, shippingStatus, cancelReason, note, postponeDate, postponeTime]);
+  }, [selectedStatus, shippingStatus, cancelReason, note, postponeDate, postponeTime, postponeNote]);
 
   const handleSubmit = async () => {
     if (!canSubmit || !currentOrder || !authUser) return;
     setSubmitting(true);
 
     try {
-      // Build update object
       const updateData: Record<string, any> = {
         confirmation_status: selectedStatus,
         customer_name: editCustomer.name,
@@ -360,32 +502,38 @@ const AgentOrders = () => {
         updateData.cancel_reason = cancelReason === "other" ? note.trim() : cancelReason;
       }
       if (selectedStatus === "postponed" && postponeDate) {
-        updateData.postpone_date = postponeDate.toISOString();
+        // Combine date + time
+        const [hourStr, rest] = postponeTime.split(":");
+        const minuteStr = rest?.replace(/ (AM|PM)/, "") || "0";
+        const ampm = postponeTime.includes("PM") ? "PM" : "AM";
+        let hour = parseInt(hourStr) || 10;
+        if (ampm === "PM" && hour !== 12) hour += 12;
+        if (ampm === "AM" && hour === 12) hour = 0;
+        const combined = new Date(postponeDate);
+        combined.setHours(hour, parseInt(minuteStr) || 0, 0, 0);
+        updateData.postpone_date = combined.toISOString();
+        updateData.postpone_note = postponeNote.trim();
+        updateData.original_agent_id = authUser.id; // Track who postponed it
+      }
+      if (selectedStatus === "no_answer") {
+        // Keep agent_id so it comes back to same agent as retry
       }
 
       // Update order in DB
       const { error: updateError } = await supabase
         .from("orders")
-        .update(updateData)
+        .update(updateData as any)
         .eq("id", currentOrder.id);
 
       if (updateError) throw updateError;
 
-      // Log all changes to history
+      // Log history
       const historyEntries: { order_id: string; changed_by: string; changed_by_role: string; field_changed: string; old_value: string | null; new_value: string | null }[] = [];
-
       const trackChange = (field: string, oldVal: any, newVal: any) => {
         const oldStr = oldVal != null ? String(oldVal) : null;
         const newStr = newVal != null ? String(newVal) : null;
         if (oldStr !== newStr) {
-          historyEntries.push({
-            order_id: currentOrder.order_id,
-            changed_by: authUser.id,
-            changed_by_role: "agent",
-            field_changed: field,
-            old_value: oldStr,
-            new_value: newStr,
-          });
+          historyEntries.push({ order_id: currentOrder.order_id, changed_by: authUser.id, changed_by_role: "agent", field_changed: field, old_value: oldStr, new_value: newStr });
         }
       };
 
@@ -398,15 +546,10 @@ const AgentOrders = () => {
       trackChange("quantity", currentOrder.quantity, activeItems.reduce((s, i) => s + i.qty, 0));
       trackChange("price", currentOrder.price, activeItems[0]?.price);
       trackChange("total_amount", currentOrder.total_amount, orderTotal);
-      if (selectedStatus === "confirmed") {
-        trackChange("delivery_status", currentOrder.delivery_status, shippingStatus === "shipped" ? "shipped" : "pending");
-      }
-      if (selectedStatus === "cancelled") {
-        trackChange("cancel_reason", currentOrder.cancel_reason, cancelReason === "other" ? note.trim() : cancelReason);
-      }
-      if (note.trim() && note.trim() !== (currentOrder.note || "")) {
-        trackChange("note", currentOrder.note, note.trim());
-      }
+      if (selectedStatus === "confirmed") trackChange("delivery_status", currentOrder.delivery_status, shippingStatus === "shipped" ? "shipped" : "pending");
+      if (selectedStatus === "cancelled") trackChange("cancel_reason", currentOrder.cancel_reason, cancelReason === "other" ? note.trim() : cancelReason);
+      if (note.trim() && note.trim() !== (currentOrder.note || "")) trackChange("note", currentOrder.note, note.trim());
+      if (selectedStatus === "postponed" && postponeNote.trim()) trackChange("postpone_note", currentOrder.postpone_note, postponeNote.trim());
 
       if (historyEntries.length > 0) {
         await supabase.from("order_history").insert(historyEntries);
@@ -414,15 +557,9 @@ const AgentOrders = () => {
 
       toast.success(`Order ${currentOrder.order_id} → ${selectedStatus.toUpperCase()} ✅`, {
         duration: 3000,
-        style: {
-          background: "hsl(155, 50%, 96%)",
-          border: "1px solid hsl(155, 50%, 42%)",
-          color: "hsl(155, 50%, 25%)",
-          fontWeight: 600,
-        },
+        style: { background: "hsl(155, 50%, 96%)", border: "1px solid hsl(155, 50%, 42%)", color: "hsl(155, 50%, 25%)", fontWeight: 600 },
       });
 
-      // Move to next order
       await moveToNext();
     } catch (err: any) {
       console.error("Submit error:", err);
@@ -435,45 +572,34 @@ const AgentOrders = () => {
   const moveToNext = async () => {
     let nextIdx = currentIndex + 1;
 
-    // Try to find and claim next unclaimed order in current queue
     while (nextIdx < orderQueue.length) {
       const nextOrder = orderQueue[nextIdx];
-      // If already assigned to this agent (follow-up or previously claimed), just move to it
       if (nextOrder.agent_id === authUser?.id) {
         const claimed = await claimOrder(nextOrder);
-        if (claimed) {
-          setCurrentIndex(nextIdx);
-          return;
-        }
+        if (claimed) { setCurrentIndex(nextIdx); return; }
       } else {
         const claimed = await claimOrder(nextOrder);
-        if (claimed) {
-          setCurrentIndex(nextIdx);
-          return;
-        }
+        if (claimed) { setCurrentIndex(nextIdx); return; }
       }
-      // Skip if claim failed
       nextIdx++;
     }
 
-    // Queue exhausted — try to refetch for more orders (new arrivals + cooled-down no_answer)
+    // Queue exhausted — refetch
     try {
       const freshOrders = await fetchPrioritizedOrders();
       if (freshOrders.length > 0) {
         setOrderQueue(freshOrders);
         setCurrentIndex(0);
-        const firstOrder = freshOrders[0];
-        await claimOrder(firstOrder);
-        const newCount = freshOrders.filter(o => o.confirmation_status === "new").length;
+        await claimOrder(freshOrders[0]);
+        const newCount = freshOrders.filter(o => !o._isFollowUp && !o._isDuplicate).length;
         const followUpCount = freshOrders.filter(o => o._isFollowUp).length;
-        toast.success(`${newCount} new + ${followUpCount} follow-up orders loaded! 🔄`);
+        toast.success(`${newCount} new + ${followUpCount} retries loaded! 🔄`);
         return;
       }
     } catch (err) {
       console.error("Error refetching orders:", err);
     }
 
-    // Truly no more orders
     toast.success("All orders processed! 🎉");
     setStarted(false);
     setOrderQueue([]);
@@ -484,7 +610,6 @@ const AgentOrders = () => {
     window.open(`https://wa.me/${phone}`, "_blank");
   };
 
-  // Edit helpers
   const updateItem = (index: number, field: "qty" | "price", value: number) => {
     setEditItems((items) => items.map((it, i) => i === index ? { ...it, [field]: value } : it));
   };
@@ -493,7 +618,7 @@ const AgentOrders = () => {
     toast.info("Item removed");
   };
 
-  // Not started — show start button
+  // ─── NOT STARTED SCREEN ───
   if (!started) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 p-6">
@@ -504,20 +629,28 @@ const AgentOrders = () => {
           <h1 className="text-2xl font-bold text-foreground">Ready to start confirming?</h1>
           <p className="text-muted-foreground text-sm max-w-md">
             You have <span className="font-bold text-primary">{newOrderCount}</span> new orders
-            {noAnswerCount > 0 && (
-              <> and <span className="font-bold text-blue-500">{noAnswerCount}</span> follow-up orders</>
-            )} waiting.
-            Hit the button below and they'll come to you one by one.
+            {retryCount > 0 && (
+              <>, <span className="font-bold text-blue-500">{retryCount}</span> retries</>
+            )}
+            {duplicateCount > 0 && (
+              <>, <span className="font-bold text-amber-500">{duplicateCount}</span> duplicates</>
+            )}
+            {" "}waiting. Orders come one by one with smart prioritization.
           </p>
+          <div className="flex flex-wrap justify-center gap-2 text-[10px]">
+            <Badge variant="outline" className="gap-1"><Copy className="h-3 w-3" /> Duplicates first</Badge>
+            <Badge variant="outline" className="gap-1"><Zap className="h-3 w-3" /> 3:1 New/Retry mix</Badge>
+            <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" /> Smart retry timing</Badge>
+          </div>
         </div>
         <Button
           size="lg"
           className="gap-2 text-base px-8 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all"
           onClick={handleStart}
-          disabled={(newOrderCount === 0 && noAnswerCount === 0) || loading}
+          disabled={(newOrderCount === 0 && retryCount === 0) || loading}
         >
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-          Start Fast Confirmation
+          Start Smart Confirmation
         </Button>
       </div>
     );
@@ -546,6 +679,54 @@ const AgentOrders = () => {
         </div>
         <span className="text-xs">{Math.round(((currentIndex + 1) / orderQueue.length) * 100)}%</span>
       </div>
+
+      {/* Context badges */}
+      <div className="flex flex-wrap gap-2">
+        {currentOrder._isFollowUp && (
+          <Badge variant="outline" className="text-[10px] gap-1 bg-blue-500/10 text-blue-600 border-blue-500/20">
+            <RotateCcw className="h-3 w-3" /> Follow-up · Attempt #{currentOrder.attempt_count + 1}
+          </Badge>
+        )}
+        {currentOrder._isDuplicate && (
+          <Badge variant="outline" className="text-[10px] gap-1 bg-amber-500/10 text-amber-600 border-amber-500/20">
+            <Copy className="h-3 w-3" /> Duplicate Group · {currentOrder._duplicateGroup?.length} orders
+          </Badge>
+        )}
+        {currentOrder._isPostponedReassign && (
+          <Badge variant="outline" className="text-[10px] gap-1 bg-purple-500/10 text-purple-600 border-purple-500/20">
+            <AlertTriangle className="h-3 w-3" /> Postponed (from another agent)
+          </Badge>
+        )}
+      </div>
+
+      {/* Postponed context from previous agent */}
+      {currentOrder._isPostponedReassign && currentOrder.postpone_note && (
+        <Card className="border-purple-500/30 bg-purple-500/5">
+          <CardContent className="py-3 px-4 space-y-1">
+            <p className="text-[10px] uppercase tracking-wide text-purple-600 font-semibold flex items-center gap-1">
+              <StickyNote className="h-3 w-3" /> Original Agent Note
+            </p>
+            <p className="text-sm text-foreground">{currentOrder.postpone_note}</p>
+            {currentOrder.postpone_date && (
+              <p className="text-[10px] text-muted-foreground">
+                Scheduled for: {format(new Date(currentOrder.postpone_date), "dd/MM/yyyy hh:mm a")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Also show postpone note for own follow-ups */}
+      {currentOrder._isFollowUp && !currentOrder._isPostponedReassign && currentOrder.postpone_note && (
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="py-3 px-4 space-y-1">
+            <p className="text-[10px] uppercase tracking-wide text-blue-600 font-semibold flex items-center gap-1">
+              <StickyNote className="h-3 w-3" /> Your Previous Note
+            </p>
+            <p className="text-sm text-foreground">{currentOrder.postpone_note}</p>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         {/* Left: Order Info (3 cols) */}
@@ -681,7 +862,6 @@ const AgentOrders = () => {
                         </div>
                       )}
 
-                      {/* Last price info */}
                       {currentOrder.last_price != null && (
                         <div className="rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 flex items-center gap-2">
                           <Tag className="h-3 w-3 text-muted-foreground shrink-0" />
@@ -690,7 +870,6 @@ const AgentOrders = () => {
                         </div>
                       )}
 
-                      {/* Links */}
                       <div className="flex flex-wrap gap-2 pt-1">
                         {currentOrder.store_url ? (
                           <a href={currentOrder.store_url} target="_blank" rel="noopener noreferrer"
@@ -794,7 +973,7 @@ const AgentOrders = () => {
                 </div>
               )}
 
-              {/* Postponed → Date/Time */}
+              {/* Postponed → Date/Time + REQUIRED note */}
               {selectedStatus === "postponed" && (
                 <div className="space-y-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
                   <Label className="text-xs font-semibold">📅 Postpone to *</Label>
@@ -839,7 +1018,20 @@ const AgentOrders = () => {
                       </Select>
                     </div>
                   </div>
-                  <Textarea placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} className="text-xs min-h-[50px]" />
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold flex items-center gap-1 text-amber-700">
+                      <StickyNote className="h-3 w-3" /> Postpone Note * (required)
+                    </Label>
+                    <Textarea
+                      placeholder='e.g. "Call tomorrow at 5pm — client busy at work"'
+                      value={postponeNote}
+                      onChange={(e) => setPostponeNote(e.target.value)}
+                      className="text-xs min-h-[60px] border-amber-500/30"
+                    />
+                    {!postponeNote.trim() && (
+                      <p className="text-[10px] text-destructive">⚠️ Note is required when postponing</p>
+                    )}
+                  </div>
                 </div>
               )}
 
