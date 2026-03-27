@@ -314,6 +314,7 @@ export default function SellerSourcing() {
       </div>
 
       <CreateSellerSourcingModal open={createOpen} onOpenChange={setCreateOpen} />
+      <EditSellerSourcingModal request={editRequest} open={!!editRequest} onOpenChange={(v) => { if (!v) setEditRequest(null); }} />
     </div>
   );
 }
