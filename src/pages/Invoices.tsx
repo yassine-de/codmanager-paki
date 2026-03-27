@@ -322,7 +322,7 @@ export default function Invoices() {
 
   // Toggle paid
   const togglePaidMutation = useMutation({
-    mutationFn: async ({ invoiceId, currentStatus }: { invoiceId: string; currentStatus: string }) => {
+    mutationFn: async ({ invoiceId, currentStatus, netPayable, sellerId }: { invoiceId: string; currentStatus: string; netPayable?: number; sellerId?: string }) => {
       const isPaid = currentStatus === "paid";
       const newStatus = isPaid ? "ready" : "paid";
       const { error } = await supabase
@@ -337,10 +337,52 @@ export default function Invoices() {
       await logInvoiceHistory(invoiceId, "status_change", "status", currentStatus, newStatus);
       if (!isPaid) {
         await logInvoiceHistory(invoiceId, "status_change", "paid_at", null, new Date().toISOString());
+
+        // If netPayable is negative, carry over to next draft invoice as addon
+        if (netPayable !== undefined && netPayable < 0 && sellerId) {
+          const carryAmount = Math.abs(netPayable);
+
+          // Find or create a draft invoice for this seller (exclude current one)
+          const { data: existingDraft } = await supabase
+            .from("invoices")
+            .select("id")
+            .eq("seller_id", sellerId)
+            .eq("status", "draft")
+            .neq("id", invoiceId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+
+          let targetInvoiceId: string;
+          if (existingDraft) {
+            targetInvoiceId = existingDraft.id;
+          } else {
+            const { data: newInv, error: newErr } = await supabase
+              .from("invoices")
+              .insert({ seller_id: sellerId, status: "draft" } as any)
+              .select("id")
+              .single();
+            if (newErr) throw newErr;
+            targetInvoiceId = newInv.id;
+          }
+
+          // Add the negative carry-over as an "out" addon
+          const { error: addonErr } = await supabase
+            .from("invoice_addons")
+            .insert({
+              invoice_id: targetInvoiceId,
+              type: "out",
+              amount: carryAmount,
+              reason: `From last invoice (${invoiceId.slice(0, 8)})`,
+            } as any);
+          if (addonErr) throw addonErr;
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["invoice-addons"] });
+      queryClient.invalidateQueries({ queryKey: ["invoice-orders-summary"] });
       toast.success("Payment status updated");
     },
   });
