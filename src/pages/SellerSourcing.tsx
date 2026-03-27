@@ -53,6 +53,7 @@ export default function SellerSourcing() {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editRequest, setEditRequest] = useState<SourcingRequest | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [validationFilter, setValidationFilter] = useState("all");
 
