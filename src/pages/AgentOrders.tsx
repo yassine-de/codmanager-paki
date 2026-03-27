@@ -79,6 +79,7 @@ const AgentOrders = () => {
   const [orderQueue, setOrderQueue] = useState<DbOrder[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [newOrderCount, setNewOrderCount] = useState(0);
+  const [noAnswerCount, setNoAnswerCount] = useState(0);
   const [assignedProducts, setAssignedProducts] = useState<string[] | null>(null); // null = all
 
   // Editable customer info
