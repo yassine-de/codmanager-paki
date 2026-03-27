@@ -345,29 +345,20 @@ export default function Invoices() {
     },
   });
 
-  // Toggle ready (un-ready a ready invoice)
+  // Toggle ready (un-ready a ready invoice → revert to draft)
   const toggleReadyMutation = useMutation({
     mutationFn: async ({ invoiceId, currentStatus }: { invoiceId: string; currentStatus: string }) => {
       if (currentStatus === "ready") {
-        // Log removed orders before deleting
-        const { data: removedOrders } = await supabase.from("orders").select("order_id").eq("invoice_id", invoiceId);
-        // Un-ready: remove orders from invoice, delete invoice
         await logInvoiceHistory(invoiceId, "status_change", "status", "ready", "draft");
-        for (const o of (removedOrders || [])) {
-          await logInvoiceHistory(invoiceId, "order_removed", null, null, null, o.order_id);
-        }
-        const { error: orderErr } = await supabase
-          .from("orders")
-          .update({ invoice_id: null } as any)
-          .eq("invoice_id", invoiceId);
-        if (orderErr) throw orderErr;
-        const { error: delErr } = await supabase.from("invoices").delete().eq("id", invoiceId);
-        if (delErr) throw delErr;
+        const { error } = await supabase
+          .from("invoices")
+          .update({ status: "draft", finalized_at: null } as any)
+          .eq("id", invoiceId);
+        if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["unassigned-delivered-orders"] });
       queryClient.invalidateQueries({ queryKey: ["invoice-orders-summary"] });
       toast.success("Invoice reverted to draft");
     },
