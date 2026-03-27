@@ -628,17 +628,15 @@ export default function Invoices() {
                           </Tooltip>
                           {!isSeller && (
                              <>
-                              {isDraft && (
                               <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10"
-                                    onClick={() => { setAddonInvoiceId(inv.id); setAddonType("in"); setAddonAmount(""); setAddonReason(""); }}>
-                                    <PlusCircle className="h-3.5 w-3.5" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="text-[10px]">{t("add_addon")}</TooltipContent>
-                              </Tooltip>
-                              )}
+                                 <TooltipTrigger asChild>
+                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10"
+                                     onClick={() => { setAddonInvoiceId(inv.id); setAddonType("in"); setAddonAmount(""); setAddonReason(""); }}>
+                                     <PlusCircle className="h-3.5 w-3.5" />
+                                   </Button>
+                                 </TooltipTrigger>
+                                 <TooltipContent className="text-[10px]">{t("add_addon")}</TooltipContent>
+                               </Tooltip>
                               {proofUrl ? (
                                 <Dialog>
                                   <Tooltip>
