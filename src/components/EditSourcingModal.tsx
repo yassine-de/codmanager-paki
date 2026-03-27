@@ -156,7 +156,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       sku,
       name: request.product_name,
       image_url: request.product_image_url || "",
-      price: sellerPrice || 0,
+      price: 0,
       landed_price: landedPrice || 0,
       quantity: quantity,
       product_url: request.product_url || "",
