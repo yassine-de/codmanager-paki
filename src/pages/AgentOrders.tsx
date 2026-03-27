@@ -503,7 +503,10 @@ const AgentOrders = () => {
           </div>
           <h1 className="text-2xl font-bold text-foreground">Ready to start confirming?</h1>
           <p className="text-muted-foreground text-sm max-w-md">
-            You have <span className="font-bold text-primary">{newOrderCount}</span> new orders waiting.
+            You have <span className="font-bold text-primary">{newOrderCount}</span> new orders
+            {noAnswerCount > 0 && (
+              <> and <span className="font-bold text-blue-500">{noAnswerCount}</span> follow-up orders</>
+            )} waiting.
             Hit the button below and they'll come to you one by one.
           </p>
         </div>
@@ -511,7 +514,7 @@ const AgentOrders = () => {
           size="lg"
           className="gap-2 text-base px-8 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all"
           onClick={handleStart}
-          disabled={newOrderCount === 0 || loading}
+          disabled={(newOrderCount === 0 && noAnswerCount === 0) || loading}
         >
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
           Start Fast Confirmation
