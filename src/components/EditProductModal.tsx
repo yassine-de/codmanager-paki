@@ -119,15 +119,24 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     if (price <= 0) errs.price = "Must be > 0";
     if (totalQty <= 0) errs.totalQty = "Must be > 0";
     if (isDbProduct) {
-      if (!storeLink.trim()) {
-        errs.storeLink = "Product link is required";
-      } else if (!isValidUrl(storeLink)) {
-        errs.storeLink = "Invalid URL format";
-      }
-      if (!videoLink.trim()) {
-        errs.videoLink = "Video link is required";
-      } else if (!isValidUrl(videoLink)) {
-        errs.videoLink = "Invalid URL format";
+      if (isSeller) {
+        if (!storeLink.trim()) {
+          errs.storeLink = "Product link is required";
+        } else if (!isValidUrl(storeLink)) {
+          errs.storeLink = "Invalid URL format";
+        }
+        if (!videoLink.trim()) {
+          errs.videoLink = "Video link is required";
+        } else if (!isValidUrl(videoLink)) {
+          errs.videoLink = "Invalid URL format";
+        }
+      } else {
+        if (storeLink.trim() && !isValidUrl(storeLink)) {
+          errs.storeLink = "Invalid URL format";
+        }
+        if (videoLink.trim() && !isValidUrl(videoLink)) {
+          errs.videoLink = "Invalid URL format";
+        }
       }
       if (isSeller && lastSellingPrice <= 0) {
         errs.sellingPrice = "Selling price is required";
@@ -300,7 +309,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className={`text-xs flex items-center gap-1.5 ${errors.storeLink ? "text-destructive" : ""}`}>
-                    <ExternalLink className="w-3 h-3 text-muted-foreground" /> Product Link {isDbProduct && <span className="text-destructive">*</span>}
+                    <ExternalLink className="w-3 h-3 text-muted-foreground" /> Product Link {isDbProduct && isSeller && <span className="text-destructive">*</span>}
                   </Label>
                   <Input
                     value={storeLink}
@@ -312,7 +321,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                 </div>
                 <div className="space-y-1.5">
                   <Label className={`text-xs flex items-center gap-1.5 ${errors.videoLink ? "text-destructive" : ""}`}>
-                    <Video className="w-3 h-3 text-muted-foreground" /> Video Link {isDbProduct && <span className="text-destructive">*</span>}
+                    <Video className="w-3 h-3 text-muted-foreground" /> Video Link {isDbProduct && isSeller && <span className="text-destructive">*</span>}
                   </Label>
                   <Input
                     value={videoLink}

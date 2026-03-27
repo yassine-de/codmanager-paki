@@ -433,6 +433,7 @@ export type Database = {
           sku: string
           sourcing_request_id: string | null
           updated_at: string
+          variants: Json | null
           video_url: string | null
           weight: string | null
         }
@@ -450,6 +451,7 @@ export type Database = {
           sku: string
           sourcing_request_id?: string | null
           updated_at?: string
+          variants?: Json | null
           video_url?: string | null
           weight?: string | null
         }
@@ -467,6 +469,7 @@ export type Database = {
           sku?: string
           sourcing_request_id?: string | null
           updated_at?: string
+          variants?: Json | null
           video_url?: string | null
           weight?: string | null
         }

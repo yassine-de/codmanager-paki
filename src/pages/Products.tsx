@@ -59,26 +59,39 @@ export default function Products() {
 
   // Merge: admin sees mock + DB, seller sees only their DB products
   const products = useMemo(() => {
-    const dbMapped: Product[] = dbProducts.map(p => ({
-      id: p.id,
-      seller: dbSellerNameMap[p.seller_id] || authUser?.name || "Unknown",
-      sku: p.sku,
-      name: p.name,
-      image: p.image_url || "",
-      price: Number(p.price) || 0,
-      totalQty: p.quantity || 0,
-      delivered: 0,
-      shipped: 0,
-      available: p.quantity || 0,
-      createdAt: p.created_at,
-      variants: [],
-      storeLink: p.product_url || "",
-      videoLink: p.video_url || "",
-      lastSellingPrice: Number(p.price) || 0,
-      lastPrice: Number(p.landed_price) || 0,
-      offers: [],
-      weight: (p as any).weight || undefined,
-    }));
+    const dbMapped: Product[] = dbProducts.map(p => {
+      // Map sourcing-style variants to product variants
+      const rawVariants = (p as any).variants as any[] | null;
+      const mappedVariants: Product["variants"] = rawVariants
+        ? rawVariants.map((v: any, i: number) => ({
+            id: v.id || `v-${i}`,
+            name: v.name || v.group || "",
+            sku: "",
+            price: 0,
+            quantity: v.quantity || (v.subVariants ? v.subVariants.reduce((s: number, sv: any) => s + (sv.quantity || 0), 0) : 0),
+          }))
+        : [];
+      return {
+        id: p.id,
+        seller: dbSellerNameMap[p.seller_id] || authUser?.name || "Unknown",
+        sku: p.sku,
+        name: p.name,
+        image: p.image_url || "",
+        price: Number(p.price) || 0,
+        totalQty: p.quantity || 0,
+        delivered: 0,
+        shipped: 0,
+        available: p.quantity || 0,
+        createdAt: p.created_at,
+        variants: mappedVariants,
+        storeLink: p.product_url || "",
+        videoLink: p.video_url || "",
+        lastSellingPrice: Number(p.price) || 0,
+        lastPrice: Number(p.landed_price) || 0,
+        offers: [],
+        weight: (p as any).weight || undefined,
+      };
+    });
     // Sellers only see DB products, admins see both
     return isAdmin ? [...dbMapped, ...localProducts] : dbMapped;
   }, [dbProducts, dbSellerNameMap, localProducts, isAdmin, authUser]);

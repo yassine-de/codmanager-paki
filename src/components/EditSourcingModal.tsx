@@ -151,7 +151,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     if (skuError) throw skuError;
     const sku = skuData as string;
 
-    const { error } = await supabase.from("products").insert({
+    const insertData: Record<string, unknown> = {
       seller_id: request.seller_id,
       sku,
       name: request.product_name,
@@ -161,7 +161,10 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       quantity: quantity,
       product_url: request.product_url || "",
       sourcing_request_id: request.id,
-    });
+      weight: productWeight || null,
+      variants: request.variants || null,
+    };
+    const { error } = await supabase.from("products").insert(insertData as any);
     if (error) throw error;
   };
 
