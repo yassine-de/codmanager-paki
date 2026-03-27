@@ -302,7 +302,9 @@ export type Database = {
           note: string | null
           offers: string | null
           order_id: string
+          original_agent_id: string | null
           postpone_date: string | null
+          postpone_note: string | null
           price: number
           product_name: string
           product_url: string | null
@@ -337,7 +339,9 @@ export type Database = {
           note?: string | null
           offers?: string | null
           order_id: string
+          original_agent_id?: string | null
           postpone_date?: string | null
+          postpone_note?: string | null
           price?: number
           product_name?: string
           product_url?: string | null
@@ -372,7 +376,9 @@ export type Database = {
           note?: string | null
           offers?: string | null
           order_id?: string
+          original_agent_id?: string | null
           postpone_date?: string | null
+          postpone_note?: string | null
           price?: number
           product_name?: string
           product_url?: string | null
