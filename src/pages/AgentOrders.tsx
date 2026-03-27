@@ -435,24 +435,45 @@ const AgentOrders = () => {
   const moveToNext = async () => {
     let nextIdx = currentIndex + 1;
 
-    // Try to find and claim next unclaimed order
+    // Try to find and claim next unclaimed order in current queue
     while (nextIdx < orderQueue.length) {
       const nextOrder = orderQueue[nextIdx];
-      // If already assigned to this agent, just move to it
+      // If already assigned to this agent (follow-up or previously claimed), just move to it
       if (nextOrder.agent_id === authUser?.id) {
-        setCurrentIndex(nextIdx);
-        return;
+        const claimed = await claimOrder(nextOrder);
+        if (claimed) {
+          setCurrentIndex(nextIdx);
+          return;
+        }
+      } else {
+        const claimed = await claimOrder(nextOrder);
+        if (claimed) {
+          setCurrentIndex(nextIdx);
+          return;
+        }
       }
-      const claimed = await claimOrder(nextOrder);
-      if (claimed) {
-        setCurrentIndex(nextIdx);
-        return;
-      }
-      // Skip if already claimed by another agent
+      // Skip if claim failed
       nextIdx++;
     }
 
-    // No more orders
+    // Queue exhausted — try to refetch for more orders (new arrivals + cooled-down no_answer)
+    try {
+      const freshOrders = await fetchPrioritizedOrders();
+      if (freshOrders.length > 0) {
+        setOrderQueue(freshOrders);
+        setCurrentIndex(0);
+        const firstOrder = freshOrders[0];
+        await claimOrder(firstOrder);
+        const newCount = freshOrders.filter(o => o.confirmation_status === "new").length;
+        const followUpCount = freshOrders.filter(o => o._isFollowUp).length;
+        toast.success(`${newCount} new + ${followUpCount} follow-up orders loaded! 🔄`);
+        return;
+      }
+    } catch (err) {
+      console.error("Error refetching orders:", err);
+    }
+
+    // Truly no more orders
     toast.success("All orders processed! 🎉");
     setStarted(false);
     setOrderQueue([]);
