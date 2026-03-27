@@ -90,7 +90,8 @@ async function fetchSheetRows(
   startRow: number
 ): Promise<string[][]> {
   // Fetch from startRow onwards (A{startRow}:J to get 10 columns)
-  const range = encodeURIComponent(`${sheetName}!A${startRow}:J`);
+  // Wrap sheet name in single quotes for the Sheets API
+  const range = encodeURIComponent(`'${sheetName}'!A${startRow}:J`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`;
 
   const resp = await fetch(url, {
