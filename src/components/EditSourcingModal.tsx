@@ -184,9 +184,63 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     if (error) throw error;
   };
 
+  const addStockToExistingProduct = async () => {
+    if (!request || !sourceProductId) return;
+    // Get current product quantity
+    const { data: prod, error: fetchErr } = await supabase
+      .from("products")
+      .select("quantity, variants")
+      .eq("id", sourceProductId)
+      .single();
+    if (fetchErr) throw fetchErr;
+
+    const currentQty = prod.quantity || 0;
+    const newQty = currentQty + quantity;
+
+    // If sourcing has variants, merge quantities into existing product variants
+    const updateData: Record<string, unknown> = {
+      quantity: newQty,
+      updated_at: new Date().toISOString(),
+      seller_seen: false,
+    };
+
+    // Update landed_price if set
+    if (landedPrice > 0) {
+      updateData.landed_price = landedPrice;
+    }
+    if (productWeight) {
+      updateData.weight = productWeight;
+    }
+
+    // Merge variant quantities
+    if (request.variants && Array.isArray(request.variants) && prod.variants && Array.isArray(prod.variants)) {
+      const existingVariants = prod.variants as any[];
+      const sourcingVariants = request.variants as any[];
+      const mergedVariants = existingVariants.map((ev: any) => {
+        const match = sourcingVariants.find((sv: any) => sv.name === ev.name);
+        if (!match) return ev;
+        if (ev.subVariants && match.subVariants) {
+          const mergedSubs = ev.subVariants.map((esv: any) => {
+            const subMatch = match.subVariants.find((ssv: any) => ssv.name === esv.name);
+            return subMatch ? { ...esv, quantity: (esv.quantity || 0) + (subMatch.quantity || 0) } : esv;
+          });
+          return { ...ev, quantity: (ev.quantity || 0) + (match.quantity || 0), subVariants: mergedSubs };
+        }
+        return { ...ev, quantity: (ev.quantity || 0) + (match.quantity || 0) };
+      });
+      updateData.variants = mergedVariants;
+    }
+
+    const { error } = await supabase.from("products").update(updateData).eq("id", sourceProductId);
+    if (error) throw error;
+  };
+
   const updateMutation = useMutation({
-    mutationFn: async ({ withProduct }: { withProduct?: boolean } = {}) => {
-      if (withProduct) {
+    mutationFn: async ({ withProduct, addStock }: { withProduct?: boolean; addStock?: boolean } = {}) => {
+      if (addStock) {
+        await addStockToExistingProduct();
+        await doUpdate(true);
+      } else if (withProduct) {
         await createProduct();
         await doUpdate(true);
       } else {
