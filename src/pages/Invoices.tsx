@@ -302,32 +302,18 @@ export default function Invoices() {
     } as any);
   };
 
-  // Finalize draft mutation
+  // Finalize draft invoice → mark as ready
   const finalizeMutation = useMutation({
-    mutationFn: async (draft: typeof draftInvoices[0]) => {
-      const { data: invoice, error: invError } = await supabase
+    mutationFn: async (invoiceId: string) => {
+      const { error } = await supabase
         .from("invoices")
-        .insert({ seller_id: draft.sellerId, status: "ready", finalized_at: new Date().toISOString() } as any)
-        .select()
-        .single();
-      if (invError) throw invError;
-      const orderIds = draft.orders.map(o => o.id);
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update({ invoice_id: invoice.id } as any)
-        .in("id", orderIds);
-      if (updateError) throw updateError;
-      // Log status change
-      await logInvoiceHistory(invoice.id, "status_change", "status", "draft", "ready");
-      // Log each order added
-      for (const o of draft.orders) {
-        await logInvoiceHistory(invoice.id, "order_added", null, null, null, o.order_id);
-      }
-      return invoice;
+        .update({ status: "ready", finalized_at: new Date().toISOString() } as any)
+        .eq("id", invoiceId);
+      if (error) throw error;
+      await logInvoiceHistory(invoiceId, "status_change", "status", "draft", "ready");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["unassigned-delivered-orders"] });
       queryClient.invalidateQueries({ queryKey: ["invoice-orders-summary"] });
       toast.success("Invoice finalized and sent to seller");
     },
