@@ -47,24 +47,25 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     enabled: !!sourceProductId,
   });
 
-  // Fetch previous landed_price from older sourcing requests for same product
-  const { data: prevLandedPrice } = useQuery({
-    queryKey: ["prev-landed-price", sourceProductId, request?.id],
+  // Fetch previous pricing from older sourcing requests for same product
+  const { data: prevPricing } = useQuery({
+    queryKey: ["prev-sourcing-pricing", sourceProductId, request?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sourcing_requests")
-        .select("landed_price")
+        .select("landed_price, seller_price")
         .eq("source_product_id", sourceProductId)
         .neq("id", request!.id)
-        .gt("landed_price", 0)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data?.landed_price ?? null;
+      return { landed_price: data?.landed_price ?? null, seller_price: data?.seller_price ?? null };
     },
     enabled: !!sourceProductId && !!request,
   });
+  const prevLandedPrice = prevPricing?.landed_price;
+  const prevSellerPrice = prevPricing?.seller_price;
   const [unitPrice, setUnitPrice] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
   const [landedPrice, setLandedPrice] = useState(0);
@@ -84,7 +85,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     setUnitPrice(request.unit_price ?? 0);
     setShippingCost(request.shipping_cost ?? 0);
     setLandedPrice(request.landed_price || prevLandedPrice || 0);
-    setSellerPrice(request.seller_price ?? 0);
+    setSellerPrice(request.seller_price || prevSellerPrice || 0);
     setQuantity(request.quantity);
     setStatus(request.status);
     setNotes(request.notes ?? "");
@@ -407,7 +408,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
                   </div>
                   <div className="rounded-lg border bg-background px-3 py-2">
                     <p className="text-[10px] text-muted-foreground">Buying Price</p>
-                    <p className="text-sm font-bold tabular-nums">{(sourceProduct.price ?? 0).toLocaleString()} MAD</p>
+                    <p className="text-sm font-bold tabular-nums">{(sellerPrice ?? 0).toLocaleString()} MAD</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-1.5 mt-1">
