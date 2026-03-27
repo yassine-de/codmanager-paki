@@ -35,6 +35,7 @@ export interface Order {
   upsell: boolean;
   warehouseState: 'in_stock' | 'out_of_stock' | 'reserved';
   history: OrderHistoryEvent[];
+  attemptCount?: number;
 }
 
 const cities = ['Casablanca', 'Rabat', 'Marrakech', 'Fes', 'Tangier', 'Agadir', 'Oujda', 'Kenitra', 'Tetouan', 'Meknes'];

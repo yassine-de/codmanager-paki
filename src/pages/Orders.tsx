@@ -201,6 +201,7 @@ export default function Orders() {
         upsell: false,
         warehouseState: "in_stock" as const,
         history: [],
+        attemptCount: o.attempt_count || 0,
       }));
 
       setOrders(mapped);
