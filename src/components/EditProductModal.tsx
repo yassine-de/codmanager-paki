@@ -86,9 +86,9 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     setPrice(product.price);
     setTotalQty(product.totalQty);
     setVariants(product.variants.map(v => ({ ...v })));
-    setStoreLink(isSeller ? "" : (product.storeLink || ""));
+    setStoreLink(product.storeLink || "");
     setVideoLink(product.videoLink || "");
-    setLastSellingPrice(isSeller ? 0 : (product.lastSellingPrice || 0));
+    setLastSellingPrice(product.lastSellingPrice || 0);
     setLastPrice(product.lastPrice || 0);
     setOffers(product.offers?.map(o => ({ ...o })) || []);
     setWeight(product.weight || "");
