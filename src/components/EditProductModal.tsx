@@ -415,9 +415,11 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                     </span>
                   )}
                 </h3>
-                <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addVariant}>
-                  <Plus className="h-3 w-3" /> Add Variant
-                </Button>
+                {!isSeller && (
+                  <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addVariant}>
+                    <Plus className="h-3 w-3" /> Add Variant
+                  </Button>
+                )}
               </div>
               {variants.length === 0 ? (
                 <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-center">
@@ -429,9 +431,11 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                     <div key={variant.id} className="rounded-lg border bg-muted/20 p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Variant {i + 1}</span>
-                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-destructive/10" onClick={() => removeVariant(i)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        {!isSeller && (
+                          <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-destructive/10" onClick={() => removeVariant(i)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <div className="space-y-1">
