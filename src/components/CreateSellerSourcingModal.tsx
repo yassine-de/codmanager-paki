@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Link2, Loader2, Upload, X, Plus, Trash2, Layers } from "lucide-react";
+import { Link2, Loader2, Upload, X, Plus, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -17,16 +17,11 @@ const countries = [
   "France", "Spain", "Germany", "USA", "UK", "India",
 ];
 
-interface VariantOption {
+interface VariantItem {
   id: string;
   name: string;
   quantity: number | "";
-}
-
-interface VariantGroup {
-  id: string;
-  groupName: string;
-  options: VariantOption[];
+  subVariants: { id: string; name: string; quantity: number | "" }[];
 }
 
 interface Props {
@@ -48,22 +43,24 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [hasVariants, setHasVariants] = useState(false);
-  const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
+  const [variants, setVariants] = useState<VariantItem[]>([]);
 
-  // Auto-calculate total quantity from all variant options across groups
+  // Auto-calculate total quantity
   useEffect(() => {
-    if (hasVariants && variantGroups.length > 0) {
-      const total = variantGroups.reduce((groupSum, g) =>
-        groupSum + g.options.reduce((optSum, o) => optSum + (typeof o.quantity === "number" ? o.quantity : 0), 0)
-      , 0);
-      setQuantity(total > 0 ? total : "");
-    }
-  }, [hasVariants, variantGroups]);
+    if (!hasVariants || variants.length === 0) return;
+    const total = variants.reduce((sum, v) => {
+      if (v.subVariants.length > 0) {
+        return sum + v.subVariants.reduce((s, sv) => s + (typeof sv.quantity === "number" ? sv.quantity : 0), 0);
+      }
+      return sum + (typeof v.quantity === "number" ? v.quantity : 0);
+    }, 0);
+    setQuantity(total > 0 ? total : "");
+  }, [hasVariants, variants]);
 
   const resetForm = () => {
     setProductName(""); setQuantity(""); setCountry(""); setShippingMethod("");
     setProductUrl(""); setNotes(""); setImageFile(null); setImagePreview(null);
-    setErrors({}); setHasVariants(false); setVariantGroups([]);
+    setErrors({}); setHasVariants(false); setVariants([]);
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,53 +76,47 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const addVariantGroup = () => {
-    setVariantGroups(prev => [...prev, {
-      id: `g-${Date.now()}-${prev.length}`,
-      groupName: "",
-      options: [{ id: `o-${Date.now()}-0`, name: "", quantity: "" }],
-    }]);
-  };
-
-  const removeVariantGroup = (gi: number) => {
-    setVariantGroups(prev => prev.filter((_, i) => i !== gi));
-  };
-
-  const updateGroupName = (gi: number, name: string) => {
-    setVariantGroups(prev => prev.map((g, i) => i === gi ? { ...g, groupName: name } : g));
-  };
-
-  const addOption = (gi: number) => {
-    setVariantGroups(prev => prev.map((g, i) => i === gi ? {
-      ...g, options: [...g.options, { id: `o-${Date.now()}-${g.options.length}`, name: "", quantity: "" }],
-    } : g));
-  };
-
-  const updateOption = (gi: number, oi: number, field: "name" | "quantity", value: string | number) => {
-    setVariantGroups(prev => prev.map((g, i) => i === gi ? {
-      ...g, options: g.options.map((o, j) => j === oi ? { ...o, [field]: value } : o),
-    } : g));
-  };
-
-  const removeOption = (gi: number, oi: number) => {
-    setVariantGroups(prev => prev.map((g, i) => i === gi ? {
-      ...g, options: g.options.filter((_, j) => j !== oi),
-    } : g));
-  };
-
   const handleVariantToggle = (checked: boolean) => {
     setHasVariants(checked);
     if (checked) {
-      setVariantGroups([{
-        id: `g-${Date.now()}-0`,
-        groupName: "",
-        options: [{ id: `o-${Date.now()}-0`, name: "", quantity: "" }],
-      }]);
+      setVariants([{ id: `v-${Date.now()}`, name: "", quantity: "", subVariants: [] }]);
       setQuantity("");
     } else {
-      setVariantGroups([]);
+      setVariants([]);
       setQuantity("");
     }
+  };
+
+  const addVariant = () => {
+    setVariants(prev => [...prev, { id: `v-${Date.now()}-${prev.length}`, name: "", quantity: "", subVariants: [] }]);
+  };
+
+  const updateVariant = (i: number, field: "name" | "quantity", value: string | number) => {
+    setVariants(prev => prev.map((v, idx) => idx === i ? { ...v, [field]: value } : v));
+  };
+
+  const removeVariant = (i: number) => setVariants(prev => prev.filter((_, idx) => idx !== i));
+
+  const addSubVariant = (vi: number) => {
+    setVariants(prev => prev.map((v, i) => i === vi ? {
+      ...v,
+      quantity: "", // clear parent qty when sub-variants exist
+      subVariants: [...v.subVariants, { id: `sv-${Date.now()}-${v.subVariants.length}`, name: "", quantity: "" }],
+    } : v));
+  };
+
+  const updateSubVariant = (vi: number, si: number, field: "name" | "quantity", value: string | number) => {
+    setVariants(prev => prev.map((v, i) => i === vi ? {
+      ...v,
+      subVariants: v.subVariants.map((sv, j) => j === si ? { ...sv, [field]: value } : sv),
+    } : v));
+  };
+
+  const removeSubVariant = (vi: number, si: number) => {
+    setVariants(prev => prev.map((v, i) => i === vi ? {
+      ...v,
+      subVariants: v.subVariants.filter((_, j) => j !== si),
+    } : v));
   };
 
   const validate = (): boolean => {
@@ -136,18 +127,18 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
     if (!productUrl.trim()) errs.productUrl = "Product URL is required";
 
     if (hasVariants) {
-      if (variantGroups.length === 0) errs.variants = "Add at least one variant group";
-      variantGroups.forEach((g, gi) => {
-        if (!g.groupName.trim()) errs[`g_name_${gi}`] = "Required";
-        if (g.options.length === 0) errs[`g_opts_${gi}`] = "Add at least one option";
-        g.options.forEach((o, oi) => {
-          if (!o.name.trim()) errs[`o_name_${gi}_${oi}`] = "Required";
-          if (!o.quantity || o.quantity <= 0) errs[`o_qty_${gi}_${oi}`] = "> 0";
-        });
+      if (variants.length === 0) errs.variants = "Add at least one variant";
+      variants.forEach((v, i) => {
+        if (!v.name.trim()) errs[`v_name_${i}`] = "Required";
+        if (v.subVariants.length === 0) {
+          if (!v.quantity || v.quantity <= 0) errs[`v_qty_${i}`] = "> 0";
+        } else {
+          v.subVariants.forEach((sv, j) => {
+            if (!sv.name.trim()) errs[`sv_name_${i}_${j}`] = "Required";
+            if (!sv.quantity || sv.quantity <= 0) errs[`sv_qty_${i}_${j}`] = "> 0";
+          });
+        }
       });
-      const total = variantGroups.reduce((s, g) =>
-        s + g.options.reduce((os, o) => os + (typeof o.quantity === "number" ? o.quantity : 0), 0), 0);
-      if (total <= 0) errs.quantity = "Total quantity must be > 0";
     } else {
       if (!quantity || quantity <= 0) errs.quantity = "Quantity must be greater than 0";
     }
@@ -168,9 +159,14 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
       }
 
       const variantsData = hasVariants
-        ? variantGroups.map(g => ({
-            group: g.groupName.trim(),
-            options: g.options.map(o => ({ name: o.name.trim(), quantity: Number(o.quantity) })),
+        ? variants.map(v => ({
+            name: v.name.trim(),
+            quantity: v.subVariants.length > 0
+              ? v.subVariants.reduce((s, sv) => s + (typeof sv.quantity === "number" ? sv.quantity : 0), 0)
+              : Number(v.quantity),
+            ...(v.subVariants.length > 0
+              ? { subVariants: v.subVariants.map(sv => ({ name: sv.name.trim(), quantity: Number(sv.quantity) })) }
+              : {}),
           }))
         : null;
 
@@ -201,7 +197,7 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
-      <DialogContent className="sm:max-w-[580px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base">New Sourcing Request</DialogTitle>
         </DialogHeader>
@@ -224,88 +220,103 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
           {/* Variant Toggle */}
           <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2.5">
             <div>
-              <p className="text-xs font-medium">Has Variants?</p>
-              <p className="text-[11px] text-muted-foreground">Sizes, colors, or other variations</p>
+              <p className="text-xs font-medium">This product has variants</p>
+              <p className="text-[11px] text-muted-foreground">e.g. sizes, colors, etc.</p>
             </div>
             <Switch checked={hasVariants} onCheckedChange={handleVariantToggle} />
           </div>
 
-          {/* Variant Groups */}
+          {/* Variants */}
           {hasVariants && (
-            <div className="space-y-3">
-              {variantGroups.map((group, gi) => (
-                <div key={group.id} className="rounded-lg border bg-muted/20 p-3 space-y-2.5">
-                  <div className="flex items-center gap-2">
-                    <Layers className="h-3.5 w-3.5 text-primary shrink-0" />
+            <div className="space-y-2">
+              {variants.map((v, vi) => (
+                <div key={v.id} className="rounded-lg border bg-card">
+                  {/* Main variant row */}
+                  <div className="flex items-center gap-2 p-2.5">
+                    <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
+                      {vi + 1}
+                    </div>
                     <Input
-                      value={group.groupName}
-                      onChange={e => updateGroupName(gi, e.target.value)}
-                      placeholder="e.g. Size, Color, Material..."
-                      className={`h-8 text-xs font-medium flex-1 ${errors[`g_name_${gi}`] ? "border-destructive" : ""}`}
+                      value={v.name}
+                      onChange={e => updateVariant(vi, "name", e.target.value)}
+                      placeholder="Variant name (e.g. Size S, Red...)"
+                      className={`h-8 text-xs flex-1 ${errors[`v_name_${vi}`] ? "border-destructive" : ""}`}
                     />
+                    {v.subVariants.length === 0 && (
+                      <Input
+                        type="number" min={1}
+                        value={v.quantity}
+                        onChange={e => updateVariant(vi, "quantity", e.target.value ? Number(e.target.value) : "")}
+                        placeholder="Qty"
+                        className={`h-8 text-xs w-[72px] ${errors[`v_qty_${vi}`] ? "border-destructive" : ""}`}
+                      />
+                    )}
+                    {v.subVariants.length > 0 && (
+                      <span className="text-[10px] font-semibold tabular-nums text-muted-foreground w-[72px] text-center">
+                        = {v.subVariants.reduce((s, sv) => s + (typeof sv.quantity === "number" ? sv.quantity : 0), 0)}
+                      </span>
+                    )}
                     <Button type="button" variant="ghost" size="icon"
                       className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => removeVariantGroup(gi)}>
-                      <Trash2 className="h-3.5 w-3.5" />
+                      onClick={() => removeVariant(vi)}>
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
 
-                  {/* Options */}
-                  <div className="space-y-1.5 pl-5">
-                    {group.options.map((opt, oi) => (
-                      <div key={opt.id} className="flex items-center gap-2">
-                        <Input
-                          value={opt.name}
-                          onChange={e => updateOption(gi, oi, "name", e.target.value)}
-                          placeholder="e.g. S, Red..."
-                          className={`h-7 text-xs flex-1 ${errors[`o_name_${gi}_${oi}`] ? "border-destructive" : ""}`}
-                        />
-                        <Input
-                          type="number" min={1}
-                          value={opt.quantity}
-                          onChange={e => updateOption(gi, oi, "quantity", e.target.value ? Number(e.target.value) : "")}
-                          placeholder="Qty"
-                          className={`h-7 text-xs w-20 ${errors[`o_qty_${gi}_${oi}`] ? "border-destructive" : ""}`}
-                        />
-                        <Button type="button" variant="ghost" size="icon"
-                          className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
-                          onClick={() => removeOption(gi, oi)}
-                          disabled={group.options.length <= 1}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
+                  {/* Sub-variants */}
+                  {v.subVariants.length > 0 && (
+                    <div className="border-t bg-muted/20 px-2.5 pb-2 pt-1.5 space-y-1.5">
+                      {v.subVariants.map((sv, si) => (
+                        <div key={sv.id} className="flex items-center gap-2 pl-7">
+                          <span className="text-[10px] text-muted-foreground shrink-0">↳</span>
+                          <Input
+                            value={sv.name}
+                            onChange={e => updateSubVariant(vi, si, "name", e.target.value)}
+                            placeholder="Sub-variant (e.g. Red, Blue...)"
+                            className={`h-7 text-[11px] flex-1 ${errors[`sv_name_${vi}_${si}`] ? "border-destructive" : ""}`}
+                          />
+                          <Input
+                            type="number" min={1}
+                            value={sv.quantity}
+                            onChange={e => updateSubVariant(vi, si, "quantity", e.target.value ? Number(e.target.value) : "")}
+                            placeholder="Qty"
+                            className={`h-7 text-[11px] w-[64px] ${errors[`sv_qty_${vi}_${si}`] ? "border-destructive" : ""}`}
+                          />
+                          <Button type="button" variant="ghost" size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                            onClick={() => removeSubVariant(vi, si)}>
+                            <X className="h-2.5 w-2.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add sub-variant button */}
+                  <div className="border-t px-2.5 py-1.5">
                     <Button type="button" variant="ghost" size="sm"
-                      className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-foreground"
-                      onClick={() => addOption(gi)}>
-                      <Plus className="h-3 w-3" /> Add Option
+                      className="h-6 text-[10px] gap-1 text-muted-foreground hover:text-primary pl-7"
+                      onClick={() => addSubVariant(vi)}>
+                      <Plus className="h-2.5 w-2.5" /> Add sub-variant
                     </Button>
-                  </div>
-
-                  {/* Group subtotal */}
-                  <div className="flex items-center justify-between px-2 pt-1 border-t border-border/50">
-                    <span className="text-[10px] text-muted-foreground">Subtotal</span>
-                    <span className="text-xs font-semibold tabular-nums">
-                      {group.options.reduce((s, o) => s + (typeof o.quantity === "number" ? o.quantity : 0), 0)}
-                    </span>
                   </div>
                 </div>
               ))}
 
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 w-full" onClick={addVariantGroup}>
-                <Layers className="h-3.5 w-3.5" /> Add Variant Group
+              <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 w-full" onClick={addVariant}>
+                <Plus className="h-3.5 w-3.5" /> Add Variant
               </Button>
 
               {/* Total */}
               <div className="flex items-center justify-between rounded-md bg-primary/5 border border-primary/20 px-3 py-2">
                 <span className="text-xs font-medium text-muted-foreground">Total Quantity</span>
-                <span className="text-sm font-semibold tabular-nums">{quantity || 0}</span>
+                <span className="text-sm font-bold tabular-nums">{quantity || 0}</span>
               </div>
               {errors.variants && <p className="text-[11px] text-destructive">{errors.variants}</p>}
             </div>
           )}
 
-          {/* Quantity (only when no variants) */}
+          {/* Quantity (no variants) */}
           {!hasVariants && (
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Quantity *</Label>
@@ -316,7 +327,7 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
             </div>
           )}
 
-          {/* Country + Shipping Method */}
+          {/* Country + Shipping */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Destination Country *</Label>
@@ -357,7 +368,7 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
             {errors.productUrl && <p className="text-[11px] text-destructive">{errors.productUrl}</p>}
           </div>
 
-          {/* Product Image */}
+          {/* Image */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Product Image <span className="text-muted-foreground">(optional)</span></Label>
             {imagePreview ? (

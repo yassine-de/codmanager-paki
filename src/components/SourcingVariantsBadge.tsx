@@ -1,47 +1,58 @@
 import { Layers } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-interface VariantOption {
+interface SubVariant {
   name: string;
   quantity: number;
 }
 
-interface VariantGroup {
-  group: string;
-  options: VariantOption[];
+interface Variant {
+  name: string;
+  quantity: number;
+  subVariants?: SubVariant[];
+  // legacy group format support
+  group?: string;
+  options?: { name: string; quantity: number }[];
 }
 
 interface Props {
-  variants: VariantGroup[] | null | undefined;
+  variants: Variant[] | null | undefined;
 }
 
 export function SourcingVariantsBadge({ variants }: Props) {
   if (!variants || !Array.isArray(variants) || variants.length === 0) return null;
-
-  const totalOptions = variants.reduce((s, g) => s + (g.options?.length || 0), 0);
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex items-center gap-1 rounded-full border bg-primary/5 border-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary cursor-default">
           <Layers className="h-2.5 w-2.5" />
-          {variants.length}G · {totalOptions}V
+          {variants.length}
         </span>
       </TooltipTrigger>
-      <TooltipContent side="bottom" className="max-w-[280px]">
-        <div className="space-y-1.5">
-          {variants.map((g, i) => (
-            <div key={i}>
-              <p className="text-[11px] font-semibold">{g.group || `Group ${i + 1}`}</p>
-              <div className="flex flex-wrap gap-1 mt-0.5">
-                {g.options?.map((o, j) => (
-                  <span key={j} className="inline-flex items-center gap-0.5 rounded bg-background/80 px-1.5 py-0.5 text-[10px]">
-                    {o.name} <span className="text-muted-foreground">×{o.quantity}</span>
-                  </span>
-                ))}
+      <TooltipContent side="bottom" className="max-w-[300px]">
+        <div className="space-y-1">
+          {variants.map((v, i) => {
+            const vName = v.name || v.group || `Variant ${i + 1}`;
+            const subs = v.subVariants || v.options;
+            return (
+              <div key={i}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[11px] font-medium">{vName}</span>
+                  <span className="text-[10px] text-muted-foreground tabular-nums">×{v.quantity}</span>
+                </div>
+                {subs && subs.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-0.5 pl-2">
+                    {subs.map((sv, j) => (
+                      <span key={j} className="inline-flex items-center gap-0.5 rounded bg-background/80 px-1.5 py-0.5 text-[10px]">
+                        {sv.name} <span className="text-muted-foreground">×{sv.quantity}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </TooltipContent>
     </Tooltip>
