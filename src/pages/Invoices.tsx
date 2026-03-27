@@ -634,14 +634,15 @@ export default function Invoices() {
                         <div className="flex items-center justify-center gap-0.5">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:bg-info/10" onClick={() => openDetail(row)}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-info hover:bg-info/10" onClick={() => openDetail(inv)}>
                                 <Eye className="h-3.5 w-3.5" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent className="text-[10px]">View Orders</TooltipContent>
                           </Tooltip>
                           {!isSeller && (
-                            <>
+                             <>
+                              {isDraft && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10"
@@ -651,6 +652,7 @@ export default function Invoices() {
                                 </TooltipTrigger>
                                 <TooltipContent className="text-[10px]">{t("add_addon")}</TooltipContent>
                               </Tooltip>
+                              )}
                               {proofUrl ? (
                                 <Dialog>
                                   <Tooltip>
@@ -727,7 +729,7 @@ export default function Invoices() {
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" onClick={() => {
-                                    openDetail(row);
+                                    openDetail(inv);
                                     setTimeout(() => window.print(), 500);
                                   }}>
                                     <Printer className="h-3.5 w-3.5" />
@@ -737,7 +739,7 @@ export default function Invoices() {
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted" onClick={() => openDetail(row)}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:bg-muted" onClick={() => openDetail(inv)}>
                                     <Download className="h-3.5 w-3.5" />
                                   </Button>
                                 </TooltipTrigger>
