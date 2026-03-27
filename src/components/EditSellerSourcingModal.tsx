@@ -226,6 +226,7 @@ export function EditSellerSourcingModal({ request, open, onOpenChange }: Props) 
   const canValidate = request.seller_validated === null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
