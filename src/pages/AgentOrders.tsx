@@ -99,6 +99,7 @@ const AgentOrders = () => {
   // Editable order items
   const [editItems, setEditItems] = useState<{ name: string; qty: number; price: number }[]>([]);
   const [editMode, setEditMode] = useState(false);
+  const [sellerProducts, setSellerProducts] = useState<{ id: string; name: string; price: number; product_url: string | null; video_url: string | null }[]>([]);
 
   // Status change form
   const [selectedStatus, setSelectedStatus] = useState<string>("");
@@ -462,6 +463,15 @@ const AgentOrders = () => {
     setEditingCustomer(false);
     setEditMode(false);
     resetForm();
+
+    // Fetch seller's products for add-item and product_url lookup
+    supabase
+      .from("products")
+      .select("id, name, price, product_url, video_url")
+      .eq("seller_id", order.seller_id)
+      .then(({ data }) => {
+        setSellerProducts((data || []).map(p => ({ ...p, price: Number(p.price) })));
+      });
   };
 
   const resetForm = () => {
@@ -835,88 +845,149 @@ const AgentOrders = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {activeItems.map((op, i) => (
-                <div key={i} className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-2">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <p className="text-sm font-semibold truncate">{op.name}</p>
+              {activeItems.map((op, i) => {
+                // Look up product_url from seller's products table
+                const matchedProduct = sellerProducts.find(p => p.name === op.name);
+                const productStoreUrl = matchedProduct?.product_url || currentOrder.store_url;
+                const productVideoUrl = matchedProduct?.video_url || currentOrder.video_url;
 
-                      {editMode ? (
-                        <div className="flex items-center gap-2">
-                          <div className="space-y-0.5">
-                            <Label className="text-[9px] text-muted-foreground">Qty</Label>
-                            <Input
-                              type="number" min={1} value={op.qty}
-                              onChange={(e) => updateItem(i, "qty", parseInt(e.target.value) || 1)}
-                              className="h-7 w-16 text-xs"
-                            />
+                return (
+                  <div key={i} className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <p className="text-sm font-semibold truncate">{op.name}</p>
+
+                        {editMode ? (
+                          <div className="flex items-center gap-2">
+                            <div className="space-y-0.5">
+                              <Label className="text-[9px] text-muted-foreground">Qty</Label>
+                              <Input
+                                type="number" min={1} value={op.qty}
+                                onChange={(e) => updateItem(i, "qty", parseInt(e.target.value) || 1)}
+                                className="h-7 w-16 text-xs"
+                              />
+                            </div>
+                            <div className="space-y-0.5">
+                              <Label className="text-[9px] text-muted-foreground">Price (MAD)</Label>
+                              <Input
+                                type="number" min={0} value={op.price}
+                                onChange={(e) => updateItem(i, "price", parseInt(e.target.value) || 0)}
+                                className="h-7 w-20 text-xs"
+                              />
+                            </div>
+                            {activeItems.length > 1 && (
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive mt-3" onClick={() => removeItem(i)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
-                          <div className="space-y-0.5">
-                            <Label className="text-[9px] text-muted-foreground">Price (MAD)</Label>
-                            <Input
-                              type="number" min={0} value={op.price}
-                              onChange={(e) => updateItem(i, "price", parseInt(e.target.value) || 0)}
-                              className="h-7 w-20 text-xs"
-                            />
+                        ) : (
+                          <div className="flex flex-wrap gap-2 text-[11px]">
+                            <span className="inline-flex items-center gap-1 text-muted-foreground">
+                              <Tag className="h-3 w-3" /> Qty: {op.qty}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-muted-foreground">
+                              <DollarSign className="h-3 w-3" /> {op.price} MAD
+                            </span>
                           </div>
-                          {activeItems.length > 1 && (
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-destructive hover:text-destructive mt-3" onClick={() => removeItem(i)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                        )}
+
+                        {/* Last Selling Price */}
+                        {currentOrder.last_price != null && Number(currentOrder.last_price) > 0 && (
+                          <div className="rounded-md bg-accent/60 border border-accent px-2.5 py-1.5 flex items-center gap-2">
+                            <DollarSign className="h-3 w-3 text-primary shrink-0" />
+                            <span className="text-[10px] text-muted-foreground">Last sold at</span>
+                            <span className="text-xs font-bold text-primary tabular-nums">{currentOrder.last_price} MAD</span>
+                            {Number(currentOrder.last_price) !== op.price && (
+                              <span className={cn(
+                                "text-[9px] font-semibold px-1.5 py-0.5 rounded-full",
+                                Number(currentOrder.last_price) < op.price
+                                  ? "bg-emerald-500/10 text-emerald-600"
+                                  : "bg-amber-500/10 text-amber-600"
+                              )}>
+                                {Number(currentOrder.last_price) < op.price ? "↓" : "↑"} {Math.abs(op.price - Number(currentOrder.last_price))} MAD
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Store & Video Links */}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          {productStoreUrl ? (
+                            <a href={productStoreUrl} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10">
+                              <Store className="h-3 w-3" /> Store Link <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                              <Store className="h-3 w-3" /> No Store Link
+                            </span>
+                          )}
+                          {productVideoUrl ? (
+                            <a href={productVideoUrl} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10">
+                              <Video className="h-3 w-3" /> Video <ExternalLink className="h-2.5 w-2.5" />
+                            </a>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                              <Video className="h-3 w-3" /> No Video
+                            </span>
                           )}
                         </div>
-                      ) : (
-                        <div className="flex flex-wrap gap-2 text-[11px]">
-                          <span className="inline-flex items-center gap-1 text-muted-foreground">
-                            <Tag className="h-3 w-3" /> Qty: {op.qty}
-                          </span>
-                          <span className="inline-flex items-center gap-1 text-muted-foreground">
-                            <DollarSign className="h-3 w-3" /> {op.price} MAD
-                          </span>
-                        </div>
-                      )}
-
-                      {currentOrder.last_price != null && (
-                        <div className="rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 flex items-center gap-2">
-                          <Tag className="h-3 w-3 text-muted-foreground shrink-0" />
-                          <span className="text-[10px] text-muted-foreground">Last sold at</span>
-                          <span className="text-xs font-bold text-foreground">{currentOrder.last_price} MAD</span>
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {currentOrder.store_url ? (
-                          <a href={currentOrder.store_url} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10">
-                            <Store className="h-3 w-3" /> Store Link <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-md">
-                            <Store className="h-3 w-3" /> No Store Link
-                          </span>
-                        )}
-                        {currentOrder.video_url ? (
-                          <a href={currentOrder.video_url} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10">
-                            <Video className="h-3 w-3" /> Video <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-md">
-                            <Video className="h-3 w-3" /> No Video
-                          </span>
-                        )}
                       </div>
+                      {!editMode && (
+                        <p className="text-sm font-bold text-foreground whitespace-nowrap">{op.qty * op.price} MAD</p>
+                      )}
                     </div>
-                    {!editMode && (
-                      <p className="text-sm font-bold text-foreground whitespace-nowrap">{op.qty * op.price} MAD</p>
-                    )}
                   </div>
+                );
+              })}
+
+              {/* Offers Section */}
+              {currentOrder.offers && currentOrder.offers.trim() && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-1">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-600 flex items-center gap-1">
+                    <Tag className="h-3 w-3" /> Offers / Promotions
+                  </p>
+                  <p className="text-sm text-foreground font-medium">{currentOrder.offers}</p>
                 </div>
-              ))}
+              )}
+
+              {/* Add Item Button */}
+              {editMode && sellerProducts.length > 0 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full h-8 text-xs gap-1.5 border-dashed">
+                      <Plus className="h-3 w-3" /> Add Product from Seller's Catalog
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-2" align="start">
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {sellerProducts
+                        .filter(sp => !activeItems.some(ai => ai.name === sp.name))
+                        .map(sp => (
+                          <button
+                            key={sp.id}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-accent text-xs flex items-center justify-between gap-2 transition-colors"
+                            onClick={() => {
+                              setEditItems(prev => [...prev, { name: sp.name, qty: 1, price: sp.price }]);
+                            }}
+                          >
+                            <span className="truncate font-medium">{sp.name}</span>
+                            <span className="text-muted-foreground shrink-0">{sp.price} MAD</span>
+                          </button>
+                        ))}
+                      {sellerProducts.filter(sp => !activeItems.some(ai => ai.name === sp.name)).length === 0 && (
+                        <p className="text-[10px] text-muted-foreground text-center py-2">All products already added</p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
 
               <div className="flex items-center justify-between pt-2 border-t">
                 <span className="text-sm font-semibold">Total</span>
-                <span className="text-lg font-bold text-primary">{orderTotal} MAD</span>
+                <span className="text-lg font-bold text-primary tabular-nums">{orderTotal} MAD</span>
               </div>
             </CardContent>
           </Card>
