@@ -71,35 +71,38 @@ interface AgentRow {
 
 export function DailyConfirmationReport({ orders, profileNameMap, agentIds }: DailyConfirmationReportProps) {
   // Global summary
+  // "Handled" = agent claimed AND changed status (not still "new")
+  const handledOrders = useMemo(() => orders.filter(o => o.agent_id && o.confirmation_status !== "new"), [orders]);
+
   const summary = useMemo(() => {
-    const total = orders.length;
-    const confirmed = orders.filter(o => o.confirmation_status === "confirmed").length;
-    const noAnswer = orders.filter(o => o.confirmation_status === "no_answer").length;
-    const postponed = orders.filter(o => o.postpone_date !== null || o.confirmation_status === "postponed").length;
-    const cancelled = orders.filter(o => o.confirmation_status === "cancelled").length;
+    const total = handledOrders.length;
+    const confirmed = handledOrders.filter(o => o.confirmation_status === "confirmed").length;
+    const noAnswer = handledOrders.filter(o => o.confirmation_status === "no_answer").length;
+    const postponed = handledOrders.filter(o => o.postpone_date !== null || o.confirmation_status === "postponed").length;
+    const cancelled = handledOrders.filter(o => o.confirmation_status === "cancelled").length;
     return {
       total, confirmed, noAnswer, postponed, cancelled,
       confirmRate: total > 0 ? Math.round((confirmed / total) * 100) : 0,
       noAnswerRate: total > 0 ? Math.round((noAnswer / total) * 100) : 0,
       postponedRate: total > 0 ? Math.round((postponed / total) * 100) : 0,
     };
-  }, [orders]);
+  }, [handledOrders]);
 
   // Per agent breakdown
   const agentRows: AgentRow[] = useMemo(() => {
     const map: Record<string, { total: number; new: number; noAnswer: number; postponed: number; confirmed: number; cancelled: number }> = {};
-    orders.forEach(o => {
+    // Only count handled orders (status changed from "new")
+    handledOrders.forEach(o => {
       const aid = o.agent_id;
       if (!aid) return;
       if (!map[aid]) map[aid] = { total: 0, new: 0, noAnswer: 0, postponed: 0, confirmed: 0, cancelled: 0 };
       map[aid].total++;
-      if (o.confirmation_status === "new") map[aid].new++;
       if (o.confirmation_status === "no_answer") map[aid].noAnswer++;
       if (o.postpone_date || o.confirmation_status === "postponed") map[aid].postponed++;
       if (o.confirmation_status === "confirmed") map[aid].confirmed++;
       if (o.confirmation_status === "cancelled") map[aid].cancelled++;
     });
-    const totalAll = orders.filter(o => o.agent_id).length || 1;
+    const totalAll = handledOrders.length || 1;
     return Object.entries(map)
       .map(([id, d]) => ({
         id,
@@ -116,7 +119,7 @@ export function DailyConfirmationReport({ orders, profileNameMap, agentIds }: Da
         workloadPct: Math.round((d.total / totalAll) * 100),
       }))
       .sort((a, b) => b.total - a.total);
-  }, [orders, profileNameMap]);
+  }, [handledOrders, profileNameMap]);
 
   const avgWorkload = agentRows.length > 0 ? 100 / agentRows.length : 100;
 
