@@ -637,11 +637,6 @@ const AgentOrders = () => {
             )}
             {" "}waiting. Orders come one by one with smart prioritization.
           </p>
-          <div className="flex flex-wrap justify-center gap-2 text-[10px]">
-            <Badge variant="outline" className="gap-1"><Copy className="h-3 w-3" /> Duplicates first</Badge>
-            <Badge variant="outline" className="gap-1"><Zap className="h-3 w-3" /> 3:1 New/Retry mix</Badge>
-            <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" /> Smart retry timing</Badge>
-          </div>
         </div>
         <Button
           size="lg"
