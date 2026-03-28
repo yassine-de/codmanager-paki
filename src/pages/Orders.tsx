@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { eachDayOfInterval, startOfDay, subDays, isAfter, format as fmtDate } from "date-fns";
@@ -939,6 +940,24 @@ export default function Orders() {
         onOpenChange={setShowCreateModal}
         onCreated={() => setRefreshKey(k => k + 1)}
       />
+
+      {/* Bulk Status Change Confirmation */}
+      <AlertDialog open={!!bulkConfirm} onOpenChange={(open) => !open && setBulkConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to change the {bulkConfirm?.field === "confirmation_status" ? "confirmation" : "delivery"} status of{" "}
+              <span className="font-semibold">{selectedOrders.size} order{selectedOrders.size > 1 ? "s" : ""}</span> to{" "}
+              <span className="font-semibold">{bulkConfirm?.label}</span>. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkStatusChange}>Yes, I'm sure</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
     </TooltipProvider>
   );
