@@ -24,7 +24,7 @@ export default function ConfirmationAnalytics() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, cancel_reason, product_name, seller_id, agent_id, created_at, confirmed_at, delivered_at, price, quantity, postpone_date")
+        .select("id, order_id, confirmation_status, delivery_status, cancel_reason, product_name, seller_id, agent_id, created_at, confirmed_at, delivered_at, price, quantity, postpone_date, attempt_count")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -60,6 +60,18 @@ export default function ConfirmationAnalytics() {
         .select("order_id, field_changed, old_value, new_value, created_at")
         .in("field_changed", ["confirmation_status", "agent_id"])
         .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch calls for duration tracking
+  const { data: callsData = [] } = useQuery({
+    queryKey: ["calls-for-analytics"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("calls")
+        .select("agent_id, duration");
       if (error) throw error;
       return data;
     },
