@@ -59,18 +59,20 @@ export function SellerAlertsBanner() {
         return (
           <div
             key={alert.id}
-            className={`flex items-start gap-3 rounded-lg border p-3 ${style.bg}`}
+            className={`flex items-center gap-3 rounded-xl border p-4 shadow-sm ${style.bg}`}
           >
-            <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${style.text}`} />
+            <div className={`p-2 rounded-lg ${style.text} bg-background/30 shrink-0`}>
+              <Icon className="h-5 w-5" />
+            </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-semibold ${style.text}`}>{alert.title}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{alert.message}</p>
+              <p className="text-sm font-bold text-foreground">{alert.title}</p>
+              <p className="text-[13px] font-medium text-foreground/80 mt-1 leading-relaxed">{alert.message}</p>
             </div>
             <button
               onClick={() => setDismissed((prev) => new Set(prev).add(alert.id))}
-              className="shrink-0 p-0.5 rounded hover:bg-background/50 transition-colors"
+              className="shrink-0 p-1 rounded-md hover:bg-background/50 transition-colors"
             >
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
+              <X className="h-4 w-4 text-muted-foreground" />
             </button>
           </div>
         );
