@@ -257,6 +257,8 @@ const AgentConfirmedOrders = () => {
                   <TableHead className="text-[11px]">City</TableHead>
                   <TableHead className="text-[11px]">Product</TableHead>
                   <TableHead className="text-[11px] text-right">Total</TableHead>
+                  <TableHead className="text-[11px]">Last Price</TableHead>
+                  <TableHead className="text-[11px]">Offers</TableHead>
                   <TableHead className="text-[11px]">Confirmation</TableHead>
                   <TableHead className="text-[11px]">Delivery</TableHead>
                   <TableHead className="text-[11px]">Date</TableHead>
@@ -266,13 +268,13 @@ const AgentConfirmedOrders = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-12">
+                    <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-12">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : filteredOrders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-12">
+                    <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-12">
                       No orders found
                     </TableCell>
                   </TableRow>
@@ -301,6 +303,24 @@ const AgentConfirmedOrders = () => {
                           </span>
                         </TableCell>
                         <TableCell className="text-right font-semibold">{order.total_amount} MAD</TableCell>
+                        <TableCell>
+                          {order.last_price != null && Number(order.last_price) > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary bg-accent/60 px-1.5 py-0.5 rounded">
+                              <DollarSign className="h-3 w-3" /> {order.last_price} MAD
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {order.offers && order.offers.trim() ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded max-w-[120px] truncate">
+                              <Tag className="h-3 w-3 shrink-0" /> {order.offers}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={cn("text-[10px]", cBadge.className)}>
                             {cBadge.label}
