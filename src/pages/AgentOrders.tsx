@@ -599,20 +599,24 @@ const AgentOrders = () => {
       nextIdx++;
     }
 
-    // Queue exhausted — refetch
-    try {
-      const freshOrders = await fetchPrioritizedOrders();
-      if (freshOrders.length > 0) {
-        setOrderQueue(freshOrders);
+    // Queue exhausted — try atomic claim directly before refetching
+    const types = ["duplicate", "new", "postponed", "no_answer"];
+    for (const t of types) {
+      const order = await claimOrderAtomic(t);
+      if (order) {
+        setOrderQueue([order]);
         setCurrentIndex(0);
-        await claimOrder(freshOrders[0]);
-        const newCount = freshOrders.filter(o => !o._isFollowUp && !o._isDuplicate).length;
-        const followUpCount = freshOrders.filter(o => o._isFollowUp).length;
-        toast.success(`${newCount} new + ${followUpCount} retries loaded! 🔄`);
+        initOrderState(order);
+        toast.info(`Got next ${t} order atomically ✅`);
+        // Then refetch full queue in background
+        fetchPrioritizedOrders().then(fresh => {
+          if (fresh.length > 0) {
+            setOrderQueue(fresh);
+            setCurrentIndex(0);
+          }
+        });
         return;
       }
-    } catch (err) {
-      console.error("Error refetching orders:", err);
     }
 
     toast.success("All orders processed! 🎉");
