@@ -425,6 +425,22 @@ export default function ConfirmationAnalytics() {
         </div>
       )}
 
+      {/* Smart Recommendations */}
+      <SmartRecommendations
+        orders={filteredOrders.map(o => ({
+          agent_id: o.agent_id || '',
+          confirmation_status: o.confirmation_status,
+          delivery_status: o.delivery_status,
+          created_at: o.created_at,
+          attempt_count: o.attempt_count ?? 0,
+          postpone_date: o.postpone_date,
+        })).filter(o => o.agent_id !== '')}
+        orderHistory={orderHistory}
+        calls={callsData}
+        profileNameMap={profileNameMap}
+        agentIds={agentIds}
+      />
+
       {/* Cancel Reasons */}
       <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '150ms' }}>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Cancellation Reasons</h2>
