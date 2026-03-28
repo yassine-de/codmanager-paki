@@ -56,6 +56,36 @@ export type Database = {
         }
         Relationships: []
       }
+      calls: {
+        Row: {
+          agent_id: string
+          call_end_time: string | null
+          call_start_time: string
+          created_at: string
+          duration: number | null
+          id: string
+          order_id: string
+        }
+        Insert: {
+          agent_id: string
+          call_end_time?: string | null
+          call_start_time?: string
+          created_at?: string
+          duration?: number | null
+          id?: string
+          order_id: string
+        }
+        Update: {
+          agent_id?: string
+          call_end_time?: string | null
+          call_start_time?: string
+          created_at?: string
+          duration?: number | null
+          id?: string
+          order_id?: string
+        }
+        Relationships: []
+      }
       integration_errors: {
         Row: {
           created_at: string
