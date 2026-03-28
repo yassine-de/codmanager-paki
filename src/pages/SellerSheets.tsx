@@ -312,8 +312,9 @@ export default function SellerSheets() {
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Sheet Name</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Orders</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">With Errors</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Last Check</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Last Check</th>
+                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Last Row</th>
+                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
                 </tr>
               </thead>
@@ -355,8 +356,28 @@ export default function SellerSheets() {
                       {sheet.last_check
                         ? formatDistanceToNow(new Date(sheet.last_check), { addSuffix: true })
                         : "Never"}
-                    </td>
-                    <td className="px-4 py-4">
+                     </td>
+                     <td className="px-4 py-4">
+                       <Input
+                         type="number"
+                         min={1}
+                         className="h-7 w-20 text-xs text-center tabular-nums"
+                         defaultValue={sheet.last_imported_row}
+                         onBlur={async (e) => {
+                           const val = parseInt(e.target.value);
+                           if (!val || val === sheet.last_imported_row) return;
+                           const { error } = await supabase
+                             .from("integration_sheets")
+                             .update({ last_imported_row: val })
+                             .eq("id", sheet.id);
+                           if (error) { toast.error("Failed to update"); return; }
+                           toast.success(`Last row updated to ${val}`);
+                           fetchSheets();
+                         }}
+                         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                       />
+                     </td>
+                     <td className="px-4 py-4">
                       <Badge
                         className={`text-[11px] font-medium ${
                           sheet.active
