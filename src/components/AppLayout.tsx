@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { usePresenceHeartbeat } from "@/hooks/usePresence";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SellerSupportChat } from "@/components/SellerSupportChat";
 
 const languages: { value: Language; label: string; flag: string }[] = [
   { value: "en", label: "English", flag: "🇬🇧" },
@@ -170,6 +171,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
+      <SellerSupportChat />
     </SidebarProvider>
   );
 }
