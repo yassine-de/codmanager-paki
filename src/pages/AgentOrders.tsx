@@ -363,10 +363,7 @@ const AgentOrders = () => {
         resetForm();
       }
 
-      const newCount = data.filter(o => !o._isFollowUp && !o._isDuplicate).length;
-      const followUpCount = data.filter(o => o._isFollowUp).length;
-      const dupCount = data.filter(o => o._isDuplicate).length;
-      toast.success(`${newCount} new + ${followUpCount} retries + ${dupCount} duplicates — Let's go! 🚀`);
+      toast.success(`Order claimed successfully — Let's go! 🚀`);
     } catch (err: any) {
       toast.error(err.message || "Failed to load orders");
     } finally {
