@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number) => [
+const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number, agentNewOrders: number) => [
   { title: "dashboard", url: "/", icon: LayoutDashboard },
   { title: "orders", url: "/orders", icon: ShoppingCart, badge: orderCount, permission: "access_to_orders", sellerVisible: true },
   { title: "products", url: "/products", icon: BoxIcon, permission: "access_to_products", sellerVisible: true, badge: productUnseen > 0 ? productUnseen : undefined },
@@ -34,7 +34,7 @@ const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUn
   { title: "simulation", url: "/simulation", icon: Calculator, sellerOnly: true },
   { title: "settings", url: "/seller-settings", icon: Settings, sellerOnly: true },
   { title: "My Dashboard", url: "/agent-dashboard", icon: LayoutDashboard, agentOnly: true },
-  { title: "Process Orders", url: "/agent-orders", icon: Play, agentOnly: true },
+  { title: "Process Orders", url: "/agent-orders", icon: Play, agentOnly: true, badge: agentNewOrders > 0 ? agentNewOrders : undefined },
   { title: "Confirmed Orders", url: "/agent-confirmed", icon: ListChecks, agentOnly: true },
 ];
 
