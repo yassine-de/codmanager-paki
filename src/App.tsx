@@ -27,6 +27,7 @@ import SellerSheets from "./pages/SellerSheets";
 import SellerSourcing from "./pages/SellerSourcing";
 import Simulation from "./pages/Simulation";
 import SellerSettings from "./pages/SellerSettings";
+import RatesManagement from "./pages/RatesManagement";
 import AgentDashboard from "./pages/AgentDashboard";
 import AgentOrders from "./pages/AgentOrders";
 import AgentConfirmedOrders from "./pages/AgentConfirmedOrders";
