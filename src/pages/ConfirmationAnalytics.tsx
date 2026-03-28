@@ -10,6 +10,7 @@ import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetF
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { SmartRecommendations } from "@/components/SmartRecommendations";
+import { DailyConfirmationReport } from "@/components/DailyConfirmationReport";
 
 export default function ConfirmationAnalytics() {
   const [agentFilter, setAgentFilter] = useState<string>("all");
