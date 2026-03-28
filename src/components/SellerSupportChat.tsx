@@ -12,6 +12,7 @@ import { MessageCircle, Send, X, ArrowLeft, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { playSellerNotificationSound } from "@/lib/support-sounds";
 
 type Ticket = {
   id: string;
@@ -28,6 +29,7 @@ type Message = {
   sender_type: string;
   message: string;
   created_at: string;
+  read_at: string | null;
 };
 
 const statusColors: Record<string, string> = {
@@ -59,6 +61,7 @@ export function SellerSupportChat() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevUnreadRef = useRef<number>(0);
 
   // New ticket form
   const [issueType, setIssueType] = useState("other");
@@ -104,34 +107,80 @@ export function SellerSupportChat() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "support_messages", filter: `ticket_id=eq.${selectedTicketId}` },
-        () => {
+        (payload) => {
           queryClient.invalidateQueries({ queryKey: ["seller-support-messages", selectedTicketId] });
+          queryClient.invalidateQueries({ queryKey: ["seller-support-unread"] });
+          // Mark admin messages as read if chat is open
+          if (payload.new && (payload.new as any).sender_type === "admin") {
+            supabase
+              .from("support_messages")
+              .update({ read_at: new Date().toISOString() })
+              .eq("id", (payload.new as any).id)
+              .then();
+          }
         }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [selectedTicketId, queryClient]);
 
-  // Unread count
+  // Unread count (admin messages not read by seller)
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["seller-support-unread"],
     queryFn: async () => {
       if (!authUser) return 0;
       const { data: tix } = await supabase
         .from("support_tickets")
-        .select("id")
-        .eq("seller_id", authUser.id);
+        .select("id");
       if (!tix?.length) return 0;
       const { count } = await supabase
         .from("support_messages")
         .select("*", { count: "exact", head: true })
         .in("ticket_id", tix.map((t: any) => t.id))
-        .eq("sender_type", "admin");
+        .eq("sender_type", "admin")
+        .is("read_at", null);
       return count || 0;
     },
     enabled: !!authUser,
     refetchInterval: 15000,
   });
+
+  // Realtime for global unread (even when chat popup is closed)
+  useEffect(() => {
+    if (!authUser || authUser.role !== "seller") return;
+    const channel = supabase
+      .channel("seller-support-global-unread")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "support_messages" },
+        (payload) => {
+          if (payload.new && (payload.new as any).sender_type === "admin") {
+            queryClient.invalidateQueries({ queryKey: ["seller-support-unread"] });
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [authUser, queryClient]);
+
+  // Play sound on new unread
+  useEffect(() => {
+    if (unreadCount > prevUnreadRef.current && prevUnreadRef.current >= 0) {
+      playSellerNotificationSound();
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount]);
+
+  // Mark messages as read when opening a ticket
+  const markTicketRead = async (ticketId: string) => {
+    await supabase
+      .from("support_messages")
+      .update({ read_at: new Date().toISOString() })
+      .eq("ticket_id", ticketId)
+      .eq("sender_type", "admin")
+      .is("read_at", null);
+    queryClient.invalidateQueries({ queryKey: ["seller-support-unread"] });
+  };
 
   // Create ticket
   const createTicket = useMutation({
@@ -177,7 +226,6 @@ export function SellerSupportChat() {
     mutationFn: async () => {
       if (!newMessage.trim() || !selectedTicketId || !authUser) return;
 
-      // If ticket is closed, reopen it
       const ticket = tickets.find((t: Ticket) => t.id === selectedTicketId);
       if (ticket?.status === "closed") {
         await supabase
@@ -226,7 +274,7 @@ export function SellerSupportChat() {
           <div className="relative">
             <MessageCircle className="h-6 w-6" />
             {unreadCount > 0 && (
-              <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold">
+              <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold animate-bounce">
                 {unreadCount}
               </span>
             )}
@@ -281,6 +329,7 @@ export function SellerSupportChat() {
                       onClick={() => {
                         setSelectedTicketId(ticket.id);
                         setView("chat");
+                        markTicketRead(ticket.id);
                       }}
                       className="w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors"
                     >
