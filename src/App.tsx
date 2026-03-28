@@ -27,6 +27,7 @@ import SellerSheets from "./pages/SellerSheets";
 import SellerSourcing from "./pages/SellerSourcing";
 import Simulation from "./pages/Simulation";
 import SellerSettings from "./pages/SellerSettings";
+import RatesManagement from "./pages/RatesManagement";
 import AgentDashboard from "./pages/AgentDashboard";
 import AgentOrders from "./pages/AgentOrders";
 import AgentConfirmedOrders from "./pages/AgentConfirmedOrders";
@@ -95,6 +96,7 @@ function AppRoutes() {
         <Route path="/analytics/finance" element={<ProtectedRoute permission="access_to_analytics"><FinanceAnalytics /></ProtectedRoute>} />
         <Route path="/analytics/follow-up" element={<ProtectedRoute permission="access_to_analytics"><FollowUpAnalytics /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute permission="access_to_settings"><SettingsPage /></ProtectedRoute>} />
+        <Route path="/rates" element={<ProtectedRoute permission="access_to_settings"><RatesManagement /></ProtectedRoute>} />
         <Route path="/integrations" element={<ProtectedRoute permission="access_to_settings"><Integrations /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute permission="access_to_users"><Users /></ProtectedRoute>} />
         <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />

@@ -522,6 +522,54 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_settings: {
+        Row: {
+          agent_commission_confirmed: number
+          agent_commission_delivered: number
+          cod_fee_per_delivery: number
+          confirmed_order_rate: number
+          created_at: string
+          dropped_order_rate: number
+          id: string
+          is_global: boolean
+          seller_id: string | null
+          shipping_rate_1kg: number
+          shipping_rate_2kg: number
+          shipping_rate_3kg: number
+          updated_at: string
+        }
+        Insert: {
+          agent_commission_confirmed?: number
+          agent_commission_delivered?: number
+          cod_fee_per_delivery?: number
+          confirmed_order_rate?: number
+          created_at?: string
+          dropped_order_rate?: number
+          id?: string
+          is_global?: boolean
+          seller_id?: string | null
+          shipping_rate_1kg?: number
+          shipping_rate_2kg?: number
+          shipping_rate_3kg?: number
+          updated_at?: string
+        }
+        Update: {
+          agent_commission_confirmed?: number
+          agent_commission_delivered?: number
+          cod_fee_per_delivery?: number
+          confirmed_order_rate?: number
+          created_at?: string
+          dropped_order_rate?: number
+          id?: string
+          is_global?: boolean
+          seller_id?: string | null
+          shipping_rate_1kg?: number
+          shipping_rate_2kg?: number
+          shipping_rate_3kg?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       seller_order_prefixes: {
         Row: {
           current_counter: number

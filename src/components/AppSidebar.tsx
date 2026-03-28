@@ -1,4 +1,4 @@
-import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Headphones, Play, ListChecks } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Headphones, Play, ListChecks, BadgeDollarSign } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +46,7 @@ const analyticsSubItems = [
 
 const settingsSubItems = [
   { title: "users", url: "/users", icon: Users, permission: "access_to_users" },
+  { title: "Rates", url: "/rates", icon: BadgeDollarSign, permission: "access_to_settings" },
   { title: "integrations", url: "/integrations", icon: Link2, permission: "access_to_settings" },
 ];
 
@@ -131,7 +132,7 @@ export function AppSidebar() {
 
   const visibleSettingsItems = settingsSubItems.filter((item) => hasPermission(item.permission));
   const showSettings = hasPermission("access_to_settings") || hasPermission("access_to_users");
-  const isSettingsActive = ["/settings", "/users", "/integrations"].some((p) =>
+  const isSettingsActive = ["/settings", "/users", "/integrations", "/rates"].some((p) =>
     location.pathname.startsWith(p)
   );
 
