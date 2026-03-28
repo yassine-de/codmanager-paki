@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { eachDayOfInterval, startOfDay, subDays, isAfter, format as fmtDate } from "date-fns";
@@ -205,7 +206,18 @@ export default function Orders() {
     toast.success(`${selected.length} orders exported`);
   };
 
-  const handleBulkStatusChange = async (field: "confirmation_status" | "delivery_status", newValue: string) => {
+  const [bulkConfirm, setBulkConfirm] = useState<{ field: "confirmation_status" | "delivery_status"; value: string; label: string } | null>(null);
+
+  const requestBulkStatusChange = (field: "confirmation_status" | "delivery_status", newValue: string) => {
+    const label = field === "confirmation_status"
+      ? confirmationConfig[newValue as ConfirmationStatus]?.label || newValue
+      : deliveryConfig[newValue as DeliveryStatus]?.label || newValue;
+    setBulkConfirm({ field, value: newValue, label });
+  };
+
+  const handleBulkStatusChange = async () => {
+    if (!bulkConfirm) return;
+    const { field, value: newValue } = bulkConfirm;
     const selected = getSelectedOrderObjects();
     if (selected.length === 0) return;
     const orderIds = selected.map(o => o.id);
@@ -218,10 +230,10 @@ export default function Orders() {
     if (error) {
       toast.error("Failed to update orders");
       console.error(error);
+      setBulkConfirm(null);
       return;
     }
 
-    // Track history
     const historyEntries = selected.map(o => ({
       order_id: o.id,
       changed_by: authUser?.id,
@@ -234,6 +246,7 @@ export default function Orders() {
 
     toast.success(`${selected.length} orders updated`);
     setSelectedOrders(new Set());
+    setBulkConfirm(null);
     setRefreshKey(k => k + 1);
   };
 
@@ -588,7 +601,7 @@ export default function Orders() {
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     {Object.entries(confirmationConfig).map(([key, cfg]) => (
-                      <DropdownMenuItem key={key} onClick={() => handleBulkStatusChange("confirmation_status", key)} className="text-xs">
+                      <DropdownMenuItem key={key} onClick={() => requestBulkStatusChange("confirmation_status", key)} className="text-xs">
                         {cfg.label}
                       </DropdownMenuItem>
                     ))}
@@ -600,7 +613,7 @@ export default function Orders() {
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     {Object.entries(deliveryConfig).map(([key, cfg]) => (
-                      <DropdownMenuItem key={key} onClick={() => handleBulkStatusChange("delivery_status", key)} className="text-xs">
+                      <DropdownMenuItem key={key} onClick={() => requestBulkStatusChange("delivery_status", key)} className="text-xs">
                         {cfg.label}
                       </DropdownMenuItem>
                     ))}
@@ -927,6 +940,24 @@ export default function Orders() {
         onOpenChange={setShowCreateModal}
         onCreated={() => setRefreshKey(k => k + 1)}
       />
+
+      {/* Bulk Status Change Confirmation */}
+      <AlertDialog open={!!bulkConfirm} onOpenChange={(open) => !open && setBulkConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to change the {bulkConfirm?.field === "confirmation_status" ? "confirmation" : "delivery"} status of{" "}
+              <span className="font-semibold">{selectedOrders.size} order{selectedOrders.size > 1 ? "s" : ""}</span> to{" "}
+              <span className="font-semibold">{bulkConfirm?.label}</span>. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkStatusChange}>Yes, I'm sure</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
     </TooltipProvider>
   );
