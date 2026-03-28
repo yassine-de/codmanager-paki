@@ -159,7 +159,82 @@ export default function Orders() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+
+  const toggleSelectOrder = (orderId: string) => {
+    setSelectedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedOrders.size === paginatedOrders.length && paginatedOrders.length > 0) {
+      setSelectedOrders(new Set());
+    } else {
+      setSelectedOrders(new Set(paginatedOrders.map(o => o.id)));
+    }
+  };
+
+  const getSelectedOrderObjects = () => orders.filter(o => selectedOrders.has(o.id));
+
+  const handleDownloadCSV = () => {
+    const selected = getSelectedOrderObjects();
+    if (selected.length === 0) return;
+    const headers = ["Order ID", "Customer Name", "Phone", "Product", "Amount", "Confirmation Status", "Delivery Status"];
+    const rows = selected.map(o => [
+      o.id,
+      o.customer,
+      o.phone,
+      o.products.map(p => p.name).join(" | "),
+      String(o.total),
+      o.confirmationStatus,
+      o.deliveryStatus,
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `orders-export-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${selected.length} orders exported`);
+  };
+
+  const handleBulkStatusChange = async (field: "confirmation_status" | "delivery_status", newValue: string) => {
+    const selected = getSelectedOrderObjects();
+    if (selected.length === 0) return;
+    const orderIds = selected.map(o => o.id);
+    
+    const { error } = await supabase
+      .from("orders")
+      .update({ [field]: newValue, updated_at: new Date().toISOString() })
+      .in("order_id", orderIds);
+    
+    if (error) {
+      toast.error("Failed to update orders");
+      console.error(error);
+      return;
+    }
+
+    // Track history
+    const historyEntries = selected.map(o => ({
+      order_id: o.id,
+      changed_by: authUser?.id,
+      changed_by_role: authUser?.role || "admin",
+      field_changed: field,
+      old_value: field === "confirmation_status" ? o.confirmationStatus : o.deliveryStatus,
+      new_value: newValue,
+    }));
+    await supabase.from("order_history").insert(historyEntries);
+
+    toast.success(`${selected.length} orders updated`);
+    setSelectedOrders(new Set());
+    setRefreshKey(k => k + 1);
+  };
 
   // Fetch orders from database
   useEffect(() => {
