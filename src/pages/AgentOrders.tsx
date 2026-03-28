@@ -909,24 +909,30 @@ const AgentOrders = () => {
                           </div>
                         )}
 
-                        {/* Last Selling Price */}
-                        {currentOrder.last_price != null && Number(currentOrder.last_price) > 0 && (
-                          <div className="rounded-md bg-accent/60 border border-accent px-2.5 py-1.5 flex items-center gap-2">
-                            <DollarSign className="h-3 w-3 text-primary shrink-0" />
-                            <span className="text-[10px] text-muted-foreground">Last sold at</span>
-                            <span className="text-xs font-bold text-primary tabular-nums">{currentOrder.last_price} MAD</span>
-                            {Number(currentOrder.last_price) !== op.price && (
-                              <span className={cn(
-                                "text-[9px] font-semibold px-1.5 py-0.5 rounded-full",
-                                Number(currentOrder.last_price) < op.price
-                                  ? "bg-emerald-500/10 text-emerald-600"
-                                  : "bg-amber-500/10 text-amber-600"
-                              )}>
-                                {Number(currentOrder.last_price) < op.price ? "↓" : "↑"} {Math.abs(op.price - Number(currentOrder.last_price))} MAD
-                              </span>
-                            )}
-                          </div>
-                        )}
+                        {/* Last Selling Price — order-level or historical fallback */}
+                        {(() => {
+                          const effectiveLastPrice = (currentOrder.last_price != null && Number(currentOrder.last_price) > 0)
+                            ? Number(currentOrder.last_price)
+                            : historicalLastPrice;
+                          if (!effectiveLastPrice || effectiveLastPrice <= 0) return null;
+                          return (
+                            <div className="rounded-md bg-accent/60 border border-accent px-2.5 py-1.5 flex items-center gap-2">
+                              <DollarSign className="h-3 w-3 text-primary shrink-0" />
+                              <span className="text-[10px] text-muted-foreground">Last sold at</span>
+                              <span className="text-xs font-bold text-primary tabular-nums">{effectiveLastPrice} MAD</span>
+                              {effectiveLastPrice !== op.price && (
+                                <span className={cn(
+                                  "text-[9px] font-semibold px-1.5 py-0.5 rounded-full",
+                                  effectiveLastPrice < op.price
+                                    ? "bg-emerald-500/10 text-emerald-600"
+                                    : "bg-amber-500/10 text-amber-600"
+                                )}>
+                                  {effectiveLastPrice < op.price ? "↓" : "↑"} {Math.abs(op.price - effectiveLastPrice)} MAD
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         {/* Store & Video Links */}
                         <div className="flex flex-wrap gap-2 pt-1">
