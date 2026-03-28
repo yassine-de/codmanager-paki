@@ -132,7 +132,7 @@ export function AppSidebar() {
 
   const visibleSettingsItems = settingsSubItems.filter((item) => hasPermission(item.permission));
   const showSettings = hasPermission("access_to_settings") || hasPermission("access_to_users");
-  const isSettingsActive = ["/settings", "/users", "/integrations"].some((p) =>
+  const isSettingsActive = ["/settings", "/users", "/integrations", "/rates"].some((p) =>
     location.pathname.startsWith(p)
   );
 
