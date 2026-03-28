@@ -407,7 +407,35 @@ const AgentConfirmedOrders = () => {
 
             {/* Product Info */}
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Product Info</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Product Info</p>
+                {sellerProducts.length > 0 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 border-dashed">
+                        <Plus className="h-3 w-3" /> Add Product
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-2" align="end">
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {sellerProducts.map(sp => (
+                          <button
+                            key={sp.id}
+                            className="w-full text-left px-3 py-2 rounded-md hover:bg-accent text-xs flex items-center justify-between gap-2 transition-colors"
+                            onClick={() => {
+                              updateField("product_name", sp.name);
+                              updateField("price", sp.price);
+                            }}
+                          >
+                            <span className="truncate font-medium">{sp.name}</span>
+                            <span className="text-muted-foreground shrink-0">{sp.price} MAD</span>
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Product Name</Label>
                 <Input
@@ -442,6 +470,53 @@ const AgentConfirmedOrders = () => {
               <div className="text-xs text-muted-foreground">
                 Total: <span className="font-semibold text-foreground">{(editForm.price * editForm.quantity).toFixed(2)} MAD</span>
               </div>
+
+              {/* Last Price & Offers */}
+              {editOrder?.last_price != null && Number(editOrder.last_price) > 0 && (
+                <div className="rounded-md bg-accent/60 border border-accent px-2.5 py-1.5 flex items-center gap-2">
+                  <DollarSign className="h-3 w-3 text-primary shrink-0" />
+                  <span className="text-[10px] text-muted-foreground">Last sold at</span>
+                  <span className="text-xs font-bold text-primary tabular-nums">{editOrder.last_price} MAD</span>
+                </div>
+              )}
+              {editOrder?.offers && editOrder.offers.trim() && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 flex items-center gap-2">
+                  <Tag className="h-3 w-3 text-amber-600 shrink-0" />
+                  <span className="text-[10px] text-amber-600 font-medium">Offers:</span>
+                  <span className="text-xs text-foreground">{editOrder.offers}</span>
+                </div>
+              )}
+
+              {/* Store & Video Links from Product */}
+              {(() => {
+                const mp = sellerProducts.find(p => p.name === editForm.product_name);
+                const storeUrl = mp?.product_url || editOrder?.store_url;
+                const videoUrl = mp?.video_url || editOrder?.video_url;
+                return (
+                  <div className="flex flex-wrap gap-2">
+                    {storeUrl ? (
+                      <a href={storeUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10">
+                        <Store className="h-3 w-3" /> Store Link <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                        <Store className="h-3 w-3" /> No Store Link
+                      </span>
+                    )}
+                    {videoUrl ? (
+                      <a href={videoUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10">
+                        <Video className="h-3 w-3" /> Video <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                        <Video className="h-3 w-3" /> No Video
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Status */}
