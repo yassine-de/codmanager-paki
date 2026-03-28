@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      alerts: {
+        Row: {
+          created_at: string
+          end_date: string | null
+          id: string
+          is_active: boolean
+          message: string
+          start_date: string | null
+          title: string
+          urgency: string
+        }
+        Insert: {
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean
+          message: string
+          start_date?: string | null
+          title: string
+          urgency?: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean
+          message?: string
+          start_date?: string | null
+          title?: string
+          urgency?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           id: string
