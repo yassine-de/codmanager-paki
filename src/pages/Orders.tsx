@@ -659,6 +659,14 @@ export default function Orders() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/30">
+                {isAdmin && (
+                  <th className="py-2.5 px-3 w-10">
+                    <Checkbox
+                      checked={paginatedOrders.length > 0 && selectedOrders.size === paginatedOrders.length}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </th>
+                )}
                 {isCol('id') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">ID</th>}
                 {isCol('createdAt') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Created</th>}
                 {isCol('updatedAt') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Updated</th>}
