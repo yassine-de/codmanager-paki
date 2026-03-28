@@ -118,7 +118,23 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
-  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen);
+  // Fetch unread support messages for admin (seller messages not read)
+  const { data: supportUnread = 0 } = useQuery({
+    queryKey: ["admin-support-unread"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("support_messages")
+        .select("*", { count: "exact", head: true })
+        .eq("sender_type", "seller")
+        .is("read_at", null);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: isAdmin && !!authUser,
+    refetchInterval: 10000,
+  });
+
+  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread);
 
   const visibleItems = navItems.filter((item: any) => {
     if (item.agentOnly) return isAgent;
