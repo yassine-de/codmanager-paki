@@ -956,6 +956,56 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_next_order: {
+        Args: {
+          p_agent_id: string
+          p_order_type?: string
+          p_product_names?: string[]
+        }
+        Returns: {
+          agent_id: string | null
+          attempt_count: number
+          cancel_reason: string | null
+          confirmation_status: string
+          confirmed_at: string | null
+          created_at: string
+          customer_address: string | null
+          customer_city: string
+          customer_name: string
+          customer_phone: string
+          delivered_at: string | null
+          delivery_status: string | null
+          fragile: boolean | null
+          id: string
+          invoice_id: string | null
+          last_price: number | null
+          note: string | null
+          offers: string | null
+          order_id: string
+          original_agent_id: string | null
+          postpone_date: string | null
+          postpone_note: string | null
+          price: number
+          product_name: string
+          product_url: string | null
+          quantity: number
+          seller_id: string
+          shipping_cost: number | null
+          shipping_status: string | null
+          source_sheet_id: string | null
+          store_url: string | null
+          total_amount: number
+          updated_at: string
+          video_url: string | null
+          weight: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       generate_order_id: { Args: { p_seller_id: string }; Returns: string }
       generate_product_sku: { Args: never; Returns: string }
       get_agent_rankings: {
