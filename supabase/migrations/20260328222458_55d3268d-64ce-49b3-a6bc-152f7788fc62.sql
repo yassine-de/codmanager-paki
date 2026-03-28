@@ -1,0 +1,1 @@
+UPDATE public.products SET price = 110 WHERE id = 'b9dccb5b-ff36-4c36-99a5-456d9d89a16d' AND price = 0;
