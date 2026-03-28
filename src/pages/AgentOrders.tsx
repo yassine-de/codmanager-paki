@@ -966,14 +966,24 @@ const AgentOrders = () => {
                 );
               })}
 
-              {/* Offers Section */}
-              {currentOrder.offers && currentOrder.offers.trim() && (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-1">
-                  <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-600 flex items-center gap-1">
-                    <Tag className="h-3 w-3" /> Offers / Promotions
-                  </p>
-                  <p className="text-sm text-foreground font-medium">{currentOrder.offers}</p>
-                </div>
+              {/* Offers Section — order-level or historical fallback */}
+              {(() => {
+                const effectiveOffers = (currentOrder.offers && currentOrder.offers.trim())
+                  ? currentOrder.offers.trim()
+                  : historicalOffers;
+                if (!effectiveOffers) return null;
+                return (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-1">
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-600 flex items-center gap-1">
+                      <Tag className="h-3 w-3" /> Offers / Promotions
+                      {!(currentOrder.offers && currentOrder.offers.trim()) && (
+                        <span className="text-[9px] font-normal text-muted-foreground ml-1">(from previous order)</span>
+                      )}
+                    </p>
+                    <p className="text-sm text-foreground font-medium">{effectiveOffers}</p>
+                  </div>
+                );
+              })()}
               )}
 
               {/* Add Item Button */}
