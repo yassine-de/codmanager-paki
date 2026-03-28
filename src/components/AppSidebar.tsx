@@ -20,13 +20,13 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number) => [
+const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number) => [
   { title: "dashboard", url: "/", icon: LayoutDashboard },
   { title: "orders", url: "/orders", icon: ShoppingCart, badge: orderCount, permission: "access_to_orders", sellerVisible: true },
   { title: "products", url: "/products", icon: BoxIcon, permission: "access_to_products", sellerVisible: true, badge: productUnseen > 0 ? productUnseen : undefined },
   { title: "confirmations", url: "/confirmations", icon: Package, permission: "access_to_confirmations" },
   { title: "sourcing", url: "/sourcing", icon: Package2, permission: "access_to_sourcing", badge: adminSourcingUnseen > 0 ? adminSourcingUnseen : undefined },
-  { title: "Support", url: "/support", icon: MessageSquare, permission: "access_to_settings" },
+  { title: "Support", url: "/support", icon: MessageSquare, permission: "access_to_settings", badge: supportUnread > 0 ? supportUnread : undefined },
   { title: "invoices", url: "/invoices", icon: FileText, permission: "access_to_settings", sellerVisible: true },
   { title: "sourcing", url: "/seller-sourcing", icon: Package2, sellerOnly: true, badge: sourcingUnseen > 0 ? sourcingUnseen : undefined },
   { title: "sheets", url: "/sheets", icon: FileSpreadsheet, sellerOnly: true },
@@ -118,7 +118,23 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
-  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen);
+  // Fetch unread support messages for admin (seller messages not read)
+  const { data: supportUnread = 0 } = useQuery({
+    queryKey: ["admin-support-unread"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("support_messages")
+        .select("*", { count: "exact", head: true })
+        .eq("sender_type", "seller")
+        .is("read_at", null);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: isAdmin && !!authUser,
+    refetchInterval: 10000,
+  });
+
+  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread);
 
   const visibleItems = navItems.filter((item: any) => {
     if (item.agentOnly) return isAgent;
