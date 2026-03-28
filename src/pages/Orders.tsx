@@ -567,6 +567,52 @@ export default function Orders() {
       {/* Table Card */}
       <div className="bg-card rounded-lg border animate-slide-up" style={{ animationDelay: '100ms' }}>
         {/* Table toolbar */}
+        {/* Bulk Action Bar */}
+        {isAdmin && selectedOrders.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-primary/5">
+            <span className="text-sm font-medium">{selectedOrders.size} selected</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="h-8 gap-1.5 text-xs">
+                  Bulk Actions <ChevronDown className="w-3.5 h-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuItem onClick={handleDownloadCSV} className="gap-2 text-xs">
+                  <Download className="w-3.5 h-3.5" /> Download CSV
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="gap-2 text-xs">
+                    <RefreshCw className="w-3.5 h-3.5" /> Change Confirmation Status
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {Object.entries(confirmationConfig).map(([key, cfg]) => (
+                      <DropdownMenuItem key={key} onClick={() => handleBulkStatusChange("confirmation_status", key)} className="text-xs">
+                        {cfg.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className="gap-2 text-xs">
+                    <RefreshCw className="w-3.5 h-3.5" /> Change Delivery Status
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {Object.entries(deliveryConfig).map(([key, cfg]) => (
+                      <DropdownMenuItem key={key} onClick={() => handleBulkStatusChange("delivery_status", key)} className="text-xs">
+                        {cfg.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setSelectedOrders(new Set())}>
+              Clear selection
+            </Button>
+          </div>
+        )}
         <div className="flex items-center justify-between px-4 py-2.5 border-b">
           <div className="flex items-center gap-3">
             <p className="text-sm font-medium">
