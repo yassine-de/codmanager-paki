@@ -6,7 +6,7 @@ import {
   Clock, Store, Award, Loader2,
 } from "lucide-react";
 import {
-  AreaChart, Area, XAxis, YAxis,
+  AreaChart, Area, XAxis, YAxis, LabelList,
   Tooltip as RechartsTooltip, ResponsiveContainer,
 } from "recharts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -159,8 +159,10 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
             labelFormatter={(l) => `${l}`}
           />
           <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2}
-            fill={`url(#${gradientId})`} dot={false}
-            activeDot={{ r: 3.5, strokeWidth: 2, stroke: "#fff", fill: color }} />
+            fill={`url(#${gradientId})`} dot={{ r: 2, fill: color, strokeWidth: 0 }}
+            activeDot={{ r: 3.5, strokeWidth: 2, stroke: "#fff", fill: color }}>
+            <LabelList dataKey={dataKey} position="top" fontSize={10} fontWeight={700} fill="hsl(var(--foreground))" offset={8} />
+          </Area>
         </AreaChart>
       </ResponsiveContainer>
     </div>
