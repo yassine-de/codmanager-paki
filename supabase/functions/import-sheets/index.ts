@@ -6,32 +6,75 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-interface SheetRow {
-  order_id: string;
-  customer_name: string;
-  phone: string;
-  address: string;
-  city: string;
-  product_name: string;
-  sku: string;
-  quantity: number;
-  unit_price: number;
-  total_amount: number;
+// ── Phone number helpers ──
+
+/** Returns true if phone contains any letter */
+function hasLetters(phone: string): boolean {
+  return /[a-zA-Z]/.test(phone);
 }
 
-// Parse the Google Sheet URL to extract the spreadsheet ID
+/** Strip spaces, dashes, dots, parentheses */
+function cleanPhone(raw: string): string {
+  return raw.replace(/[\s\-\.\(\)]/g, "");
+}
+
+/**
+ * Normalize phone to +92XXXXXXXXXX format.
+ * Returns { valid: true, phone } or { valid: false, reason }.
+ */
+function normalizePhone(raw: string): { valid: true; phone: string } | { valid: false; reason: string } {
+  if (!raw || !raw.trim()) {
+    return { valid: false, reason: "Phone number is empty" };
+  }
+
+  // Check for letters first
+  if (hasLetters(raw)) {
+    return { valid: false, reason: `Phone "${raw}" contains letters` };
+  }
+
+  let phone = cleanPhone(raw);
+
+  // Convert 0092... → +92...
+  if (phone.startsWith("0092")) {
+    phone = "+92" + phone.slice(4);
+  }
+  // Convert 92... (without +) → +92...
+  else if (phone.startsWith("92") && !phone.startsWith("+")) {
+    phone = "+" + phone;
+  }
+  // No country code — prepend +92
+  else if (phone.startsWith("0")) {
+    phone = "+92" + phone.slice(1);
+  }
+  // Already has +92
+  else if (phone.startsWith("+92")) {
+    // keep as-is
+  }
+  // Just digits without any prefix (e.g. 3001234567)
+  else if (/^\d+$/.test(phone)) {
+    phone = "+92" + phone;
+  }
+
+  // Validate length: +92 + 10 digits = 13 chars
+  const digitsOnly = phone.replace(/\D/g, "");
+  if (digitsOnly.length < 11 || digitsOnly.length > 13) {
+    return { valid: false, reason: `Phone "${raw}" has invalid length (${digitsOnly.length} digits after formatting to "${phone}")` };
+  }
+
+  return { valid: true, phone };
+}
+
+// ── Google Sheets helpers ──
+
 function extractSpreadsheetId(url: string): string | null {
   const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   return match ? match[1] : null;
 }
 
-// Get access token from service account JSON key
 async function getAccessToken(serviceAccountKey: string): Promise<string> {
   const sa = JSON.parse(serviceAccountKey);
-
   const header = btoa(JSON.stringify({ alg: "RS256", typ: "JWT" }))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-
   const now = Math.floor(Date.now() / 1000);
   const claimSet = btoa(JSON.stringify({
     iss: sa.client_email,
@@ -40,72 +83,48 @@ async function getAccessToken(serviceAccountKey: string): Promise<string> {
     exp: now + 3600,
     iat: now,
   })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-
   const signInput = `${header}.${claimSet}`;
-
-  // Import the private key
   const pemContent = sa.private_key
     .replace(/-----BEGIN PRIVATE KEY-----/, "")
     .replace(/-----END PRIVATE KEY-----/, "")
     .replace(/\n/g, "");
   const binaryKey = Uint8Array.from(atob(pemContent), (c) => c.charCodeAt(0));
-
   const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8",
-    binaryKey,
+    "pkcs8", binaryKey,
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"]
+    false, ["sign"]
   );
-
   const signatureBuffer = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    cryptoKey,
-    new TextEncoder().encode(signInput)
+    "RSASSA-PKCS1-v1_5", cryptoKey, new TextEncoder().encode(signInput)
   );
-
   const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-
   const jwt = `${signInput}.${signature}`;
-
   const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
   });
-
   const tokenData = await tokenResp.json();
-  if (!tokenResp.ok) {
-    throw new Error(`Google auth failed: ${JSON.stringify(tokenData)}`);
-  }
+  if (!tokenResp.ok) throw new Error(`Google auth failed: ${JSON.stringify(tokenData)}`);
   return tokenData.access_token;
 }
 
-// Fetch rows from the sheet starting at a specific row
 async function fetchSheetRows(
-  accessToken: string,
-  spreadsheetId: string,
-  sheetName: string,
-  startRow: number
+  accessToken: string, spreadsheetId: string, sheetName: string, startRow: number
 ): Promise<string[][]> {
-  // Fetch from startRow onwards (A{startRow}:J to get 10 columns)
-  // Wrap sheet name in single quotes for the Sheets API
   const range = encodeURIComponent(`'${sheetName}'!A${startRow}:J`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`;
-
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!resp.ok) {
     const body = await resp.text();
     throw new Error(`Sheets API error [${resp.status}]: ${body}`);
   }
-
   const data = await resp.json();
   return data.values || [];
 }
+
+// ── Main handler ──
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -125,15 +144,10 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
-
-    // Get access token
     const accessToken = await getAccessToken(googleKey);
 
-    // Fetch all active sheets
     const { data: sheets, error: sheetsError } = await supabase
-      .from("integration_sheets")
-      .select("*")
-      .eq("active", true);
+      .from("integration_sheets").select("*").eq("active", true);
 
     if (sheetsError) throw sheetsError;
     if (!sheets || sheets.length === 0) {
@@ -143,7 +157,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch all existing SKUs with their seller mapping
     const { data: allProducts } = await supabase
       .from("products")
       .select("sku, seller_id, name, price, weight, product_url, video_url");
@@ -161,7 +174,7 @@ Deno.serve(async (req) => {
       }
 
       const sheetName = sheet.sheet_name || "Sheet1";
-      const startRow = (sheet.last_imported_row || 1) + 1; // +1 to skip header or last imported
+      const startRow = (sheet.last_imported_row || 1) + 1;
 
       let rows: string[][];
       try {
@@ -172,9 +185,7 @@ Deno.serve(async (req) => {
       }
 
       if (rows.length === 0) {
-        // Update last_check even if no new rows
-        await supabase
-          .from("integration_sheets")
+        await supabase.from("integration_sheets")
           .update({ last_check: new Date().toISOString() })
           .eq("id", sheet.id);
         results[sheet.id] = { imported: 0, errors: 0, skipped: 0 };
@@ -187,19 +198,14 @@ Deno.serve(async (req) => {
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        // Expected: Order ID, Customer Name, Phone Number, Address, City, Product Name, SKU, Quantity, Unit Price, Total Amount
-        if (!row || row.length < 7) {
-          skipped++;
-          continue;
-        }
+        if (!row || row.length < 7) { skipped++; continue; }
 
         const [orderId, customerName, phone, address, city, productName, sku, qtyStr, priceStr, totalStr] = row;
 
-        // Skip empty rows
-        if (!sku || !customerName || !phone) {
-          skipped++;
-          continue;
-        }
+        if (!sku || !customerName || !phone) { skipped++; continue; }
+
+        // ── Phone validation & formatting ──
+        const phoneResult = normalizePhone(phone);
 
         const orderData = {
           order_id: orderId || "",
@@ -214,10 +220,21 @@ Deno.serve(async (req) => {
           total_amount: parseFloat(totalStr) || 0,
         };
 
+        if (!phoneResult.valid) {
+          await supabase.from("integration_errors").insert({
+            sheet_id: sheet.id,
+            order_data: orderData as any,
+            error_message: phoneResult.reason,
+          });
+          errorsCount++;
+          continue;
+        }
+
+        const normalizedPhone = phoneResult.phone;
+
         // Check SKU exists and belongs to this seller
         const product = skuMap.get(sku.toLowerCase());
         if (!product || product.seller_id !== sheet.seller_id) {
-          // Log error: SKU not found
           await supabase.from("integration_errors").insert({
             sheet_id: sheet.id,
             order_data: orderData as any,
@@ -229,15 +246,14 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Duplicate check: same phone + same product_name + same day
+        // Duplicate check
         const today = new Date();
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
         const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
 
         const { data: existing } = await supabase
-          .from("orders")
-          .select("id")
-          .eq("customer_phone", phone)
+          .from("orders").select("id")
+          .eq("customer_phone", normalizedPhone)
           .eq("product_name", product.name)
           .eq("seller_id", sheet.seller_id)
           .gte("created_at", startOfDay)
@@ -245,27 +261,24 @@ Deno.serve(async (req) => {
           .limit(1);
 
         if (existing && existing.length > 0) {
-          // Log as duplicate error
           await supabase.from("integration_errors").insert({
             sheet_id: sheet.id,
             order_data: orderData as any,
-            error_message: `Duplicate: same phone "${phone}" + product "${product.name}" already exists today`,
+            error_message: `Duplicate: same phone "${normalizedPhone}" + product "${product.name}" already exists today`,
           });
           errorsCount++;
           continue;
         }
 
-        // Generate order ID
         const { data: generatedId } = await supabase.rpc("generate_order_id", {
           p_seller_id: sheet.seller_id,
         });
 
-        // Insert order
         const { error: insertError } = await supabase.from("orders").insert({
           order_id: generatedId || orderData.order_id,
           seller_id: sheet.seller_id,
           customer_name: orderData.customer_name,
-          customer_phone: orderData.phone,
+          customer_phone: normalizedPhone,
           customer_address: orderData.address,
           customer_city: orderData.city,
           product_name: product.name,
@@ -291,10 +304,8 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Update sheet: last_imported_row, orders_count, errors_count, last_check
       const newLastRow = startRow + rows.length - 1;
-      await supabase
-        .from("integration_sheets")
+      await supabase.from("integration_sheets")
         .update({
           last_imported_row: newLastRow,
           last_check: new Date().toISOString(),

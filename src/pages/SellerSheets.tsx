@@ -194,8 +194,13 @@ export default function SellerSheets() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-1.5">
-            <Download className="w-3.5 h-3.5" />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => window.open("https://docs.google.com/spreadsheets/d/1aPJaen4DFC1gxtoNBFFFKKV0dtUF0hy3RvWWEbO7zSQ/edit?usp=sharing", "_blank")}
+          >
+            <ArrowUpRight className="w-3.5 h-3.5" />
             Template
           </Button>
           <Button size="sm" onClick={() => setLinkOpen(true)} className="gap-1.5">
