@@ -845,8 +845,8 @@ const AgentOrders = () => {
               {activeItems.map((op, i) => {
                 // Look up product_url from seller's products table
                 const matchedProduct = sellerProducts.find(p => p.name === op.name);
-                const productStoreUrl = matchedProduct?.product_url || currentOrder.store_url;
-                const productVideoUrl = matchedProduct?.video_url || currentOrder.video_url;
+                const productStoreUrl = currentOrder.product_url || matchedProduct?.product_url || currentOrder.store_url;
+                const productVideoUrl = currentOrder.video_url || matchedProduct?.video_url;
 
                 return (
                   <div key={i} className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-2">
