@@ -490,8 +490,8 @@ const AgentConfirmedOrders = () => {
               {/* Store & Video Links from Product */}
               {(() => {
                 const mp = sellerProducts.find(p => p.name === editForm.product_name);
-                const storeUrl = mp?.product_url || editOrder?.store_url;
-                const videoUrl = mp?.video_url || editOrder?.video_url;
+                const storeUrl = editOrder?.product_url || mp?.product_url || editOrder?.store_url;
+                const videoUrl = editOrder?.video_url || mp?.video_url;
                 return (
                   <div className="flex flex-wrap gap-2">
                     {storeUrl ? (
