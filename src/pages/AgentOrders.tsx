@@ -148,16 +148,15 @@ const AgentOrders = () => {
     // Heartbeat every 30s
     heartbeatRef.current = setInterval(touchLock, 30_000);
 
-    // Page visibility
+    // On visibility change: just pause/resume heartbeat, DON'T release
+    // The 2-min backend timeout is the safety net for truly abandoned orders
     const handleVisibility = () => {
-      if (document.hidden) {
-        releaseLock();
-      } else {
-        touchLock();
+      if (!document.hidden) {
+        touchLock(); // Resume heartbeat when tab regains focus
       }
     };
 
-    // Page unload
+    // Page unload — best effort release
     const handleBeforeUnload = () => {
       releaseLock();
     };
@@ -169,7 +168,7 @@ const AgentOrders = () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      // Release on unmount (navigating away)
+      // Release on unmount (navigating away within the app)
       releaseLock();
     };
   }, [started, authUser?.id]);
