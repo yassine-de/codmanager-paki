@@ -327,7 +327,7 @@ export default function Products() {
                         className={`border-b last:border-b-0 transition-colors ${isMissingLinks ? "bg-destructive/5 hover:bg-destructive/10" : "hover:bg-muted/30"}`}
                         title={isMissingLinks ? "Missing required links (Product Link / Video Link)" : undefined}
                       >
-                        <td className="py-2 px-4 font-mono text-xs text-muted-foreground">{product.id}</td>
+                        <td className="py-2 px-4 font-mono text-xs text-muted-foreground">{product.displayId || product.id.slice(0, 8)}</td>
                         <td className="py-2 px-3">
                           {product.image ? (
                             <img
