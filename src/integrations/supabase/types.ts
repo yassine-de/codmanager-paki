@@ -501,6 +501,7 @@ export type Database = {
           landed_price: number | null
           last_price: number | null
           name: string
+          offers: Json | null
           price: number
           product_url: string | null
           quantity: number
@@ -520,6 +521,7 @@ export type Database = {
           landed_price?: number | null
           last_price?: number | null
           name: string
+          offers?: Json | null
           price?: number
           product_url?: string | null
           quantity?: number
@@ -539,6 +541,7 @@ export type Database = {
           landed_price?: number | null
           last_price?: number | null
           name?: string
+          offers?: Json | null
           price?: number
           product_url?: string | null
           quantity?: number
