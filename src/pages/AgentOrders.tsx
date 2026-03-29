@@ -152,7 +152,7 @@ const AgentOrders = () => {
     heartbeatRef.current = setInterval(touchLock, 30_000);
 
     // On visibility change: just pause/resume heartbeat, DON'T release
-    // The 2-min backend timeout is the safety net for truly abandoned orders
+    // The 5-min backend timeout is the safety net for truly abandoned orders
     const handleVisibility = () => {
       if (!document.hidden) {
         touchLock(); // Resume heartbeat when tab regains focus
