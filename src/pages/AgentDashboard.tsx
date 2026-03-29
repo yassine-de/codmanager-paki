@@ -70,6 +70,9 @@ const AgentDashboard = () => {
     const postponed = filteredOrders.filter((o) => o.confirmation_status === "postponed").length;
     const noAnswer = filteredOrders.filter((o) => o.confirmation_status === "no_answer").length;
     const cancelled = filteredOrders.filter((o) => o.confirmation_status === "cancelled").length;
+    const doubleOrders = filteredOrders.filter((o) => o.confirmation_status === "double").length;
+    const wrongNumber = filteredOrders.filter((o) => o.confirmation_status === "wrong_number").length;
+    const other = doubleOrders + wrongNumber;
     return {
       total,
       confirmed,
@@ -80,6 +83,7 @@ const AgentDashboard = () => {
       noAnswerPct: total ? Math.round((noAnswer / total) * 100) : 0,
       cancelled,
       cancelledPct: total ? Math.round((cancelled / total) * 100) : 0,
+      other,
     };
   }, [filteredOrders]);
 
