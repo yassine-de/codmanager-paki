@@ -533,10 +533,10 @@ const AgentOrders = () => {
     // Fetch seller's products for add-item and product_url lookup
     supabase
       .from("products")
-      .select("id, name, price, product_url, video_url")
+      .select("id, name, price, last_price, product_url, video_url")
       .eq("seller_id", order.seller_id)
       .then(({ data }) => {
-        setSellerProducts((data || []).map(p => ({ ...p, price: Number(p.price) })));
+        setSellerProducts((data || []).map(p => ({ ...p, price: Number(p.price), last_price: Number((p as any).last_price || 0) })));
       });
 
     // Fetch historical offers & last_price from previous confirmed orders of same product
