@@ -793,6 +793,14 @@ const AgentOrders = () => {
         <span className="text-xs">{Math.round(((currentIndex + 1) / orderQueue.length) * 100)}%</span>
       </div>
 
+      {/* ⚠️ Taking too long warning */}
+      {orderElapsedSec >= ORDER_WARNING_SEC && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm font-medium text-destructive animate-pulse">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          ⚠️ You are taking too long on this order ({Math.floor(orderElapsedSec / 60)}:{String(orderElapsedSec % 60).padStart(2, '0')})
+        </div>
+      )}
+
       {/* Context badges */}
       <div className="flex flex-wrap gap-2">
         {currentOrder._isFollowUp && (
