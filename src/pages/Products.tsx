@@ -87,7 +87,7 @@ export default function Products() {
         storeLink: p.product_url || "",
         videoLink: p.video_url || "",
         lastSellingPrice: Number(p.price) || 0,
-        lastPrice: Number(p.landed_price) || 0,
+        lastPrice: Number((p as any).last_price) || 0,
         offers: [],
         weight: (p as any).weight || undefined,
       };

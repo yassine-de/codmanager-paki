@@ -57,13 +57,14 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
           name: name.trim(),
           price: lastSellingPrice,
           landed_price: price,
+          last_price: lastPrice,
           quantity: totalQty,
           weight: weight || null,
           product_url: storeLink.trim(),
           video_url: videoLink.trim(),
           image_url: image.trim(),
           updated_at: new Date().toISOString(),
-        })
+        } as any)
         .eq("id", product!.id);
       if (error) throw error;
     },
