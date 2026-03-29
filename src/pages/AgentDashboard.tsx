@@ -23,6 +23,8 @@ const COLORS = {
   postponed: "hsl(40, 80%, 50%)",
   noAnswer: "hsl(220, 60%, 55%)",
   cancelled: "hsl(0, 65%, 52%)",
+  wrongNumber: "hsl(280, 50%, 55%)",
+  double: "hsl(30, 70%, 50%)",
 };
 
 const AgentDashboard = () => {
