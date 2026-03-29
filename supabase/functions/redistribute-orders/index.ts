@@ -18,6 +18,9 @@ Deno.serve(async (req) => {
     const INACTIVE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without heartbeat = inactive
     const inactiveCutoff = new Date(Date.now() - INACTIVE_THRESHOLD_MS).toISOString();
 
+    // 0. Release expired order locks (2 min timeout on new orders)
+    await supabase.rpc("release_expired_order_locks");
+
     // 1. Find inactive agents (no heartbeat in last 10 min)
     const { data: inactivePresence } = await supabase
       .from("user_presence")
