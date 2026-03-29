@@ -199,7 +199,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       name: request.product_name,
       image_url: request.product_image_url || "",
       price: 0,
-      landed_price: landedPrice || 0,
+      landed_price: sellerPrice || 0,
       quantity: quantity,
       product_url: "",
       sourcing_request_id: request.id,
@@ -230,9 +230,9 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       seller_seen: false,
     };
 
-    // Update landed_price if set
-    if (landedPrice > 0) {
-      updateData.landed_price = landedPrice;
+    // Update landed_price (buying price) from seller_price
+    if (sellerPrice > 0) {
+      updateData.landed_price = sellerPrice;
     }
     if (productWeight) {
       updateData.weight = productWeight;
