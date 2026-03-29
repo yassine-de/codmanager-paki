@@ -512,6 +512,10 @@ const AgentOrders = () => {
     if (authUser && order.confirmation_status === "new") {
       supabase.rpc("touch_order_lock" as any, { p_order_id: order.id, p_agent_id: authUser.id });
     }
+    // Reset elapsed timer for new order
+    setOrderElapsedSec(0);
+    if (orderTimerRef.current) clearInterval(orderTimerRef.current);
+    orderTimerRef.current = setInterval(() => setOrderElapsedSec(s => s + 1), 1000);
     setEditItems([{ name: order.product_name, qty: order.quantity, price: Number(order.price) }]);
     setEditCustomer({
       name: order.customer_name,
