@@ -187,9 +187,15 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     if (skuError) throw skuError;
     const sku = skuData as string;
 
+    // Generate display_id
+    const { data: displayIdData, error: displayIdError } = await supabase.rpc("generate_product_display_id", { p_seller_id: request.seller_id });
+    if (displayIdError) throw displayIdError;
+    const displayId = displayIdData as string;
+
     const insertData: Record<string, unknown> = {
       seller_id: request.seller_id,
       sku,
+      display_id: displayId,
       name: request.product_name,
       image_url: request.product_image_url || "",
       price: 0,

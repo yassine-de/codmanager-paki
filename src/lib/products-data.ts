@@ -14,6 +14,7 @@ export interface ProductVariant {
 
 export interface Product {
   id: string;
+  displayId?: string;
   seller: string;
   sku: string;
   name: string;

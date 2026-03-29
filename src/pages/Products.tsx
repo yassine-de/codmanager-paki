@@ -73,6 +73,7 @@ export default function Products() {
         : [];
       return {
         id: p.id,
+        displayId: (p as any).display_id || undefined,
         seller: dbSellerNameMap[p.seller_id] || authUser?.name || "Unknown",
         sku: p.sku,
         name: p.name,
@@ -154,7 +155,8 @@ export default function Products() {
         return (
           p.name.toLowerCase().includes(s) ||
           p.sku.toLowerCase().includes(s) ||
-          p.id.toLowerCase().includes(s)
+          p.id.toLowerCase().includes(s) ||
+          (p.displayId && p.displayId.toLowerCase().includes(s))
         );
       }
       return true;
@@ -326,7 +328,7 @@ export default function Products() {
                         className={`border-b last:border-b-0 transition-colors ${isMissingLinks ? "bg-destructive/5 hover:bg-destructive/10" : "hover:bg-muted/30"}`}
                         title={isMissingLinks ? "Missing required links (Product Link / Video Link)" : undefined}
                       >
-                        <td className="py-2 px-4 font-mono text-xs text-muted-foreground">{product.id}</td>
+                        <td className="py-2 px-4 font-mono text-xs text-muted-foreground">{product.displayId || product.id.slice(0, 8)}</td>
                         <td className="py-2 px-3">
                           {product.image ? (
                             <img
@@ -452,7 +454,7 @@ export default function Products() {
                       <div className="flex items-start justify-between">
                         <div>
                           <p className="text-sm font-medium truncate">{product.name}</p>
-                          <p className="text-xs text-muted-foreground">{product.seller} · {product.sku}</p>
+                          <p className="text-xs text-muted-foreground">{product.displayId ? `${product.displayId} · ` : ''}{product.seller} · {product.sku}</p>
                         </div>
                         <Button
                           size="icon"

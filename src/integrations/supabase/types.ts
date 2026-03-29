@@ -496,6 +496,7 @@ export type Database = {
       products: {
         Row: {
           created_at: string
+          display_id: string | null
           id: string
           image_url: string | null
           landed_price: number | null
@@ -516,6 +517,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          display_id?: string | null
           id?: string
           image_url?: string | null
           landed_price?: number | null
@@ -536,6 +538,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          display_id?: string | null
           id?: string
           image_url?: string | null
           landed_price?: number | null
@@ -702,6 +705,24 @@ export type Database = {
           method?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      seller_product_counters: {
+        Row: {
+          current_counter: number
+          id: string
+          seller_id: string
+        }
+        Insert: {
+          current_counter?: number
+          id?: string
+          seller_id: string
+        }
+        Update: {
+          current_counter?: number
+          id?: string
+          seller_id?: string
         }
         Relationships: []
       }
@@ -1021,6 +1042,10 @@ export type Database = {
         }
       }
       generate_order_id: { Args: { p_seller_id: string }; Returns: string }
+      generate_product_display_id: {
+        Args: { p_seller_id: string }
+        Returns: string
+      }
       generate_product_sku: { Args: never; Returns: string }
       get_agent_rankings: {
         Args: never
