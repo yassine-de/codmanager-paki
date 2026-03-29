@@ -533,7 +533,7 @@ const AgentOrders = () => {
     // Fetch seller's products for add-item and product_url lookup
     supabase
       .from("products")
-      .select("id, name, price, last_price, offers, product_url, video_url")
+      .select("id, name, price, last_price, offers, product_url, video_url, display_id")
       .eq("seller_id", order.seller_id)
       .then(({ data }) => {
         setSellerProducts((data || []).map(p => ({ ...p, price: Number(p.price), last_price: Number((p as any).last_price || 0), offers: (p as any).offers || [] })));
