@@ -273,8 +273,13 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
 
   const handleCreate = () => {
     if (!validate()) return;
-    // Show auto-validate confirmation
-    setShowValidateConfirm(true);
+    // Only show auto-validate for existing products (restock)
+    if (productType === "existing") {
+      setShowValidateConfirm(true);
+    } else {
+      // New products go directly as waiting_quote
+      createMutation.mutate(false);
+    }
   };
 
   const handleConfirmCreate = (autoValidate: boolean) => {
