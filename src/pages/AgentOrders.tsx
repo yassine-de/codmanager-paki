@@ -989,11 +989,14 @@ const AgentOrders = () => {
                           </div>
                         )}
 
-                        {/* Last Selling Price — order-level or historical fallback */}
+                        {/* Last Selling Price — product table price > order last_price > historical fallback */}
                         {(() => {
-                          const effectiveLastPrice = (currentOrder.last_price != null && Number(currentOrder.last_price) > 0)
-                            ? Number(currentOrder.last_price)
-                            : historicalLastPrice;
+                          const productPrice = matchedProduct?.price;
+                          const effectiveLastPrice = (productPrice != null && productPrice > 0)
+                            ? productPrice
+                            : (currentOrder.last_price != null && Number(currentOrder.last_price) > 0)
+                              ? Number(currentOrder.last_price)
+                              : historicalLastPrice;
                           if (!effectiveLastPrice || effectiveLastPrice <= 0) return null;
                           return (
                             <div className="rounded-md bg-accent/60 border border-accent px-2.5 py-1.5 flex items-center gap-2">
