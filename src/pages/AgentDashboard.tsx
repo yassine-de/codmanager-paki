@@ -41,7 +41,7 @@ const AgentDashboard = () => {
       if (!userId) return [];
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, product_name, price, quantity, total_amount, confirmed_at, created_at")
+        .select("id, order_id, confirmation_status, delivery_status, product_name, price, quantity, total_amount, confirmed_at, created_at, updated_at")
         .eq("agent_id", userId)
         .neq("confirmation_status", "new");
       if (error) throw error;
