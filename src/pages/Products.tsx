@@ -88,7 +88,7 @@ export default function Products() {
         videoLink: p.video_url || "",
         lastSellingPrice: Number(p.price) || 0,
         lastPrice: Number((p as any).last_price) || 0,
-        offers: [],
+        offers: ((p as any).offers || []).map((o: any, idx: number) => ({ id: `OFF-${idx}`, quantity: o.quantity || 1, price: o.price || 0 })),
         weight: (p as any).weight || undefined,
       };
     });
