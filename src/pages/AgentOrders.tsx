@@ -140,14 +140,19 @@ const AgentOrders = () => {
     const releaseLock = () => {
       const order = currentOrderRef.current;
       if (order && order.confirmation_status === "new") {
-        // Use sendBeacon for reliability on page close
+        // Use fetch with keepalive for reliability on page close
         const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/release_order_lock`;
-        const body = JSON.stringify({ p_order_id: order.id, p_agent_id: authUser.id });
-        const sent = navigator.sendBeacon?.(url, new Blob([body], { type: "application/json" }));
-        if (!sent) {
-          // Fallback
-          supabase.rpc("release_order_lock", { p_order_id: order.id, p_agent_id: authUser.id });
-        }
+        const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        fetch(url, {
+          method: "POST",
+          keepalive: true,
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": anonKey,
+            "Authorization": `Bearer ${anonKey}`,
+          },
+          body: JSON.stringify({ p_order_id: order.id, p_agent_id: authUser.id }),
+        }).catch(() => {});
       }
     };
 
