@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -115,7 +115,64 @@ const AgentOrders = () => {
   // Track new/retry assignment count for balanced distribution
   const [newAssignedCount, setNewAssignedCount] = useState(0);
 
+  // ─── LEASE HEARTBEAT & AUTO-RELEASE ───
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const currentOrderRef = useRef<DbOrder | null>(null);
+
   const currentOrder = orderQueue[currentIndex];
+
+  // Keep ref in sync for use in event handlers
+  useEffect(() => {
+    currentOrderRef.current = currentOrder || null;
+  }, [currentOrder]);
+
+  // Touch order lock heartbeat (every 30s) + page leave detection
+  useEffect(() => {
+    if (!started || !authUser) return;
+
+    const touchLock = () => {
+      const order = currentOrderRef.current;
+      if (order && order.confirmation_status === "new") {
+        supabase.rpc("touch_order_lock", { p_order_id: order.id, p_agent_id: authUser.id });
+      }
+    };
+
+    const releaseLock = () => {
+      const order = currentOrderRef.current;
+      if (order && order.confirmation_status === "new") {
+        // Best effort: use supabase RPC (works for navigation away / unmount)
+        supabase.rpc("release_order_lock" as any, { p_order_id: order.id, p_agent_id: authUser.id }).then();
+      }
+    };
+
+    // Heartbeat every 30s
+    heartbeatRef.current = setInterval(touchLock, 30_000);
+
+    // Page visibility
+    const handleVisibility = () => {
+      if (document.hidden) {
+        releaseLock();
+      } else {
+        touchLock();
+      }
+    };
+
+    // Page unload
+    const handleBeforeUnload = () => {
+      releaseLock();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // Release on unmount (navigating away)
+      releaseLock();
+    };
+  }, [started, authUser?.id]);
 
   const activeItems = editItems.length > 0 ? editItems : currentOrder
     ? [{ name: currentOrder.product_name, qty: currentOrder.quantity, price: Number(currentOrder.price) }]
@@ -411,7 +468,11 @@ const AgentOrders = () => {
       else if (order.confirmation_status === "no_answer") orderType = "no_answer";
 
       // Try to claim this specific order first (optimistic)
-      const updatePayload: Record<string, any> = { agent_id: authUser.id };
+      const updatePayload: Record<string, any> = {
+        agent_id: authUser.id,
+        assigned_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+      };
       const { data, error } = await supabase
         .from("orders")
         .update(updatePayload as any)
@@ -445,6 +506,10 @@ const AgentOrders = () => {
   };
 
   const initOrderState = (order: DbOrder) => {
+    // Touch the lease heartbeat on init
+    if (authUser && order.confirmation_status === "new") {
+      supabase.rpc("touch_order_lock" as any, { p_order_id: order.id, p_agent_id: authUser.id });
+    }
     setEditItems([{ name: order.product_name, qty: order.quantity, price: Number(order.price) }]);
     setEditCustomer({
       name: order.customer_name,

@@ -347,6 +347,7 @@ export type Database = {
       orders: {
         Row: {
           agent_id: string | null
+          assigned_at: string | null
           attempt_count: number
           cancel_reason: string | null
           confirmation_status: string
@@ -361,6 +362,7 @@ export type Database = {
           fragile: boolean | null
           id: string
           invoice_id: string | null
+          last_activity_at: string | null
           last_price: number | null
           note: string | null
           offers: string | null
@@ -384,6 +386,7 @@ export type Database = {
         }
         Insert: {
           agent_id?: string | null
+          assigned_at?: string | null
           attempt_count?: number
           cancel_reason?: string | null
           confirmation_status?: string
@@ -398,6 +401,7 @@ export type Database = {
           fragile?: boolean | null
           id?: string
           invoice_id?: string | null
+          last_activity_at?: string | null
           last_price?: number | null
           note?: string | null
           offers?: string | null
@@ -421,6 +425,7 @@ export type Database = {
         }
         Update: {
           agent_id?: string | null
+          assigned_at?: string | null
           attempt_count?: number
           cancel_reason?: string | null
           confirmation_status?: string
@@ -435,6 +440,7 @@ export type Database = {
           fragile?: boolean | null
           id?: string
           invoice_id?: string | null
+          last_activity_at?: string | null
           last_price?: number | null
           note?: string | null
           offers?: string | null
@@ -964,6 +970,7 @@ export type Database = {
         }
         Returns: {
           agent_id: string | null
+          assigned_at: string | null
           attempt_count: number
           cancel_reason: string | null
           confirmation_status: string
@@ -978,6 +985,7 @@ export type Database = {
           fragile: boolean | null
           id: string
           invoice_id: string | null
+          last_activity_at: string | null
           last_price: number | null
           note: string | null
           offers: string | null
@@ -1029,6 +1037,15 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      release_expired_order_locks: { Args: never; Returns: undefined }
+      release_order_lock: {
+        Args: { p_agent_id: string; p_order_id: string }
+        Returns: undefined
+      }
+      touch_order_lock: {
+        Args: { p_agent_id: string; p_order_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "seller" | "agent" | "custom"
