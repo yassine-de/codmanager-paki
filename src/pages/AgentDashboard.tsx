@@ -23,6 +23,8 @@ const COLORS = {
   postponed: "hsl(40, 80%, 50%)",
   noAnswer: "hsl(220, 60%, 55%)",
   cancelled: "hsl(0, 65%, 52%)",
+  wrongNumber: "hsl(280, 50%, 55%)",
+  double: "hsl(30, 70%, 50%)",
 };
 
 const AgentDashboard = () => {
@@ -93,7 +95,8 @@ const AgentDashboard = () => {
     { name: "Postponed", value: stats.postponed, color: COLORS.postponed },
     { name: "No Answer", value: stats.noAnswer, color: COLORS.noAnswer },
     { name: "Cancelled", value: stats.cancelled, color: COLORS.cancelled },
-  ];
+    ...(stats.other > 0 ? [{ name: "Wrong №/Double", value: stats.other, color: COLORS.wrongNumber }] : []),
+  ].filter(d => d.value > 0);
 
   // Agent ranking (real data)
   const { data: rankingData = [] } = useQuery({
