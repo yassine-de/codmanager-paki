@@ -78,7 +78,7 @@ export default function Products() {
         sku: p.sku,
         name: p.name,
         image: p.image_url || "",
-        price: Number(p.price) || 0,
+        price: Number((p as any).landed_price) || 0,
         totalQty: p.quantity || 0,
         delivered: 0,
         shipped: 0,
