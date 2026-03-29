@@ -198,7 +198,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
         <DialogHeader className="px-5 pt-5 pb-3 border-b">
           <DialogTitle className="text-base font-semibold">
             Edit Product
-            <span className="ml-2 text-xs font-normal text-muted-foreground">{product.id}</span>
+            {product.displayId && <span className="ml-2 text-xs font-normal text-muted-foreground">{product.displayId}</span>}
           </DialogTitle>
         </DialogHeader>
 
