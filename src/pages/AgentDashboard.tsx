@@ -95,7 +95,8 @@ const AgentDashboard = () => {
     { name: "Postponed", value: stats.postponed, color: COLORS.postponed },
     { name: "No Answer", value: stats.noAnswer, color: COLORS.noAnswer },
     { name: "Cancelled", value: stats.cancelled, color: COLORS.cancelled },
-  ];
+    ...(stats.other > 0 ? [{ name: "Wrong №/Double", value: stats.other, color: COLORS.wrongNumber }] : []),
+  ].filter(d => d.value > 0);
 
   // Agent ranking (real data)
   const { data: rankingData = [] } = useQuery({
