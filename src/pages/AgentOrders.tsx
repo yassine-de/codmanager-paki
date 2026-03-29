@@ -169,6 +169,7 @@ const AgentOrders = () => {
 
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      if (orderTimerRef.current) clearInterval(orderTimerRef.current);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("beforeunload", handleBeforeUnload);
       // Release on unmount (navigating away within the app)
