@@ -58,6 +58,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
           price: lastSellingPrice,
           landed_price: price,
           last_price: lastPrice,
+          offers: offers.map(o => ({ quantity: o.quantity, price: o.price })),
           quantity: totalQty,
           weight: weight || null,
           product_url: storeLink.trim(),
