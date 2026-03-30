@@ -261,6 +261,9 @@ export default function Sourcing() {
                         </div>
                       )}
                     </TableCell>
+                    <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                      {req.display_id || req.id.slice(0, 8)}
+                    </TableCell>
                     <TableCell className="text-muted-foreground whitespace-nowrap">
                       {format(new Date(req.created_at), "dd MMM yyyy")}
                     </TableCell>
