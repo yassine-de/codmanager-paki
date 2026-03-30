@@ -37,6 +37,7 @@ const validationConfig: Record<string, { label: string; color: string }> = {
 
 interface SourcingRequest {
   id: string;
+  display_id: string | null;
   product_name: string;
   quantity: number;
   destination_country: string;
