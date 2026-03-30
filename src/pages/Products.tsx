@@ -191,7 +191,7 @@ export default function Products() {
 
   useMemo(() => {
     setCurrentPage(1);
-  }, [search, appliedSeller, pageSize]);
+  }, [search, appliedSeller, appliedStatus, pageSize]);
 
   const handleCreate = (product: Product) => {
     setLocalProducts((prev) => [product, ...prev]);
