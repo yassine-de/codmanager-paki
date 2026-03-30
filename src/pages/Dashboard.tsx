@@ -68,6 +68,7 @@ function SectionKPI({
   title, value, percentage, percentLabel, icon: Icon, color, iconBg,
   highlight = false, prefix = "", suffix = "", change, delay = 0, onClick,
 }: SectionKPIProps) {
+  const { isDataVisible } = useDataVisibility();
   const isPositive = change !== undefined && change >= 0;
   return (
     <Tooltip>
