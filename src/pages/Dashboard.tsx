@@ -20,7 +20,7 @@ import { useDashboardData } from "@/hooks/useDashboardData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import OnlineStatusPanel from "@/components/OnlineStatusPanel";
-import { useDataVisibility } from "@/contexts/DataVisibilityContext";
+import { useDataVisibility, MaskedValue } from "@/contexts/DataVisibilityContext";
 
 /* ── Animated Number ── */
 function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
