@@ -41,6 +41,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { authUser, signOut } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const { language, setLanguage, t } = useLanguage();
+  const { isDataVisible, toggleDataVisibility } = useDataVisibility();
+  const { theme, toggleTheme } = useTheme();
   usePresenceHeartbeat();
   useGlobalAdminSupportNotifications();
 
