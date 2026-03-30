@@ -239,7 +239,7 @@ export default function Sourcing() {
           <TableBody>
             {paginated.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={15} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={16} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
