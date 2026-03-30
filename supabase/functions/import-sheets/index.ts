@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
 
     const { data: allProducts } = await supabase
       .from("products")
-      .select("sku, seller_id, name, price, weight, product_url, video_url");
+      .select("sku, seller_id, name, price, weight, product_url, video_url, active");
 
     const skuMap = new Map<string, typeof allProducts extends (infer T)[] ? T : never>();
     allProducts?.forEach((p) => skuMap.set(p.sku.toLowerCase(), p));
@@ -241,6 +241,17 @@ Deno.serve(async (req) => {
             error_message: product
               ? `SKU "${sku}" does not belong to this seller`
               : `SKU "${sku}" not found in system`,
+          });
+          errorsCount++;
+          continue;
+        }
+
+        // Check product is active (has product_url and video_url)
+        if (!product.active) {
+          await supabase.from("integration_errors").insert({
+            sheet_id: sheet.id,
+            order_data: orderData as any,
+            error_message: `Product "${product.name}" (SKU: ${sku}) is inactive — missing product link or video link`,
           });
           errorsCount++;
           continue;

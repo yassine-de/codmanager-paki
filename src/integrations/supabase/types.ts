@@ -495,6 +495,7 @@ export type Database = {
       }
       products: {
         Row: {
+          active: boolean
           created_at: string
           display_id: string | null
           id: string
@@ -516,6 +517,7 @@ export type Database = {
           weight: string | null
         }
         Insert: {
+          active?: boolean
           created_at?: string
           display_id?: string | null
           id?: string
@@ -537,6 +539,7 @@ export type Database = {
           weight?: string | null
         }
         Update: {
+          active?: boolean
           created_at?: string
           display_id?: string | null
           id?: string

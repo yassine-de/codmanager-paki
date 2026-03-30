@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import { mockProducts, productSellers, type Product } from "@/lib/products-data";
+import { mockProducts, type Product } from "@/lib/products-data";
 import { CreateProductModal } from "@/components/CreateProductModal";
 import { EditProductModal } from "@/components/EditProductModal";
 import { supabase } from "@/integrations/supabase/client";
@@ -91,6 +91,7 @@ export default function Products() {
         lastPrice: Number((p as any).last_price) || 0,
         offers: ((p as any).offers || []).map((o: any, idx: number) => ({ id: `OFF-${idx}`, quantity: o.quantity || 1, price: o.price || 0 })),
         weight: (p as any).weight || undefined,
+        active: (p as any).active ?? false,
       };
     });
     // Sellers only see DB products, admins see both
@@ -125,18 +126,31 @@ export default function Products() {
   // Filters
   const [filterSeller, setFilterSeller] = useState("all");
   const [appliedSeller, setAppliedSeller] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [appliedStatus, setAppliedStatus] = useState("all");
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // Build seller options from DB products (admin only)
+  const sellerOptions = useMemo(() => {
+    if (!isAdmin) return [];
+    const sellers = new Set<string>();
+    products.forEach(p => sellers.add(p.seller));
+    return [...sellers].sort().map(s => ({ value: s, label: s }));
+  }, [products, isAdmin]);
+
   const applyFilters = useCallback(() => {
     setAppliedSeller(filterSeller);
+    setAppliedStatus(filterStatus);
     setCurrentPage(1);
-  }, [filterSeller]);
+  }, [filterSeller, filterStatus]);
 
   const clearFilters = useCallback(() => {
     setFilterSeller("all");
     setAppliedSeller("all");
+    setFilterStatus("all");
+    setAppliedStatus("all");
     setSearch("");
     setCurrentPage(1);
   }, []);
@@ -144,12 +158,18 @@ export default function Products() {
   const activeFilterCount = useMemo(() => {
     let c = 0;
     if (appliedSeller !== "all") c++;
+    if (appliedStatus !== "all") c++;
     return c;
-  }, [appliedSeller]);
+  }, [appliedSeller, appliedStatus]);
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
       if (appliedSeller !== "all" && p.seller !== appliedSeller) return false;
+      if (appliedStatus !== "all") {
+        const isActive = !!(p as any).active;
+        if (appliedStatus === "active" && !isActive) return false;
+        if (appliedStatus === "inactive" && isActive) return false;
+      }
       if (search) {
         const s = search.toLowerCase();
         return (
@@ -161,7 +181,7 @@ export default function Products() {
       }
       return true;
     });
-  }, [products, appliedSeller, search]);
+  }, [products, appliedSeller, appliedStatus, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = useMemo(() => {
@@ -171,7 +191,7 @@ export default function Products() {
 
   useMemo(() => {
     setCurrentPage(1);
-  }, [search, appliedSeller, pageSize]);
+  }, [search, appliedSeller, appliedStatus, pageSize]);
 
   const handleCreate = (product: Product) => {
     setLocalProducts((prev) => [product, ...prev]);
@@ -227,16 +247,31 @@ export default function Products() {
         {showFilters && (
           <div className="bg-card rounded-lg border p-4 animate-fade-in">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {isAdmin && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Seller</label>
+                  <SearchableSelect
+                    value={filterSeller}
+                    onValueChange={setFilterSeller}
+                    options={sellerOptions}
+                    placeholder="Seller"
+                    allLabel="All Sellers"
+                    className="w-full"
+                  />
+                </div>
+              )}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Seller</label>
-                <SearchableSelect
-                  value={filterSeller}
-                  onValueChange={setFilterSeller}
-                  options={productSellers.map(s => ({ value: s, label: s }))}
-                  placeholder="Seller"
-                  allLabel="All Sellers"
-                  className="w-full"
-                />
+                <label className="text-xs font-medium text-muted-foreground">Status</label>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex items-end gap-2">
                 <Button size="sm" className="h-9 px-4" onClick={applyFilters}>
@@ -307,6 +342,7 @@ export default function Products() {
                       <th className="text-left py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Seller</th>
                       <th className="text-left py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">SKU</th>
                       <th className="text-left py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Name</th>
+                      <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Status</th>
                       <th className="text-right py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Buying Price</th>
                       <th className="text-right py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Selling Price</th>
                       <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Total Qty</th>
@@ -346,6 +382,15 @@ export default function Products() {
                         <td className="py-2 px-3 text-xs text-muted-foreground">{product.seller}</td>
                         <td className="py-2 px-3 font-mono text-xs">{product.sku}</td>
                         <td className="py-2 px-3 text-xs font-medium max-w-[160px] truncate">{product.name}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                            (product as any).active
+                              ? "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20"
+                              : "bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20"
+                          }`}>
+                            {(product as any).active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
                         <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{product.price} MAD</td>
                         <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">{product.lastSellingPrice} MAD</td>
                         <td className="py-2 px-3 text-center tabular-nums text-xs">{product.totalQty}</td>
@@ -455,6 +500,13 @@ export default function Products() {
                         <div>
                           <p className="text-sm font-medium truncate">{product.name}</p>
                           <p className="text-xs text-muted-foreground">{product.displayId ? `${product.displayId} · ` : ''}{product.seller} · {product.sku}</p>
+                          <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-medium mt-0.5 ${
+                            (product as any).active
+                              ? "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20"
+                              : "bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20"
+                          }`}>
+                            {(product as any).active ? "Active" : "Inactive"}
+                          </span>
                         </div>
                         <Button
                           size="icon"
