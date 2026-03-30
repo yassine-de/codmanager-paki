@@ -78,56 +78,61 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center pb-4">
-          <div className="mx-auto w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-3">
-            <Package className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <CardTitle className="text-lg">COD Manager</CardTitle>
-          <CardDescription className="text-xs">Connectez-vous à votre compte</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Email</Label>
-              <Input
-                className="h-9 text-xs"
-                type="email"
-                placeholder="email@gmail.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      {/* Subtle background pattern */}
+      <div className="fixed inset-0 bg-[radial-gradient(hsl(var(--border))_1px,transparent_1px)] [background-size:32px_32px] opacity-40" />
+      
+      <div className="relative z-10 w-full max-w-sm">
+        <Card className="rounded-2xl shadow-float border-border/60">
+          <CardHeader className="text-center pb-2 pt-8">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-primary flex items-center justify-center mb-4 shadow-elevated">
+              <Package className="w-7 h-7 text-primary-foreground" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Mot de passe</Label>
-              <Input
-                className="h-9 text-xs"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+            <CardTitle className="text-xl">COD Manager</CardTitle>
+            <CardDescription className="text-sm mt-1">Sign in to your account</CardDescription>
+          </CardHeader>
+          <CardContent className="px-6 pb-8">
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Email</Label>
+                <Input
+                  className="h-11 rounded-xl text-sm"
+                  type="email"
+                  placeholder="email@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Password</Label>
+                <Input
+                  className="h-11 rounded-xl text-sm"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+              <Button type="submit" className="w-full h-11 rounded-xl text-sm font-semibold gap-2 shadow-soft" disabled={isLoading}>
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+                Sign in
+              </Button>
+            </form>
+            <div className="mt-6 pt-4 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-sm h-10 rounded-xl"
+                onClick={seedAll}
+                disabled={isSeeding}
+              >
+                {isSeeding ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}
+                Initialize all users
+              </Button>
             </div>
-            <Button type="submit" className="w-full h-9 text-xs gap-1.5" disabled={isLoading}>
-              {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-              Se connecter
-            </Button>
-          </form>
-          <div className="mt-4 pt-4 border-t">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full text-xs h-8"
-              onClick={seedAll}
-              disabled={isSeeding}
-            >
-              {isSeeding ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : null}
-              Initialiser tous les utilisateurs
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

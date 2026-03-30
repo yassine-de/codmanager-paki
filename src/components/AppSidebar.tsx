@@ -73,7 +73,6 @@ export function AppSidebar() {
     refetchInterval: 30000,
   });
 
-  // Fetch unseen sourcing requests count for sellers
   const { data: sourcingUnseen = 0 } = useQuery({
     queryKey: ["seller-sourcing-unseen", authUser?.id],
     queryFn: async () => {
@@ -88,7 +87,6 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
-  // Fetch unseen sourcing requests count for admins (seller validated/cancelled)
   const isAdmin = authUser?.role === "admin";
   const { data: adminSourcingUnseen = 0 } = useQuery({
     queryKey: ["admin-sourcing-unseen"],
@@ -104,7 +102,6 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
-  // Fetch unseen products count for sellers
   const { data: productUnseen = 0 } = useQuery({
     queryKey: ["seller-product-unseen", authUser?.id],
     queryFn: async () => {
@@ -119,7 +116,6 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
-  // Fetch unread support messages for admin (seller messages not read)
   const { data: supportUnread = 0 } = useQuery({
     queryKey: ["admin-support-unread"],
     queryFn: async () => {
@@ -135,7 +131,6 @@ export function AppSidebar() {
     refetchInterval: 10000,
   });
 
-  // Fetch new orders count for agents
   const { data: agentNewOrders = 0 } = useQuery({
     queryKey: ["agent-new-orders-count"],
     queryFn: async () => {
@@ -172,19 +167,32 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarContent className="pt-4">
-        <div className={`px-3 pb-4 ${collapsed ? 'px-1.5' : ''}`}>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-sidebar-primary flex items-center justify-center shrink-0">
-              <Package className="w-3.5 h-3.5 text-sidebar-primary-foreground" />
+      <SidebarContent className="pt-5 gap-1">
+        {/* Logo */}
+        <div className={`px-4 pb-6 ${collapsed ? 'px-2' : ''}`}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-sidebar-primary flex items-center justify-center shrink-0 shadow-soft">
+              <Package className="w-4 h-4 text-sidebar-primary-foreground" />
             </div>
             {!collapsed && (
-              <span className="text-sm font-semibold text-sidebar-accent-foreground tracking-tight">
-                COD Manager
-              </span>
+              <div className="flex flex-col">
+                <span className="text-sm font-bold text-sidebar-accent-foreground tracking-tight leading-none">
+                  COD Manager
+                </span>
+                <span className="text-[10px] text-sidebar-foreground/50 mt-0.5">Business Suite</span>
+              </div>
             )}
           </div>
         </div>
+
+        {/* Navigation label */}
+        {!collapsed && (
+          <div className="px-4 mb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-sidebar-foreground/40">
+              Navigation
+            </span>
+          </div>
+        )}
 
         <SidebarGroup>
           <SidebarGroupContent>
@@ -195,22 +203,22 @@ export function AppSidebar() {
                   : location.pathname.startsWith(item.url);
                 return (
                   <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild isActive={isActive} className="h-8 text-xs">
+                    <SidebarMenuButton asChild isActive={isActive} className="h-9 text-[13px] rounded-lg transition-all duration-150">
                       <NavLink
                         to={item.url}
                         end={item.url === '/'}
-                        className="hover:bg-sidebar-accent/60"
+                        className="hover:bg-sidebar-accent/70"
                         activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                       >
-                        <item.icon className="mr-1.5 h-3.5 w-3.5" />
+                        <item.icon className="mr-2 h-4 w-4 opacity-70" />
                         {!collapsed && <span className="flex-1">{t(item.title)}</span>}
                         {!collapsed && item.badge != null && (
-                          <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
-                            {item.badge}
+                          <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
+                            {item.badge > 999 ? '999+' : item.badge}
                           </span>
                         )}
                         {collapsed && item.badge != null && (
-                          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center">
+                          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center ring-2 ring-sidebar">
                             {item.badge > 9 ? "9+" : item.badge}
                           </span>
                         )}
@@ -227,13 +235,13 @@ export function AppSidebar() {
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton
                         isActive={isAnalyticsActive}
-                        className="h-8 text-xs cursor-pointer"
+                        className="h-9 text-[13px] cursor-pointer rounded-lg"
                       >
-                        <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+                        <BarChart3 className="mr-2 h-4 w-4 opacity-70" />
                         {!collapsed && (
                           <>
                             <span className="flex-1">{t("analytics")}</span>
-                            <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform group-data-[state=open]/analytics:rotate-180" />
+                            <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/analytics:rotate-180 opacity-50" />
                           </>
                         )}
                       </SidebarMenuButton>
@@ -244,13 +252,13 @@ export function AppSidebar() {
                           const isSubActive = location.pathname === sub.url;
                           return (
                             <SidebarMenuSubItem key={sub.title}>
-                              <SidebarMenuSubButton asChild isActive={isSubActive} className="text-xs h-7">
+                              <SidebarMenuSubButton asChild isActive={isSubActive} className="text-[13px] h-8 rounded-lg">
                                 <NavLink
                                   to={sub.url}
-                                  className="hover:bg-sidebar-accent/60"
+                                  className="hover:bg-sidebar-accent/70"
                                   activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                                 >
-                                  <sub.icon className="mr-1.5 h-3 w-3" />
+                                  <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
                                   <span>{t(sub.title)}</span>
                                 </NavLink>
                               </SidebarMenuSubButton>
@@ -270,13 +278,13 @@ export function AppSidebar() {
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton
                         isActive={isSettingsActive}
-                        className="h-8 text-xs cursor-pointer"
+                        className="h-9 text-[13px] cursor-pointer rounded-lg"
                       >
-                        <Settings className="mr-1.5 h-3.5 w-3.5" />
+                        <Settings className="mr-2 h-4 w-4 opacity-70" />
                         {!collapsed && (
                           <>
                             <span className="flex-1">{t("settings")}</span>
-                            <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+                            <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180 opacity-50" />
                           </>
                         )}
                       </SidebarMenuButton>
@@ -287,13 +295,13 @@ export function AppSidebar() {
                           const isSubActive = location.pathname.startsWith(sub.url);
                           return (
                             <SidebarMenuSubItem key={sub.title}>
-                              <SidebarMenuSubButton asChild isActive={isSubActive} className="text-xs h-7">
+                              <SidebarMenuSubButton asChild isActive={isSubActive} className="text-[13px] h-8 rounded-lg">
                                 <NavLink
                                   to={sub.url}
-                                  className="hover:bg-sidebar-accent/60"
+                                  className="hover:bg-sidebar-accent/70"
                                   activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                                 >
-                                  <sub.icon className="mr-1.5 h-3 w-3" />
+                                  <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
                                   <span>{t(sub.title)}</span>
                                 </NavLink>
                               </SidebarMenuSubButton>

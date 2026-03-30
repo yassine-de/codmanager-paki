@@ -25,7 +25,7 @@ export function KPICard({
   const { isDataVisible } = useDataVisibility();
   return (
     <div
-      className="bg-card rounded-xl border p-5 animate-slide-up hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group"
+      className="bg-card rounded-xl border shadow-soft p-5 animate-slide-up hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-300 group"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-start justify-between mb-3">
@@ -33,7 +33,7 @@ export function KPICard({
           <Icon className="w-5 h-5" />
         </div>
         {trend && (
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+          <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${
             trend.positive
               ? 'bg-success/10 text-success'
               : 'bg-destructive/10 text-destructive'
@@ -47,7 +47,7 @@ export function KPICard({
         {isDataVisible ? value : <MaskedValue className="gap-1" />}
       </p>
       {subtitle && (
-        <p className="text-xs text-muted-foreground mt-1.5">
+        <p className="text-xs text-muted-foreground mt-2">
           {isDataVisible ? subtitle : <MaskedValue />}
         </p>
       )}
