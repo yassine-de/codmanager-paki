@@ -247,16 +247,31 @@ export default function Products() {
         {showFilters && (
           <div className="bg-card rounded-lg border p-4 animate-fade-in">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {isAdmin && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Seller</label>
+                  <SearchableSelect
+                    value={filterSeller}
+                    onValueChange={setFilterSeller}
+                    options={sellerOptions}
+                    placeholder="Seller"
+                    allLabel="All Sellers"
+                    className="w-full"
+                  />
+                </div>
+              )}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Seller</label>
-                <SearchableSelect
-                  value={filterSeller}
-                  onValueChange={setFilterSeller}
-                  options={productSellers.map(s => ({ value: s, label: s }))}
-                  placeholder="Seller"
-                  allLabel="All Sellers"
-                  className="w-full"
-                />
+                <label className="text-xs font-medium text-muted-foreground">Status</label>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex items-end gap-2">
                 <Button size="sm" className="h-9 px-4" onClick={applyFilters}>
