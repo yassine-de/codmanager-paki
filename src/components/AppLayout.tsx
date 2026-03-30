@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SellerSupportChat } from "@/components/SellerSupportChat";
 import { SellerAlertsBanner } from "@/components/SellerAlertsBanner";
+import { useDataVisibility } from "@/contexts/DataVisibilityContext";
+import { useTheme } from "@/contexts/ThemeContext";
 
 const languages: { value: Language; label: string; flag: string }[] = [
   { value: "en", label: "English", flag: "🇬🇧" },
