@@ -129,13 +129,14 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
   data: { day: string; [k: string]: string | number }[];
   dataKey: string; color: string; gradientId: string; title: string; total: number; delay: number;
 }) {
+  const { isDataVisible } = useDataVisibility();
   return (
     <div className="bg-card rounded-xl border px-5 py-4 animate-slide-up hover:shadow-lg transition-all duration-300"
       style={{ animationDelay: `${delay}ms` }}>
       <div className="flex items-center justify-between mb-2">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground/60">{title}</p>
-          <p className="text-2xl font-bold tabular-nums mt-1"><AnimatedNumber value={total} /></p>
+          <p className="text-2xl font-bold tabular-nums mt-1">{isDataVisible ? <AnimatedNumber value={total} /> : <MaskedValue className="gap-1" />}</p>
         </div>
         <span className="text-[10px] font-bold text-muted-foreground/50 bg-muted rounded-full px-2.5 py-1 uppercase tracking-widest">7d</span>
       </div>
@@ -165,15 +166,17 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
           <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2.5}
             fill={`url(#${gradientId})`} dot={{ r: 3, fill: color, strokeWidth: 2, stroke: "hsl(var(--card))" }}
             activeDot={{ r: 4.5, strokeWidth: 2, stroke: "#fff", fill: color }}>
-            <LabelList
-              dataKey={dataKey}
-              position="top"
-              offset={10}
-              fontSize={11}
-              fontWeight={800}
-              fill="hsl(var(--foreground))"
-              formatter={(v: number) => v.toLocaleString()}
-            />
+            {isDataVisible && (
+              <LabelList
+                dataKey={dataKey}
+                position="top"
+                offset={10}
+                fontSize={11}
+                fontWeight={800}
+                fill="hsl(var(--foreground))"
+                formatter={(v: number) => v.toLocaleString()}
+              />
+            )}
           </Area>
         </AreaChart>
       </ResponsiveContainer>
@@ -183,6 +186,7 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
 
 /* ── Radial Gauge (Semi-circle, compact) ── */
 function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; delay?: number }) {
+  const { isDataVisible } = useDataVisibility();
   const [animatedRate, setAnimatedRate] = useState(0);
 
   useEffect(() => {
@@ -255,11 +259,11 @@ function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; 
           ))}
           <text x={cx} y={cy - 16} textAnchor="middle" dominantBaseline="middle"
             className="text-[36px] font-bold tabular-nums" fill="hsl(var(--foreground))"
-            style={{ letterSpacing: "-0.03em" }}>{animatedRate}%</text>
+            style={{ letterSpacing: "-0.03em" }}>{isDataVisible ? `${animatedRate}%` : '••••'}</text>
           <text x={cx} y={cy + 6} textAnchor="middle" dominantBaseline="middle"
             className="text-[10px] font-semibold uppercase tracking-[0.06em]" fill="hsl(30,6%,55%)">{title}</text>
           <text x={cx} y={cy + 20} textAnchor="middle" dominantBaseline="middle"
-            className="text-[9px] font-bold" fill={statusColor}>{status}</text>
+            className="text-[9px] font-bold" fill={statusColor}>{isDataVisible ? status : ''}</text>
         </svg>
       </div>
     </div>
