@@ -9,17 +9,18 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-// Using real data from orders table
-
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { authUser } = useAuth();
+  const isAdmin = authUser?.role === "admin";
 
-  // Try mock products first
-  const mockProduct = useMemo(() => mockProducts.find(p => p.id === id), [id]);
+  const isDbId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || "");
 
-  // Fetch from DB if not in mock
+  // Mock products only for admin
+  const mockProduct = useMemo(() => isAdmin ? mockProducts.find(p => p.id === id) : undefined, [id, isAdmin]);
+
+  // Fetch DB product
   const { data: dbProduct } = useQuery({
     queryKey: ["product-detail", id],
     queryFn: async () => {
@@ -29,81 +30,109 @@ export default function ProductDetail() {
         .eq("id", id!)
         .maybeSingle();
       if (error) throw error;
-      if (!data) return null;
-      const rawVariants = (data as any).variants as any[] | null;
-      const mappedVariants = rawVariants
-        ? rawVariants.map((v: any, i: number) => ({
-            id: v.id || `v-${i}`,
-            name: v.name || v.group || "",
-            sku: "",
-            price: 0,
-            quantity: v.quantity || (v.subVariants ? v.subVariants.reduce((s: number, sv: any) => s + (sv.quantity || 0), 0) : 0),
-          }))
-        : [];
-      return {
-        id: data.id,
-        seller: authUser?.name || "Unknown",
-        sku: data.sku,
-        name: data.name,
-        image: data.image_url || "",
-        price: Number(data.price) || 0,
-        totalQty: data.quantity || 0,
-        delivered: 0,
-        shipped: 0,
-        available: data.quantity || 0,
-        createdAt: data.created_at,
-        variants: mappedVariants,
-        storeLink: data.product_url || "",
-        videoLink: data.video_url || "",
-        lastSellingPrice: Number(data.price) || 0,
-        lastPrice: Number(data.landed_price) || 0,
-        offers: [],
-        weight: (data as any).weight || undefined,
-      } as Product;
+      return data;
     },
-    enabled: !mockProduct && !!id,
+    enabled: isDbId && !mockProduct,
   });
 
-  const product = mockProduct || dbProduct;
-
-  // Fetch real orders for this product from DB
-  const { data: productOrders = [] } = useQuery({
-    queryKey: ["product-orders", product?.name, product?.id],
+  // Fetch seller profile (admin needs actual seller name)
+  const { data: sellerProfile } = useQuery({
+    queryKey: ["product-seller-profile", dbProduct?.seller_id],
     queryFn: async () => {
-      if (!product) return [];
       const { data, error } = await supabase
+        .from("profiles")
+        .select("name")
+        .eq("user_id", dbProduct!.seller_id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!dbProduct?.seller_id && isAdmin,
+  });
+
+  const product: Product | null = useMemo(() => {
+    if (mockProduct) return mockProduct;
+    if (!dbProduct) return null;
+    const rawVariants = (dbProduct as any).variants as any[] | null;
+    const mappedVariants = rawVariants
+      ? rawVariants.map((v: any, i: number) => ({
+          id: v.id || `v-${i}`,
+          name: v.name || v.group || "",
+          sku: "",
+          price: 0,
+          quantity: v.quantity || (v.subVariants ? v.subVariants.reduce((s: number, sv: any) => s + (sv.quantity || 0), 0) : 0),
+        }))
+      : [];
+    return {
+      id: dbProduct.id,
+      seller: sellerProfile?.name || authUser?.name || "Unknown",
+      sku: dbProduct.sku,
+      name: dbProduct.name,
+      image: dbProduct.image_url || "",
+      price: Number(dbProduct.landed_price) || 0,
+      totalQty: dbProduct.quantity || 0,
+      delivered: 0,
+      shipped: 0,
+      available: dbProduct.quantity || 0,
+      createdAt: dbProduct.created_at,
+      variants: mappedVariants,
+      storeLink: dbProduct.product_url || "",
+      videoLink: dbProduct.video_url || "",
+      lastSellingPrice: Number(dbProduct.price) || 0,
+      lastPrice: Number(dbProduct.last_price) || 0,
+      offers: ((dbProduct as any).offers || []).map((o: any, idx: number) => ({ id: `OFF-${idx}`, quantity: o.quantity || 1, price: o.price || 0 })),
+      weight: (dbProduct as any).weight || undefined,
+    } as Product;
+  }, [dbProduct, mockProduct, sellerProfile, authUser]);
+
+  // Fetch real orders — RLS handles seller isolation; admin filters by seller_id
+  const { data: productOrders = [] } = useQuery({
+    queryKey: ["product-orders", dbProduct?.name, dbProduct?.seller_id],
+    queryFn: async () => {
+      let query = supabase
         .from("orders")
         .select("*")
-        .eq("product_name", product.name)
+        .eq("product_name", dbProduct!.name)
         .order("created_at", { ascending: false });
+      if (isAdmin) {
+        query = query.eq("seller_id", dbProduct!.seller_id);
+      }
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
-    enabled: !!product?.name,
+    enabled: !!dbProduct?.name && !!dbProduct?.seller_id,
   });
 
   // Compute real stats from orders
   const stats = useMemo(() => {
     if (!product) return null;
     const totalOrders = productOrders.length;
-    const confirmed = productOrders.filter(o =>
-      ['confirmed', 'shipped', 'delivered'].includes(o.confirmation_status)
+    const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').length;
+    const shipped = productOrders.filter(o =>
+      o.shipping_status && ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status)
     ).length;
-    const deliveredOrders = productOrders.filter(o => o.delivery_status === 'delivered');
-    const delivered = deliveredOrders.length;
+    const delivered = productOrders.filter(o =>
+      o.delivery_status === 'delivered' || o.delivery_status === 'paid'
+    ).length;
     const cancelled = productOrders.filter(o =>
       ['cancelled', 'no_answer', 'wrong_number', 'double'].includes(o.confirmation_status)
     ).length;
-    const totalSales = productOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
-    const avgOrderValue = totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0;
+    // Total sales = sum of total_amount for confirmed/shipped/delivered orders
+    const activeSales = productOrders.filter(o =>
+      !['cancelled', 'no_answer', 'wrong_number', 'double'].includes(o.confirmation_status)
+    );
+    const totalSales = activeSales.reduce((sum, o) => sum + Number(o.total_amount), 0);
+    const avgOrderValue = activeSales.length > 0 ? Math.round(totalSales / activeSales.length) : 0;
 
     return {
       totalOrders,
-      confirmed,
+      confirmed: confirmed + shipped + delivered, // all that passed confirmation
+      shipped,
       delivered,
       cancelled,
-      confirmationRate: totalOrders > 0 ? ((confirmed / totalOrders) * 100).toFixed(1) : "0.0",
-      deliveryRate: confirmed > 0 ? ((delivered / confirmed) * 100).toFixed(1) : "0.0",
+      confirmationRate: totalOrders > 0 ? (((confirmed + shipped + delivered) / totalOrders) * 100).toFixed(1) : "0.0",
+      deliveryRate: (confirmed + shipped + delivered) > 0 ? ((delivered / (confirmed + shipped + delivered)) * 100).toFixed(1) : "0.0",
       totalSales,
       avgOrderValue,
     };
@@ -116,8 +145,8 @@ export default function ProductDetail() {
       const date = subDays(new Date(), 29 - i);
       const dayStr = format(date, "yyyy-MM-dd");
       const dayOrders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr);
-      const shipped = dayOrders.filter(o => ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status || '')).length;
-      const delivered = dayOrders.filter(o => o.delivery_status === 'delivered').length;
+      const shipped = dayOrders.filter(o => o.shipping_status && ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status)).length;
+      const delivered = dayOrders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
       return {
         date: format(date, "dd MMM"),
         shortDate: format(date, "dd"),
@@ -142,8 +171,8 @@ export default function ProductDetail() {
   }
 
   // Compute real shipped/delivered counts from orders
-  const realShipped = productOrders.filter(o => ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status || '')).length;
-  const realDelivered = productOrders.filter(o => o.delivery_status === 'delivered').length;
+  const realShipped = productOrders.filter(o => o.shipping_status && ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status)).length;
+  const realDelivered = productOrders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
   const realAvailable = Math.max(0, product.totalQty - realShipped - realDelivered);
 
   const inventoryData = [
@@ -440,23 +469,21 @@ function KPICard({
 }
 
 function PerformanceGauge({ label, value }: { label: string; value: number }) {
+  const circumference = 2 * Math.PI * 45;
+  const offset = circumference - (value / 100) * circumference;
   const color =
     value >= 70 ? "hsl(155, 50%, 42%)" :
     value >= 40 ? "hsl(38, 90%, 55%)" :
     "hsl(0, 65%, 52%)";
 
-  const circumference = 2 * Math.PI * 40;
-  const offset = circumference - (value / 100) * circumference;
-
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="relative w-24 h-24">
-        <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="40" fill="none" stroke="hsl(40, 12%, 94%)" strokeWidth="8" />
+        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="hsl(35, 12%, 92%)" strokeWidth="8" />
           <circle
-            cx="50" cy="50" r="40" fill="none"
-            stroke={color}
-            strokeWidth="8"
+            cx="50" cy="50" r="45" fill="none"
+            stroke={color} strokeWidth="8"
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
@@ -464,10 +491,10 @@ function PerformanceGauge({ label, value }: { label: string; value: number }) {
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-lg font-bold tabular-nums">{value.toFixed(0)}%</span>
+          <span className="text-lg font-bold tabular-nums">{Math.round(value)}%</span>
         </div>
       </div>
-      <p className="text-[11px] text-muted-foreground text-center font-medium">{label}</p>
+      <p className="text-[11px] text-muted-foreground font-medium text-center">{label}</p>
     </div>
   );
 }
