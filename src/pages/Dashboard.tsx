@@ -233,7 +233,7 @@ function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; 
   const status = animatedRate < 50 ? "Needs Improvement" : animatedRate < 60 ? "Good" : "Excellent";
 
   return (
-    <div className="bg-card rounded-xl border overflow-hidden animate-slide-up hover:shadow-lg transition-all duration-300"
+    <div className="bg-card rounded-xl border shadow-soft overflow-hidden animate-slide-up hover:shadow-elevated transition-all duration-200"
       style={{ animationDelay: `${delay}ms` }}>
       <div className="flex flex-col items-center justify-center px-2 py-3">
         <svg viewBox="0 0 280 150" className="w-full h-auto max-w-[420px] overflow-visible">
