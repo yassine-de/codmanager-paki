@@ -126,18 +126,31 @@ export default function Products() {
   // Filters
   const [filterSeller, setFilterSeller] = useState("all");
   const [appliedSeller, setAppliedSeller] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [appliedStatus, setAppliedStatus] = useState("all");
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  // Build seller options from DB products (admin only)
+  const sellerOptions = useMemo(() => {
+    if (!isAdmin) return [];
+    const sellers = new Set<string>();
+    products.forEach(p => sellers.add(p.seller));
+    return [...sellers].sort().map(s => ({ value: s, label: s }));
+  }, [products, isAdmin]);
+
   const applyFilters = useCallback(() => {
     setAppliedSeller(filterSeller);
+    setAppliedStatus(filterStatus);
     setCurrentPage(1);
-  }, [filterSeller]);
+  }, [filterSeller, filterStatus]);
 
   const clearFilters = useCallback(() => {
     setFilterSeller("all");
     setAppliedSeller("all");
+    setFilterStatus("all");
+    setAppliedStatus("all");
     setSearch("");
     setCurrentPage(1);
   }, []);
@@ -145,12 +158,18 @@ export default function Products() {
   const activeFilterCount = useMemo(() => {
     let c = 0;
     if (appliedSeller !== "all") c++;
+    if (appliedStatus !== "all") c++;
     return c;
-  }, [appliedSeller]);
+  }, [appliedSeller, appliedStatus]);
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
       if (appliedSeller !== "all" && p.seller !== appliedSeller) return false;
+      if (appliedStatus !== "all") {
+        const isActive = !!(p as any).active;
+        if (appliedStatus === "active" && !isActive) return false;
+        if (appliedStatus === "inactive" && isActive) return false;
+      }
       if (search) {
         const s = search.toLowerCase();
         return (
@@ -162,7 +181,7 @@ export default function Products() {
       }
       return true;
     });
-  }, [products, appliedSeller, search]);
+  }, [products, appliedSeller, appliedStatus, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = useMemo(() => {
