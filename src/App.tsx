@@ -120,21 +120,27 @@ function AppRoutes() {
 
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
+import { DataVisibilityProvider } from "@/contexts/DataVisibilityContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Sonner />
-      <BrowserRouter>
-        <LanguageProvider>
-          <NotificationProvider>
-            <AuthProvider>
-              <AppRoutes />
-            </AuthProvider>
-          </NotificationProvider>
-        </LanguageProvider>
-      </BrowserRouter>
-    </TooltipProvider>
+    <ThemeProvider>
+      <TooltipProvider>
+        <Sonner />
+        <BrowserRouter>
+          <LanguageProvider>
+            <NotificationProvider>
+              <DataVisibilityProvider>
+                <AuthProvider>
+                  <AppRoutes />
+                </AuthProvider>
+              </DataVisibilityProvider>
+            </NotificationProvider>
+          </LanguageProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

@@ -66,6 +66,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </span>
               )}
 
+              {/* Data Visibility Toggle */}
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={toggleDataVisibility}
+                title={isDataVisible ? "Hide data" : "Show data"}>
+                {isDataVisible ? <Eye className="h-4 w-4 text-muted-foreground" /> : <EyeOff className="h-4 w-4 text-muted-foreground" />}
+              </Button>
+
+              {/* Dark/Light Mode Toggle */}
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={toggleTheme}
+                title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
+                {theme === "dark" ? <Sun className="h-4 w-4 text-muted-foreground" /> : <Moon className="h-4 w-4 text-muted-foreground" />}
+              </Button>
+
               {/* Language Switcher */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
