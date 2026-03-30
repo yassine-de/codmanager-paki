@@ -53,6 +53,7 @@ interface SourcingRequest {
   seller_seen: boolean | null;
   created_at: string;
   variants: any[] | null;
+  payment_status: string;
 }
 
 export default function SellerSourcing() {
