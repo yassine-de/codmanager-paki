@@ -13,6 +13,12 @@ import { toast } from "sonner";
 import { CreateSellerSourcingModal } from "@/components/CreateSellerSourcingModal";
 import { EditSellerSourcingModal } from "@/components/EditSellerSourcingModal";
 
+const paymentStatusConfig: Record<string, { label: string; color: string }> = {
+  unpaid: { label: "Unpaid", color: "bg-destructive/15 text-destructive border-destructive/25" },
+  paid: { label: "Paid", color: "bg-success/15 text-success border-success/25" },
+  partial: { label: "Partial", color: "bg-warning/15 text-warning border-warning/25" },
+};
+
 const statusConfig: Record<string, { label: string; color: string }> = {
   waiting_quote: { label: "Waiting Quote", color: "bg-warning/15 text-warning border-warning/25" },
   quoted: { label: "Quoted", color: "bg-info/15 text-info border-info/25" },
@@ -47,6 +53,7 @@ interface SourcingRequest {
   seller_seen: boolean | null;
   created_at: string;
   variants: any[] | null;
+  payment_status: string;
 }
 
 export default function SellerSourcing() {
@@ -177,6 +184,7 @@ export default function SellerSourcing() {
               <TableHead className="text-center">Validation</TableHead>
               <TableHead className="text-right">Unit Price</TableHead>
               <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-center">Payment</TableHead>
               <TableHead>Date</TableHead>
               <TableHead className="text-center">Link</TableHead>
               <TableHead className="text-center">Actions</TableHead>
@@ -185,7 +193,7 @@ export default function SellerSourcing() {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={13} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
@@ -237,6 +245,17 @@ export default function SellerSourcing() {
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
                       {(req.total_price ?? 0) > 0 ? `${req.total_price} MAD` : "—"}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {(() => {
+                        const pKey = req.payment_status || "unpaid";
+                        const pConfig = paymentStatusConfig[pKey] || paymentStatusConfig.unpaid;
+                        return (
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${pConfig.color}`}>
+                            {pConfig.label}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-muted-foreground whitespace-nowrap">
                       {format(new Date(req.created_at), "dd MMM yyyy")}
