@@ -308,7 +308,7 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-[1400px]">
-      <div className="sticky top-0 z-30 -mx-4 px-4 py-2.5 bg-background/80 backdrop-blur-xl border-b">
+      <div className="sticky top-0 z-30 -mx-5 lg:-mx-6 px-5 lg:px-6 py-3 bg-background/80 glass border-b mb-1">
         <DatePresetFilter
           dateRange={dateRange}
           onDateRangeChange={setDateRange}
@@ -317,12 +317,12 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="space-y-6 mt-4">
+      <div className="space-y-8 mt-5">
         {/* Header */}
         <div className="flex items-end justify-between animate-fade-in">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">{isSeller ? "My Dashboard" : "Dashboard"}</h1>
-            <p className="text-muted-foreground text-xs mt-0.5">{format(new Date(), "EEEE, dd MMMM yyyy")}</p>
+            <h1 className="text-2xl font-bold tracking-tight">{isSeller ? "My Dashboard" : "Dashboard"}</h1>
+            <p className="text-muted-foreground text-sm mt-1">{format(new Date(), "EEEE, dd MMMM yyyy")}</p>
           </div>
         </div>
 
