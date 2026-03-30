@@ -115,9 +115,9 @@ function OrderSparklineCards({ orders }: { orders: Order[] }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 animate-fade-in">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
       {cards.map((c) => (
-        <div key={c.title} className="bg-card rounded-xl border px-5 py-4 hover:shadow-md transition-all duration-300">
+        <div key={c.title} className="bg-card rounded-xl border shadow-soft px-5 py-4 hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200">
           <p className="text-sm text-muted-foreground font-medium">{c.title}</p>
           <div className="flex items-end justify-between mt-2">
             <div className="flex items-baseline gap-1.5">
