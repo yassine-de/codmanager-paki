@@ -442,9 +442,6 @@ export default function Products() {
                             <span className="text-[10px] text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="py-2 px-3 text-xs text-muted-foreground whitespace-nowrap">
-                          {format(new Date(product.createdAt), "dd MMM yyyy")}
-                        </td>
                         <td className="py-2 px-3 text-center">
                           <div className="flex items-center justify-center gap-0.5">
                             <Tooltip>
