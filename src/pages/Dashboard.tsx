@@ -166,15 +166,17 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
           <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2.5}
             fill={`url(#${gradientId})`} dot={{ r: 3, fill: color, strokeWidth: 2, stroke: "hsl(var(--card))" }}
             activeDot={{ r: 4.5, strokeWidth: 2, stroke: "#fff", fill: color }}>
-            <LabelList
-              dataKey={dataKey}
-              position="top"
-              offset={10}
-              fontSize={11}
-              fontWeight={800}
-              fill="hsl(var(--foreground))"
-              formatter={(v: number) => v.toLocaleString()}
-            />
+            {isDataVisible && (
+              <LabelList
+                dataKey={dataKey}
+                position="top"
+                offset={10}
+                fontSize={11}
+                fontWeight={800}
+                fill="hsl(var(--foreground))"
+                formatter={(v: number) => v.toLocaleString()}
+              />
+            )}
           </Area>
         </AreaChart>
       </ResponsiveContainer>
