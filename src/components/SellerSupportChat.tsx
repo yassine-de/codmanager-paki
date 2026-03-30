@@ -145,7 +145,7 @@ export function SellerSupportChat() {
     refetchInterval: 15000,
   });
 
-  // Realtime for global unread (even when chat popup is closed)
+  // Realtime for global unread (even when chat popup is closed) + toast
   useEffect(() => {
     if (!authUser || authUser.role !== "seller") return;
     const channel = supabase
@@ -154,8 +154,16 @@ export function SellerSupportChat() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "support_messages" },
         (payload) => {
-          if (payload.new && (payload.new as any).sender_type === "admin") {
+          const msg = payload.new as any;
+          if (msg.sender_type === "admin" && msg.sender_id !== authUser.id) {
             queryClient.invalidateQueries({ queryKey: ["seller-support-unread"] });
+            queryClient.invalidateQueries({ queryKey: ["seller-support-messages", msg.ticket_id] });
+            queryClient.invalidateQueries({ queryKey: ["seller-support-tickets"] });
+            // Show toast notification
+            toast.info("New message from support", {
+              description: msg.message?.slice(0, 80) + (msg.message?.length > 80 ? "..." : ""),
+              duration: 4000,
+            });
           }
         }
       )

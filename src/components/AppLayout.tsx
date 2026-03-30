@@ -40,6 +40,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const { language, setLanguage, t } = useLanguage();
   usePresenceHeartbeat();
+  useGlobalAdminSupportNotifications();
 
   const handleLogout = async () => {
     await signOut();
