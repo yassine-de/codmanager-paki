@@ -500,6 +500,13 @@ export default function Products() {
                         <div>
                           <p className="text-sm font-medium truncate">{product.name}</p>
                           <p className="text-xs text-muted-foreground">{product.displayId ? `${product.displayId} · ` : ''}{product.seller} · {product.sku}</p>
+                          <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-medium mt-0.5 ${
+                            (product as any).active
+                              ? "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20"
+                              : "bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20"
+                          }`}>
+                            {(product as any).active ? "Active" : "Inactive"}
+                          </span>
                         </div>
                         <Button
                           size="icon"
