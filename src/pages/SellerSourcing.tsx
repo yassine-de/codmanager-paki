@@ -248,7 +248,7 @@ export default function SellerSourcing() {
                     </TableCell>
                     <TableCell className="text-center">
                       {(() => {
-                        const pKey = (req as any).payment_status || "unpaid";
+                        const pKey = req.payment_status || "unpaid";
                         const pConfig = paymentStatusConfig[pKey] || paymentStatusConfig.unpaid;
                         return (
                           <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${pConfig.color}`}>
