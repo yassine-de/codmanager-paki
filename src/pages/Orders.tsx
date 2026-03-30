@@ -6,6 +6,7 @@ import { eachDayOfInterval, startOfDay, subDays, isAfter, format as fmtDate } fr
 import { Search, SlidersHorizontal, X, Columns3, CalendarIcon, Filter, Pencil, History, MessageCircle, Download, RefreshCw, ChevronDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDataVisibility, MaskedValue } from "@/contexts/DataVisibilityContext";
 import OrderHistoryModal from "@/components/OrderHistoryModal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
