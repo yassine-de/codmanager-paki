@@ -91,6 +91,7 @@ export default function Products() {
         lastPrice: Number((p as any).last_price) || 0,
         offers: ((p as any).offers || []).map((o: any, idx: number) => ({ id: `OFF-${idx}`, quantity: o.quantity || 1, price: o.price || 0 })),
         weight: (p as any).weight || undefined,
+        active: (p as any).active ?? false,
       };
     });
     // Sellers only see DB products, admins see both
