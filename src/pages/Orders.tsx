@@ -675,28 +675,28 @@ export default function Orders() {
         <div className="overflow-x-auto hidden md:block">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-muted/30">
+              <tr className="border-b bg-muted/40">
                 {isAdmin && (
-                  <th className="py-2.5 px-3 w-10">
+                  <th className="py-3 px-3 w-10">
                     <Checkbox
                       checked={paginatedOrders.length > 0 && selectedOrders.size === paginatedOrders.length}
                       onCheckedChange={toggleSelectAll}
                     />
                   </th>
                 )}
-                {isCol('id') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">ID</th>}
-                {isCol('createdAt') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Created</th>}
-                {isCol('updatedAt') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Updated</th>}
-                {isCol('seller') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Seller</th>}
-                {isCol('customer') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Client</th>}
-                {isCol('city') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">City</th>}
-                {isCol('phone') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Phone</th>}
-                {isCol('product') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Product</th>}
-                {isCol('amount') && <th className="text-right py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Amount</th>}
-                {isCol('confirmationStatus') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
-                {isCol('attempts') && isAdmin && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Attempts</th>}
-                {isCol('deliveryStatus') && <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
-                <th className="text-left py-2.5 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Actions</th>
+                {isCol('id') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">ID</th>}
+                {isCol('createdAt') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Created</th>}
+                {isCol('updatedAt') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Updated</th>}
+                {isCol('seller') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Seller</th>}
+                {isCol('customer') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Client</th>}
+                {isCol('city') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">City</th>}
+                {isCol('phone') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Phone</th>}
+                {isCol('product') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Product</th>}
+                {isCol('amount') && <th className="text-right py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Amount</th>}
+                {isCol('confirmationStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
+                {isCol('attempts') && isAdmin && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Attempts</th>}
+                {isCol('deliveryStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
+                <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
