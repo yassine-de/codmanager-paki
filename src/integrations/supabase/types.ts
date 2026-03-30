@@ -756,11 +756,30 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_sourcing_counters: {
+        Row: {
+          current_counter: number
+          id: string
+          seller_id: string
+        }
+        Insert: {
+          current_counter?: number
+          id?: string
+          seller_id: string
+        }
+        Update: {
+          current_counter?: number
+          id?: string
+          seller_id?: string
+        }
+        Relationships: []
+      }
       sourcing_requests: {
         Row: {
           admin_seen: boolean | null
           created_at: string
           destination_country: string
+          display_id: string | null
           id: string
           landed_price: number | null
           notes: string | null
@@ -790,6 +809,7 @@ export type Database = {
           admin_seen?: boolean | null
           created_at?: string
           destination_country?: string
+          display_id?: string | null
           id?: string
           landed_price?: number | null
           notes?: string | null
@@ -819,6 +839,7 @@ export type Database = {
           admin_seen?: boolean | null
           created_at?: string
           destination_country?: string
+          display_id?: string | null
           id?: string
           landed_price?: number | null
           notes?: string | null
@@ -1050,6 +1071,10 @@ export type Database = {
         Returns: string
       }
       generate_product_sku: { Args: never; Returns: string }
+      generate_sourcing_display_id: {
+        Args: { p_seller_id: string }
+        Returns: string
+      }
       get_agent_rankings: {
         Args: never
         Returns: {

@@ -37,6 +37,7 @@ const validationConfig: Record<string, { label: string; color: string }> = {
 
 interface SourcingRequest {
   id: string;
+  display_id: string | null;
   product_name: string;
   quantity: number;
   destination_country: string;
@@ -176,6 +177,7 @@ export default function SellerSourcing() {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[40px]"></TableHead>
+              <TableHead>ID</TableHead>
               <TableHead>Product</TableHead>
               <TableHead className="text-center">Qty</TableHead>
               <TableHead>Country</TableHead>
@@ -193,7 +195,7 @@ export default function SellerSourcing() {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={13} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={14} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
@@ -215,6 +217,9 @@ export default function SellerSourcing() {
                           <ImageIcon className="h-3.5 w-3.5 text-muted-foreground/40" />
                         </div>
                       )}
+                    </TableCell>
+                    <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                      {req.display_id || req.id.slice(0, 8)}
                     </TableCell>
                     <TableCell className="font-medium max-w-[160px] truncate">
                       <div className="flex items-center gap-1.5">

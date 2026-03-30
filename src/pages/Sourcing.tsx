@@ -42,6 +42,7 @@ const weightConfig: Record<string, { label: string; short: string }> = {
 
 export interface DbSourcingRequest {
   id: string;
+  display_id: string | null;
   seller_id: string;
   product_name: string;
   quantity: number;
@@ -218,6 +219,7 @@ export default function Sourcing() {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[40px]"></TableHead>
+              <TableHead>ID</TableHead>
               <TableHead>Created</TableHead>
               <TableHead>Product</TableHead>
               <TableHead>Seller</TableHead>
@@ -237,7 +239,7 @@ export default function Sourcing() {
           <TableBody>
             {paginated.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={15} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={16} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
@@ -258,6 +260,9 @@ export default function Sourcing() {
                           <ImageIcon className="h-3.5 w-3.5 text-muted-foreground/40" />
                         </div>
                       )}
+                    </TableCell>
+                    <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+                      {req.display_id || req.id.slice(0, 8)}
                     </TableCell>
                     <TableCell className="text-muted-foreground whitespace-nowrap">
                       {format(new Date(req.created_at), "dd MMM yyyy")}
