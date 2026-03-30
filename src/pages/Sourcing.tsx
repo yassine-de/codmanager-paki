@@ -42,6 +42,7 @@ const weightConfig: Record<string, { label: string; short: string }> = {
 
 export interface DbSourcingRequest {
   id: string;
+  display_id: string | null;
   seller_id: string;
   product_name: string;
   quantity: number;
