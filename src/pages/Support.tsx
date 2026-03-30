@@ -12,7 +12,7 @@ import { MessageSquare, Send, Search, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { playAdminNotificationSound } from "@/lib/support-sounds";
+
 
 type Ticket = {
   id: string;
@@ -70,7 +70,7 @@ export default function Support() {
   const [newMessage, setNewMessage] = useState("");
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const prevUnreadRef = useRef<number>(0);
+  
 
   // Fetch all tickets with seller names + unread counts
   const { data: tickets = [] } = useQuery({
@@ -121,15 +121,6 @@ export default function Support() {
     },
     refetchInterval: 10000,
   });
-
-  // Play sound when new unread messages arrive
-  const totalUnread = tickets.reduce((sum: number, t: Ticket) => sum + (t.unread_count || 0), 0);
-  useEffect(() => {
-    if (totalUnread > prevUnreadRef.current && prevUnreadRef.current >= 0) {
-      playAdminNotificationSound();
-    }
-    prevUnreadRef.current = totalUnread;
-  }, [totalUnread]);
 
   // Fetch messages for selected ticket
   const { data: messages = [] } = useQuery({

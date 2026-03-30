@@ -10,6 +10,7 @@ import { useLanguage, type Language } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { usePresenceHeartbeat } from "@/hooks/usePresence";
+import { useGlobalAdminSupportNotifications } from "@/hooks/useGlobalSupportNotifications";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SellerSupportChat } from "@/components/SellerSupportChat";
@@ -39,6 +40,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const { language, setLanguage, t } = useLanguage();
   usePresenceHeartbeat();
+  useGlobalAdminSupportNotifications();
 
   const handleLogout = async () => {
     await signOut();
