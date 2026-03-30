@@ -12,7 +12,7 @@ import { MessageSquare, Send, Search, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { playAdminNotificationSound } from "@/lib/support-sounds";
+
 
 type Ticket = {
   id: string;
