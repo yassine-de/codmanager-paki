@@ -184,6 +184,7 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
 
 /* ── Radial Gauge (Semi-circle, compact) ── */
 function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; delay?: number }) {
+  const { isDataVisible } = useDataVisibility();
   const [animatedRate, setAnimatedRate] = useState(0);
 
   useEffect(() => {
