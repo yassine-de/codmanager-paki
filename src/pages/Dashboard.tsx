@@ -74,14 +74,14 @@ function SectionKPI({
     <Tooltip>
       <TooltipTrigger asChild>
         <div onClick={onClick}
-          className={`relative overflow-hidden rounded-xl border px-5 py-4 animate-slide-up group
-            hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 cursor-pointer
-            ${highlight ? 'ring-1 ring-success/30 bg-success/[0.04]' : 'bg-card'}`}
+          className={`relative overflow-hidden rounded-xl border shadow-soft px-5 py-4 animate-slide-up group
+            hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 cursor-pointer
+            ${highlight ? 'ring-1 ring-success/20 bg-success/[0.03]' : 'bg-card'}`}
           style={{ animationDelay: `${delay}ms` }}>
           <div className="flex items-start justify-between mb-2">
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.06em] leading-none">{title}</p>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider leading-none">{title}</p>
             {change !== undefined && (
-              <div className={`flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${
+              <div className={`flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-lg shrink-0 ${
                 isPositive ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
               }`}>
                 {isPositive ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
@@ -90,7 +90,7 @@ function SectionKPI({
             )}
           </div>
           <div className="flex items-center gap-3 mt-1">
-            <div className={`p-2.5 rounded-xl ${iconBg} shrink-0`}>
+            <div className={`p-2.5 rounded-xl ${iconBg} shrink-0 transition-transform duration-200 group-hover:scale-105`}>
               <Icon className={`w-5 h-5 ${color}`} />
             </div>
             <div className="min-w-0 flex-1">
@@ -98,16 +98,16 @@ function SectionKPI({
                 <p className={`font-bold tabular-nums tracking-tight leading-none ${highlight ? 'text-3xl' : 'text-2xl'}`}>
                   {isDataVisible ? <AnimatedNumber value={value} prefix={prefix} suffix={suffix} /> : <MaskedValue className="gap-1" />}
                 </p>
-                <span className={`text-sm font-semibold tabular-nums ${color} opacity-70`}>
+                <span className={`text-sm font-semibold tabular-nums ${color} opacity-60`}>
                   {isDataVisible ? `${percentage}%` : <MaskedValue />}
                 </span>
               </div>
-              {percentLabel && <p className="text-[11px] text-muted-foreground/60 mt-1.5">{isDataVisible ? percentLabel : <MaskedValue />}</p>}
+              {percentLabel && <p className="text-[11px] text-muted-foreground/50 mt-1.5">{isDataVisible ? percentLabel : <MaskedValue />}</p>}
             </div>
           </div>
         </div>
       </TooltipTrigger>
-      <TooltipContent side="bottom" className="text-xs">Click to filter by {title.toLowerCase()}</TooltipContent>
+      <TooltipContent side="bottom" className="text-xs rounded-lg">Click to filter by {title.toLowerCase()}</TooltipContent>
     </Tooltip>
   );
 }
