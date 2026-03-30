@@ -191,6 +191,7 @@ export default function SellerSourcing() {
               <TableHead className="text-center">Validation</TableHead>
               <TableHead className="text-right">Unit Price</TableHead>
               <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-center">Payment</TableHead>
               <TableHead>Date</TableHead>
               <TableHead className="text-center">Link</TableHead>
               <TableHead className="text-center">Actions</TableHead>
