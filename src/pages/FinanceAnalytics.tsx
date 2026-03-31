@@ -12,7 +12,6 @@ import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetF
 import { supabase } from "@/integrations/supabase/client";
 
 const CONFIRMATION_RATE = 0.35; // $0.35 per confirmed order
-const COD_FEE_RATE = 0.05; // 5% COD fees
 
 export default function FinanceAnalytics() {
   const [sellerFilter, setSellerFilter] = useState<string>("all");
@@ -62,6 +61,26 @@ export default function FinanceAnalytics() {
       return data;
     },
   });
+
+  // Fetch rate_settings for COD fee percentages
+  const { data: rateSettingsFinance = [] } = useQuery({
+    queryKey: ["rate-settings-finance"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("rate_settings").select("seller_id, cod_fee_per_delivery, is_global");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const getCodRate = useMemo(() => {
+    const globalRate = rateSettingsFinance.find(r => r.is_global && !r.seller_id);
+    const globalCod = (globalRate?.cod_fee_per_delivery ?? 5) / 100;
+    const sellerMap: Record<string, number> = {};
+    rateSettingsFinance.forEach(r => {
+      if (r.seller_id) sellerMap[r.seller_id] = r.cod_fee_per_delivery / 100;
+    });
+    return (sellerId: string) => sellerMap[sellerId] ?? globalCod;
+  }, [rateSettingsFinance]);
 
   const profileNameMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -115,14 +134,14 @@ export default function FinanceAnalytics() {
     return { count, profit, rate: CONFIRMATION_RATE };
   }, [filteredOrders]);
 
-  // COD fees (5% of delivered revenue converted to USD)
+  // COD fees (dynamic % per seller, of delivered revenue converted to USD)
   const codStats = useMemo(() => {
     const deliveredOrders = filteredOrders.filter(o => o.delivery_status === "delivered");
     const deliveredRevenuePKR = deliveredOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
     const deliveredRevenueUSD = pkrToUsd(deliveredRevenuePKR);
-    const codFees = deliveredRevenueUSD * COD_FEE_RATE;
+    const codFees = deliveredOrders.reduce((sum, o) => sum + pkrToUsd(o.price * o.quantity) * getCodRate(o.seller_id), 0);
     return { deliveredRevenueUSD, codFees, deliveredCount: deliveredOrders.length };
-  }, [filteredOrders]);
+  }, [filteredOrders, getCodRate]);
 
   // Sourcing stats
   const sourcingStats = useMemo(() => {
@@ -148,7 +167,7 @@ export default function FinanceAnalytics() {
         map[id].shippingProfit += (o.shipping_cost || 0);
       }
       if (o.delivery_status === "delivered") {
-        map[id].codProfit += (o.price * o.quantity) * COD_FEE_RATE;
+        map[id].codProfit += (o.price * o.quantity) * getCodRate(id);
       }
     });
 

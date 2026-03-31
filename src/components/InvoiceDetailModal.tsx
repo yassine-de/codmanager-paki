@@ -17,6 +17,7 @@ interface Props {
   sellerName: string;
   sellerId?: string;
   sellerRates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null;
+  codFeePercentage?: number;
   isDraft?: boolean;
   draftOrders?: any[];
 }
@@ -49,7 +50,7 @@ const deliveryStatusConfig: Record<string, { label: string; color: string }> = {
   postponed: { label: "Postponed", color: "bg-warning/15 text-warning" },
 };
 
-export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumber, sellerName, sellerId, sellerRates, isDraft, draftOrders }: Props) {
+export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumber, sellerName, sellerId, sellerRates, codFeePercentage = 5, isDraft, draftOrders }: Props) {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["invoice-orders", invoiceId],
     queryFn: async () => {
@@ -112,7 +113,7 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
   const totalAmountPKR = displayOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
   const totalAmountUSD = pkrToUsd(totalAmountPKR);
   const totalFees = displayOrders.reduce((sum, o) => sum + calculateFeeFromWeight(getWeight(o.product_name), sellerRates), 0);
-  const codFees = totalAmountUSD * 0.05; // COD fees in USD
+  const codFees = totalAmountUSD * (codFeePercentage / 100);
   const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0); // addons in USD
   const netPayableUSD = totalAmountUSD - totalFees - codFees + addonNet;
 
@@ -220,7 +221,7 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
                   )}
                   {codFees > 0 && (
                     <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">COD Fees (5%)</span>
+                      <span className="text-muted-foreground">COD Fees ({codFeePercentage}%)</span>
                       <span className="font-semibold tabular-nums text-destructive">-{formatUSD(codFees)}</span>
                     </div>
                   )}

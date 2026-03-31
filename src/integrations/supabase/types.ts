@@ -612,6 +612,7 @@ export type Database = {
           created_at: string
           dropped_order_rate: number
           id: string
+          is_custom: boolean
           is_global: boolean
           seller_id: string | null
           shipping_rate_1kg: number
@@ -627,6 +628,7 @@ export type Database = {
           created_at?: string
           dropped_order_rate?: number
           id?: string
+          is_custom?: boolean
           is_global?: boolean
           seller_id?: string | null
           shipping_rate_1kg?: number
@@ -642,6 +644,7 @@ export type Database = {
           created_at?: string
           dropped_order_rate?: number
           id?: string
+          is_custom?: boolean
           is_global?: boolean
           seller_id?: string | null
           shipping_rate_1kg?: number
