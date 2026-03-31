@@ -578,6 +578,7 @@ export type Database = {
           variants: Json | null
           video_url: string | null
           weight: string | null
+          weight_kg: number | null
         }
         Insert: {
           active?: boolean
@@ -600,6 +601,7 @@ export type Database = {
           variants?: Json | null
           video_url?: string | null
           weight?: string | null
+          weight_kg?: number | null
         }
         Update: {
           active?: boolean
@@ -622,6 +624,7 @@ export type Database = {
           variants?: Json | null
           video_url?: string | null
           weight?: string | null
+          weight_kg?: number | null
         }
         Relationships: [
           {
