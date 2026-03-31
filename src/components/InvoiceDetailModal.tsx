@@ -200,28 +200,34 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
                     <span className="text-muted-foreground">Total Orders</span>
                     <span className="font-semibold">{displayOrders.length}</span>
                   </div>
-                  {totalAmount > 0 && (
+                  {totalAmountPKR > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Total Amount (price × qty)</span>
-                      <span className="font-semibold tabular-nums">{totalAmount.toLocaleString()} PKR</span>
+                      <span className="font-semibold tabular-nums">{totalAmountPKR.toLocaleString()} PKR</span>
+                    </div>
+                  )}
+                  {totalAmountUSD > 0 && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">Converted to USD <span className="text-[10px]">(1$ = {USD_TO_PKR} PKR)</span></span>
+                      <span className="font-semibold tabular-nums text-primary">{formatUSD(totalAmountUSD)}</span>
                     </div>
                   )}
                   {totalFees > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Total Fees (shipping rates)</span>
-                      <span className="font-semibold tabular-nums text-destructive">-{totalFees.toFixed(2)} PKR</span>
+                      <span className="font-semibold tabular-nums text-destructive">-{formatUSD(totalFees)}</span>
                     </div>
                   )}
                   {codFees > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">COD Fees (5%)</span>
-                      <span className="font-semibold tabular-nums text-destructive">-{codFees.toFixed(2)} PKR</span>
+                      <span className="font-semibold tabular-nums text-destructive">-{formatUSD(codFees)}</span>
                     </div>
                   )}
-                  {/* Addons breakdown */}
+                  {/* Addons breakdown (in USD) */}
                   {addons.length > 0 && (
                     <div className="border-t pt-2 space-y-1.5">
-                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Addons</span>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Addons (USD)</span>
                       {addons.map(addon => (
                         <div key={addon.id} className="flex justify-between text-xs items-center">
                           <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -233,15 +239,15 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
                             {addon.reason || (addon.type === "in" ? "Bonus" : "Deduction")}
                           </span>
                           <span className={`font-semibold tabular-nums ${addon.type === "in" ? "text-success" : "text-destructive"}`}>
-                            {addon.type === "in" ? "+" : "-"}{addon.amount.toFixed(2)} PKR
+                            {addon.type === "in" ? "+" : "-"}{formatUSD(addon.amount)}
                           </span>
                         </div>
                       ))}
                     </div>
                   )}
                   <div className="border-t pt-2 flex justify-between text-sm">
-                    <span className="font-bold">Paid Amount</span>
-                    <span className="font-bold text-success tabular-nums">{netPayable.toLocaleString()} PKR</span>
+                    <span className="font-bold">Net Payable</span>
+                    <span className="font-bold text-success tabular-nums">{formatUSD(netPayableUSD)}</span>
                   </div>
                 </div>
               )}
