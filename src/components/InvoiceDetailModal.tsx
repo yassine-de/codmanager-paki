@@ -245,6 +245,27 @@ export function InvoiceDetailModal({
                 </>
               )}
 
+              {/* ADJUSTMENTS SECTION */}
+              {invoiceAdjustments.length > 0 && (
+                <>
+                  <SectionHeader icon={ArrowUpDown} title="Adjustments" color="text-orange-500" count={invoiceAdjustments.length} />
+                  <div className="py-2">
+                    {invoiceAdjustments.map(adj => (
+                      <div key={adj.id} className="flex justify-between px-4 py-1 text-xs items-center">
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <ArrowUpDown className="h-3 w-3" />
+                          <span className="font-mono">{adj.order_id}</span>
+                          <span className="text-muted-foreground/60">({adj.old_status} → {adj.new_status})</span>
+                        </span>
+                        <span className={`font-semibold tabular-nums ${adj.difference >= 0 ? "text-success" : "text-destructive"}`}>
+                          {adj.difference >= 0 ? "+" : ""}{formatUSD(pkrToUsd(adj.difference))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
               {/* SECTION 5: FINAL SUMMARY */}
               <SectionHeader icon={BarChart3} title="Final Summary" color="text-primary" />
               <div className="py-3 px-4 space-y-1.5">
@@ -270,6 +291,14 @@ export function InvoiceDetailModal({
                     <span className="text-muted-foreground">Addons</span>
                     <span className={`tabular-nums font-semibold ${addonNet >= 0 ? "text-success" : "text-destructive"}`}>
                       {addonNet >= 0 ? "+" : ""}{formatUSD(addonNet)}
+                    </span>
+                  </div>
+                )}
+                {adjustmentNet !== 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Adjustments</span>
+                    <span className={`tabular-nums font-semibold ${adjustmentNet >= 0 ? "text-success" : "text-destructive"}`}>
+                      {adjustmentNet >= 0 ? "+" : ""}{formatUSD(adjustmentNet)}
                     </span>
                   </div>
                 )}
