@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
+import { formatUSD, formatPKR, pkrToUsd } from "@/lib/currency";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Package } from "lucide-react";
-import { formatPKR } from "@/lib/currency";
+import { Search } from "lucide-react";
 
 interface Order {
   id: string;
@@ -100,7 +100,7 @@ export function InvoiceOrdersTable({ orders, productWeightMap }: Props) {
                     <td className="px-3 py-1.5">{o.product_name}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{o.quantity}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{totalWeight > 0 ? `${totalWeight.toFixed(1)} KG` : "—"}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{formatPKR(o.price * o.quantity)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{formatUSD(pkrToUsd(o.price * o.quantity))}</td>
                   </tr>
                 );
               })
@@ -112,7 +112,7 @@ export function InvoiceOrdersTable({ orders, productWeightMap }: Props) {
       {/* Footer totals */}
       <div className="flex justify-between items-center px-4 py-2 border-t bg-muted/30">
         <span className="text-xs text-muted-foreground">{filtered.length} order{filtered.length !== 1 ? "s" : ""}</span>
-        <span className="text-xs font-bold text-success tabular-nums">Total: {formatPKR(totalRevenue)}</span>
+        <span className="text-xs font-bold text-success tabular-nums">Total: {formatUSD(pkrToUsd(totalRevenue))}</span>
       </div>
     </div>
   );
