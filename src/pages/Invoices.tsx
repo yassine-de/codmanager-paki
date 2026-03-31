@@ -646,7 +646,7 @@ export default function Invoices() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isSeller ? 8 : 11} className="text-center text-xs text-muted-foreground py-16">
+                  <TableCell colSpan={isSeller ? 9 : 13} className="text-center text-xs text-muted-foreground py-16">
                     <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
                     <p className="font-medium">{t("no_invoices")}</p>
                   </TableCell>
