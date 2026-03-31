@@ -115,12 +115,13 @@ export default function FinanceAnalytics() {
     return { count, profit, rate: CONFIRMATION_RATE };
   }, [filteredOrders]);
 
-  // COD fees (5% of delivered revenue)
+  // COD fees (5% of delivered revenue converted to USD)
   const codStats = useMemo(() => {
     const deliveredOrders = filteredOrders.filter(o => o.delivery_status === "delivered");
-    const deliveredRevenue = deliveredOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
-    const codFees = deliveredRevenue * COD_FEE_RATE;
-    return { deliveredRevenue, codFees, deliveredCount: deliveredOrders.length };
+    const deliveredRevenuePKR = deliveredOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+    const deliveredRevenueUSD = pkrToUsd(deliveredRevenuePKR);
+    const codFees = deliveredRevenueUSD * COD_FEE_RATE;
+    return { deliveredRevenueUSD, codFees, deliveredCount: deliveredOrders.length };
   }, [filteredOrders]);
 
   // Sourcing stats
