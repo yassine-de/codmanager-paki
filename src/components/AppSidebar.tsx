@@ -147,7 +147,21 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
-  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders);
+  const { data: pendingAdjustments = 0 } = useQuery({
+    queryKey: ["pending-adjustments-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("invoice_adjustments")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: isAdmin && !!authUser,
+    refetchInterval: 15000,
+  });
+
+  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments);
 
   const visibleItems = navItems.filter((item: any) => {
     if (item.agentOnly) return isAgent;
