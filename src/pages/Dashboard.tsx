@@ -154,7 +154,7 @@ function FinancialKPI({
               {isDataVisible ? `${percentage}%` : <MaskedValue />}
             </span>
           </div>
-          <p className="text-[11px] text-muted-foreground/60 mt-1.5 tabular-nums">
+          <p className="text-sm font-bold text-muted-foreground mt-1.5 tabular-nums">
             {isDataVisible ? `≈ ${formatUSD(usdEquiv)}` : <MaskedValue />}
           </p>
           {percentLabel && <p className="text-[10px] text-muted-foreground/40 mt-0.5">{isDataVisible ? percentLabel : <MaskedValue />}</p>}
