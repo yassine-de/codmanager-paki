@@ -129,9 +129,12 @@ export function InvoiceDetailModal({
   // Addons
   const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0);
 
+  // Adjustments net
+  const adjustmentNet = invoiceAdjustments.reduce((sum, a) => sum + pkrToUsd(a.difference), 0);
+
   // Final — all in USD
   const totalDeductions = totalShippingFees + totalCallCenterFees + codFeesTotal;
-  const netPayable = deliveredRevenueUSD - totalDeductions + addonNet;
+  const netPayable = deliveredRevenueUSD - totalDeductions + addonNet + adjustmentNet;
 
   const SectionHeader = ({ icon: Icon, title, color, count }: { icon: any; title: string; color: string; count?: number }) => (
     <div className="flex items-center gap-2 px-4 py-2.5 border-b border-t bg-muted/30">
