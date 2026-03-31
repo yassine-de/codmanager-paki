@@ -188,13 +188,12 @@ export default function Invoices() {
     return map;
   }, [sellerRatesData]);
 
-  // Fetch rate_settings for COD fee percentage per seller
+  // Fetch rate_settings for COD fee + call center rates per seller
   const { data: rateSettingsData = [] } = useQuery({
     queryKey: ["rate-settings-invoices", allSellerIds],
     queryFn: async () => {
       if (allSellerIds.length === 0) return [];
-      // Fetch seller-specific + global rate settings
-      const { data, error } = await supabase.from("rate_settings").select("seller_id, cod_fee_per_delivery, is_global");
+      const { data, error } = await supabase.from("rate_settings").select("seller_id, cod_fee_per_delivery, confirmed_order_rate, dropped_order_rate, is_global");
       if (error) throw error;
       return data;
     },
@@ -205,10 +204,24 @@ export default function Invoices() {
     const map: Record<string, number> = {};
     const globalRate = rateSettingsData.find(r => r.is_global && !r.seller_id);
     const globalCod = globalRate?.cod_fee_per_delivery ?? 5;
-    // Set per-seller COD rates, fallback to global
     allSellerIds.forEach(id => {
       const sellerRate = rateSettingsData.find(r => r.seller_id === id);
       map[id] = sellerRate ? sellerRate.cod_fee_per_delivery : globalCod;
+    });
+    return map;
+  }, [rateSettingsData, allSellerIds]);
+
+  const callCenterRatesMap = useMemo(() => {
+    const map: Record<string, { confirmedRate: number; droppedRate: number }> = {};
+    const globalRate = rateSettingsData.find(r => r.is_global && !r.seller_id);
+    const gConfirmed = globalRate?.confirmed_order_rate ?? 0;
+    const gDropped = globalRate?.dropped_order_rate ?? 0;
+    allSellerIds.forEach(id => {
+      const sellerRate = rateSettingsData.find(r => r.seller_id === id);
+      map[id] = {
+        confirmedRate: sellerRate ? sellerRate.confirmed_order_rate : gConfirmed,
+        droppedRate: sellerRate ? sellerRate.dropped_order_rate : gDropped,
+      };
     });
     return map;
   }, [rateSettingsData, allSellerIds]);
