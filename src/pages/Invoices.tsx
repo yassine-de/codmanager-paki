@@ -255,7 +255,8 @@ export default function Invoices() {
       const totalAmountPKR = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
       const totalAmountUSD = pkrToUsd(totalAmountPKR);
       const totalFees = orders.reduce((sum, o) => sum + calculateFeeFromWeight(getProductWeight(inv.seller_id, o.product_name), rates), 0);
-      const codFees = totalAmountUSD * 0.05;
+      const codPct = (codFeeMap[inv.seller_id] ?? 5) / 100;
+      const codFees = totalAmountUSD * codPct;
       const addons = addonsByInvoice[inv.id] || [];
       const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0);
       return {
