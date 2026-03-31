@@ -226,32 +226,32 @@ export default function Invoices() {
     return map;
   }, [rateSettingsData, allSellerIds]);
 
-  // Fetch products to get weight info
+  // Fetch products to get weight_kg info
   const { data: allProducts = [] } = useQuery({
     queryKey: ["products-for-invoices", allSellerIds],
     queryFn: async () => {
       if (allSellerIds.length === 0) return [];
       const { data, error } = await supabase
         .from("products")
-        .select("name, seller_id, weight")
+        .select("name, seller_id, weight_kg")
         .in("seller_id", allSellerIds);
       if (error) throw error;
-      return data as { name: string; seller_id: string; weight: string | null }[];
+      return data as { name: string; seller_id: string; weight_kg: number | null }[];
     },
     enabled: allSellerIds.length > 0,
   });
 
-  // Map: "sellerId|productName" -> weight text
+  // Map: "sellerId|productName" -> weight_kg
   const productWeightMap = useMemo(() => {
-    const map: Record<string, string | null> = {};
+    const map: Record<string, number | null> = {};
     allProducts.forEach(p => {
-      map[`${p.seller_id}|${p.name}`] = p.weight;
+      map[`${p.seller_id}|${p.name}`] = p.weight_kg;
     });
     return map;
   }, [allProducts]);
 
-  const getProductWeight = (sellerId: string, productName: string): string | null => {
-    return productWeightMap[`${sellerId}|${productName}`] || null;
+  const getProductWeightKg = (sellerId: string, productName: string): number | null => {
+    return productWeightMap[`${sellerId}|${productName}`] ?? null;
   };
 
   // Compute invoice summaries (all invoices including drafts from DB)
