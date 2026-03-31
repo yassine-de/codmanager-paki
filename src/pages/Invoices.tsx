@@ -128,14 +128,14 @@ export default function Invoices() {
     return map;
   }, [allAddons]);
 
-  // Fetch orders with invoice_id to compute totals
+  // Fetch orders with invoice_id to compute totals (need more fields now)
   const { data: invoiceOrders = [] } = useQuery({
     queryKey: ["invoice-orders-summary", invoiceIds],
     queryFn: async () => {
       if (invoiceIds.length === 0) return [];
       const { data, error } = await supabase
         .from("orders")
-        .select("id, invoice_id, price, quantity, product_name, seller_id")
+        .select("id, invoice_id, price, quantity, product_name, seller_id, confirmation_status, delivery_status")
         .in("invoice_id", invoiceIds);
       if (error) throw error;
       return data;
