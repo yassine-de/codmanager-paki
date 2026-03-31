@@ -368,6 +368,12 @@ export type Database = {
           offers: string | null
           order_id: string
           original_agent_id: string | null
+          orio_consignment_no: string | null
+          orio_order_id: number | null
+          orio_shipping_status: string | null
+          orio_sync_error: string | null
+          orio_sync_status: string | null
+          orio_synced_at: string | null
           postpone_date: string | null
           postpone_note: string | null
           price: number
@@ -407,6 +413,12 @@ export type Database = {
           offers?: string | null
           order_id: string
           original_agent_id?: string | null
+          orio_consignment_no?: string | null
+          orio_order_id?: number | null
+          orio_shipping_status?: string | null
+          orio_sync_error?: string | null
+          orio_sync_status?: string | null
+          orio_synced_at?: string | null
           postpone_date?: string | null
           postpone_note?: string | null
           price?: number
@@ -446,6 +458,12 @@ export type Database = {
           offers?: string | null
           order_id?: string
           original_agent_id?: string | null
+          orio_consignment_no?: string | null
+          orio_order_id?: number | null
+          orio_shipping_status?: string | null
+          orio_sync_error?: string | null
+          orio_sync_status?: string | null
+          orio_synced_at?: string | null
           postpone_date?: string | null
           postpone_note?: string | null
           price?: number
@@ -471,6 +489,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      orio_cities_cache: {
+        Row: {
+          cached_at: string
+          city_id: number
+          city_name: string
+          id: string
+          province_id: number | null
+        }
+        Insert: {
+          cached_at?: string
+          city_id: number
+          city_name: string
+          id?: string
+          province_id?: number | null
+        }
+        Update: {
+          cached_at?: string
+          city_id?: number
+          city_name?: string
+          id?: string
+          province_id?: number | null
+        }
+        Relationships: []
+      }
+      orio_platform_cache: {
+        Row: {
+          cached_at: string
+          customer_platform_id: number
+          id: string
+          platform_id: number
+        }
+        Insert: {
+          cached_at?: string
+          customer_platform_id: number
+          id?: string
+          platform_id?: number
+        }
+        Update: {
+          cached_at?: string
+          customer_platform_id?: number
+          id?: string
+          platform_id?: number
+        }
+        Relationships: []
       }
       permissions: {
         Row: {
@@ -1045,6 +1108,12 @@ export type Database = {
           offers: string | null
           order_id: string
           original_agent_id: string | null
+          orio_consignment_no: string | null
+          orio_order_id: number | null
+          orio_shipping_status: string | null
+          orio_sync_error: string | null
+          orio_sync_status: string | null
+          orio_synced_at: string | null
           postpone_date: string | null
           postpone_note: string | null
           price: number
