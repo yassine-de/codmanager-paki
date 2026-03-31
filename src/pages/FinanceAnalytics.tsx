@@ -12,7 +12,6 @@ import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetF
 import { supabase } from "@/integrations/supabase/client";
 
 const CONFIRMATION_RATE = 0.35; // $0.35 per confirmed order
-const COD_FEE_RATE = 0.05; // 5% COD fees
 
 export default function FinanceAnalytics() {
   const [sellerFilter, setSellerFilter] = useState<string>("all");
