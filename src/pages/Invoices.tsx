@@ -279,10 +279,10 @@ export default function Invoices() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // Stats
-  const totalAmount = filtered.reduce((s, r) => s + r.data.netPayable, 0);
-  const paidAmount = filtered.filter(r => r.data.status === "paid").reduce((s, r) => s + r.data.netPayable, 0);
-  const needToPay = filtered.filter(r => r.data.status === "ready").reduce((s, r) => s + r.data.netPayable, 0);
+  // Stats (all in USD now)
+  const totalAmountUSD = filtered.reduce((s, r) => s + r.data.netPayableUSD, 0);
+  const paidAmount = filtered.filter(r => r.data.status === "paid").reduce((s, r) => s + r.data.netPayableUSD, 0);
+  const needToPay = filtered.filter(r => r.data.status === "ready").reduce((s, r) => s + r.data.netPayableUSD, 0);
 
   const sellerOptions = useMemo(() => {
     return allSellerIds.map(id => ({
