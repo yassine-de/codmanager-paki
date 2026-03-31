@@ -257,7 +257,7 @@ export function InvoiceDetailModal({
                 <div className="flex justify-between py-1.5">
                   <span className="text-sm font-bold">Net Payable</span>
                   <span className={`text-sm font-bold tabular-nums ${netPayable >= 0 ? "text-success" : "text-destructive"}`}>
-                    {netPayable.toLocaleString()} PKR
+                    {formatUSD(netPayable)}
                   </span>
                 </div>
               </div>
