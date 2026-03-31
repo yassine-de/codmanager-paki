@@ -229,7 +229,7 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
           {/* Total */}
           <div className="flex items-center justify-between bg-muted/50 rounded-lg px-4 py-3">
             <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
-            <span className="text-lg font-bold tabular-nums">{totalAmount.toLocaleString()} MAD</span>
+            <span className="text-lg font-bold tabular-nums">{totalAmount.toLocaleString()} PKR</span>
           </div>
 
           {/* Note */}

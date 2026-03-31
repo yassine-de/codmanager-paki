@@ -244,12 +244,12 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
               <h3 className={sectionTitle}>Pricing & Stock</h3>
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Buying Price (MAD) *</Label>
+                  <Label className="text-xs">Buying Price ($) *</Label>
                   <Input type="number" min={0.01} step={0.01} value={price} onChange={e => setPrice(Number(e.target.value))} className={`h-9 text-sm ${errors.price ? "border-destructive" : ""}`} disabled={isSeller} />
                   {errors.price && <p className="text-[11px] text-destructive">{errors.price}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Selling Price (MAD) {isSeller && isDbProduct && <span className="text-destructive">*</span>}</Label>
+                  <Label className="text-xs">Selling Price ($) {isSeller && isDbProduct && <span className="text-destructive">*</span>}</Label>
                   <Input type="number" min={0} step={0.01} value={lastSellingPrice || ""} onChange={e => setLastSellingPrice(Number(e.target.value))} placeholder={isSeller ? "Enter selling price" : ""} className={`h-9 text-sm ${errors.sellingPrice ? "border-destructive" : ""}`} />
                   {errors.sellingPrice && <p className="text-[11px] text-destructive">{errors.sellingPrice}</p>}
                 </div>
@@ -372,7 +372,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Price (MAD) *</Label>
+                          <Label className="text-[10px] text-muted-foreground">Price ($) *</Label>
                           <Input
                             type="number" min={0.01} step={0.01} value={offer.price}
                             onChange={e => updateOffer(i, "price", Math.max(0, Number(e.target.value)))}
@@ -445,7 +445,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                           <Input value={variant.name} onChange={e => updateVariant(i, "name", e.target.value)} placeholder="e.g. Black, XL" className={`h-8 text-xs ${errors[`v_name_${i}`] ? "border-destructive" : ""}`} disabled={isSeller} />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-[10px] text-muted-foreground">Price (MAD)</Label>
+                          <Label className="text-[10px] text-muted-foreground">Price ($)</Label>
                           <Input type="number" min={0.01} step={0.01} value={variant.price} onChange={e => updateVariant(i, "price", Number(e.target.value))} className={`h-8 text-xs ${errors[`v_price_${i}`] ? "border-destructive" : ""}`} />
                         </div>
                         <div className="space-y-1">

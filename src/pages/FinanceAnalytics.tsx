@@ -220,13 +220,13 @@ export default function FinanceAnalytics() {
           </div>
           <div>
             <p className="text-sm text-muted-foreground font-medium">Total Revenue</p>
-            <p className="text-3xl font-bold tabular-nums tracking-tight">{totalProfit.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MAD</p>
+            <p className="text-3xl font-bold tabular-nums tracking-tight">{totalProfit.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} PKR</p>
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           <div className="bg-background/60 rounded-lg p-3 text-center">
             <p className="text-xs text-muted-foreground mb-1">Shipping</p>
-            <p className="text-lg font-bold tabular-nums">{shippingRevenue.toLocaleString()} MAD</p>
+            <p className="text-lg font-bold tabular-nums">{shippingRevenue.toLocaleString()} PKR</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{shippedOrders.length} orders</p>
           </div>
           <div className="bg-background/60 rounded-lg p-3 text-center">
@@ -236,12 +236,12 @@ export default function FinanceAnalytics() {
           </div>
           <div className="bg-background/60 rounded-lg p-3 text-center">
             <p className="text-xs text-muted-foreground mb-1">COD Fees (5%)</p>
-            <p className="text-lg font-bold tabular-nums">{codStats.codFees.toLocaleString(undefined, { minimumFractionDigits: 2 })} MAD</p>
+            <p className="text-lg font-bold tabular-nums">{codStats.codFees.toLocaleString(undefined, { minimumFractionDigits: 2 })} PKR</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{codStats.deliveredCount} delivered orders</p>
           </div>
           <div className="bg-background/60 rounded-lg p-3 text-center">
             <p className="text-xs text-muted-foreground mb-1">Sourcing</p>
-            <p className="text-lg font-bold tabular-nums">{sourcingStats.profit.toLocaleString()} MAD</p>
+            <p className="text-lg font-bold tabular-nums">{sourcingStats.profit.toLocaleString()} PKR</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{sourcingStats.totalUnits} units · 30% margin</p>
           </div>
         </div>
@@ -250,10 +250,10 @@ export default function FinanceAnalytics() {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <KPICard title="Shipped Orders" value={shippedOrders.length} icon={Truck} iconBg="bg-primary/10" iconColor="text-primary" delay={0} />
-        <KPICard title="Shipping Revenue" value={`${shippingRevenue.toLocaleString()} MAD`} icon={DollarSign} iconBg="bg-success/10" iconColor="text-success" delay={50} />
+        <KPICard title="Shipping Revenue" value={`${shippingRevenue.toLocaleString()} PKR`} icon={DollarSign} iconBg="bg-success/10" iconColor="text-success" delay={50} />
         <KPICard title="Confirmed Orders" value={confirmationStats.count} subtitle={`$${confirmationStats.profit.toFixed(2)} profit`} icon={CheckCircle2} iconBg="bg-info/10" iconColor="text-info" delay={75} />
-        <KPICard title="COD Fees" value={`${codStats.codFees.toFixed(2)} MAD`} subtitle={`5% of ${codStats.deliveredRevenue.toLocaleString()} MAD`} icon={DollarSign} iconBg="bg-warning/10" iconColor="text-warning" delay={100} />
-        <KPICard title="Sourcing Profit" value={`${sourcingStats.profit.toLocaleString()} MAD`} subtitle="~30% margin" icon={TrendingUp} iconBg="bg-success/10" iconColor="text-success" delay={150} />
+        <KPICard title="COD Fees" value={`${codStats.codFees.toFixed(2)} PKR`} subtitle={`5% of ${codStats.deliveredRevenue.toLocaleString()} PKR`} icon={DollarSign} iconBg="bg-warning/10" iconColor="text-warning" delay={100} />
+        <KPICard title="Sourcing Profit" value={`${sourcingStats.profit.toLocaleString()} PKR`} subtitle="~30% margin" icon={TrendingUp} iconBg="bg-success/10" iconColor="text-success" delay={150} />
       </div>
 
       {/* Charts */}
@@ -265,10 +265,10 @@ export default function FinanceAnalytics() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={profitBySeller} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${v} MAD`} />
+                <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${v} PKR`} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" width={110} />
                 <Tooltip
-                  formatter={(v: number, name: string) => [`${v.toLocaleString()} MAD`, name]}
+                  formatter={(v: number, name: string) => [`${v.toLocaleString()} PKR`, name]}
                   contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }}
                 />
                 <Bar dataKey="shipping" stackId="a" name="Shipping" fill="hsl(var(--primary))" radius={[0, 0, 0, 0]} />
@@ -313,8 +313,8 @@ function ProductRevenueChart({ data, chartColors }: { data: { name: string; reve
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
           <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
           <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={120} />
-          <Tooltip formatter={(v: number) => `${v.toLocaleString()} MAD`} contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
-          <Bar dataKey="revenue" radius={[0, 4, 4, 0]} name="Revenue (MAD)">
+          <Tooltip formatter={(v: number) => `${v.toLocaleString()} PKR`} contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
+          <Bar dataKey="revenue" radius={[0, 4, 4, 0]} name="Revenue (PKR)">
             {visibleData.map((_, i) => (
               <Cell key={i} fill={chartColors[i % chartColors.length]} />
             ))}

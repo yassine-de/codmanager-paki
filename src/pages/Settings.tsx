@@ -240,13 +240,13 @@ const Settings = () => {
                           </div>
                         </TableCell>
                         <TableCell className="py-2.5">
-                          <Badge variant="secondary" className="text-[10px] font-semibold">{seller.rates.rate1kg} MAD</Badge>
+                          <Badge variant="secondary" className="text-[10px] font-semibold">{seller.rates.rate1kg} $</Badge>
                         </TableCell>
                         <TableCell className="py-2.5">
-                          <Badge variant="secondary" className="text-[10px] font-semibold">{seller.rates.rate2kg} MAD</Badge>
+                          <Badge variant="secondary" className="text-[10px] font-semibold">{seller.rates.rate2kg} $</Badge>
                         </TableCell>
                         <TableCell className="py-2.5">
-                          <Badge variant="secondary" className="text-[10px] font-semibold">{seller.rates.rate3kg} MAD</Badge>
+                          <Badge variant="secondary" className="text-[10px] font-semibold">{seller.rates.rate3kg} $</Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground py-2.5">{seller.createdAt}</TableCell>
                         <TableCell className="text-right py-2.5">
@@ -372,7 +372,7 @@ const Settings = () => {
               <Input className="h-9 text-xs" type="text" placeholder="Mot de passe" value={sellerForm.password} onChange={e => setSellerForm(f => ({ ...f, password: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Tarifs par poids (MAD)</Label>
+              <Label className="text-xs font-semibold">Tarifs par poids ($)</Label>
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">1 Kg</Label>

@@ -965,7 +965,7 @@ const AgentOrders = () => {
                               />
                             </div>
                             <div className="space-y-0.5">
-                              <Label className="text-[9px] text-muted-foreground">Price (MAD)</Label>
+                              <Label className="text-[9px] text-muted-foreground">Price ($)</Label>
                               <Input
                                 type="number" min={0} value={op.price}
                                 onChange={(e) => updateItem(i, "price", parseInt(e.target.value) || 0)}
@@ -984,7 +984,7 @@ const AgentOrders = () => {
                               <Tag className="h-3 w-3" /> Qty: {op.qty}
                             </span>
                             <span className="inline-flex items-center gap-1 text-muted-foreground">
-                              <DollarSign className="h-3 w-3" /> {op.price} MAD
+                              <DollarSign className="h-3 w-3" /> {op.price} PKR
                             </span>
                           </div>
                         )}
@@ -1002,7 +1002,7 @@ const AgentOrders = () => {
                             <div className="rounded-md bg-accent/60 border border-accent px-2.5 py-1.5 flex items-center gap-2">
                               <DollarSign className="h-3 w-3 text-primary shrink-0" />
                               <span className="text-[10px] text-muted-foreground">Last sold at</span>
-                              <span className="text-xs font-bold text-primary tabular-nums">{effectiveLastPrice} MAD</span>
+                              <span className="text-xs font-bold text-primary tabular-nums">{effectiveLastPrice} PKR</span>
                               {effectiveLastPrice !== op.price && (
                                 <span className={cn(
                                   "text-[9px] font-semibold px-1.5 py-0.5 rounded-full",
@@ -1010,7 +1010,7 @@ const AgentOrders = () => {
                                     ? "bg-emerald-500/10 text-emerald-600"
                                     : "bg-amber-500/10 text-amber-600"
                                 )}>
-                                  {effectiveLastPrice < op.price ? "↓" : "↑"} {Math.abs(op.price - effectiveLastPrice)} MAD
+                                  {effectiveLastPrice < op.price ? "↓" : "↑"} {Math.abs(op.price - effectiveLastPrice)} PKR
                                 </span>
                               )}
                             </div>
@@ -1042,7 +1042,7 @@ const AgentOrders = () => {
                         </div>
                       </div>
                       {!editMode && (
-                        <p className="text-sm font-bold text-foreground whitespace-nowrap">{op.qty * op.price} MAD</p>
+                        <p className="text-sm font-bold text-foreground whitespace-nowrap">{op.qty * op.price} PKR</p>
                       )}
                     </div>
                   </div>
@@ -1054,7 +1054,7 @@ const AgentOrders = () => {
                 const outerMatchedProduct = sellerProducts.find(p => p.name === currentOrder.product_name);
                 const productOffers = (outerMatchedProduct as any)?.offers as any[] | undefined;
                 const productOffersText = productOffers && productOffers.length > 0
-                  ? productOffers.map((o: any) => `${o.quantity}x → ${o.price} MAD`).join(" | ")
+                  ? productOffers.map((o: any) => `${o.quantity}x → ${o.price} PKR`).join(" | ")
                   : null;
                 const effectiveOffers = productOffersText
                   || (currentOrder.offers && currentOrder.offers.trim() ? currentOrder.offers.trim() : null)
@@ -1095,7 +1095,7 @@ const AgentOrders = () => {
                             }}
                           >
                             <span className="truncate font-medium">{sp.name}</span>
-                            <span className="text-muted-foreground shrink-0">{sp.price} MAD</span>
+                            <span className="text-muted-foreground shrink-0">{sp.price} PKR</span>
                           </button>
                         ))}
                       {sellerProducts.filter(sp => !activeItems.some(ai => ai.name === sp.name)).length === 0 && (
@@ -1108,7 +1108,7 @@ const AgentOrders = () => {
 
               <div className="flex items-center justify-between pt-2 border-t">
                 <span className="text-sm font-semibold">Total</span>
-                <span className="text-lg font-bold text-primary tabular-nums">{orderTotal} MAD</span>
+                <span className="text-lg font-bold text-primary tabular-nums">{orderTotal} PKR</span>
               </div>
             </CardContent>
           </Card>

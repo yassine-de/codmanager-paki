@@ -483,7 +483,7 @@ export default function Invoices() {
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
               <CheckCircle2 className="h-3 w-3 text-success" /> {t("paid")}
             </p>
-            <p className="text-base font-bold text-success">{paidAmount.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">MAD</span></p>
+            <p className="text-base font-bold text-success">{paidAmount.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">PKR</span></p>
           </div>
           {!isSeller && (
             <>
@@ -492,7 +492,7 @@ export default function Invoices() {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
                   <Clock className="h-3 w-3 text-warning" /> {t("need_to_pay")}
                 </p>
-                <p className="text-base font-bold text-warning">{needToPay.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">MAD</span></p>
+                <p className="text-base font-bold text-warning">{needToPay.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">PKR</span></p>
               </div>
             </>
           )}
@@ -608,10 +608,10 @@ export default function Invoices() {
                       <TableCell className="text-center">
                         <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-accent text-[11px] font-semibold">{inv.ordersCount}</span>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{inv.totalAmount.toLocaleString()} <span className="text-muted-foreground text-[10px]">MAD</span></TableCell>
+                      <TableCell className="text-right tabular-nums">{inv.totalAmount.toLocaleString()} <span className="text-muted-foreground text-[10px]">PKR</span></TableCell>
                       <TableCell className="text-right tabular-nums text-destructive">-{inv.totalFees.toFixed(2)}</TableCell>
                       <TableCell className="text-right tabular-nums text-destructive">-{inv.codFees.toFixed(2)}</TableCell>
-                      <TableCell className="text-right tabular-nums font-bold text-success">{inv.netPayable.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">MAD</span></TableCell>
+                      <TableCell className="text-right tabular-nums font-bold text-success">{inv.netPayable.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">PKR</span></TableCell>
                       {!isSeller && (
                         <TableCell className="text-center">
                           <Switch
@@ -834,7 +834,7 @@ export default function Invoices() {
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{t("amount")} (MAD)</Label>
+              <Label className="text-xs">{t("amount")} (PKR)</Label>
               <Input type="number" value={addonAmount} onChange={e => setAddonAmount(e.target.value)} placeholder="0.00" className="h-9 text-xs" min="0" step="0.01" />
             </div>
             <div className="space-y-1">

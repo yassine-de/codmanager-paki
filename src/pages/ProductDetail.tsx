@@ -227,12 +227,12 @@ export default function ProductDetail() {
         <KPICard
           label="Total Sales"
           value={`${(stats?.totalSales ?? 0).toLocaleString()}`}
-          suffix="MAD"
+          suffix="$"
         />
         <KPICard
           label="Avg. Order Value"
           value={stats?.avgOrderValue ?? 0}
-          suffix="MAD"
+          suffix="$"
         />
         <KPICard
           label="Confirmed"
@@ -292,7 +292,7 @@ export default function ProductDetail() {
                   <span className="font-medium">{v.name}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground tabular-nums">{v.quantity} units</span>
-                    <span className="tabular-nums font-medium">{v.price} MAD</span>
+                    <span className="tabular-nums font-medium">{v.price}</span>
                   </div>
                 </div>
               ))}

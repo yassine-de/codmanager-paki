@@ -246,10 +246,10 @@ export default function SellerSourcing() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {(req.unit_price ?? 0) > 0 ? `${req.unit_price} MAD` : "—"}
+                      {(req.unit_price ?? 0) > 0 ? `$${req.unit_price}` : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {(req.total_price ?? 0) > 0 ? `${req.total_price} MAD` : "—"}
+                      {(req.total_price ?? 0) > 0 ? `$${req.total_price}` : "—"}
                     </TableCell>
                     <TableCell className="text-center">
                       {(() => {

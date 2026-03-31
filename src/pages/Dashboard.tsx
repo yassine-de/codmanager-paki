@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import OnlineStatusPanel from "@/components/OnlineStatusPanel";
 import { useDataVisibility, MaskedValue } from "@/contexts/DataVisibilityContext";
+import { formatPKR, formatUSD, pkrToUsd } from "@/lib/currency";
 
 /* ── Animated Number ── */
 function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
@@ -109,6 +110,57 @@ function SectionKPI({
       </TooltipTrigger>
       <TooltipContent side="bottom" className="text-xs rounded-lg">Click to filter by {title.toLowerCase()}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/* ── Financial KPI Card (PKR + USD) ── */
+interface FinancialKPIProps {
+  title: string;
+  pkrAmount: number;
+  percentage: number;
+  percentLabel?: string;
+  icon: LucideIcon;
+  color: string;
+  iconBg: string;
+  highlight?: boolean;
+  delay?: number;
+}
+
+function FinancialKPI({
+  title, pkrAmount, percentage, percentLabel, icon: Icon, color, iconBg,
+  highlight = false, delay = 0,
+}: FinancialKPIProps) {
+  const { isDataVisible } = useDataVisibility();
+  const usdEquiv = pkrToUsd(pkrAmount);
+  return (
+    <div
+      className={`relative overflow-hidden rounded-xl border shadow-soft px-5 py-4 animate-slide-up group
+        hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200
+        ${highlight ? 'ring-1 ring-success/20 bg-success/[0.03]' : 'bg-card'}`}
+      style={{ animationDelay: `${delay}ms` }}>
+      <div className="flex items-start justify-between mb-2">
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider leading-none">{title}</p>
+      </div>
+      <div className="flex items-center gap-3 mt-1">
+        <div className={`p-2.5 rounded-xl ${iconBg} shrink-0 transition-transform duration-200 group-hover:scale-105`}>
+          <Icon className={`w-5 h-5 ${color}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <p className={`font-bold tabular-nums tracking-tight leading-none ${highlight ? 'text-3xl' : 'text-2xl'}`}>
+              {isDataVisible ? <AnimatedNumber value={pkrAmount} suffix=" PKR" /> : <MaskedValue className="gap-1" />}
+            </p>
+            <span className={`text-sm font-semibold tabular-nums ${color} opacity-60`}>
+              {isDataVisible ? `${percentage}%` : <MaskedValue />}
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground/60 mt-1.5 tabular-nums">
+            {isDataVisible ? `≈ ${formatUSD(usdEquiv)}` : <MaskedValue />}
+          </p>
+          {percentLabel && <p className="text-[10px] text-muted-foreground/40 mt-0.5">{isDataVisible ? percentLabel : <MaskedValue />}</p>}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -345,16 +397,17 @@ export default function Dashboard() {
         {/* ═══════════ FINANCIAL OVERVIEW ═══════════ */}
         <div className="space-y-3">
           <SectionHeader icon={DollarSign} title="Financial Overview" color="text-primary" iconBg="bg-primary/10" delay={160} />
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md">1 USD = 280 PKR</span>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <SectionKPI title="Delivered Amount" value={kpis.revenue} percentage={100}
-              percentLabel="total delivered" icon={DollarSign} color="text-foreground" iconBg="bg-muted"
-              prefix="" suffix=" MAD" delay={170} />
-            <SectionKPI title="Paid Amount" value={kpis.paidAmount} percentage={pct(kpis.paidAmount, kpis.revenue)}
-              percentLabel="of delivered" icon={Banknote} color="text-success" iconBg="bg-success/10"
-              prefix="" suffix=" MAD" delay={180} />
-            <SectionKPI title="Pending Amount" value={kpis.pendingAmount} percentage={pct(kpis.pendingAmount, kpis.revenue)}
+            <FinancialKPI title="Delivered Amount" pkrAmount={kpis.revenue} percentage={100}
+              percentLabel="total delivered" icon={DollarSign} color="text-foreground" iconBg="bg-muted" delay={170} />
+            <FinancialKPI title="Paid Amount" pkrAmount={kpis.paidAmount} percentage={pct(kpis.paidAmount, kpis.revenue)}
+              percentLabel="of delivered" icon={Banknote} color="text-success" iconBg="bg-success/10" delay={180} />
+            <FinancialKPI title="Pending Amount" pkrAmount={kpis.pendingAmount} percentage={pct(kpis.pendingAmount, kpis.revenue)}
               percentLabel="of delivered" icon={Clock} color="text-warning" iconBg="bg-warning/10"
-              highlight prefix="" suffix=" MAD" delay={190} />
+              highlight delay={190} />
           </div>
         </div>
 

@@ -89,7 +89,7 @@ export function CreateProductModal({ open, onOpenChange, onCreate }: CreateProdu
               {errors.sku && <p className="text-[11px] text-destructive">{errors.sku}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Price (MAD) *</Label>
+              <Label className="text-xs">Price ($) *</Label>
               <Input type="number" min={0.01} step={0.01} value={price} onChange={(e) => setPrice(e.target.value ? Number(e.target.value) : "")} placeholder="0.00" className={`h-9 text-sm ${errors.price ? "border-destructive" : ""}`} />
               {errors.price && <p className="text-[11px] text-destructive">{errors.price}</p>}
             </div>

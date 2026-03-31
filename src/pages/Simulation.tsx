@@ -275,7 +275,7 @@ export default function Simulation() {
                       <SelectItem key={p.id} value={p.id} className="text-sm">
                         <div className="flex items-center gap-2">
                           {p.image_url && <img src={p.image_url} alt="" className="w-5 h-5 rounded object-cover" />}
-                          {p.name} — {p.price} MAD
+                          {p.name} — {p.price} $
                         </div>
                       </SelectItem>
                     ))}
@@ -337,8 +337,8 @@ export default function Simulation() {
               )}
               {metrics && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-                  <MetricCard label="Buying Price" value={`${metrics.buyingPrice}`} unit="MAD" icon={ShoppingCart} color="text-warning" bg="bg-warning/10" />
-                  <MetricCard label="Selling Price" value={`${metrics.sellingPrice}`} unit="MAD" icon={DollarSign} color="text-success" bg="bg-success/10" />
+                  <MetricCard label="Buying Price" value={`${metrics.buyingPrice}`} unit="$" icon={ShoppingCart} color="text-warning" bg="bg-warning/10" />
+                  <MetricCard label="Selling Price" value={`${metrics.sellingPrice}`} unit="$" icon={DollarSign} color="text-success" bg="bg-success/10" />
                   <MetricCard label="Confirmation Rate" value={`${(metrics.confirmationRate * 100).toFixed(1)}`} unit="%" icon={Target} color="text-info" bg="bg-info/10" />
                   <MetricCard label="Delivery Rate" value={`${(metrics.deliveryRate * 100).toFixed(1)}`} unit="%" icon={Truck} color="text-primary" bg="bg-primary/10" />
                 </div>
@@ -406,7 +406,7 @@ export default function Simulation() {
                 <span className="text-xs text-muted-foreground">Product Weight:</span>
                 <span className="text-sm font-medium text-foreground">{selectedProduct.weight} kg</span>
                 <Badge variant="outline" className="ml-1 text-[9px] font-normal text-info">Auto</Badge>
-                <span className="text-xs text-muted-foreground ml-auto">Shipping: <span className="font-semibold text-foreground">{shippingRate} MAD</span></span>
+                <span className="text-xs text-muted-foreground ml-auto">Shipping: <span className="font-semibold text-foreground">{shippingRate} $</span></span>
               </div>
             )}
             {mode === "manual" && (
@@ -424,13 +424,13 @@ export default function Simulation() {
                   <SelectContent>
                     {weightOptions.map(w => (
                       <SelectItem key={w.value} value={w.value} className="text-sm">
-                        {w.label} — {w.rate} MAD shipping
+                        {w.label} — {w.rate} $ shipping
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-muted-foreground mt-1.5">
-                  Shipping: <span className="font-semibold text-foreground">{shippingRate} MAD</span> per confirmed order
+                  Shipping: <span className="font-semibold text-foreground">{shippingRate} $</span> per confirmed order
                 </p>
               </div>
             )}
@@ -489,7 +489,7 @@ export default function Simulation() {
                   <BreakdownRow label="Revenue" value={`+${results.revenue.toFixed(2)} $`} colorClass="text-success" />
                   <BreakdownRow label="Product Cost" value={`-${results.productCost.toFixed(2)} $`} colorClass="text-destructive" />
                   <BreakdownRow label="Ads Cost" value={`-${results.adsCost.toFixed(2)} $`} colorClass="text-destructive" />
-                  <BreakdownRow label={`Shipping (${shippingRate} MAD × ${results.confirmedOrders})`} value={`-${results.totalShipping.toFixed(2)} $`} colorClass="text-destructive" />
+                  <BreakdownRow label={`Shipping (${shippingRate} $ × ${results.confirmedOrders})`} value={`-${results.totalShipping.toFixed(2)} $`} colorClass="text-destructive" />
                   <BreakdownRow label={`COD Fees (5% × ${results.revenue.toFixed(0)}$)`} value={`-${results.codFees.toFixed(2)} $`} colorClass="text-destructive" />
                   <div className="border-t border-border pt-2.5 flex justify-between items-center font-bold">
                     <span className="text-foreground">Net Profit</span>

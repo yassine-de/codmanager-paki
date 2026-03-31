@@ -201,19 +201,19 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
                   {totalAmount > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Total Amount (price × qty)</span>
-                      <span className="font-semibold tabular-nums">{totalAmount.toLocaleString()} MAD</span>
+                      <span className="font-semibold tabular-nums">{totalAmount.toLocaleString()} PKR</span>
                     </div>
                   )}
                   {totalFees > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">Total Fees (shipping rates)</span>
-                      <span className="font-semibold tabular-nums text-destructive">-{totalFees.toFixed(2)} MAD</span>
+                      <span className="font-semibold tabular-nums text-destructive">-{totalFees.toFixed(2)} PKR</span>
                     </div>
                   )}
                   {codFees > 0 && (
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">COD Fees (5%)</span>
-                      <span className="font-semibold tabular-nums text-destructive">-{codFees.toFixed(2)} MAD</span>
+                      <span className="font-semibold tabular-nums text-destructive">-{codFees.toFixed(2)} PKR</span>
                     </div>
                   )}
                   {/* Addons breakdown */}
@@ -231,7 +231,7 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
                             {addon.reason || (addon.type === "in" ? "Bonus" : "Deduction")}
                           </span>
                           <span className={`font-semibold tabular-nums ${addon.type === "in" ? "text-success" : "text-destructive"}`}>
-                            {addon.type === "in" ? "+" : "-"}{addon.amount.toFixed(2)} MAD
+                            {addon.type === "in" ? "+" : "-"}{addon.amount.toFixed(2)} PKR
                           </span>
                         </div>
                       ))}
@@ -239,7 +239,7 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
                   )}
                   <div className="border-t pt-2 flex justify-between text-sm">
                     <span className="font-bold">Paid Amount</span>
-                    <span className="font-bold text-success tabular-nums">{netPayable.toLocaleString()} MAD</span>
+                    <span className="font-bold text-success tabular-nums">{netPayable.toLocaleString()} PKR</span>
                   </div>
                 </div>
               )}

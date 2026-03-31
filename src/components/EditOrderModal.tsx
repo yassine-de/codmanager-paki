@@ -133,7 +133,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
       historyEvents.push({ id: `${order.id}-h${eid++}`, timestamp: now, type: 'delivery_update', description: `Delivery status updated`, agent, oldValue: order.deliveryStatus, newValue: deliveryStatus });
     }
     if (total !== order.total) {
-      historyEvents.push({ id: `${order.id}-h${eid++}`, timestamp: now, type: 'price_change', description: `Order total changed`, agent, oldValue: `${order.total} MAD`, newValue: `${total} MAD` });
+      historyEvents.push({ id: `${order.id}-h${eid++}`, timestamp: now, type: 'price_change', description: `Order total changed`, agent, oldValue: `${order.total} PKR`, newValue: `${total} PKR` });
     }
 
     const updated: Order = {
@@ -242,7 +242,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                         placeholder="Price"
                       />
                     </div>
-                    <span className="text-xs text-muted-foreground w-20 text-right tabular-nums">{p.qty * p.price} MAD</span>
+                    <span className="text-xs text-muted-foreground w-20 text-right tabular-nums">{p.qty * p.price} PKR</span>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -256,7 +256,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                 ))}
               </div>
               <div className="text-right mt-2">
-                <span className="text-sm font-semibold tabular-nums">Total: {total} MAD</span>
+                <span className="text-sm font-semibold tabular-nums">Total: {total} PKR</span>
               </div>
             </div>
 

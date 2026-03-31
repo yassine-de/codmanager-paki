@@ -725,7 +725,7 @@ export default function Orders() {
                   {isCol('city') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.city}</td>}
                   {isCol('phone') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{order.phone}</td>}
                   {isCol('product') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.products.map(p => p.name).join(', ')}</td>}
-                  {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} MAD</td>}
+                  {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} PKR</td>}
                   {isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} /></td>}
                   {isCol('attempts') && isAdmin && (
                     <td className="py-2.5 px-4 text-xs">

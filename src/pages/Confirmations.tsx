@@ -37,7 +37,7 @@ export default function Confirmations() {
                   <span className="font-semibold">{order.id}</span>
                   <StatusBadge status={order.status} />
                 </div>
-                <span className="text-lg font-semibold tabular-nums">{order.total.toLocaleString()} MAD</span>
+                <span className="text-lg font-semibold tabular-nums">{order.total.toLocaleString()} PKR</span>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 text-sm text-muted-foreground">

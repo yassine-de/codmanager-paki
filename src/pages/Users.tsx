@@ -413,7 +413,7 @@ const Users = () => {
             {/* Seller rates */}
             {form.role === "seller" && (
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Tarifs par poids (MAD)</Label>
+                <Label className="text-xs font-semibold">Tarifs par poids ($)</Label>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">1 Kg</Label>
