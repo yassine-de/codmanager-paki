@@ -558,7 +558,7 @@ export default function Invoices() {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
                   <Clock className="h-3 w-3 text-warning" /> {t("need_to_pay")}
                 </p>
-                <p className="text-base font-bold text-warning">{formatUSD(needToPay)}</p>
+            <p className="text-base font-bold text-warning">{needToPay.toLocaleString()} PKR</p>
               </div>
             </>
           )}
