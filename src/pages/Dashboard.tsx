@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import OnlineStatusPanel from "@/components/OnlineStatusPanel";
 import { useDataVisibility, MaskedValue } from "@/contexts/DataVisibilityContext";
+import { formatPKR, formatUSD, pkrToUsd } from "@/lib/currency";
 
 /* ── Animated Number ── */
 function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
