@@ -302,6 +302,16 @@ const Users = () => {
     );
   };
 
+  const [filterRole, setFilterRole] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+
+  const filteredUsers = users.filter((u) => {
+    if (filterRole !== "all" && u.role !== filterRole) return false;
+    if (filterStatus === "active" && !u.active) return false;
+    if (filterStatus === "inactive" && u.active) return false;
+    return true;
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -312,6 +322,32 @@ const Users = () => {
         <Button size="sm" className="h-8 text-xs gap-1.5" onClick={openCreate}>
           <Plus className="h-3.5 w-3.5" /> Créer Utilisateur
         </Button>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <Select value={filterRole} onValueChange={setFilterRole}>
+          <SelectTrigger className="h-8 w-[130px] text-xs">
+            <SelectValue placeholder="Rôle" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">Tous les rôles</SelectItem>
+            <SelectItem value="admin" className="text-xs">Admin</SelectItem>
+            <SelectItem value="seller" className="text-xs">Seller</SelectItem>
+            <SelectItem value="agent" className="text-xs">Agent</SelectItem>
+            <SelectItem value="custom" className="text-xs">Custom</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="h-8 w-[130px] text-xs">
+            <SelectValue placeholder="Statut" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">Tous</SelectItem>
+            <SelectItem value="active" className="text-xs">Actif</SelectItem>
+            <SelectItem value="inactive" className="text-xs">Inactif</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="text-[11px] text-muted-foreground ml-1">{filteredUsers.length} utilisateur(s)</span>
       </div>
 
       <Card>
