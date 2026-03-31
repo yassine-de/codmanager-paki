@@ -224,28 +224,28 @@ export default function FinanceAnalytics() {
           </div>
           <div>
             <p className="text-sm text-muted-foreground font-medium">Total Revenue</p>
-            <p className="text-3xl font-bold tabular-nums tracking-tight">{totalProfit.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} PKR</p>
+            <p className="text-3xl font-bold tabular-nums tracking-tight">{formatUSD(totalProfitUSD)}</p>
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
           <div className="bg-background/60 rounded-lg p-3 text-center">
             <p className="text-xs text-muted-foreground mb-1">Shipping</p>
-            <p className="text-lg font-bold tabular-nums">{shippingRevenue.toLocaleString()} PKR</p>
+            <p className="text-lg font-bold tabular-nums">{formatUSD(shippingRevenueUSD)}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{shippedOrders.length} orders</p>
           </div>
           <div className="bg-background/60 rounded-lg p-3 text-center">
             <p className="text-xs text-muted-foreground mb-1">Confirmation</p>
-            <p className="text-lg font-bold tabular-nums">${confirmationStats.profit.toFixed(2)}</p>
+            <p className="text-lg font-bold tabular-nums">{formatUSD(confirmationStats.profit)}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{confirmationStats.count} × ${CONFIRMATION_RATE}</p>
           </div>
           <div className="bg-background/60 rounded-lg p-3 text-center">
             <p className="text-xs text-muted-foreground mb-1">COD Fees (5%)</p>
-            <p className="text-lg font-bold tabular-nums">{codStats.codFees.toLocaleString(undefined, { minimumFractionDigits: 2 })} PKR</p>
+            <p className="text-lg font-bold tabular-nums">{formatUSD(codStats.codFees)}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{codStats.deliveredCount} delivered orders</p>
           </div>
           <div className="bg-background/60 rounded-lg p-3 text-center">
             <p className="text-xs text-muted-foreground mb-1">Sourcing</p>
-            <p className="text-lg font-bold tabular-nums">{sourcingStats.profit.toLocaleString()} PKR</p>
+            <p className="text-lg font-bold tabular-nums">{formatUSD(sourcingProfitUSD)}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{sourcingStats.totalUnits} units · 30% margin</p>
           </div>
         </div>
@@ -254,10 +254,10 @@ export default function FinanceAnalytics() {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <KPICard title="Shipped Orders" value={shippedOrders.length} icon={Truck} iconBg="bg-primary/10" iconColor="text-primary" delay={0} />
-        <KPICard title="Shipping Revenue" value={`${shippingRevenue.toLocaleString()} PKR`} icon={DollarSign} iconBg="bg-success/10" iconColor="text-success" delay={50} />
-        <KPICard title="Confirmed Orders" value={confirmationStats.count} subtitle={`$${confirmationStats.profit.toFixed(2)} profit`} icon={CheckCircle2} iconBg="bg-info/10" iconColor="text-info" delay={75} />
-        <KPICard title="COD Fees" value={`${codStats.codFees.toFixed(2)} PKR`} subtitle={`5% of ${codStats.deliveredRevenue.toLocaleString()} PKR`} icon={DollarSign} iconBg="bg-warning/10" iconColor="text-warning" delay={100} />
-        <KPICard title="Sourcing Profit" value={`${sourcingStats.profit.toLocaleString()} PKR`} subtitle="~30% margin" icon={TrendingUp} iconBg="bg-success/10" iconColor="text-success" delay={150} />
+        <KPICard title="Shipping Revenue" value={formatUSD(shippingRevenueUSD)} icon={DollarSign} iconBg="bg-success/10" iconColor="text-success" delay={50} />
+        <KPICard title="Confirmed Orders" value={confirmationStats.count} subtitle={`${formatUSD(confirmationStats.profit)} profit`} icon={CheckCircle2} iconBg="bg-info/10" iconColor="text-info" delay={75} />
+        <KPICard title="COD Fees" value={formatUSD(codStats.codFees)} subtitle={`5% of ${formatUSD(codStats.deliveredRevenueUSD)}`} icon={DollarSign} iconBg="bg-warning/10" iconColor="text-warning" delay={100} />
+        <KPICard title="Sourcing Profit" value={formatUSD(sourcingProfitUSD)} subtitle="~30% margin" icon={TrendingUp} iconBg="bg-success/10" iconColor="text-success" delay={150} />
       </div>
 
       {/* Charts */}
