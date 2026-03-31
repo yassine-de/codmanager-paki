@@ -4,7 +4,7 @@
 // Fees: USD
 // Financial overview: PKR with USD equivalent
 
-export const USD_TO_PKR = 280;
+export const USD_TO_PKR = 290;
 
 /** Format amount as PKR */
 export function formatPKR(amount: number): string {
