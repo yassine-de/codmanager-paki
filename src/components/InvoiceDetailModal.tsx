@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Package, Truck, Phone, CreditCard, ArrowDownCircle, ArrowUpCircle, BarChart3 } from "lucide-react";
 import { formatUSD, formatPKR, pkrToUsd } from "@/lib/currency";
 import { InvoiceOrdersTable } from "@/components/invoice/InvoiceOrdersTable";
-import { InvoiceShippedTable, calcShippingFee } from "@/components/invoice/InvoiceShippedTable";
+import { calcShippingFee } from "@/components/invoice/InvoiceShippedTable";
 import { InvoiceCallCenterTable } from "@/components/invoice/InvoiceCallCenterTable";
 
 interface Props {
