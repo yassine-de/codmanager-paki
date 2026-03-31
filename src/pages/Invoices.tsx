@@ -837,7 +837,7 @@ export default function Invoices() {
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{t("amount")} (PKR)</Label>
+              <Label className="text-xs">{t("amount")} ($)</Label>
               <Input type="number" value={addonAmount} onChange={e => setAddonAmount(e.target.value)} placeholder="0.00" className="h-9 text-xs" min="0" step="0.01" />
             </div>
             <div className="space-y-1">
