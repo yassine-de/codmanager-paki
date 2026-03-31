@@ -114,6 +114,12 @@ export default function OrderDetail() {
   const attemptCount = isDbOrder ? dbOrder.attemptCount : 0;
   const fragile = isDbOrder ? dbOrder.fragile : false;
   const offers = isDbOrder ? dbOrder.offers : undefined;
+  const orioOrderId = isDbOrder ? dbOrder.orioOrderId : undefined;
+  const orioConsignmentNo = isDbOrder ? dbOrder.orioConsignmentNo : undefined;
+  const orioShippingStatus = isDbOrder ? dbOrder.orioShippingStatus : undefined;
+  const orioSyncStatus = isDbOrder ? dbOrder.orioSyncStatus : undefined;
+  const orioSyncError = isDbOrder ? dbOrder.orioSyncError : undefined;
+  const orioSyncedAt = isDbOrder ? dbOrder.orioSyncedAt : undefined;
 
   return (
     <div className="max-w-3xl space-y-6">
