@@ -371,7 +371,7 @@ const Users = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((u) => (
+                  {filteredUsers.map((u) => (
                     <TableRow key={u.user_id} className={`hover:bg-muted/30 ${!u.active ? "opacity-50" : ""}`}>
                       <TableCell className="py-2.5">
                         <Switch checked={u.active} onCheckedChange={() => toggleActive(u)} className="scale-75" />
