@@ -62,6 +62,26 @@ export default function FinanceAnalytics() {
     },
   });
 
+  // Fetch rate_settings for COD fee percentages
+  const { data: rateSettingsFinance = [] } = useQuery({
+    queryKey: ["rate-settings-finance"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("rate_settings").select("seller_id, cod_fee_per_delivery, is_global");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const getCodRate = useMemo(() => {
+    const globalRate = rateSettingsFinance.find(r => r.is_global && !r.seller_id);
+    const globalCod = (globalRate?.cod_fee_per_delivery ?? 5) / 100;
+    const sellerMap: Record<string, number> = {};
+    rateSettingsFinance.forEach(r => {
+      if (r.seller_id) sellerMap[r.seller_id] = r.cod_fee_per_delivery / 100;
+    });
+    return (sellerId: string) => sellerMap[sellerId] ?? globalCod;
+  }, [rateSettingsFinance]);
+
   const profileNameMap = useMemo(() => {
     const map: Record<string, string> = {};
     profiles.forEach(p => { map[p.user_id] = p.name; });
