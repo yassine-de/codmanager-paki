@@ -32,6 +32,7 @@ export interface Product {
   lastPrice: number;
   offers: ProductOffer[];
   weight?: string;
+  weightKg?: number | null;
 }
 
 const productImages = [

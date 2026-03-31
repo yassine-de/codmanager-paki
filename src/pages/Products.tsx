@@ -91,6 +91,7 @@ export default function Products() {
         lastPrice: Number((p as any).last_price) || 0,
         offers: ((p as any).offers || []).map((o: any, idx: number) => ({ id: `OFF-${idx}`, quantity: o.quantity || 1, price: o.price || 0 })),
         weight: (p as any).weight || undefined,
+        weightKg: (p as any).weight_kg ?? null,
         active: (p as any).active ?? false,
       };
     });
