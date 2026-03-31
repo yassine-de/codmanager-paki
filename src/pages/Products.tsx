@@ -91,6 +91,7 @@ export default function Products() {
         lastPrice: Number((p as any).last_price) || 0,
         offers: ((p as any).offers || []).map((o: any, idx: number) => ({ id: `OFF-${idx}`, quantity: o.quantity || 1, price: o.price || 0 })),
         weight: (p as any).weight || undefined,
+        weightKg: (p as any).weight_kg ?? null,
         active: (p as any).active ?? false,
       };
     });
@@ -417,9 +418,9 @@ export default function Products() {
                           </span>
                         </td>
                         <td className="py-2 px-3 text-center">
-                          {product.weight ? (
+                          {product.weightKg ? (
                             <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
-                              {product.weight === 'up_to_1kg' ? '≤1kg' : product.weight === 'up_to_2kg' ? '≤2kg' : product.weight === 'up_to_3kg' ? '≤3kg' : '>3kg'}
+                              {product.weightKg} KG
                             </span>
                           ) : (
                             <span className="text-[10px] text-muted-foreground">—</span>

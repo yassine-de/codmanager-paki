@@ -61,6 +61,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
           offers: offers.map(o => ({ quantity: o.quantity, price: o.price })),
           quantity: totalQty,
           weight: weight || null,
+          weight_kg: weight ? parseFloat(weight) : null,
           product_url: storeLink.trim(),
           video_url: videoLink.trim(),
           image_url: image.trim(),
@@ -281,26 +282,24 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
               <h3 className={sectionTitle}>
                 <span className="flex items-center gap-1.5">
                   <Weight className="w-3.5 h-3.5 text-muted-foreground" />
-                  Weight
+                  Weight (KG)
                 </span>
               </h3>
               <div className="w-1/2">
                 {isSeller ? (
                   <div className="h-9 flex items-center px-3 rounded-md border bg-muted/50 text-sm text-muted-foreground">
-                    {weight === "up_to_1kg" ? "Up to 1 kg" : weight === "up_to_2kg" ? "Up to 2 kg" : weight === "up_to_3kg" ? "Up to 3 kg" : weight === "more_than_3kg" ? "More than 3 kg" : "Not set"}
+                    {weight ? `${weight} KG` : "Not set"}
                   </div>
                 ) : (
-                  <Select value={weight} onValueChange={setWeight}>
-                    <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Select weight bracket" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="up_to_1kg">Up to 1 kg</SelectItem>
-                      <SelectItem value="up_to_2kg">Up to 2 kg</SelectItem>
-                      <SelectItem value="up_to_3kg">Up to 3 kg</SelectItem>
-                      <SelectItem value="more_than_3kg">More than 3 kg</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    type="number"
+                    min={0.01}
+                    step={0.01}
+                    value={weight}
+                    onChange={e => setWeight(e.target.value)}
+                    placeholder="e.g. 0.5, 1.2, 2.8"
+                    className="h-9 text-sm"
+                  />
                 )}
               </div>
             </div>

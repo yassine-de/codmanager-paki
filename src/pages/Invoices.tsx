@@ -50,13 +50,14 @@ interface DbAddon {
   created_at: string;
 }
 
-function calculateFeeFromWeight(weightText: string | null, rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null): number {
-  if (!rates || !weightText) return 0;
-  if (weightText === "up_to_1kg") return rates.rate_1kg;
-  if (weightText === "up_to_2kg") return rates.rate_2kg;
-  if (weightText === "up_to_3kg") return rates.rate_3kg;
-  if (weightText === "more_than_3kg") return rates.rate_3kg_plus ?? 6;
-  return 0;
+function calcShippingFee(weightKg: number | null, qty: number, rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null): number {
+  if (!rates || !weightKg || weightKg <= 0) return 0;
+  const totalWeight = weightKg * qty;
+  const rounded = Math.ceil(totalWeight);
+  if (rounded <= 1) return rates.rate_1kg;
+  if (rounded <= 2) return rates.rate_2kg;
+  if (rounded <= 3) return rates.rate_3kg;
+  return rates.rate_3kg_plus ?? rates.rate_3kg;
 }
 
 export default function Invoices() {
@@ -127,14 +128,14 @@ export default function Invoices() {
     return map;
   }, [allAddons]);
 
-  // Fetch orders with invoice_id to compute totals
+  // Fetch orders with invoice_id to compute totals (need more fields now)
   const { data: invoiceOrders = [] } = useQuery({
     queryKey: ["invoice-orders-summary", invoiceIds],
     queryFn: async () => {
       if (invoiceIds.length === 0) return [];
       const { data, error } = await supabase
         .from("orders")
-        .select("id, invoice_id, price, quantity, product_name, seller_id")
+        .select("id, invoice_id, price, quantity, product_name, seller_id, confirmation_status, delivery_status")
         .in("invoice_id", invoiceIds);
       if (error) throw error;
       return data;
@@ -187,13 +188,12 @@ export default function Invoices() {
     return map;
   }, [sellerRatesData]);
 
-  // Fetch rate_settings for COD fee percentage per seller
+  // Fetch rate_settings for COD fee + call center rates per seller
   const { data: rateSettingsData = [] } = useQuery({
     queryKey: ["rate-settings-invoices", allSellerIds],
     queryFn: async () => {
       if (allSellerIds.length === 0) return [];
-      // Fetch seller-specific + global rate settings
-      const { data, error } = await supabase.from("rate_settings").select("seller_id, cod_fee_per_delivery, is_global");
+      const { data, error } = await supabase.from("rate_settings").select("seller_id, cod_fee_per_delivery, confirmed_order_rate, dropped_order_rate, is_global");
       if (error) throw error;
       return data;
     },
@@ -204,7 +204,6 @@ export default function Invoices() {
     const map: Record<string, number> = {};
     const globalRate = rateSettingsData.find(r => r.is_global && !r.seller_id);
     const globalCod = globalRate?.cod_fee_per_delivery ?? 5;
-    // Set per-seller COD rates, fallback to global
     allSellerIds.forEach(id => {
       const sellerRate = rateSettingsData.find(r => r.seller_id === id);
       map[id] = sellerRate ? sellerRate.cod_fee_per_delivery : globalCod;
@@ -212,32 +211,47 @@ export default function Invoices() {
     return map;
   }, [rateSettingsData, allSellerIds]);
 
-  // Fetch products to get weight info
+  const callCenterRatesMap = useMemo(() => {
+    const map: Record<string, { confirmedRate: number; droppedRate: number }> = {};
+    const globalRate = rateSettingsData.find(r => r.is_global && !r.seller_id);
+    const gConfirmed = globalRate?.confirmed_order_rate ?? 0;
+    const gDropped = globalRate?.dropped_order_rate ?? 0;
+    allSellerIds.forEach(id => {
+      const sellerRate = rateSettingsData.find(r => r.seller_id === id);
+      map[id] = {
+        confirmedRate: sellerRate ? sellerRate.confirmed_order_rate : gConfirmed,
+        droppedRate: sellerRate ? sellerRate.dropped_order_rate : gDropped,
+      };
+    });
+    return map;
+  }, [rateSettingsData, allSellerIds]);
+
+  // Fetch products to get weight_kg info
   const { data: allProducts = [] } = useQuery({
     queryKey: ["products-for-invoices", allSellerIds],
     queryFn: async () => {
       if (allSellerIds.length === 0) return [];
       const { data, error } = await supabase
         .from("products")
-        .select("name, seller_id, weight")
+        .select("name, seller_id, weight_kg")
         .in("seller_id", allSellerIds);
       if (error) throw error;
-      return data as { name: string; seller_id: string; weight: string | null }[];
+      return data as { name: string; seller_id: string; weight_kg: number | null }[];
     },
     enabled: allSellerIds.length > 0,
   });
 
-  // Map: "sellerId|productName" -> weight text
+  // Map: "sellerId|productName" -> weight_kg
   const productWeightMap = useMemo(() => {
-    const map: Record<string, string | null> = {};
+    const map: Record<string, number | null> = {};
     allProducts.forEach(p => {
-      map[`${p.seller_id}|${p.name}`] = p.weight;
+      map[`${p.seller_id}|${p.name}`] = p.weight_kg;
     });
     return map;
   }, [allProducts]);
 
-  const getProductWeight = (sellerId: string, productName: string): string | null => {
-    return productWeightMap[`${sellerId}|${productName}`] || null;
+  const getProductWeightKg = (sellerId: string, productName: string): number | null => {
+    return productWeightMap[`${sellerId}|${productName}`] ?? null;
   };
 
   // Compute invoice summaries (all invoices including drafts from DB)
@@ -252,26 +266,49 @@ export default function Invoices() {
     return invoices.map(inv => {
       const orders = ordersByInvoice[inv.id] || [];
       const rates = sellerRatesMap[inv.seller_id] || null;
-      const totalAmountPKR = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
-      const totalAmountUSD = pkrToUsd(totalAmountPKR);
-      const totalFees = orders.reduce((sum, o) => sum + calculateFeeFromWeight(getProductWeight(inv.seller_id, o.product_name), rates), 0);
+      const ccRates = callCenterRatesMap[inv.seller_id] || { confirmedRate: 0, droppedRate: 0 };
+      
+      // Delivered orders → revenue
+      const delivered = orders.filter(o => o.delivery_status === "delivered");
+      const deliveredRevenuePKR = delivered.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+      
+      // Shipping: shipped + delivered orders
+      const shippable = orders.filter(o => 
+        o.delivery_status === "delivered" || o.delivery_status === "shipped" || 
+        o.delivery_status === "in_transit" || o.delivery_status === "with_courier"
+      );
+      const shippingFees = shippable.reduce((sum, o) => sum + calcShippingFee(getProductWeightKg(inv.seller_id, o.product_name), o.quantity, rates), 0);
+      
+      // Call center fees
+      const confirmedCount = orders.filter(o => o.confirmation_status === "confirmed").length;
+      const droppedCount = orders.filter(o => o.confirmation_status === "cancelled").length;
+      const callCenterFees = (confirmedCount * ccRates.confirmedRate) + (droppedCount * ccRates.droppedRate);
+      
+      // COD fees
       const codPct = (codFeeMap[inv.seller_id] ?? 5) / 100;
-      const codFees = totalAmountUSD * codPct;
+      const codFees = deliveredRevenuePKR * codPct;
+      
+      // Addons
       const addons = addonsByInvoice[inv.id] || [];
       const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0);
+      
+      const totalDeductions = shippingFees + callCenterFees + codFees;
+      const netPayable = deliveredRevenuePKR - totalDeductions + addonNet;
+      
       return {
         ...inv,
         ordersCount: orders.length,
-        totalAmountPKR,
-        totalAmountUSD,
-        totalFees,
+        deliveredCount: delivered.length,
+        totalAmountPKR: deliveredRevenuePKR,
+        shippingFees,
+        callCenterFees,
         codFees,
         addonNet,
-        netPayableUSD: totalAmountUSD - totalFees - codFees + addonNet,
+        netPayable,
         sellerName: sellerNameMap[inv.seller_id] || inv.seller_id.slice(0, 8),
       };
     });
-  }, [invoices, invoiceOrders, sellerRatesMap, addonsByInvoice, sellerNameMap, productWeightMap]);
+  }, [invoices, invoiceOrders, sellerRatesMap, callCenterRatesMap, addonsByInvoice, sellerNameMap, productWeightMap, codFeeMap]);
 
   // All invoices as rows (no more virtual drafts)
   const combined = useMemo(() => {
@@ -305,10 +342,10 @@ export default function Invoices() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // Stats (all in USD now)
-  const totalAmountUSD = filtered.reduce((s, r) => s + r.data.netPayableUSD, 0);
-  const paidAmount = filtered.filter(r => r.data.status === "paid").reduce((s, r) => s + r.data.netPayableUSD, 0);
-  const needToPay = filtered.filter(r => r.data.status === "ready").reduce((s, r) => s + r.data.netPayableUSD, 0);
+  // Stats
+  const totalAmountPKR = filtered.reduce((s, r) => s + r.data.netPayable, 0);
+  const paidAmount = filtered.filter(r => r.data.status === "paid").reduce((s, r) => s + r.data.netPayable, 0);
+  const needToPay = filtered.filter(r => r.data.status === "ready").reduce((s, r) => s + r.data.netPayable, 0);
 
   const sellerOptions = useMemo(() => {
     return allSellerIds.map(id => ({
@@ -512,7 +549,7 @@ export default function Invoices() {
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
               <CheckCircle2 className="h-3 w-3 text-success" /> {t("paid")}
             </p>
-            <p className="text-base font-bold text-success">{formatUSD(paidAmount)}</p>
+            <p className="text-base font-bold text-success">{paidAmount.toLocaleString()} PKR</p>
           </div>
           {!isSeller && (
             <>
@@ -521,7 +558,7 @@ export default function Invoices() {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
                   <Clock className="h-3 w-3 text-warning" /> {t("need_to_pay")}
                 </p>
-                <p className="text-base font-bold text-warning">{formatUSD(needToPay)}</p>
+            <p className="text-base font-bold text-warning">{needToPay.toLocaleString()} PKR</p>
               </div>
             </>
           )}
@@ -594,10 +631,11 @@ export default function Invoices() {
                 <TableHead className="text-[11px] font-semibold">Date</TableHead>
                 {!isSeller && <TableHead className="text-[11px] font-semibold">Seller</TableHead>}
                 <TableHead className="text-[11px] font-semibold text-center">Orders</TableHead>
-                <TableHead className="text-[11px] font-semibold text-right">Amount</TableHead>
-                <TableHead className="text-[11px] font-semibold text-right">Fees</TableHead>
-                <TableHead className="text-[11px] font-semibold text-right">COD 5%</TableHead>
-                <TableHead className="text-[11px] font-semibold text-right">Paid Amount</TableHead>
+                <TableHead className="text-[11px] font-semibold text-right">Revenue</TableHead>
+                <TableHead className="text-[11px] font-semibold text-right">Shipping</TableHead>
+                <TableHead className="text-[11px] font-semibold text-right">Call Center</TableHead>
+                <TableHead className="text-[11px] font-semibold text-right">COD</TableHead>
+                <TableHead className="text-[11px] font-semibold text-right">Net Payable</TableHead>
                 {!isSeller && <TableHead className="text-[11px] font-semibold text-center">Ready</TableHead>}
                 <TableHead className="text-[11px] font-semibold text-center">Status</TableHead>
                 {!isSeller && <TableHead className="text-[11px] font-semibold text-center">Payment</TableHead>}
@@ -608,7 +646,7 @@ export default function Invoices() {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isSeller ? 8 : 11} className="text-center text-xs text-muted-foreground py-16">
+                  <TableCell colSpan={isSeller ? 9 : 13} className="text-center text-xs text-muted-foreground py-16">
                     <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
                     <p className="font-medium">{t("no_invoices")}</p>
                   </TableCell>
@@ -638,9 +676,10 @@ export default function Invoices() {
                         <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-accent text-[11px] font-semibold">{inv.ordersCount}</span>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{inv.totalAmountPKR.toLocaleString()} <span className="text-muted-foreground text-[10px]">PKR</span></TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive">-{formatUSD(inv.totalFees)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive">-{formatUSD(inv.codFees)}</TableCell>
-                      <TableCell className="text-right tabular-nums font-bold text-success">{formatUSD(inv.netPayableUSD)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">-{inv.shippingFees.toLocaleString()} PKR</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">-{inv.callCenterFees.toLocaleString()} PKR</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">-{inv.codFees.toLocaleString()} PKR</TableCell>
+                      <TableCell className="text-right tabular-nums font-bold text-success">{inv.netPayable.toLocaleString()} PKR</TableCell>
                       {!isSeller && (
                         <TableCell className="text-center">
                           <Switch
@@ -667,7 +706,7 @@ export default function Invoices() {
                           <div className="flex items-center justify-center gap-1.5">
                             <Switch
                               checked={inv.status === "paid"}
-                              onCheckedChange={() => togglePaidMutation.mutate({ invoiceId: inv.id, currentStatus: inv.status, netPayable: inv.netPayableUSD, sellerId: inv.seller_id })}
+                              onCheckedChange={() => togglePaidMutation.mutate({ invoiceId: inv.id, currentStatus: inv.status, netPayable: inv.netPayable, sellerId: inv.seller_id })}
                               disabled={inv.status !== "ready" && inv.status !== "paid"}
                               className="data-[state=checked]:bg-success scale-90"
                             />
@@ -892,6 +931,8 @@ export default function Invoices() {
         sellerId={detailSellerId}
         sellerRates={detailSellerRates}
         codFeePercentage={codFeeMap[detailSellerId] ?? 5}
+        confirmedRate={callCenterRatesMap[detailSellerId]?.confirmedRate ?? 0}
+        droppedRate={callCenterRatesMap[detailSellerId]?.droppedRate ?? 0}
         isDraft={detailIsDraft}
         draftOrders={detailDraftOrders}
       />
