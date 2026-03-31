@@ -61,6 +61,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
           offers: offers.map(o => ({ quantity: o.quantity, price: o.price })),
           quantity: totalQty,
           weight: weight || null,
+          weight_kg: weight ? parseFloat(weight) : null,
           product_url: storeLink.trim(),
           video_url: videoLink.trim(),
           image_url: image.trim(),
