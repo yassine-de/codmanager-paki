@@ -113,7 +113,7 @@ export function InvoiceDetailModal({ open, onOpenChange, invoiceId, invoiceNumbe
   const totalAmountPKR = displayOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
   const totalAmountUSD = pkrToUsd(totalAmountPKR);
   const totalFees = displayOrders.reduce((sum, o) => sum + calculateFeeFromWeight(getWeight(o.product_name), sellerRates), 0);
-  const codFees = totalAmountUSD * 0.05; // COD fees in USD
+  const codFees = totalAmountUSD * (codFeePercentage / 100);
   const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0); // addons in USD
   const netPayableUSD = totalAmountUSD - totalFees - codFees + addonNet;
 
