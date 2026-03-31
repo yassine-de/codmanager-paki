@@ -287,7 +287,7 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
             </p>
             <div className="flex items-center gap-1.5 mt-1">
               <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold ${isIn ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                {isIn ? "+" : "-"}{event.amount?.toFixed(2)} PKR
+                {isIn ? "+" : "-"}{event.amount?.toFixed(2)} $
               </span>
               {event.reason && (
                 <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">

@@ -7,6 +7,7 @@ import {
   Loader2, ChevronLeft, ChevronRight, Package, Download, Printer
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { pkrToUsd, formatUSD, USD_TO_PKR } from "@/lib/currency";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -226,19 +227,21 @@ export default function Invoices() {
     return invoices.map(inv => {
       const orders = ordersByInvoice[inv.id] || [];
       const rates = sellerRatesMap[inv.seller_id] || null;
-      const totalAmount = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+      const totalAmountPKR = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+      const totalAmountUSD = pkrToUsd(totalAmountPKR);
       const totalFees = orders.reduce((sum, o) => sum + calculateFeeFromWeight(getProductWeight(inv.seller_id, o.product_name), rates), 0);
-      const codFees = totalAmount * 0.05;
+      const codFees = totalAmountUSD * 0.05;
       const addons = addonsByInvoice[inv.id] || [];
       const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0);
       return {
         ...inv,
         ordersCount: orders.length,
-        totalAmount,
+        totalAmountPKR,
+        totalAmountUSD,
         totalFees,
         codFees,
         addonNet,
-        netPayable: totalAmount - totalFees - codFees + addonNet,
+        netPayableUSD: totalAmountUSD - totalFees - codFees + addonNet,
         sellerName: sellerNameMap[inv.seller_id] || inv.seller_id.slice(0, 8),
       };
     });
@@ -276,10 +279,10 @@ export default function Invoices() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // Stats
-  const totalAmount = filtered.reduce((s, r) => s + r.data.netPayable, 0);
-  const paidAmount = filtered.filter(r => r.data.status === "paid").reduce((s, r) => s + r.data.netPayable, 0);
-  const needToPay = filtered.filter(r => r.data.status === "ready").reduce((s, r) => s + r.data.netPayable, 0);
+  // Stats (all in USD now)
+  const totalAmountUSD = filtered.reduce((s, r) => s + r.data.netPayableUSD, 0);
+  const paidAmount = filtered.filter(r => r.data.status === "paid").reduce((s, r) => s + r.data.netPayableUSD, 0);
+  const needToPay = filtered.filter(r => r.data.status === "ready").reduce((s, r) => s + r.data.netPayableUSD, 0);
 
   const sellerOptions = useMemo(() => {
     return allSellerIds.map(id => ({
@@ -483,7 +486,7 @@ export default function Invoices() {
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
               <CheckCircle2 className="h-3 w-3 text-success" /> {t("paid")}
             </p>
-            <p className="text-base font-bold text-success">{paidAmount.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">PKR</span></p>
+            <p className="text-base font-bold text-success">{formatUSD(paidAmount)}</p>
           </div>
           {!isSeller && (
             <>
@@ -492,7 +495,7 @@ export default function Invoices() {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
                   <Clock className="h-3 w-3 text-warning" /> {t("need_to_pay")}
                 </p>
-                <p className="text-base font-bold text-warning">{needToPay.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">PKR</span></p>
+                <p className="text-base font-bold text-warning">{formatUSD(needToPay)}</p>
               </div>
             </>
           )}
@@ -608,10 +611,10 @@ export default function Invoices() {
                       <TableCell className="text-center">
                         <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-accent text-[11px] font-semibold">{inv.ordersCount}</span>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{inv.totalAmount.toLocaleString()} <span className="text-muted-foreground text-[10px]">PKR</span></TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive">-{inv.totalFees.toFixed(2)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive">-{inv.codFees.toFixed(2)}</TableCell>
-                      <TableCell className="text-right tabular-nums font-bold text-success">{inv.netPayable.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">PKR</span></TableCell>
+                      <TableCell className="text-right tabular-nums">{inv.totalAmountPKR.toLocaleString()} <span className="text-muted-foreground text-[10px]">PKR</span></TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">-{formatUSD(inv.totalFees)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">-{formatUSD(inv.codFees)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-bold text-success">{formatUSD(inv.netPayableUSD)}</TableCell>
                       {!isSeller && (
                         <TableCell className="text-center">
                           <Switch
@@ -638,7 +641,7 @@ export default function Invoices() {
                           <div className="flex items-center justify-center gap-1.5">
                             <Switch
                               checked={inv.status === "paid"}
-                              onCheckedChange={() => togglePaidMutation.mutate({ invoiceId: inv.id, currentStatus: inv.status, netPayable: inv.netPayable, sellerId: inv.seller_id })}
+                              onCheckedChange={() => togglePaidMutation.mutate({ invoiceId: inv.id, currentStatus: inv.status, netPayable: inv.netPayableUSD, sellerId: inv.seller_id })}
                               disabled={inv.status !== "ready" && inv.status !== "paid"}
                               className="data-[state=checked]:bg-success scale-90"
                             />
@@ -834,7 +837,7 @@ export default function Invoices() {
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{t("amount")} (PKR)</Label>
+              <Label className="text-xs">{t("amount")} ($)</Label>
               <Input type="number" value={addonAmount} onChange={e => setAddonAmount(e.target.value)} placeholder="0.00" className="h-9 text-xs" min="0" step="0.01" />
             </div>
             <div className="space-y-1">
