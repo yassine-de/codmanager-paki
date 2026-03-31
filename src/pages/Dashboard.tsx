@@ -345,16 +345,17 @@ export default function Dashboard() {
         {/* ═══════════ FINANCIAL OVERVIEW ═══════════ */}
         <div className="space-y-3">
           <SectionHeader icon={DollarSign} title="Financial Overview" color="text-primary" iconBg="bg-primary/10" delay={160} />
+          <div className="mb-2 flex items-center gap-2">
+            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md">1 USD = 280 PKR</span>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <SectionKPI title="Delivered Amount" value={kpis.revenue} percentage={100}
-              percentLabel="total delivered" icon={DollarSign} color="text-foreground" iconBg="bg-muted"
-              prefix="" suffix=" MAD" delay={170} />
-            <SectionKPI title="Paid Amount" value={kpis.paidAmount} percentage={pct(kpis.paidAmount, kpis.revenue)}
-              percentLabel="of delivered" icon={Banknote} color="text-success" iconBg="bg-success/10"
-              prefix="" suffix=" MAD" delay={180} />
-            <SectionKPI title="Pending Amount" value={kpis.pendingAmount} percentage={pct(kpis.pendingAmount, kpis.revenue)}
+            <FinancialKPI title="Delivered Amount" pkrAmount={kpis.revenue} percentage={100}
+              percentLabel="total delivered" icon={DollarSign} color="text-foreground" iconBg="bg-muted" delay={170} />
+            <FinancialKPI title="Paid Amount" pkrAmount={kpis.paidAmount} percentage={pct(kpis.paidAmount, kpis.revenue)}
+              percentLabel="of delivered" icon={Banknote} color="text-success" iconBg="bg-success/10" delay={180} />
+            <FinancialKPI title="Pending Amount" pkrAmount={kpis.pendingAmount} percentage={pct(kpis.pendingAmount, kpis.revenue)}
               percentLabel="of delivered" icon={Clock} color="text-warning" iconBg="bg-warning/10"
-              highlight prefix="" suffix=" MAD" delay={190} />
+              highlight delay={190} />
           </div>
         </div>
 
