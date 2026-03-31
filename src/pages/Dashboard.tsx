@@ -146,17 +146,17 @@ function FinancialKPI({
           <Icon className={`w-5 h-5 ${color}`} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
+          <div className="flex flex-col gap-1">
             <p className={`font-bold tabular-nums tracking-tight leading-none ${highlight ? 'text-3xl' : 'text-2xl'}`}>
               {isDataVisible ? <AnimatedNumber value={pkrAmount} suffix=" PKR" /> : <MaskedValue className="gap-1" />}
             </p>
-            <span className={`text-sm font-semibold tabular-nums ${color} opacity-60`}>
-              {isDataVisible ? `${percentage}%` : <MaskedValue />}
-            </span>
+            <p className={`font-bold tabular-nums tracking-tight leading-none text-foreground ${highlight ? 'text-2xl' : 'text-xl'}`}>
+              {isDataVisible ? `≈ ${formatUSD(usdEquiv)}` : <MaskedValue />}
+            </p>
           </div>
-          <p className="text-sm font-bold text-muted-foreground mt-1.5 tabular-nums">
-            {isDataVisible ? `≈ ${formatUSD(usdEquiv)}` : <MaskedValue />}
-          </p>
+          <span className={`text-sm font-semibold tabular-nums ${color} opacity-60 self-start mt-1`}>
+            {isDataVisible ? `${percentage}%` : <MaskedValue />}
+          </span>
           {percentLabel && <p className="text-[10px] text-muted-foreground/40 mt-0.5">{isDataVisible ? percentLabel : <MaskedValue />}</p>}
         </div>
       </div>
