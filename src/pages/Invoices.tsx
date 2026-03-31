@@ -227,19 +227,21 @@ export default function Invoices() {
     return invoices.map(inv => {
       const orders = ordersByInvoice[inv.id] || [];
       const rates = sellerRatesMap[inv.seller_id] || null;
-      const totalAmount = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+      const totalAmountPKR = orders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+      const totalAmountUSD = pkrToUsd(totalAmountPKR);
       const totalFees = orders.reduce((sum, o) => sum + calculateFeeFromWeight(getProductWeight(inv.seller_id, o.product_name), rates), 0);
-      const codFees = totalAmount * 0.05;
+      const codFees = totalAmountUSD * 0.05;
       const addons = addonsByInvoice[inv.id] || [];
       const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0);
       return {
         ...inv,
         ordersCount: orders.length,
-        totalAmount,
+        totalAmountPKR,
+        totalAmountUSD,
         totalFees,
         codFees,
         addonNet,
-        netPayable: totalAmount - totalFees - codFees + addonNet,
+        netPayableUSD: totalAmountUSD - totalFees - codFees + addonNet,
         sellerName: sellerNameMap[inv.seller_id] || inv.seller_id.slice(0, 8),
       };
     });
