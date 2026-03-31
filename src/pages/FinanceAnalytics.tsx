@@ -6,6 +6,7 @@ import { KPICard } from "@/components/KPICard";
 import { Truck, DollarSign, Package, TrendingUp, ChevronDown, CheckCircle2, Wallet, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatUSD, pkrToUsd } from "@/lib/currency";
 import { DateRange } from "react-day-picker";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
 import { supabase } from "@/integrations/supabase/client";
