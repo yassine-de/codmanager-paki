@@ -41,19 +41,34 @@ const defaultAgentRates: AgentRateValues = {
 
 // --- Reusable Input ---
 function RateInput({ label, value, onChange, helper, prefix = "$" }: { label: string; value: number; onChange: (v: number) => void; helper?: string; prefix?: string }) {
+  const [localValue, setLocalValue] = useState(String(value));
+
+  useEffect(() => {
+    setLocalValue(String(value));
+  }, [value]);
+
   return (
     <div className="space-y-1.5">
       <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">{prefix}</span>
         <Input
-          type="number"
-          min="0"
-          step="0.01"
-          value={value || ""}
+          type="text"
+          inputMode="decimal"
+          value={localValue}
           onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            onChange(isNaN(v) || v < 0 ? 0 : v);
+            const raw = e.target.value;
+            if (raw === "" || /^[0-9]*\.?[0-9]*$/.test(raw)) {
+              setLocalValue(raw);
+              const v = parseFloat(raw);
+              onChange(isNaN(v) || v < 0 ? 0 : v);
+            }
+          }}
+          onBlur={() => {
+            const v = parseFloat(localValue);
+            const final = isNaN(v) || v < 0 ? 0 : v;
+            setLocalValue(String(final));
+            onChange(final);
           }}
           className="pl-7 h-9 text-sm"
           placeholder="0.00"
