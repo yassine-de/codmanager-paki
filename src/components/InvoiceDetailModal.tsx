@@ -7,6 +7,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Package, ArrowDownCircle, ArrowUpCircle } from "lucide-react";
+import { pkrToUsd, formatUSD, USD_TO_PKR } from "@/lib/currency";
 
 interface Props {
   open: boolean;
