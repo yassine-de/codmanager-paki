@@ -82,6 +82,23 @@ export function InvoiceDetailModal({
     enabled: !!invoiceId && open,
   });
 
+  // Fetch approved adjustments for this invoice
+  const { data: invoiceAdjustments = [] } = useQuery({
+    queryKey: ["invoice-adjustments-detail", invoiceId],
+    queryFn: async () => {
+      if (!invoiceId) return [];
+      const { data, error } = await supabase
+        .from("invoice_adjustments")
+        .select("*")
+        .eq("applied_invoice_id", invoiceId)
+        .eq("status", "approved")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as { id: string; order_id: string; difference: number; reason: string; old_status: string; new_status: string }[];
+    },
+    enabled: !!invoiceId && open,
+  });
+
   // Categorize orders
   const deliveredOrders = displayOrders.filter(o => o.delivery_status === "delivered");
   const shippableOrders = displayOrders.filter(o =>
