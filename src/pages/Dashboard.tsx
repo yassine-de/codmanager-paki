@@ -398,7 +398,7 @@ export default function Dashboard() {
         <div className="space-y-3">
           <SectionHeader icon={DollarSign} title="Financial Overview" color="text-primary" iconBg="bg-primary/10" delay={160} />
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md">1 USD = 280 PKR</span>
+            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md">1 USD = 290 PKR</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <FinancialKPI title="Delivered Amount" pkrAmount={kpis.revenue} percentage={100}
