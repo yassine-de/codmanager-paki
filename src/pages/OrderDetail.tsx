@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Phone, MapPin, Calendar, StickyNote, Loader2 } from "lucide-react";
+import { ArrowLeft, Phone, MapPin, Calendar, StickyNote, Loader2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { mockOrders } from "@/lib/data";
