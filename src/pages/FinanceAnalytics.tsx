@@ -315,10 +315,10 @@ function ProductRevenueChart({ data, chartColors }: { data: { name: string; reve
       <ResponsiveContainer width="100%" height={visibleData.length * 44 + 30}>
         <BarChart data={visibleData} layout="vertical">
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+          <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => formatUSD(v)} />
           <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={120} />
-          <Tooltip formatter={(v: number) => `${v.toLocaleString()} PKR`} contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
-          <Bar dataKey="revenue" radius={[0, 4, 4, 0]} name="Revenue (PKR)">
+          <Tooltip formatter={(v: number) => formatUSD(pkrToUsd(v))} contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
+          <Bar dataKey="revenue" radius={[0, 4, 4, 0]} name="Revenue ($)">
             {visibleData.map((_, i) => (
               <Cell key={i} fill={chartColors[i % chartColors.length]} />
             ))}
