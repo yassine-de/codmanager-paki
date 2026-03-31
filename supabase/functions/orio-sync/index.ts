@@ -335,6 +335,16 @@ Deno.serve(async (req) => {
         result = { synced: results.length, results };
         break;
 
+      case "store-config": {
+        // Store supabase URL and service role key in app_settings for trigger use
+        const url = Deno.env.get("SUPABASE_URL")!;
+        const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        await supabase.from("app_settings").upsert({ key: "supabase_url", value: url }, { onConflict: "key" });
+        await supabase.from("app_settings").upsert({ key: "supabase_service_role_key", value: key }, { onConflict: "key" });
+        result = { stored: true };
+        break;
+      }
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
