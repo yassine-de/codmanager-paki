@@ -253,7 +253,7 @@ export default function RatesManagement() {
   // Save seller rates
   const saveSellerMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
+      const payload: Record<string, any> = {
         dropped_order_rate: sellerRates.dropped_order_rate,
         confirmed_order_rate: sellerRates.confirmed_order_rate,
         shipping_rate_1kg: sellerRates.shipping_rate_1kg,
@@ -261,6 +261,10 @@ export default function RatesManagement() {
         shipping_rate_3kg: sellerRates.shipping_rate_3kg,
         cod_fee_per_delivery: sellerRates.cod_fee_percentage,
       };
+      // Mark as custom when saving per-seller rates
+      if (sellerTarget) {
+        payload.is_custom = true;
+      }
       if (sellerRateData?.id) {
         const { error } = await supabase.from("rate_settings").update(payload).eq("id", sellerRateData.id);
         if (error) throw error;
@@ -271,6 +275,7 @@ export default function RatesManagement() {
           agent_commission_delivered: 0,
           seller_id: sellerTarget,
           is_global: !sellerTarget,
+          is_custom: !!sellerTarget,
         });
         if (error) throw error;
       }
