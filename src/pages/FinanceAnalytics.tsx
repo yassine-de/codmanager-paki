@@ -161,10 +161,10 @@ export default function FinanceAnalytics() {
     return Object.entries(map)
       .map(([id, d]) => ({
         name: profileNameMap[id] || id.slice(0, 8),
-        total: Math.round(d.shippingProfit + d.codProfit + d.sourcingProfit),
-        shipping: Math.round(d.shippingProfit),
-        cod: Math.round(d.codProfit),
-        sourcing: Math.round(d.sourcingProfit),
+        total: Math.round(pkrToUsd(d.shippingProfit + d.codProfit + d.sourcingProfit)),
+        shipping: Math.round(pkrToUsd(d.shippingProfit)),
+        cod: Math.round(pkrToUsd(d.codProfit)),
+        sourcing: Math.round(pkrToUsd(d.sourcingProfit)),
       }))
       .sort((a, b) => b.total - a.total);
   }, [filteredOrders, filteredSourcing, profileNameMap]);
