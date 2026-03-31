@@ -202,6 +202,11 @@ const Users = () => {
               rate_2kg: Number(form.rate_2kg) || 0,
               rate_3kg: Number(form.rate_3kg) || 0,
             } : undefined,
+            rateSettings: form.role === "seller" ? {
+              dropped_order_rate: Number(form.dropped_order_rate) || 0,
+              confirmed_order_rate: Number(form.confirmed_order_rate) || 0,
+              cod_fee_per_delivery: Number(form.cod_fee_per_delivery) || 0,
+            } : undefined,
             permissions: form.role === "custom" ? form.selectedPermissions : undefined,
           },
         });
