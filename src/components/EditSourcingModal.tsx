@@ -102,11 +102,11 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
-    if (quantity <= 0) errs.quantity = "Quantity must be greater than 0";
-    if (unitPrice < 0) errs.unitPrice = "Price cannot be negative";
-    if (shippingCost < 0) errs.shippingCost = "Shipping cost cannot be negative";
-    if (landedPrice < 0) errs.landedPrice = "Landed price cannot be negative";
-    if (sellerPrice < 0) errs.sellerPrice = "Seller price cannot be negative";
+    if (n(quantity) <= 0) errs.quantity = "Quantity must be greater than 0";
+    if (n(unitPrice) < 0) errs.unitPrice = "Price cannot be negative";
+    if (n(shippingCost) < 0) errs.shippingCost = "Shipping cost cannot be negative";
+    if (n(landedPrice) < 0) errs.landedPrice = "Landed price cannot be negative";
+    if (n(sellerPrice) < 0) errs.sellerPrice = "Seller price cannot be negative";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
