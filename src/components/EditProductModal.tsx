@@ -485,7 +485,24 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] text-muted-foreground">SKU <span className="text-muted-foreground/60">(auto if empty)</span></Label>
-                        <Input value={variant.sku} onChange={e => updateVariant(i, "sku", e.target.value)} placeholder={`${sku}-${variant.name.toUpperCase().replace(/\s/g, '') || '...'}`} className="h-8 text-xs" />
+                        <div className="relative">
+                          <Input value={variant.sku} onChange={e => updateVariant(i, "sku", e.target.value)} placeholder={`${sku}-${variant.name.toUpperCase().replace(/\s/g, '') || '...'}`} className="h-8 text-xs pr-8" />
+                          {(variant.sku || `${sku}-${variant.name.toUpperCase().replace(/\s/g, '')}`) && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-8 w-8 text-muted-foreground hover:text-foreground"
+                              onClick={() => {
+                                const variantSku = variant.sku || `${sku}-${variant.name.toUpperCase().replace(/\s/g, '')}`;
+                                navigator.clipboard.writeText(variantSku);
+                                toast.success("Variant SKU copied");
+                              }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
