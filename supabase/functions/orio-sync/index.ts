@@ -146,7 +146,13 @@ async function createShipment(
     piece: order.quantity || 1,
     weight: Number(order.weight || 0.5),
     order_amount: Number(order.total_amount || 0),
-    detail: [{ product_name: order.product_name || "Product", quantity: order.quantity || 1 }],
+    detail: [{
+      product_name: order.product_name || "Product",
+      product_code: order.order_id || "N/A",
+      quantity: order.quantity || 1,
+      amount: Number(order.total_amount || 0),
+      image_url: order.product_url || "",
+    }],
     remarks: order.note || "",
   };
 
