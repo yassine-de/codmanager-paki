@@ -45,6 +45,7 @@ interface RealProduct {
   landed_price: number | null;
   image_url: string | null;
   weight: string | null;
+  weight_kg: number | null;
 }
 
 /* ── Default weight options (fallback) ── */
