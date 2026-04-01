@@ -500,7 +500,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
             {/* Shipping Cost */}
             <div className="space-y-1.5">
               <Label className="text-xs">Shipping Cost ($)</Label>
-              <Input type="number" min={0} step={0.01} value={shippingCost} onChange={e => setShippingCost(Number(e.target.value))} className={`h-9 text-sm ${errors.shippingCost ? "border-destructive" : ""}`} />
+              <Input type="number" min={0} step={0.01} value={shippingCost} onChange={e => setShippingCost(e.target.value === "" ? "" : Number(e.target.value))} className={`h-9 text-sm ${errors.shippingCost ? "border-destructive" : ""}`} />
               {errors.shippingCost && <p className="text-[11px] text-destructive">{errors.shippingCost}</p>}
             </div>
 
