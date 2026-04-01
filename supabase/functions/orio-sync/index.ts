@@ -129,6 +129,8 @@ async function createShipment(
     consignee_address: order.customer_address || order.customer_city || "N/A",
     consignee_email: "customer@na.com",
     consignee_contact: order.customer_phone || "03000000000",
+    consignee_latitude: 0,
+    consignee_longitude: 0,
     // Location
     origin_country_id: 1,
     origin_province_id: originProvinceId,
