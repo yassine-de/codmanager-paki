@@ -328,12 +328,22 @@ Deno.serve(async (req) => {
 
       case "platforms": {
         const cfg = getOrioConfig();
-        const res = await fetch(`${ORIO_BASE}/customer-platforms`, {
-          method: "POST",
-          headers: orioHeaders(cfg.token),
-          body: JSON.stringify({ acno: cfg.acno }),
-        });
-        result = await res.json();
+        const endpoints = ["customer-platforms", "get-platforms", "platforms"];
+        const platformResults: any[] = [];
+        for (const ep of endpoints) {
+          try {
+            const res = await fetch(`${ORIO_BASE}/${ep}`, {
+              method: "POST",
+              headers: orioHeaders(cfg.token),
+              body: JSON.stringify({ acno: cfg.acno }),
+            });
+            const text = await res.text();
+            platformResults.push({ endpoint: ep, status: res.status, body: text.substring(0, 500) });
+          } catch (e) {
+            platformResults.push({ endpoint: ep, error: (e as Error).message });
+          }
+        }
+        result = platformResults;
         break;
       }
 
