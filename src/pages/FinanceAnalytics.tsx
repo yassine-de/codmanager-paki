@@ -350,6 +350,19 @@ export default function FinanceAnalytics() {
       .sort((a, b) => b.total - a.total);
   }, [filteredOrders, filteredSourcing, profileNameMap, getShippingFee, rateHelpers]);
 
+  const profitByProduct = useMemo(() => {
+    const map: Record<string, { revenue: number; count: number }> = {};
+    filteredOrders.forEach(o => {
+      if (o.delivery_status === "delivered" || o.delivery_status === "paid") {
+        const name = o.product_name || "Unknown";
+        if (!map[name]) map[name] = { revenue: 0, count: 0 };
+        map[name].revenue += Number(o.total_amount);
+        map[name].count += o.quantity;
+      }
+    });
+    return Object.entries(map).map(([name, d]) => ({ name, revenue: d.revenue, count: d.count })).sort((a, b) => b.revenue - a.revenue);
+  }, [filteredOrders]);
+
   const chartColors = ['hsl(var(--primary))', 'hsl(155, 50%, 42%)', 'hsl(38, 90%, 55%)', 'hsl(0, 65%, 52%)', 'hsl(220, 70%, 55%)'];
 
   if (isLoading) {
