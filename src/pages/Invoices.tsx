@@ -268,38 +268,39 @@ export default function Invoices() {
       const rates = sellerRatesMap[inv.seller_id] || null;
       const ccRates = callCenterRatesMap[inv.seller_id] || { confirmedRate: 0, droppedRate: 0 };
       
-      // Delivered orders → revenue
+      // Delivered orders → revenue in USD
       const delivered = orders.filter(o => o.delivery_status === "delivered");
       const deliveredRevenuePKR = delivered.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+      const deliveredRevenueUSD = pkrToUsd(deliveredRevenuePKR);
       
-      // Shipping: shipped + delivered orders
+      // Shipping: shipped + delivered orders (already in USD)
       const shippable = orders.filter(o => 
         o.delivery_status === "delivered" || o.delivery_status === "shipped" || 
         o.delivery_status === "in_transit" || o.delivery_status === "with_courier"
       );
       const shippingFees = shippable.reduce((sum, o) => sum + calcShippingFee(getProductWeightKg(inv.seller_id, o.product_name), o.quantity, rates), 0);
       
-      // Call center fees
+      // Call center fees (already in USD)
       const confirmedCount = orders.filter(o => o.confirmation_status === "confirmed").length;
       const droppedCount = orders.filter(o => o.confirmation_status === "cancelled").length;
       const callCenterFees = (confirmedCount * ccRates.confirmedRate) + (droppedCount * ccRates.droppedRate);
       
-      // COD fees
+      // COD fees (percentage of USD revenue)
       const codPct = (codFeeMap[inv.seller_id] ?? 5) / 100;
-      const codFees = deliveredRevenuePKR * codPct;
+      const codFees = deliveredRevenueUSD * codPct;
       
-      // Addons
+      // Addons (already in USD)
       const addons = addonsByInvoice[inv.id] || [];
       const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0);
       
       const totalDeductions = shippingFees + callCenterFees + codFees;
-      const netPayable = deliveredRevenuePKR - totalDeductions + addonNet;
+      const netPayable = deliveredRevenueUSD - totalDeductions + addonNet;
       
       return {
         ...inv,
         ordersCount: orders.length,
         deliveredCount: delivered.length,
-        totalAmountPKR: deliveredRevenuePKR,
+        totalAmountPKR: deliveredRevenueUSD,
         shippingFees,
         callCenterFees,
         codFees,
@@ -549,7 +550,7 @@ export default function Invoices() {
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
               <CheckCircle2 className="h-3 w-3 text-success" /> {t("paid")}
             </p>
-            <p className="text-base font-bold text-success">{paidAmount.toLocaleString()} PKR</p>
+            <p className="text-base font-bold text-success">{formatUSD(paidAmount)}</p>
           </div>
           {!isSeller && (
             <>
@@ -558,7 +559,7 @@ export default function Invoices() {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
                   <Clock className="h-3 w-3 text-warning" /> {t("need_to_pay")}
                 </p>
-            <p className="text-base font-bold text-warning">{needToPay.toLocaleString()} PKR</p>
+            <p className="text-base font-bold text-warning">{formatUSD(needToPay)}</p>
               </div>
             </>
           )}
@@ -675,11 +676,11 @@ export default function Invoices() {
                       <TableCell className="text-center">
                         <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-accent text-[11px] font-semibold">{inv.ordersCount}</span>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{inv.totalAmountPKR.toLocaleString()} <span className="text-muted-foreground text-[10px]">PKR</span></TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive">-{inv.shippingFees.toLocaleString()} PKR</TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive">-{inv.callCenterFees.toLocaleString()} PKR</TableCell>
-                      <TableCell className="text-right tabular-nums text-destructive">-{inv.codFees.toLocaleString()} PKR</TableCell>
-                      <TableCell className="text-right tabular-nums font-bold text-success">{inv.netPayable.toLocaleString()} PKR</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatUSD(inv.totalAmountPKR)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">-{formatUSD(inv.shippingFees)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">-{formatUSD(inv.callCenterFees)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">-{formatUSD(inv.codFees)}</TableCell>
+                      <TableCell className="text-right tabular-nums font-bold text-success">{formatUSD(inv.netPayable)}</TableCell>
                       {!isSeller && (
                         <TableCell className="text-center">
                           <Switch
