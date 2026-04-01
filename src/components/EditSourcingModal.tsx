@@ -534,7 +534,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
                   <span className={`text-sm font-semibold tabular-nums ${sourcingProfit > 0 ? "text-success" : sourcingProfit < 0 ? "text-destructive" : ""}`}>
                     {sourcingProfit > 0 ? "+" : ""}{sourcingProfit.toLocaleString()} $
                   </span>
-                  {sellerPrice > 0 && (
+                  {n(sellerPrice) > 0 && (
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sourcingProfit > 0 ? "bg-success/15 text-success" : sourcingProfit < 0 ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground"}`}>
                       {profitMargin.toFixed(1)}%
                     </span>
