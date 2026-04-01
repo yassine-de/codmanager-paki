@@ -300,7 +300,7 @@ export default function Invoices() {
         ...inv,
         ordersCount: orders.length,
         deliveredCount: delivered.length,
-        totalAmountPKR: deliveredRevenuePKR,
+        totalAmountPKR: deliveredRevenueUSD,
         shippingFees,
         callCenterFees,
         codFees,
