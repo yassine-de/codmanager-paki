@@ -282,7 +282,7 @@ export default function Invoices() {
       
       // Call center fees (already in USD)
       const confirmedCount = orders.filter(o => o.confirmation_status === "confirmed").length;
-      const droppedCount = orders.filter(o => o.confirmation_status === "cancelled").length;
+      const droppedCount = orders.length;
       const callCenterFees = (confirmedCount * ccRates.confirmedRate) + (droppedCount * ccRates.droppedRate);
       
       // COD fees (percentage of USD revenue)
