@@ -44,6 +44,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
   const [offers, setOffers] = useState<ProductOffer[]>([]);
   const [weight, setWeight] = useState<string>("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [skuCopied, setSkuCopied] = useState(false);
   const [prevId, setPrevId] = useState<string | null>(null);
 
   // Check if this is a DB product (UUID format)
