@@ -140,7 +140,7 @@ async function createShipment(
     cnic_number: "0000000000000",
     order_ref: order.order_id,
     platform_id: cfg.platformId,
-    customer_platform_id: cfg.platformId,
+    customer_platform_id: 5120,
     payment_method_id: 1, // COD
     shipping_charges: Number(order.shipping_cost || 0),
     piece: order.quantity || 1,
