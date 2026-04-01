@@ -487,7 +487,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">Quantity</Label>
-                <Input type="number" min={1} step={1} value={quantity} onChange={e => setQuantity(Number(e.target.value))} className={`h-9 text-sm ${errors.quantity ? "border-destructive" : ""}`} />
+                <Input type="number" min={1} step={1} value={quantity} onChange={e => setQuantity(e.target.value === "" ? "" : Number(e.target.value))} className={`h-9 text-sm ${errors.quantity ? "border-destructive" : ""}`} />
                 {errors.quantity && <p className="text-[11px] text-destructive">{errors.quantity}</p>}
               </div>
               <div className="space-y-1.5">
