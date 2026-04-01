@@ -550,7 +550,7 @@ export default function Invoices() {
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center justify-end gap-1">
               <CheckCircle2 className="h-3 w-3 text-success" /> {t("paid")}
             </p>
-            <p className="text-base font-bold text-success">{paidAmount.toLocaleString()} PKR</p>
+            <p className="text-base font-bold text-success">{formatUSD(paidAmount)}</p>
           </div>
           {!isSeller && (
             <>
