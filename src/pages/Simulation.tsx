@@ -179,18 +179,28 @@ export default function Simulation() {
 
   const selectedProduct = useMemo(() => realProducts.find(p => p.id === selectedProductId), [selectedProductId, realProducts]);
 
-  // Auto-select weight from product in system mode
-  const autoShippingRate = useMemo(() => {
-    if (mode === "system" && selectedProduct?.weight) {
-      const w = parseFloat(selectedProduct.weight);
-      if (!isNaN(w)) {
-        if (w <= 1) return weightOptions[0]?.rate ?? 3;
-        if (w <= 2) return weightOptions[1]?.rate ?? 5;
-        return weightOptions[2]?.rate ?? 7;
+  // Auto-select weight from product in system mode (prefer weight_kg)
+  const productWeight = useMemo(() => {
+    if (mode === "system" && selectedProduct) {
+      if (selectedProduct.weight_kg !== null && selectedProduct.weight_kg !== undefined) {
+        return selectedProduct.weight_kg;
+      }
+      if (selectedProduct.weight) {
+        const w = parseFloat(selectedProduct.weight);
+        if (!isNaN(w)) return w;
       }
     }
     return null;
-  }, [mode, selectedProduct, weightOptions]);
+  }, [mode, selectedProduct]);
+
+  const autoShippingRate = useMemo(() => {
+    if (productWeight !== null) {
+      if (productWeight <= 1) return weightOptions[0]?.rate ?? 3;
+      if (productWeight <= 2) return weightOptions[1]?.rate ?? 5;
+      return weightOptions[2]?.rate ?? 7;
+    }
+    return null;
+  }, [productWeight, weightOptions]);
 
   const shippingRate = useMemo(() => {
     if (mode === "system" && autoShippingRate !== null) return autoShippingRate;
