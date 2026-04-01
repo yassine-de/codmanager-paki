@@ -176,7 +176,7 @@ export default function FinanceAnalytics() {
 
   const shippingStats = useMemo(() => {
     let total = 0, paid = 0, pending = 0;
-    const sellerMap: Record<string, { confirmed: number; dropped: number; upsell: number; revenue: number; paid: number; pending: number }> = {};
+    const sellerMap: Record<string, { shipped: number; revenue: number; paid: number; pending: number }> = {};
     shippedOrders.forEach(o => {
       const weight = Number(o.weight) || 0.5;
       const fee = getShippingFee(o.seller_id, weight);
@@ -184,12 +184,10 @@ export default function FinanceAnalytics() {
       total += fee;
       if (invoicePaid) paid += fee; else pending += fee;
 
-      if (!sellerMap[o.seller_id]) sellerMap[o.seller_id] = { confirmed: 0, dropped: 0, upsell: 0, revenue: 0, paid: 0, pending: 0 };
+      if (!sellerMap[o.seller_id]) sellerMap[o.seller_id] = { shipped: 0, revenue: 0, paid: 0, pending: 0 };
+      sellerMap[o.seller_id].shipped++;
       sellerMap[o.seller_id].revenue += fee;
       if (invoicePaid) sellerMap[o.seller_id].paid += fee; else sellerMap[o.seller_id].pending += fee;
-      if (o.confirmation_status === 'confirmed') sellerMap[o.seller_id].confirmed++;
-      if (['cancelled', 'wrong_number', 'double'].includes(o.confirmation_status)) sellerMap[o.seller_id].dropped++;
-      if (o.last_price && Number(o.last_price) > 0 && Number(o.last_price) !== Number(o.price)) sellerMap[o.seller_id].upsell++;
     });
     const sellerDetails = Object.entries(sellerMap).map(([id, d]) => ({
       sellerId: id,
