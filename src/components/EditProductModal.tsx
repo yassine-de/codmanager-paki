@@ -100,7 +100,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
   }
 
   const addVariant = () => {
-    setVariants(prev => [...prev, { id: `VAR-${Date.now()}-${prev.length}`, name: "", sku: "", price: lastSellingPrice || price, quantity: 0 }]);
+    setVariants(prev => [...prev, { id: `VAR-${Date.now()}-${prev.length}`, name: "", sku: "", price: price || 0, quantity: 0 }]);
   };
   const updateVariant = (i: number, field: keyof ProductVariant, value: string | number) => {
     setVariants(prev => prev.map((v, idx) => (idx === i ? { ...v, [field]: value } : v)));

@@ -67,7 +67,7 @@ export default function Products() {
             id: v.id || `v-${i}`,
             name: v.name || v.group || "",
             sku: v.sku || "",
-            price: v.price || Number(p.price) || 0,
+            price: v.price || Number((p as any).landed_price) || 0,
             quantity: v.quantity || (v.subVariants ? v.subVariants.reduce((s: number, sv: any) => s + (sv.quantity || 0), 0) : 0),
           }))
         : [];
