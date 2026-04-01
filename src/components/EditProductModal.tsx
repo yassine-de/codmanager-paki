@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ExternalLink, Video, Tag, Loader2, Weight } from "lucide-react";
+import { Plus, Trash2, ExternalLink, Video, Tag, Loader2, Weight, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { type Product, type ProductVariant, type ProductOffer } from "@/lib/products-data";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +44,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
   const [offers, setOffers] = useState<ProductOffer[]>([]);
   const [weight, setWeight] = useState<string>("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [skuCopied, setSkuCopied] = useState(false);
   const [prevId, setPrevId] = useState<string | null>(null);
 
   // Check if this is a DB product (UUID format)
@@ -230,7 +231,25 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">SKU *</Label>
-                  <Input value={sku} onChange={e => setSku(e.target.value)} className={`h-9 text-sm ${errors.sku ? "border-destructive" : ""}`} disabled={isDbProduct} />
+                  <div className="relative">
+                    <Input value={sku} onChange={e => setSku(e.target.value)} className={`h-9 text-sm pr-9 ${errors.sku ? "border-destructive" : ""}`} disabled={isDbProduct} readOnly={isDbProduct} />
+                    {!isSeller && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-9 w-9 text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          navigator.clipboard.writeText(sku);
+                          setSkuCopied(true);
+                          setTimeout(() => setSkuCopied(false), 1500);
+                          toast.success("SKU copied");
+                        }}
+                      >
+                        {skuCopied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                      </Button>
+                    )}
+                  </div>
                   {errors.sku && <p className="text-[11px] text-destructive">{errors.sku}</p>}
                 </div>
                 <div className="space-y-1.5">
