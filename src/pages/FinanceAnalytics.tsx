@@ -350,6 +350,19 @@ export default function FinanceAnalytics() {
       .sort((a, b) => b.total - a.total);
   }, [filteredOrders, filteredSourcing, profileNameMap, getShippingFee, rateHelpers]);
 
+  const profitByProduct = useMemo(() => {
+    const map: Record<string, { revenue: number; count: number }> = {};
+    filteredOrders.forEach(o => {
+      if (o.delivery_status === "delivered" || o.delivery_status === "paid") {
+        const name = o.product_name || "Unknown";
+        if (!map[name]) map[name] = { revenue: 0, count: 0 };
+        map[name].revenue += Number(o.total_amount);
+        map[name].count += o.quantity;
+      }
+    });
+    return Object.entries(map).map(([name, d]) => ({ name, revenue: d.revenue, count: d.count })).sort((a, b) => b.revenue - a.revenue);
+  }, [filteredOrders]);
+
   const chartColors = ['hsl(var(--primary))', 'hsl(155, 50%, 42%)', 'hsl(38, 90%, 55%)', 'hsl(0, 65%, 52%)', 'hsl(220, 70%, 55%)'];
 
   if (isLoading) {
@@ -483,31 +496,90 @@ export default function FinanceAnalytics() {
         </div>
       </div>
 
-      {/* Charts */}
+      {/* Revenue Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Revenue by Seller */}
         {profitBySeller.length > 0 && (
-          <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '160ms' }}>
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Revenue by Seller</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={profitBySeller} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => formatUSD(v)} />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" width={110} />
-                <Tooltip formatter={(v: number, name: string) => [formatUSD(v), name]} contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
-                <Bar dataKey="shipping" stackId="a" name="Shipping" fill="hsl(var(--primary))" />
-                <Bar dataKey="confirmation" stackId="a" name="Call Center" fill="hsl(210, 60%, 52%)" />
-                <Bar dataKey="cod" stackId="a" name="COD Fees" fill="hsl(38, 90%, 55%)" />
-                <Bar dataKey="sourcing" stackId="a" name="Sourcing" fill="hsl(155, 50%, 42%)" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-            <div className="mt-3 flex flex-wrap gap-4 text-xs">
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ background: 'hsl(var(--primary))' }} /> Shipping</div>
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ background: 'hsl(210, 60%, 52%)' }} /> Call Center</div>
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ background: 'hsl(38, 90%, 55%)' }} /> COD Fees</div>
-              <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-sm" style={{ background: 'hsl(155, 50%, 42%)' }} /> Sourcing</div>
+          <div className="bg-card rounded-xl border overflow-hidden animate-slide-up" style={{ animationDelay: '160ms' }}>
+            <div className="px-5 py-4 border-b bg-muted/10 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold">Revenue by Seller</h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{profitBySeller.length} sellers · {formatUSD(profitBySeller.reduce((s, d) => s + d.total, 0))} total</p>
+              </div>
+            </div>
+            <div className="p-5">
+              <div className="space-y-3">
+                {profitBySeller.slice(0, 8).map((seller, i) => {
+                  const maxTotal = profitBySeller[0]?.total || 1;
+                  const pct = (seller.total / maxTotal) * 100;
+                  return (
+                    <div key={seller.name} className="group">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-medium truncate max-w-[140px]">{seller.name}</span>
+                        <span className="text-xs font-bold tabular-nums">{formatUSD(seller.total)}</span>
+                      </div>
+                      <div className="h-6 bg-muted/30 rounded-md overflow-hidden flex">
+                        {seller.shipping > 0 && (
+                          <div className="h-full bg-primary/80 transition-all" style={{ width: `${(seller.shipping / seller.total) * pct}%` }} title={`Shipping: ${formatUSD(seller.shipping)}`} />
+                        )}
+                        {seller.confirmation > 0 && (
+                          <div className="h-full bg-[hsl(210,60%,52%)]" style={{ width: `${(seller.confirmation / seller.total) * pct}%` }} title={`Call Center: ${formatUSD(seller.confirmation)}`} />
+                        )}
+                        {seller.cod > 0 && (
+                          <div className="h-full bg-[hsl(38,90%,55%)]" style={{ width: `${(seller.cod / seller.total) * pct}%` }} title={`COD: ${formatUSD(seller.cod)}`} />
+                        )}
+                        {seller.sourcing > 0 && (
+                          <div className="h-full bg-[hsl(155,50%,42%)]" style={{ width: `${(seller.sourcing / seller.total) * pct}%` }} title={`Sourcing: ${formatUSD(seller.sourcing)}`} />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-4 pt-3 border-t flex flex-wrap gap-4 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-primary/80" /> Shipping</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: 'hsl(210, 60%, 52%)' }} /> Call Center</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: 'hsl(38, 90%, 55%)' }} /> COD</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm" style={{ background: 'hsl(155, 50%, 42%)' }} /> Sourcing</div>
+              </div>
             </div>
           </div>
         )}
+
+        {/* Revenue by Product */}
+        <div className="bg-card rounded-xl border overflow-hidden animate-slide-up" style={{ animationDelay: '200ms' }}>
+          <div className="px-5 py-4 border-b bg-muted/10">
+            <h2 className="text-sm font-semibold">Revenue by Product</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Top products by delivered revenue</p>
+          </div>
+          <div className="p-5">
+            {profitByProduct.length === 0 ? (
+              <p className="text-muted-foreground text-xs text-center py-10">No delivered orders yet</p>
+            ) : (
+              <div className="space-y-3">
+                {profitByProduct.slice(0, 8).map((product, i) => {
+                  const maxRev = profitByProduct[0]?.revenue || 1;
+                  const pct = (product.revenue / maxRev) * 100;
+                  const colors = ['hsl(var(--primary))', 'hsl(210, 60%, 52%)', 'hsl(155, 50%, 42%)', 'hsl(38, 90%, 55%)', 'hsl(0, 65%, 52%)', 'hsl(280, 50%, 55%)', 'hsl(170, 50%, 42%)', 'hsl(320, 50%, 50%)'];
+                  return (
+                    <div key={product.name}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-medium truncate max-w-[160px]">{product.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground">{product.count} units</span>
+                          <span className="text-xs font-bold tabular-nums">{formatUSD(pkrToUsd(product.revenue))}</span>
+                        </div>
+                      </div>
+                      <div className="h-5 bg-muted/30 rounded-md overflow-hidden">
+                        <div className="h-full rounded-md transition-all" style={{ width: `${pct}%`, background: colors[i % colors.length] }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
