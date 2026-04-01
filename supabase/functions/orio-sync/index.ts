@@ -129,6 +129,8 @@ async function createShipment(
     consignee_address: order.customer_address || order.customer_city || "N/A",
     consignee_email: "customer@na.com",
     consignee_contact: order.customer_phone || "03000000000",
+    consignee_latitude: 0,
+    consignee_longitude: 0,
     // Location
     origin_country_id: 1,
     origin_province_id: originProvinceId,
@@ -140,7 +142,7 @@ async function createShipment(
     cnic_number: "0000000000000",
     order_ref: order.order_id,
     platform_id: cfg.platformId,
-    customer_platform_id: cfg.platformId,
+    customer_platform_id: 5120,
     payment_method_id: 1, // COD
     shipping_charges: Number(order.shipping_cost || 0),
     piece: order.quantity || 1,
