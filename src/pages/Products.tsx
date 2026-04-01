@@ -66,8 +66,8 @@ export default function Products() {
         ? rawVariants.map((v: any, i: number) => ({
             id: v.id || `v-${i}`,
             name: v.name || v.group || "",
-            sku: "",
-            price: 0,
+            sku: v.sku || "",
+            price: v.price || Number(p.price) || 0,
             quantity: v.quantity || (v.subVariants ? v.subVariants.reduce((s: number, sv: any) => s + (sv.quantity || 0), 0) : 0),
           }))
         : [];
