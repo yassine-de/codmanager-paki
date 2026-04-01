@@ -70,9 +70,23 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
         } as any)
         .eq("id", product!.id);
       if (error) throw error;
+
+      // Sync landed_price back to linked sourcing request
+      const { data: prod } = await supabase
+        .from("products")
+        .select("sourcing_request_id")
+        .eq("id", product!.id)
+        .single();
+      if (prod?.sourcing_request_id) {
+        await supabase
+          .from("sourcing_requests")
+          .update({ landed_price: price, updated_at: new Date().toISOString() } as any)
+          .eq("id", prod.sourcing_request_id);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["db-products"] });
+      queryClient.invalidateQueries({ queryKey: ["sourcing-requests"] });
       onOpenChange(false);
       toast.success("Product updated");
     },
