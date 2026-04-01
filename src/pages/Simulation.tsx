@@ -89,7 +89,7 @@ export default function Simulation() {
       });
   }, [authUser?.id]);
 
-  // Fetch seller shipping rates from DB
+  // Fetch seller shipping rates and rate settings from DB
   useEffect(() => {
     if (!authUser?.id) return;
     supabase
@@ -99,6 +99,28 @@ export default function Simulation() {
       .maybeSingle()
       .then(({ data }) => {
         if (data) setSellerRates(data);
+      });
+    // Fetch rate_settings for accurate fees
+    supabase
+      .from("rate_settings")
+      .select("cod_fee_per_delivery, dropped_order_rate, confirmed_order_rate")
+      .eq("seller_id", authUser.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setRateSettings(data);
+        } else {
+          // Fallback to global rates
+          supabase
+            .from("rate_settings")
+            .select("cod_fee_per_delivery, dropped_order_rate, confirmed_order_rate")
+            .is("seller_id", null)
+            .eq("is_global", true)
+            .maybeSingle()
+            .then(({ data: globalData }) => {
+              if (globalData) setRateSettings(globalData);
+            });
+        }
       });
   }, [authUser?.id]);
 
