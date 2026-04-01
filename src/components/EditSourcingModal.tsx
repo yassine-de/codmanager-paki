@@ -95,9 +95,10 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     setErrors({});
   }
 
-  const totalPrice = quantity * unitPrice + shippingCost;
-  const sourcingProfit = sellerPrice > 0 && landedPrice > 0 ? sellerPrice - landedPrice : 0;
-  const profitMargin = sellerPrice > 0 ? ((sourcingProfit / sellerPrice) * 100) : 0;
+  const n = (v: number | "") => typeof v === "number" ? v : 0;
+  const totalPrice = n(quantity) * n(unitPrice) + n(shippingCost);
+  const sourcingProfit = n(sellerPrice) > 0 && n(landedPrice) > 0 ? n(sellerPrice) - n(landedPrice) : 0;
+  const profitMargin = n(sellerPrice) > 0 ? ((sourcingProfit / n(sellerPrice)) * 100) : 0;
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
