@@ -232,24 +232,31 @@ export default function Simulation() {
     }
   }, [mode, selectedProduct, orderMetrics, manualBuyingPrice, manualSellingPrice, manualConfirmationRate, manualDeliveryRate]);
 
+  // Use accurate fees from rate_settings
+  const codFeePercent = rateSettings ? Number(rateSettings.cod_fee_per_delivery) / 100 : 0.05;
+  const droppedOrderRate = rateSettings ? Number(rateSettings.dropped_order_rate) : 0;
+  const confirmedOrderRate = rateSettings ? Number(rateSettings.confirmed_order_rate) : 0;
+
   const results = useMemo(() => {
     if (!metrics) return null;
     const leads = parseFloat(numberOfLeads) || 0;
     const cpl = parseFloat(costPerLead) || 0;
 
     const confirmedOrders = Math.round(leads * metrics.confirmationRate);
+    const droppedOrders = leads; // All orders entering system count as dropped
     const deliveredOrders = Math.round(confirmedOrders * metrics.deliveryRate);
     const revenue = deliveredOrders * metrics.sellingPrice;
     const productCost = deliveredOrders * metrics.buyingPrice;
     const adsCost = leads * cpl;
     const totalShipping = confirmedOrders * shippingRate;
-    const codFees = revenue * 0.05;
-    const totalProfit = revenue - productCost - adsCost - totalShipping - codFees;
+    const codFees = revenue * codFeePercent;
+    const callCenterFees = (confirmedOrders * confirmedOrderRate) + (droppedOrders * droppedOrderRate);
+    const totalProfit = revenue - productCost - adsCost - totalShipping - codFees - callCenterFees;
     const profitPerOrder = deliveredOrders > 0 ? totalProfit / deliveredOrders : 0;
-    const breakEvenCPL = leads > 0 ? (revenue - productCost - totalShipping - codFees) / leads : 0;
+    const breakEvenCPL = leads > 0 ? (revenue - productCost - totalShipping - codFees - callCenterFees) / leads : 0;
 
-    return { confirmedOrders, deliveredOrders, revenue, productCost, adsCost, totalShipping, codFees, totalProfit, profitPerOrder, breakEvenCPL };
-  }, [metrics, costPerLead, numberOfLeads, shippingRate]);
+    return { confirmedOrders, deliveredOrders, droppedOrders, revenue, productCost, adsCost, totalShipping, codFees, callCenterFees, totalProfit, profitPerOrder, breakEvenCPL };
+  }, [metrics, costPerLead, numberOfLeads, shippingRate, codFeePercent, droppedOrderRate, confirmedOrderRate]);
 
   const isProfitable = results ? results.totalProfit >= 0 : true;
 
