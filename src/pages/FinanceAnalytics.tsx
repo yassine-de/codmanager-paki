@@ -283,8 +283,21 @@ export default function FinanceAnalytics() {
     return { total, paid, pending, deliveredCount: deliveredOrders.length, invoiceDetails };
   }, [filteredOrders, rateHelpers, invoiceStatusMap, profileNameMap]);
 
-  // Sourcing: profit based on payment_status from sourcing_requests
+  // Sourcing: profit paid/pending based on invoice status of related orders (not sourcing payment_status)
   const sourcingStats = useMemo(() => {
+    // Build a map: sellerId|productName -> whether all related invoices are paid
+    const productInvoicePaidMap: Record<string, boolean> = {};
+    filteredOrders.forEach(o => {
+      const key = `${o.seller_id}|${o.product_name}`;
+      const invoicePaid = isInvoicePaid(o.invoice_id);
+      // If any order for this product has an unpaid invoice, mark as unpaid
+      if (productInvoicePaidMap[key] === undefined) {
+        productInvoicePaidMap[key] = invoicePaid;
+      } else if (!invoicePaid) {
+        productInvoicePaidMap[key] = false;
+      }
+    });
+
     let totalProfit = 0, totalAmount = 0, paidAmount = 0, unpaidAmount = 0, paidProfit = 0, unpaidProfit = 0, totalUnits = 0;
     const details: { id: string; displayId: string; product: string; quantity: number; sellerPrice: number; totalCost: number; profit: number; isPaid: boolean }[] = [];
 
@@ -292,7 +305,9 @@ export default function FinanceAnalytics() {
       const sellerOwes = (r.seller_price || 0) * r.quantity;
       const ourCost = r.total_price || 0;
       const profit = sellerOwes - ourCost;
-      const isPaid = r.payment_status === 'paid';
+      // Check if seller paid us via invoice (not sourcing payment_status)
+      const key = `${r.seller_id}|${r.product_name}`;
+      const isPaid = productInvoicePaidMap[key] === true;
 
       totalAmount += sellerOwes;
       totalProfit += profit;
@@ -314,7 +329,7 @@ export default function FinanceAnalytics() {
     });
 
     return { totalProfit, totalAmount, paidAmount, unpaidAmount, paidProfit, unpaidProfit, totalUnits, count: filteredSourcing.length, details };
-  }, [filteredSourcing]);
+  }, [filteredSourcing, filteredOrders, invoiceStatusMap]);
 
   const totalRevenueUSD = shippingStats.total + confirmationStats.totalRevenue + codStats.total + sourcingStats.totalProfit;
   const totalPaid = shippingStats.paid + confirmationStats.totalPaid + codStats.paid + sourcingStats.paidProfit;
