@@ -478,9 +478,9 @@ export default function FinanceAnalytics() {
 
         {/* Tab Content */}
         <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-          {activeTab === "shipping" && <ShippingDetails details={shippingStats.details} />}
-          {activeTab === "call_center" && <CallCenterDetails details={confirmationStats.details} />}
-          {activeTab === "cod" && <CodDetails details={codStats.details} />}
+          {activeTab === "shipping" && <ShippingDetails details={shippingStats.sellerDetails} />}
+          {activeTab === "call_center" && <CallCenterDetails details={confirmationStats.sellerDetails} />}
+          {activeTab === "cod" && <CodDetails details={codStats.invoiceDetails} />}
           {activeTab === "sourcing" && <SourcingDetails details={sourcingStats.details} />}
         </div>
       </div>
