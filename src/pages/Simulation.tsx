@@ -45,6 +45,7 @@ interface RealProduct {
   landed_price: number | null;
   image_url: string | null;
   weight: string | null;
+  weight_kg: number | null;
 }
 
 /* ── Default weight options (fallback) ── */
@@ -71,6 +72,7 @@ export default function Simulation() {
 
   // Real data from DB
   const [sellerRates, setSellerRates] = useState<{ rate_1kg: number; rate_2kg: number; rate_3kg: number } | null>(null);
+  const [rateSettings, setRateSettings] = useState<{ cod_fee_per_delivery: number; dropped_order_rate: number; confirmed_order_rate: number } | null>(null);
   const [realProducts, setRealProducts] = useState<RealProduct[]>([]);
   const [orderMetrics, setOrderMetrics] = useState<{ confirmationRate: number; deliveryRate: number; totalLeads: number }>({ confirmationRate: 0, deliveryRate: 0, totalLeads: 0 });
 
@@ -79,7 +81,7 @@ export default function Simulation() {
     if (!authUser?.id) return;
     supabase
       .from("products")
-      .select("id, name, sku, price, landed_price, image_url, weight")
+      .select("id, name, sku, price, landed_price, image_url, weight, weight_kg")
       .eq("seller_id", authUser.id)
       .order("created_at", { ascending: false })
       .then(({ data }) => {
@@ -87,7 +89,7 @@ export default function Simulation() {
       });
   }, [authUser?.id]);
 
-  // Fetch seller shipping rates from DB
+  // Fetch seller shipping rates and rate settings from DB
   useEffect(() => {
     if (!authUser?.id) return;
     supabase
@@ -97,6 +99,28 @@ export default function Simulation() {
       .maybeSingle()
       .then(({ data }) => {
         if (data) setSellerRates(data);
+      });
+    // Fetch rate_settings for accurate fees
+    supabase
+      .from("rate_settings")
+      .select("cod_fee_per_delivery, dropped_order_rate, confirmed_order_rate")
+      .eq("seller_id", authUser.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setRateSettings(data);
+        } else {
+          // Fallback to global rates
+          supabase
+            .from("rate_settings")
+            .select("cod_fee_per_delivery, dropped_order_rate, confirmed_order_rate")
+            .is("seller_id", null)
+            .eq("is_global", true)
+            .maybeSingle()
+            .then(({ data: globalData }) => {
+              if (globalData) setRateSettings(globalData);
+            });
+        }
       });
   }, [authUser?.id]);
 
@@ -155,18 +179,28 @@ export default function Simulation() {
 
   const selectedProduct = useMemo(() => realProducts.find(p => p.id === selectedProductId), [selectedProductId, realProducts]);
 
-  // Auto-select weight from product in system mode
-  const autoShippingRate = useMemo(() => {
-    if (mode === "system" && selectedProduct?.weight) {
-      const w = parseFloat(selectedProduct.weight);
-      if (!isNaN(w)) {
-        if (w <= 1) return weightOptions[0]?.rate ?? 3;
-        if (w <= 2) return weightOptions[1]?.rate ?? 5;
-        return weightOptions[2]?.rate ?? 7;
+  // Auto-select weight from product in system mode (prefer weight_kg)
+  const productWeight = useMemo(() => {
+    if (mode === "system" && selectedProduct) {
+      if (selectedProduct.weight_kg !== null && selectedProduct.weight_kg !== undefined) {
+        return selectedProduct.weight_kg;
+      }
+      if (selectedProduct.weight) {
+        const w = parseFloat(selectedProduct.weight);
+        if (!isNaN(w)) return w;
       }
     }
     return null;
-  }, [mode, selectedProduct, weightOptions]);
+  }, [mode, selectedProduct]);
+
+  const autoShippingRate = useMemo(() => {
+    if (productWeight !== null) {
+      if (productWeight <= 1) return weightOptions[0]?.rate ?? 3;
+      if (productWeight <= 2) return weightOptions[1]?.rate ?? 5;
+      return weightOptions[2]?.rate ?? 7;
+    }
+    return null;
+  }, [productWeight, weightOptions]);
 
   const shippingRate = useMemo(() => {
     if (mode === "system" && autoShippingRate !== null) return autoShippingRate;
@@ -198,24 +232,31 @@ export default function Simulation() {
     }
   }, [mode, selectedProduct, orderMetrics, manualBuyingPrice, manualSellingPrice, manualConfirmationRate, manualDeliveryRate]);
 
+  // Use accurate fees from rate_settings
+  const codFeePercent = rateSettings ? Number(rateSettings.cod_fee_per_delivery) / 100 : 0.05;
+  const droppedOrderRate = rateSettings ? Number(rateSettings.dropped_order_rate) : 0;
+  const confirmedOrderRate = rateSettings ? Number(rateSettings.confirmed_order_rate) : 0;
+
   const results = useMemo(() => {
     if (!metrics) return null;
     const leads = parseFloat(numberOfLeads) || 0;
     const cpl = parseFloat(costPerLead) || 0;
 
     const confirmedOrders = Math.round(leads * metrics.confirmationRate);
+    const droppedOrders = leads; // All orders entering system count as dropped
     const deliveredOrders = Math.round(confirmedOrders * metrics.deliveryRate);
     const revenue = deliveredOrders * metrics.sellingPrice;
     const productCost = deliveredOrders * metrics.buyingPrice;
     const adsCost = leads * cpl;
     const totalShipping = confirmedOrders * shippingRate;
-    const codFees = revenue * 0.05;
-    const totalProfit = revenue - productCost - adsCost - totalShipping - codFees;
+    const codFees = revenue * codFeePercent;
+    const callCenterFees = (confirmedOrders * confirmedOrderRate) + (droppedOrders * droppedOrderRate);
+    const totalProfit = revenue - productCost - adsCost - totalShipping - codFees - callCenterFees;
     const profitPerOrder = deliveredOrders > 0 ? totalProfit / deliveredOrders : 0;
-    const breakEvenCPL = leads > 0 ? (revenue - productCost - totalShipping - codFees) / leads : 0;
+    const breakEvenCPL = leads > 0 ? (revenue - productCost - totalShipping - codFees - callCenterFees) / leads : 0;
 
-    return { confirmedOrders, deliveredOrders, revenue, productCost, adsCost, totalShipping, codFees, totalProfit, profitPerOrder, breakEvenCPL };
-  }, [metrics, costPerLead, numberOfLeads, shippingRate]);
+    return { confirmedOrders, deliveredOrders, droppedOrders, revenue, productCost, adsCost, totalShipping, codFees, callCenterFees, totalProfit, profitPerOrder, breakEvenCPL };
+  }, [metrics, costPerLead, numberOfLeads, shippingRate, codFeePercent, droppedOrderRate, confirmedOrderRate]);
 
   const isProfitable = results ? results.totalProfit >= 0 : true;
 
@@ -400,11 +441,11 @@ export default function Simulation() {
                 className="h-10 text-sm"
               />
             </div>
-            {mode === "system" && selectedProduct?.weight && (
+            {mode === "system" && productWeight !== null && (
               <div className="rounded-lg bg-muted/30 border border-border p-3 flex items-center gap-2">
                 <Weight className="h-4 w-4 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">Product Weight:</span>
-                <span className="text-sm font-medium text-foreground">{selectedProduct.weight} kg</span>
+                <span className="text-sm font-medium text-foreground">{productWeight} kg</span>
                 <Badge variant="outline" className="ml-1 text-[9px] font-normal text-info">Auto</Badge>
                 <span className="text-xs text-muted-foreground ml-auto">Shipping: <span className="font-semibold text-foreground">{shippingRate} $</span></span>
               </div>
@@ -490,7 +531,8 @@ export default function Simulation() {
                   <BreakdownRow label="Product Cost" value={`-${results.productCost.toFixed(2)} $`} colorClass="text-destructive" />
                   <BreakdownRow label="Ads Cost" value={`-${results.adsCost.toFixed(2)} $`} colorClass="text-destructive" />
                   <BreakdownRow label={`Shipping (${shippingRate} $ × ${results.confirmedOrders})`} value={`-${results.totalShipping.toFixed(2)} $`} colorClass="text-destructive" />
-                  <BreakdownRow label={`COD Fees (5% × ${results.revenue.toFixed(0)}$)`} value={`-${results.codFees.toFixed(2)} $`} colorClass="text-destructive" />
+                  <BreakdownRow label={`COD Fees (${(codFeePercent * 100).toFixed(0)}% × ${results.revenue.toFixed(0)}$)`} value={`-${results.codFees.toFixed(2)} $`} colorClass="text-destructive" />
+                  <BreakdownRow label={`Call Center (${droppedOrderRate}$ × ${results.droppedOrders} dropped + ${confirmedOrderRate}$ × ${results.confirmedOrders} confirmed)`} value={`-${results.callCenterFees.toFixed(2)} $`} colorClass="text-destructive" />
                   <div className="border-t border-border pt-2.5 flex justify-between items-center font-bold">
                     <span className="text-foreground">Net Profit</span>
                     <AnimatedNumber
