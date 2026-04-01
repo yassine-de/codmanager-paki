@@ -26,7 +26,7 @@ export default function FinanceAnalytics() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, price, quantity, total_amount, shipping_cost, weight, invoice_id, created_at")
+        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, price, last_price, quantity, total_amount, shipping_cost, weight, invoice_id, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
