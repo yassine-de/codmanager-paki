@@ -106,7 +106,7 @@ export function InvoiceDetailModal({
     o.delivery_status === "in_transit" || o.delivery_status === "with_courier"
   );
   const confirmedOrders = displayOrders.filter(o => o.confirmation_status === "confirmed");
-  const droppedOrders = displayOrders.filter(o => o.confirmation_status === "cancelled");
+  const droppedOrders = displayOrders;
 
   // Revenue
   const deliveredRevenuePKR = deliveredOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
