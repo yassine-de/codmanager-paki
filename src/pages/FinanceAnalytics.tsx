@@ -3,27 +3,42 @@ import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { KPICard } from "@/components/KPICard";
-import { Truck, DollarSign, ChevronDown, CheckCircle2, Wallet, Loader2, XCircle, Package, CreditCard, Clock } from "lucide-react";
+import { Truck, DollarSign, ChevronDown, CheckCircle2, Wallet, Loader2, XCircle, Package, CreditCard, Clock, Phone, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatUSD, pkrToUsd } from "@/lib/currency";
 import { DateRange } from "react-day-picker";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
 import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
+
+type RevenueTab = "shipping" | "call_center" | "cod" | "sourcing";
 
 export default function FinanceAnalytics() {
   const [sellerFilter, setSellerFilter] = useState<string>("all");
   const [productFilter, setProductFilter] = useState<string>("all");
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [activeTab, setActiveTab] = useState<RevenueTab>("shipping");
 
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["finance-analytics-orders"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, price, quantity, total_amount, shipping_cost, weight, created_at")
+        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, price, quantity, total_amount, shipping_cost, weight, invoice_id, created_at")
         .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: invoices = [] } = useQuery({
+    queryKey: ["finance-invoices"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("id, status, invoice_number, paid_at");
       if (error) throw error;
       return data;
     },
@@ -52,7 +67,7 @@ export default function FinanceAnalytics() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sourcing_requests")
-        .select("id, seller_id, product_name, quantity, unit_price, shipping_cost, total_price, seller_price, payment_status, seller_validated, status, created_at");
+        .select("id, display_id, seller_id, product_name, quantity, unit_price, shipping_cost, total_price, seller_price, payment_status, seller_validated, status, created_at");
       if (error) throw error;
       return data;
     },
@@ -66,6 +81,18 @@ export default function FinanceAnalytics() {
       return data;
     },
   });
+
+  // Invoice status map
+  const invoiceStatusMap = useMemo(() => {
+    const map: Record<string, { status: string; number: string }> = {};
+    invoices.forEach(inv => { map[inv.id] = { status: inv.status, number: inv.invoice_number }; });
+    return map;
+  }, [invoices]);
+
+  const isInvoicePaid = (invoiceId: string | null) => {
+    if (!invoiceId) return false;
+    return invoiceStatusMap[invoiceId]?.status === 'paid';
+  };
 
   const rateHelpers = useMemo(() => {
     const globalRate = rateSettingsFinance.find(r => r.is_global && !r.seller_id);
@@ -132,7 +159,6 @@ export default function FinanceAnalytics() {
     return filtered;
   }, [orders, sellerFilter, productFilter, dateRange]);
 
-  // Only validated sourcing requests count for profit
   const filteredSourcing = useMemo(() => {
     let filtered = sourcingRequests.filter(r => r.seller_validated === true);
     if (sellerFilter !== "all") filtered = filtered.filter(r => r.seller_id === sellerFilter);
@@ -142,67 +168,129 @@ export default function FinanceAnalytics() {
     return filtered;
   }, [sourcingRequests, sellerFilter, productFilter, dateRange]);
 
-  // === CALCULATIONS ===
+  // === CALCULATIONS with invoice-based paid/pending ===
 
   const shippedOrders = useMemo(() => {
     return filteredOrders.filter(o => o.delivery_status && ["shipped", "in_transit", "with_courier", "delivered", "paid", "returned", "pending"].includes(o.delivery_status));
   }, [filteredOrders]);
 
-  const shippingRevenue = useMemo(() => {
-    return shippedOrders.reduce((sum, o) => {
+  const shippingStats = useMemo(() => {
+    let total = 0, paid = 0, pending = 0;
+    const details: { orderId: string; product: string; weight: number; fee: number; isPaid: boolean; invoiceNum: string }[] = [];
+    shippedOrders.forEach(o => {
       const weight = Number(o.weight) || 0.5;
-      return sum + getShippingFee(o.seller_id, weight);
-    }, 0);
-  }, [shippedOrders, getShippingFee]);
+      const fee = getShippingFee(o.seller_id, weight);
+      const invoicePaid = isInvoicePaid(o.invoice_id);
+      total += fee;
+      if (invoicePaid) paid += fee; else pending += fee;
+      details.push({
+        orderId: o.order_id,
+        product: o.product_name,
+        weight,
+        fee,
+        isPaid: invoicePaid,
+        invoiceNum: o.invoice_id ? (invoiceStatusMap[o.invoice_id]?.number || '—') : 'No Invoice',
+      });
+    });
+    return { total, paid, pending, details };
+  }, [shippedOrders, getShippingFee, invoiceStatusMap]);
 
   const confirmationStats = useMemo(() => {
     const confirmedOrders = filteredOrders.filter(o => o.confirmation_status === "confirmed");
     const droppedOrders = filteredOrders.filter(o => ["cancelled", "wrong_number", "double"].includes(o.confirmation_status));
-    const confirmedRevenue = confirmedOrders.reduce((sum, o) => sum + rateHelpers.getConfirmedRate(o.seller_id), 0);
-    const droppedRevenue = droppedOrders.reduce((sum, o) => sum + rateHelpers.getDroppedRate(o.seller_id), 0);
-    return { confirmedCount: confirmedOrders.length, droppedCount: droppedOrders.length, confirmedRevenue, droppedRevenue, totalRevenue: confirmedRevenue + droppedRevenue };
-  }, [filteredOrders, rateHelpers]);
+
+    let confirmedRevenue = 0, confirmedPaid = 0, confirmedPending = 0;
+    let droppedRevenue = 0, droppedPaid = 0, droppedPending = 0;
+
+    const details: { orderId: string; product: string; type: string; rate: number; isPaid: boolean; invoiceNum: string }[] = [];
+
+    confirmedOrders.forEach(o => {
+      const rate = rateHelpers.getConfirmedRate(o.seller_id);
+      const invoicePaid = isInvoicePaid(o.invoice_id);
+      confirmedRevenue += rate;
+      if (invoicePaid) confirmedPaid += rate; else confirmedPending += rate;
+      details.push({ orderId: o.order_id, product: o.product_name, type: 'Confirmed', rate, isPaid: invoicePaid, invoiceNum: o.invoice_id ? (invoiceStatusMap[o.invoice_id]?.number || '—') : 'No Invoice' });
+    });
+
+    droppedOrders.forEach(o => {
+      const rate = rateHelpers.getDroppedRate(o.seller_id);
+      const invoicePaid = isInvoicePaid(o.invoice_id);
+      droppedRevenue += rate;
+      if (invoicePaid) droppedPaid += rate; else droppedPending += rate;
+      details.push({ orderId: o.order_id, product: o.product_name, type: 'Dropped', rate, isPaid: invoicePaid, invoiceNum: o.invoice_id ? (invoiceStatusMap[o.invoice_id]?.number || '—') : 'No Invoice' });
+    });
+
+    return {
+      confirmedCount: confirmedOrders.length,
+      droppedCount: droppedOrders.length,
+      confirmedRevenue, droppedRevenue,
+      totalRevenue: confirmedRevenue + droppedRevenue,
+      totalPaid: confirmedPaid + droppedPaid,
+      totalPending: confirmedPending + droppedPending,
+      details,
+    };
+  }, [filteredOrders, rateHelpers, invoiceStatusMap]);
 
   const codStats = useMemo(() => {
     const deliveredOrders = filteredOrders.filter(o => o.delivery_status === "delivered" || o.delivery_status === "paid");
-    const deliveredRevenuePKR = deliveredOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
-    const deliveredRevenueUSD = pkrToUsd(deliveredRevenuePKR);
-    const codFees = deliveredOrders.reduce((sum, o) => sum + pkrToUsd(Number(o.total_amount)) * rateHelpers.getCodRate(o.seller_id), 0);
-    return { deliveredRevenueUSD, codFees, deliveredCount: deliveredOrders.length };
-  }, [filteredOrders, rateHelpers]);
+    let total = 0, paid = 0, pending = 0;
+    const details: { orderId: string; product: string; amount: number; codFee: number; isPaid: boolean; invoiceNum: string }[] = [];
 
-  // Sourcing: profit = (seller_price * quantity) - total_price, split by payment status
+    deliveredOrders.forEach(o => {
+      const amountUSD = pkrToUsd(Number(o.total_amount));
+      const codFee = amountUSD * rateHelpers.getCodRate(o.seller_id);
+      const invoicePaid = isInvoicePaid(o.invoice_id);
+      total += codFee;
+      if (invoicePaid) paid += codFee; else pending += codFee;
+      details.push({
+        orderId: o.order_id,
+        product: o.product_name,
+        amount: amountUSD,
+        codFee,
+        isPaid: invoicePaid,
+        invoiceNum: o.invoice_id ? (invoiceStatusMap[o.invoice_id]?.number || '—') : 'No Invoice',
+      });
+    });
+
+    return { total, paid, pending, deliveredCount: deliveredOrders.length, details };
+  }, [filteredOrders, rateHelpers, invoiceStatusMap]);
+
+  // Sourcing: profit based on payment_status from sourcing_requests
   const sourcingStats = useMemo(() => {
-    let totalProfit = 0;
-    let totalAmount = 0; // total seller owes (seller_price * qty)
-    let paidAmount = 0;
-    let unpaidAmount = 0;
-    let paidProfit = 0;
-    let unpaidProfit = 0;
-    let totalUnits = 0;
+    let totalProfit = 0, totalAmount = 0, paidAmount = 0, unpaidAmount = 0, paidProfit = 0, unpaidProfit = 0, totalUnits = 0;
+    const details: { id: string; displayId: string; product: string; quantity: number; sellerPrice: number; totalCost: number; profit: number; isPaid: boolean }[] = [];
 
     filteredSourcing.forEach(r => {
       const sellerOwes = (r.seller_price || 0) * r.quantity;
       const ourCost = r.total_price || 0;
       const profit = sellerOwes - ourCost;
+      const isPaid = r.payment_status === 'paid';
 
       totalAmount += sellerOwes;
       totalProfit += profit;
       totalUnits += r.quantity;
 
-      if (r.payment_status === 'paid') {
-        paidAmount += sellerOwes;
-        paidProfit += profit;
-      } else {
-        unpaidAmount += sellerOwes;
-        unpaidProfit += profit;
-      }
+      if (isPaid) { paidAmount += sellerOwes; paidProfit += profit; }
+      else { unpaidAmount += sellerOwes; unpaidProfit += profit; }
+
+      details.push({
+        id: r.id,
+        displayId: r.display_id || r.id.slice(0, 8),
+        product: r.product_name,
+        quantity: r.quantity,
+        sellerPrice: r.seller_price || 0,
+        totalCost: ourCost,
+        profit,
+        isPaid,
+      });
     });
 
-    return { totalProfit, totalAmount, paidAmount, unpaidAmount, paidProfit, unpaidProfit, totalUnits, count: filteredSourcing.length };
+    return { totalProfit, totalAmount, paidAmount, unpaidAmount, paidProfit, unpaidProfit, totalUnits, count: filteredSourcing.length, details };
   }, [filteredSourcing]);
 
-  const totalRevenueUSD = shippingRevenue + confirmationStats.totalRevenue + codStats.codFees + sourcingStats.totalProfit;
+  const totalRevenueUSD = shippingStats.total + confirmationStats.totalRevenue + codStats.total + sourcingStats.totalProfit;
+  const totalPaid = shippingStats.paid + confirmationStats.totalPaid + codStats.paid + sourcingStats.paidProfit;
+  const totalPending = shippingStats.pending + confirmationStats.totalPending + codStats.pending + sourcingStats.unpaidProfit;
 
   // Revenue by seller
   const profitBySeller = useMemo(() => {
@@ -234,19 +322,6 @@ export default function FinanceAnalytics() {
       .sort((a, b) => b.total - a.total);
   }, [filteredOrders, filteredSourcing, profileNameMap, getShippingFee, rateHelpers]);
 
-  const profitByProduct = useMemo(() => {
-    const map: Record<string, { revenue: number; count: number }> = {};
-    filteredOrders.forEach(o => {
-      if (o.delivery_status === "delivered" || o.delivery_status === "paid") {
-        const name = o.product_name || "Unknown";
-        if (!map[name]) map[name] = { revenue: 0, count: 0 };
-        map[name].revenue += Number(o.total_amount);
-        map[name].count += o.quantity;
-      }
-    });
-    return Object.entries(map).map(([name, d]) => ({ name, revenue: d.revenue, count: d.count })).sort((a, b) => b.revenue - a.revenue);
-  }, [filteredOrders]);
-
   const chartColors = ['hsl(var(--primary))', 'hsl(155, 50%, 42%)', 'hsl(38, 90%, 55%)', 'hsl(0, 65%, 52%)', 'hsl(220, 70%, 55%)'];
 
   if (isLoading) {
@@ -257,58 +332,11 @@ export default function FinanceAnalytics() {
     );
   }
 
-  // Detail table rows
-  const detailRows = [
-    {
-      category: "Shipping",
-      icon: Truck,
-      iconBg: "bg-primary/10",
-      iconColor: "text-primary",
-      description: `${shippedOrders.length} shipped orders × weight-based rates`,
-      total: shippingRevenue,
-      paid: shippingRevenue, // shipping is always charged
-      pending: 0,
-    },
-    {
-      category: "Call Center — Confirmed",
-      icon: CheckCircle2,
-      iconBg: "bg-success/10",
-      iconColor: "text-success",
-      description: `${confirmationStats.confirmedCount} orders × $${rateHelpers.globalConfirmedRate}`,
-      total: confirmationStats.confirmedRevenue,
-      paid: confirmationStats.confirmedRevenue,
-      pending: 0,
-    },
-    {
-      category: "Call Center — Dropped",
-      icon: XCircle,
-      iconBg: "bg-destructive/10",
-      iconColor: "text-destructive",
-      description: `${confirmationStats.droppedCount} orders × $${rateHelpers.globalDroppedRate}`,
-      total: confirmationStats.droppedRevenue,
-      paid: confirmationStats.droppedRevenue,
-      pending: 0,
-    },
-    {
-      category: "COD Fees",
-      icon: DollarSign,
-      iconBg: "bg-warning/10",
-      iconColor: "text-warning",
-      description: `${rateHelpers.globalCodPercent}% of ${formatUSD(codStats.deliveredRevenueUSD)} (${codStats.deliveredCount} delivered)`,
-      total: codStats.codFees,
-      paid: codStats.codFees,
-      pending: 0,
-    },
-    {
-      category: "Sourcing Profit",
-      icon: Package,
-      iconBg: "bg-info/10",
-      iconColor: "text-info",
-      description: `${sourcingStats.count} validated requests · ${sourcingStats.totalUnits} units`,
-      total: sourcingStats.totalProfit,
-      paid: sourcingStats.paidProfit,
-      pending: sourcingStats.unpaidProfit,
-    },
+  const tabs: { key: RevenueTab; label: string; icon: typeof Truck; total: number; paid: number; pending: number; color: string }[] = [
+    { key: "shipping", label: "Shipping", icon: Truck, total: shippingStats.total, paid: shippingStats.paid, pending: shippingStats.pending, color: "text-primary" },
+    { key: "call_center", label: "Call Center", icon: Phone, total: confirmationStats.totalRevenue, paid: confirmationStats.totalPaid, pending: confirmationStats.totalPending, color: "text-success" },
+    { key: "cod", label: "COD Fees", icon: DollarSign, total: codStats.total, paid: codStats.paid, pending: codStats.pending, color: "text-warning" },
+    { key: "sourcing", label: "Sourcing", icon: Package, total: sourcingStats.totalProfit, paid: sourcingStats.paidProfit, pending: sourcingStats.unpaidProfit, color: "text-info" },
   ];
 
   return (
@@ -342,148 +370,88 @@ export default function FinanceAnalytics() {
             <p className="text-sm text-muted-foreground font-medium">Total Revenue</p>
             <p className="text-3xl font-bold tabular-nums tracking-tight">{formatUSD(totalRevenueUSD)}</p>
           </div>
+          <div className="ml-auto flex gap-4">
+            <div className="text-right">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Paid</p>
+              <p className="text-lg font-bold tabular-nums text-success">{formatUSD(totalPaid)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Pending</p>
+              <p className="text-lg font-bold tabular-nums text-warning">{formatUSD(totalPending)}</p>
+            </div>
+          </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-          <div className="bg-background/60 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">Shipping</p>
-            <p className="text-lg font-bold tabular-nums">{formatUSD(shippingRevenue)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{shippedOrders.length} shipped</p>
-          </div>
-          <div className="bg-background/60 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">Call Center</p>
-            <p className="text-lg font-bold tabular-nums">{formatUSD(confirmationStats.totalRevenue)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{confirmationStats.confirmedCount + confirmationStats.droppedCount} processed</p>
-          </div>
-          <div className="bg-background/60 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">COD Fees</p>
-            <p className="text-lg font-bold tabular-nums">{formatUSD(codStats.codFees)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{codStats.deliveredCount} delivered</p>
-          </div>
-          <div className="bg-background/60 rounded-lg p-3 text-center">
-            <p className="text-xs text-muted-foreground mb-1">Sourcing</p>
-            <p className="text-lg font-bold tabular-nums">{formatUSD(sourcingStats.totalProfit)}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              <span className="text-success">{formatUSD(sourcingStats.paidProfit)} paid</span>
-              {sourcingStats.unpaidProfit > 0 && <span className="text-warning"> · {formatUSD(sourcingStats.unpaidProfit)} pending</span>}
-            </p>
-          </div>
+          {tabs.map(t => (
+            <div key={t.key} className="bg-background/60 rounded-lg p-3 text-center">
+              <p className="text-xs text-muted-foreground mb-1">{t.label}</p>
+              <p className="text-lg font-bold tabular-nums">{formatUSD(t.total)}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                <span className="text-success">{formatUSD(t.paid)}</span>
+                {t.pending > 0 && <span className="text-warning"> · {formatUSD(t.pending)}</span>}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* KPIs row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPICard title="Shipping Revenue" value={formatUSD(shippingRevenue)} subtitle={`${shippedOrders.length} orders`} icon={Truck} iconBg="bg-primary/10" iconColor="text-primary" delay={0} />
-        <KPICard title="Call Center" value={formatUSD(confirmationStats.totalRevenue)} subtitle={`${confirmationStats.confirmedCount} confirmed · ${confirmationStats.droppedCount} dropped`} icon={CheckCircle2} iconBg="bg-success/10" iconColor="text-success" delay={50} />
-        <KPICard title="COD Fees" value={formatUSD(codStats.codFees)} subtitle={`${rateHelpers.globalCodPercent}% of ${formatUSD(codStats.deliveredRevenueUSD)}`} icon={DollarSign} iconBg="bg-warning/10" iconColor="text-warning" delay={100} />
-        <KPICard title="Sourcing Profit" value={formatUSD(sourcingStats.totalProfit)} subtitle={`${sourcingStats.count} requests · ${sourcingStats.totalUnits} units`} icon={Package} iconBg="bg-info/10" iconColor="text-info" delay={150} />
-      </div>
-
-      {/* Sourcing Payment Breakdown */}
-      <div className="bg-card rounded-xl border p-5 animate-slide-up" style={{ animationDelay: '80ms' }}>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Sourcing Payment Overview</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="relative overflow-hidden rounded-xl border bg-gradient-to-br from-muted/30 to-muted/10 p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-lg bg-foreground/5"><Package className="w-4 h-4 text-foreground/70" /></div>
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Amount</span>
-            </div>
-            <p className="text-2xl font-bold tabular-nums">{formatUSD(sourcingStats.totalAmount)}</p>
-            <p className="text-xs text-muted-foreground mt-1">{sourcingStats.totalUnits} units across {sourcingStats.count} requests</p>
-          </div>
-          <div className="relative overflow-hidden rounded-xl border border-success/20 bg-gradient-to-br from-success/5 to-transparent p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-lg bg-success/10"><CreditCard className="w-4 h-4 text-success" /></div>
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Paid</span>
-            </div>
-            <p className="text-2xl font-bold tabular-nums text-success">{formatUSD(sourcingStats.paidAmount)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Profit: {formatUSD(sourcingStats.paidProfit)}</p>
-          </div>
-          <div className="relative overflow-hidden rounded-xl border border-warning/20 bg-gradient-to-br from-warning/5 to-transparent p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-lg bg-warning/10"><Clock className="w-4 h-4 text-warning" /></div>
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pending</span>
-            </div>
-            <p className="text-2xl font-bold tabular-nums text-warning">{formatUSD(sourcingStats.unpaidAmount)}</p>
-            <p className="text-xs text-muted-foreground mt-1">Profit: {formatUSD(sourcingStats.unpaidProfit)}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Revenue Breakdown Table */}
-      <div className="bg-card rounded-xl border overflow-hidden animate-slide-up" style={{ animationDelay: '120ms' }}>
-        <div className="px-5 py-4 border-b bg-muted/30">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Revenue Breakdown</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-muted/20">
-                <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3">Category</th>
-                <th className="text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3 hidden md:table-cell">Details</th>
-                <th className="text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3">Total</th>
-                <th className="text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3">Paid</th>
-                <th className="text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider px-5 py-3">Pending</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {detailRows.map((row) => {
-                const Icon = row.icon;
-                return (
-                  <tr key={row.category} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className={cn("p-2 rounded-lg", row.iconBg)}>
-                          <Icon className={cn("w-4 h-4", row.iconColor)} />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">{row.category}</p>
-                          <p className="text-xs text-muted-foreground md:hidden mt-0.5">{row.description}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 hidden md:table-cell">
-                      <p className="text-xs text-muted-foreground">{row.description}</p>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <span className="text-sm font-semibold tabular-nums">{formatUSD(row.total)}</span>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <span className="text-sm font-medium tabular-nums text-success">{formatUSD(row.paid)}</span>
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      {row.pending > 0 ? (
-                        <span className="text-sm font-medium tabular-nums text-warning">{formatUSD(row.pending)}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-primary/20 bg-primary/5">
-                <td className="px-5 py-4" colSpan={2}>
-                  <p className="text-sm font-bold">Total Revenue</p>
-                </td>
-                <td className="px-5 py-4 text-right">
-                  <span className="text-base font-bold tabular-nums">{formatUSD(totalRevenueUSD)}</span>
-                </td>
-                <td className="px-5 py-4 text-right">
-                  <span className="text-sm font-bold tabular-nums text-success">
-                    {formatUSD(shippingRevenue + confirmationStats.totalRevenue + codStats.codFees + sourcingStats.paidProfit)}
-                  </span>
-                </td>
-                <td className="px-5 py-4 text-right">
-                  {sourcingStats.unpaidProfit > 0 ? (
-                    <span className="text-sm font-bold tabular-nums text-warning">{formatUSD(sourcingStats.unpaidProfit)}</span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
+      {/* Revenue Breakdown - Interactive Tabs */}
+      <div className="bg-card rounded-xl border overflow-hidden animate-slide-up" style={{ animationDelay: '80ms' }}>
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <h2 className="text-base font-semibold">Revenues</h2>
+          <div className="flex bg-muted/50 rounded-lg p-1 gap-0.5">
+            {tabs.map(t => {
+              const Icon = t.icon;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                    activeTab === t.key
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   )}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Tab Summary */}
+        {(() => {
+          const current = tabs.find(t => t.key === activeTab)!;
+          return (
+            <div className="px-5 py-4 border-b bg-muted/10">
+              <div className="flex items-center gap-6">
+                <div>
+                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-xl font-bold tabular-nums">{formatUSD(current.total)}</p>
+                </div>
+                <div className="h-8 w-px bg-border" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Paid</p>
+                  <p className="text-lg font-semibold tabular-nums text-success">{formatUSD(current.paid)}</p>
+                </div>
+                <div className="h-8 w-px bg-border" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Pending</p>
+                  <p className="text-lg font-semibold tabular-nums text-warning">{formatUSD(current.pending)}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Tab Content */}
+        <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+          {activeTab === "shipping" && <ShippingDetails details={shippingStats.details} />}
+          {activeTab === "call_center" && <CallCenterDetails details={confirmationStats.details} />}
+          {activeTab === "cod" && <CodDetails details={codStats.details} />}
+          {activeTab === "sourcing" && <SourcingDetails details={sourcingStats.details} />}
         </div>
       </div>
 
@@ -512,48 +480,176 @@ export default function FinanceAnalytics() {
             </div>
           </div>
         )}
-        <ProductRevenueChart data={profitByProduct} chartColors={chartColors} />
       </div>
     </div>
   );
 }
 
-function ProductRevenueChart({ data, chartColors }: { data: { name: string; revenue: number; count: number }[]; chartColors: string[] }) {
-  const [showAll, setShowAll] = useState(false);
-  const visibleData = showAll ? data : data.slice(0, 6);
-  const hasMore = data.length > 6;
+// === Detail Components ===
 
-  if (data.length === 0) {
-    return (
-      <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '150ms' }}>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Top Revenue by Product</h2>
-        <p className="text-muted-foreground text-sm text-center py-10">No delivered orders yet</p>
-      </div>
-    );
-  }
-
+function StatusBadge({ isPaid }: { isPaid: boolean }) {
   return (
-    <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '150ms' }}>
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Top Revenue by Product</h2>
-      <ResponsiveContainer width="100%" height={visibleData.length * 44 + 30}>
-        <BarChart data={visibleData} layout="vertical">
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-          <XAxis type="number" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => formatUSD(pkrToUsd(v))} />
-          <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" width={120} />
-          <Tooltip formatter={(v: number) => formatUSD(pkrToUsd(v))} contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
-          <Bar dataKey="revenue" radius={[0, 4, 4, 0]} name="Revenue ($)">
-            {visibleData.map((_, i) => (
-              <Cell key={i} fill={chartColors[i % chartColors.length]} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-      {hasMore && (
-        <Button variant="ghost" size="sm" className="w-full mt-2 text-xs text-muted-foreground hover:text-foreground" onClick={() => setShowAll(!showAll)}>
-          <ChevronDown className={cn("w-3.5 h-3.5 mr-1 transition-transform", showAll && "rotate-180")} />
-          {showAll ? "Show less" : `Show ${data.length - 6} more products`}
-        </Button>
-      )}
+    <Badge variant="outline" className={cn(
+      "text-[10px] px-1.5 py-0 font-medium",
+      isPaid ? "border-success/30 bg-success/10 text-success" : "border-warning/30 bg-warning/10 text-warning"
+    )}>
+      {isPaid ? "Paid" : "Pending"}
+    </Badge>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="relative mb-4">
+        <div className="absolute inset-0 bg-primary/5 rounded-full scale-150 animate-pulse" />
+        <div className="relative p-4 bg-muted/50 rounded-xl border">
+          <BarChart3 className="w-6 h-6 text-muted-foreground/50" />
+        </div>
+      </div>
+      <p className="text-sm font-medium text-muted-foreground">No Data Available Yet</p>
+      <p className="text-xs text-muted-foreground/70 mt-1">Once your activity starts generating insights,<br />you'll see them visualized here.</p>
     </div>
+  );
+}
+
+function ShippingDetails({ details }: { details: { orderId: string; product: string; weight: number; fee: number; isPaid: boolean; invoiceNum: string }[] }) {
+  if (details.length === 0) return <EmptyState />;
+  return (
+    <table className="w-full">
+      <thead className="sticky top-0 bg-card z-10">
+        <tr className="border-b bg-muted/20">
+          <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Order</th>
+          <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Product</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Weight</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Fee</th>
+          <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Invoice</th>
+          <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Status</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {details.slice(0, 50).map((d, i) => (
+          <tr key={i} className="hover:bg-muted/20 transition-colors">
+            <td className="px-5 py-2.5 text-xs font-mono font-medium">{d.orderId}</td>
+            <td className="px-5 py-2.5 text-xs truncate max-w-[200px]">{d.product}</td>
+            <td className="px-5 py-2.5 text-xs text-right tabular-nums">{d.weight}kg</td>
+            <td className="px-5 py-2.5 text-xs text-right font-medium tabular-nums">{formatUSD(d.fee)}</td>
+            <td className="px-5 py-2.5 text-xs text-center text-muted-foreground">{d.invoiceNum}</td>
+            <td className="px-5 py-2.5 text-center"><StatusBadge isPaid={d.isPaid} /></td>
+          </tr>
+        ))}
+      </tbody>
+      {details.length > 50 && (
+        <tfoot>
+          <tr className="border-t"><td colSpan={6} className="px-5 py-2 text-xs text-muted-foreground text-center">Showing 50 of {details.length} orders</td></tr>
+        </tfoot>
+      )}
+    </table>
+  );
+}
+
+function CallCenterDetails({ details }: { details: { orderId: string; product: string; type: string; rate: number; isPaid: boolean; invoiceNum: string }[] }) {
+  if (details.length === 0) return <EmptyState />;
+  return (
+    <table className="w-full">
+      <thead className="sticky top-0 bg-card z-10">
+        <tr className="border-b bg-muted/20">
+          <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Order</th>
+          <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Product</th>
+          <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Type</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Rate</th>
+          <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Invoice</th>
+          <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Status</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {details.slice(0, 50).map((d, i) => (
+          <tr key={i} className="hover:bg-muted/20 transition-colors">
+            <td className="px-5 py-2.5 text-xs font-mono font-medium">{d.orderId}</td>
+            <td className="px-5 py-2.5 text-xs truncate max-w-[200px]">{d.product}</td>
+            <td className="px-5 py-2.5 text-center">
+              <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", d.type === 'Confirmed' ? "border-success/30 text-success" : "border-destructive/30 text-destructive")}>
+                {d.type}
+              </Badge>
+            </td>
+            <td className="px-5 py-2.5 text-xs text-right font-medium tabular-nums">{formatUSD(d.rate)}</td>
+            <td className="px-5 py-2.5 text-xs text-center text-muted-foreground">{d.invoiceNum}</td>
+            <td className="px-5 py-2.5 text-center"><StatusBadge isPaid={d.isPaid} /></td>
+          </tr>
+        ))}
+      </tbody>
+      {details.length > 50 && (
+        <tfoot>
+          <tr className="border-t"><td colSpan={6} className="px-5 py-2 text-xs text-muted-foreground text-center">Showing 50 of {details.length} orders</td></tr>
+        </tfoot>
+      )}
+    </table>
+  );
+}
+
+function CodDetails({ details }: { details: { orderId: string; product: string; amount: number; codFee: number; isPaid: boolean; invoiceNum: string }[] }) {
+  if (details.length === 0) return <EmptyState />;
+  return (
+    <table className="w-full">
+      <thead className="sticky top-0 bg-card z-10">
+        <tr className="border-b bg-muted/20">
+          <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Order</th>
+          <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Product</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Amount</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">COD Fee</th>
+          <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Invoice</th>
+          <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Status</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {details.slice(0, 50).map((d, i) => (
+          <tr key={i} className="hover:bg-muted/20 transition-colors">
+            <td className="px-5 py-2.5 text-xs font-mono font-medium">{d.orderId}</td>
+            <td className="px-5 py-2.5 text-xs truncate max-w-[200px]">{d.product}</td>
+            <td className="px-5 py-2.5 text-xs text-right tabular-nums">{formatUSD(d.amount)}</td>
+            <td className="px-5 py-2.5 text-xs text-right font-medium tabular-nums">{formatUSD(d.codFee)}</td>
+            <td className="px-5 py-2.5 text-xs text-center text-muted-foreground">{d.invoiceNum}</td>
+            <td className="px-5 py-2.5 text-center"><StatusBadge isPaid={d.isPaid} /></td>
+          </tr>
+        ))}
+      </tbody>
+      {details.length > 50 && (
+        <tfoot>
+          <tr className="border-t"><td colSpan={6} className="px-5 py-2 text-xs text-muted-foreground text-center">Showing 50 of {details.length} orders</td></tr>
+        </tfoot>
+      )}
+    </table>
+  );
+}
+
+function SourcingDetails({ details }: { details: { id: string; displayId: string; product: string; quantity: number; sellerPrice: number; totalCost: number; profit: number; isPaid: boolean }[] }) {
+  if (details.length === 0) return <EmptyState />;
+  return (
+    <table className="w-full">
+      <thead className="sticky top-0 bg-card z-10">
+        <tr className="border-b bg-muted/20">
+          <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">ID</th>
+          <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Product</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Qty</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Seller Price</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Our Cost</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Profit</th>
+          <th className="text-center text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Status</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {details.map((d) => (
+          <tr key={d.id} className="hover:bg-muted/20 transition-colors">
+            <td className="px-5 py-2.5 text-xs font-mono font-medium">{d.displayId}</td>
+            <td className="px-5 py-2.5 text-xs truncate max-w-[200px]">{d.product}</td>
+            <td className="px-5 py-2.5 text-xs text-right tabular-nums">{d.quantity}</td>
+            <td className="px-5 py-2.5 text-xs text-right tabular-nums">{formatUSD(d.sellerPrice * d.quantity)}</td>
+            <td className="px-5 py-2.5 text-xs text-right tabular-nums">{formatUSD(d.totalCost)}</td>
+            <td className="px-5 py-2.5 text-xs text-right font-medium tabular-nums text-success">{formatUSD(d.profit)}</td>
+            <td className="px-5 py-2.5 text-center"><StatusBadge isPaid={d.isPaid} /></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
