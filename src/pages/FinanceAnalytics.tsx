@@ -541,16 +541,14 @@ function EmptyState() {
   );
 }
 
-function ShippingDetails({ details }: { details: { sellerId: string; sellerName: string; confirmed: number; dropped: number; upsell: number; revenue: number; paid: number; pending: number }[] }) {
+function ShippingDetails({ details }: { details: { sellerId: string; sellerName: string; shipped: number; revenue: number; paid: number; pending: number }[] }) {
   if (details.length === 0) return <EmptyState />;
   return (
     <table className="w-full">
       <thead className="sticky top-0 bg-card z-10">
         <tr className="border-b bg-muted/20">
           <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Seller</th>
-          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Confirmed</th>
-          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Dropped</th>
-          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Upsell</th>
+          <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Shipped</th>
           <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Revenue</th>
           <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Paid</th>
           <th className="text-right text-[11px] font-semibold text-muted-foreground uppercase px-5 py-2.5">Pending</th>
@@ -560,9 +558,7 @@ function ShippingDetails({ details }: { details: { sellerId: string; sellerName:
         {details.map((d) => (
           <tr key={d.sellerId} className="hover:bg-muted/20 transition-colors">
             <td className="px-5 py-2.5 text-xs font-medium">{d.sellerName}</td>
-            <td className="px-5 py-2.5 text-xs text-right tabular-nums">{d.confirmed}</td>
-            <td className="px-5 py-2.5 text-xs text-right tabular-nums text-destructive">{d.dropped}</td>
-            <td className="px-5 py-2.5 text-xs text-right tabular-nums text-info">{d.upsell}</td>
+            <td className="px-5 py-2.5 text-xs text-right tabular-nums">{d.shipped}</td>
             <td className="px-5 py-2.5 text-xs text-right font-semibold tabular-nums">{formatUSD(d.revenue)}</td>
             <td className="px-5 py-2.5 text-xs text-right tabular-nums text-success">{formatUSD(d.paid)}</td>
             <td className="px-5 py-2.5 text-xs text-right tabular-nums text-warning">{d.pending > 0 ? formatUSD(d.pending) : '—'}</td>
