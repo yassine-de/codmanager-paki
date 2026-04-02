@@ -52,6 +52,12 @@ const Integrations = () => {
   const [serviceEmailLoaded, setServiceEmailLoaded] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // API Config
+  const [apiEnabled, setApiEnabled] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [apiAccountNumber, setApiAccountNumber] = useState("");
+  const [apiSaving, setApiSaving] = useState(false);
+  const [apiLoaded, setApiLoaded] = useState(false);
   // Create/Edit modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<IntegrationSheet | null>(null);
