@@ -494,6 +494,7 @@ const AgentOrders = () => {
         quantity: activeItems.reduce((sum, item) => sum + item.qty, 0),
         price: activeItems[0]?.price || currentOrder.price,
         total_amount: orderTotal,
+        is_manual_price: isManualPrice,
         note: note.trim() || currentOrder.note,
         attempt_count: currentOrder.attempt_count + (selectedStatus === "no_answer" ? 1 : 0),
       };
