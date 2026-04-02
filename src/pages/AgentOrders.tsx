@@ -474,66 +474,62 @@ const AgentOrders = () => {
     return rows[0];
   };
 
-  const claimOrder = async (order: DbOrder) => {
-    if (!authUser) return false;
+  const claimOrder = async (order: DbOrder): Promise<DbOrder | null> => {
+    if (!authUser) return null;
     setClaiming(true);
     try {
-      // If already assigned to us, just init
+      // If already assigned to us, re-fetch fresh data from DB to ensure consistency
       if (order.agent_id === authUser.id) {
-        initOrderState(order);
-        return true;
-      }
-
-      // If it's a duplicate group, use atomic duplicate claim
-      if (order._isDuplicate && order._duplicateGroup) {
-        const claimed = await claimOrderAtomic("duplicate");
-        if (!claimed) {
-          toast.warning(`Duplicate orders were already taken`);
-          return false;
+        const { data: fresh } = await supabase
+          .from("orders")
+          .select("*")
+          .eq("id", order.id)
+          .eq("agent_id", authUser.id)
+          .maybeSingle();
+        if (fresh) {
+          const freshOrder = fresh as DbOrder;
+          // Validate data consistency
+          if (freshOrder.id !== order.id || freshOrder.order_id !== order.order_id) {
+            console.error("[AgentOrders] Data mismatch on re-fetch!", { expected: order.order_id, got: freshOrder.order_id });
+            toast.error("Data mismatch detected — reloading");
+            return null;
+          }
+          initOrderState(freshOrder);
+          return freshOrder;
         }
-        initOrderState(claimed);
-        toast.info(`📋 Duplicate orders assigned atomically`, { duration: 4000 });
-        return true;
+        return null;
       }
 
       // Determine order type for atomic claim
       let orderType = "new";
-      if (order.confirmation_status === "postponed") orderType = "postponed";
+      if (order._isDuplicate) orderType = "duplicate";
+      else if (order.confirmation_status === "postponed") orderType = "postponed";
       else if (order.confirmation_status === "no_answer") orderType = "no_answer";
 
-      // Try to claim this specific order first (optimistic)
-      const updatePayload: Record<string, any> = {
-        agent_id: authUser.id,
-        assigned_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-      };
-      const { data, error } = await supabase
-        .from("orders")
-        .update(updatePayload as any)
-        .eq("id", order.id)
-        .is("agent_id", null)
-        .select()
-        .maybeSingle();
-
-      if (error) throw error;
-      if (data) {
-        initOrderState(data as DbOrder);
-        return true;
+      // Always use atomic claim — single source of truth from backend
+      const claimed = await claimOrderAtomic(orderType);
+      if (!claimed) {
+        toast.warning(`No more ${orderType} orders available`);
+        return null;
       }
 
-      // Order was taken — use atomic function to get next available
-      const fallback = await claimOrderAtomic(orderType);
-      if (fallback) {
-        initOrderState(fallback);
+      // Validate claimed order data
+      if (!claimed.id || !claimed.order_id) {
+        console.error("[AgentOrders] Invalid atomic claim result:", claimed);
+        return null;
+      }
+
+      if (order._isDuplicate) {
+        toast.info(`📋 Duplicate orders assigned atomically`, { duration: 4000 });
+      } else if (claimed.id !== order.id) {
         toast.info(`Order was taken, got next available ✅`);
-        return true;
       }
 
-      toast.warning(`Order ${order.order_id} was already taken, no more available`);
-      return false;
+      initOrderState(claimed);
+      return claimed;
     } catch (err: any) {
       toast.error("Failed to claim order");
-      return false;
+      return null;
     } finally {
       setClaiming(false);
     }
