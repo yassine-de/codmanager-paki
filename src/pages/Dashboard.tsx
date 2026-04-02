@@ -3,7 +3,7 @@ import {
   ShoppingCart, CheckCircle2, Truck, DollarSign, XCircle, RotateCcw,
   Sparkles, PhoneOff, CalendarClock, TrendingUp, TrendingDown,
   Package, Copy, PhoneForwarded, Navigation, UserCheck, Banknote,
-  Clock, Store, Award, Loader2,
+  Clock, Store, Award,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, LabelList,
