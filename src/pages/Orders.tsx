@@ -59,10 +59,11 @@ function StatusBadge({ label, cls }: { label: string; cls: string }) {
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'id' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'attempts';
+type ColumnKey = 'systemId' | 'id' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'attempts';
 
-const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean }[] = [
-  { key: 'id', label: 'ID', defaultVisible: true },
+const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
+  { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
+  { key: 'id', label: 'Seller ID', defaultVisible: true },
   { key: 'createdAt', label: 'Created', defaultVisible: true },
   { key: 'updatedAt', label: 'Updated', defaultVisible: true },
   { key: 'seller', label: 'Seller', defaultVisible: true },
@@ -278,6 +279,7 @@ export default function Orders() {
 
       const mapped: Order[] = (data || []).map(o => ({
         id: o.order_id,
+        systemId: o.system_id || undefined,
         customer: o.customer_name,
         phone: o.customer_phone,
         city: o.customer_city,
@@ -657,7 +659,7 @@ export default function Orders() {
             </PopoverTrigger>
             <PopoverContent className="w-48 p-2" align="end">
               <div className="space-y-1">
-                {allColumns.map(col => (
+                {allColumns.filter(col => !col.adminOnly || isAdmin).map(col => (
                   <label key={col.key} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm">
                     <Checkbox
                       checked={visibleColumns.has(col.key)}
@@ -684,7 +686,8 @@ export default function Orders() {
                     />
                   </th>
                 )}
-                {isCol('id') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">ID</th>}
+                {isAdmin && isCol('systemId') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">System ID</th>}
+                {isCol('id') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Seller ID</th>}
                 {isCol('createdAt') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Created</th>}
                 {isCol('updatedAt') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Updated</th>}
                 {isCol('seller') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Seller</th>}
@@ -717,6 +720,7 @@ export default function Orders() {
                       />
                     </td>
                   )}
+                  {isAdmin && isCol('systemId') && <td className="py-2.5 px-4 font-mono text-xs text-muted-foreground">{order.systemId ?? '—'}</td>}
                   {isCol('id') && <td className="py-2.5 px-4 font-medium text-xs">{order.id}</td>}
                   {isCol('createdAt') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{format(new Date(order.createdAt), 'dd MMM yyyy')}</td>}
                   {isCol('updatedAt') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{format(new Date(order.updatedAt), 'dd MMM yyyy')}</td>}

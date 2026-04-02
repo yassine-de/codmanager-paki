@@ -15,6 +15,7 @@ export interface OrderHistoryEvent {
 
 export interface Order {
   id: string;
+  systemId?: number;
   customer: string;
   phone: string;
   city: string;
