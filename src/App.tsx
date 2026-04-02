@@ -36,18 +36,61 @@ import Alerts from "./pages/Alerts";
 import Adjustments from "./pages/Adjustments";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const queryClient = new QueryClient();
+/* Full-page skeleton that mimics sidebar + header + content */
+function AppSkeleton() {
+  return (
+    <div className="min-h-screen flex w-full">
+      {/* Sidebar skeleton */}
+      <div className="w-[260px] border-r bg-sidebar p-4 space-y-4 hidden md:block">
+        <div className="flex items-center gap-2.5 mb-6">
+          <Skeleton className="w-8 h-8 rounded-xl" />
+          <div>
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-2.5 w-16 mt-1" />
+          </div>
+        </div>
+        <Skeleton className="h-2.5 w-16 mb-2" />
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-9 w-full rounded-lg" />
+        ))}
+      </div>
+      {/* Main area */}
+      <div className="flex-1 flex flex-col">
+        <div className="h-14 border-b bg-card/80 px-4 flex items-center gap-3">
+          <Skeleton className="h-8 w-8 rounded-lg" />
+          <Skeleton className="h-9 w-64 rounded-lg hidden sm:block" />
+          <div className="ml-auto flex gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-8 rounded-lg" />
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 p-6">
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-64 mb-8" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-[180px] rounded-xl" />
+            ))}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-[100px] rounded-xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ProtectedRoute({ children, permission }: { children: React.ReactNode; permission?: string }) {
   const { user, loading, hasPermission } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return null; // AppRoutes already shows skeleton
   }
 
   if (!user) {
@@ -65,11 +108,7 @@ function AppRoutes() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <AppSkeleton />;
   }
 
   if (!user) {

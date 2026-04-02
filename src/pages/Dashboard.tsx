@@ -351,11 +351,9 @@ export default function Dashboard() {
   const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 100) : 0;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    // Use lazy import to avoid circular deps
+    const { DashboardSkeleton } = require("@/components/DashboardSkeleton");
+    return <DashboardSkeleton />;
   }
 
   return (
