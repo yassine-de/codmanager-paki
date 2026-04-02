@@ -362,8 +362,10 @@ const AgentOrders = () => {
     orderTimerRef.current = setInterval(() => setOrderElapsedSec((seconds) => seconds + 1), 1000);
 
     setEditItems([{ name: order.product_name, qty: order.quantity, price: Number(order.price) }]);
-    setIsManualPrice(false);
-    setManualTotal(Number(order.total_amount) || Number(order.price) * order.quantity);
+    const savedManual = !!(order as any).is_manual_price;
+    const savedTotal = Number(order.total_amount) || Number(order.price) * order.quantity;
+    setIsManualPrice(savedManual);
+    setManualTotal(savedTotal);
     setEditCustomer({
       name: order.customer_name,
       phone: order.customer_phone,
