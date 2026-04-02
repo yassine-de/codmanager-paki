@@ -638,17 +638,6 @@ const AgentOrders = () => {
 
   return (
     <div className="p-4 md:p-6 max-w-[1100px] mx-auto space-y-4">
-      <div className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Live backend assignment</p>
-          <p className="text-sm font-semibold text-foreground">This order is loaded fresh from the backend and is the only active source of truth.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary" className="text-[10px]">New {newOrderCount}</Badge>
-          <Badge variant="outline" className="text-[10px]">Retries {retryCount}</Badge>
-          {duplicateCount > 0 && <Badge variant="outline" className="text-[10px]">Duplicate groups {duplicateCount}</Badge>}
-        </div>
-      </div>
 
       {/* ⚠️ Taking too long warning */}
       {orderElapsedSec >= ORDER_WARNING_SEC && (
