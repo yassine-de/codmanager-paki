@@ -711,16 +711,27 @@ const AgentOrders = () => {
   };
 
   const moveToNext = async () => {
-    let nextIdx = currentIndex + 1;
+    // Clear previous order state completely before loading next
+    resetForm();
+    setEditItems([]);
+    setEditCustomer({ name: "", phone: "", city: "", address: "" });
+    setHistoricalOffers(null);
+    setHistoricalLastPrice(null);
 
+    // Try claiming from remaining queue entries
+    let nextIdx = currentIndex + 1;
     while (nextIdx < orderQueue.length) {
       const nextOrder = orderQueue[nextIdx];
-      if (nextOrder.agent_id === authUser?.id) {
-        const claimed = await claimOrder(nextOrder);
-        if (claimed) { setCurrentIndex(nextIdx); return; }
-      } else {
-        const claimed = await claimOrder(nextOrder);
-        if (claimed) { setCurrentIndex(nextIdx); return; }
+      const claimed = await claimOrder(nextOrder);
+      if (claimed) {
+        // Update queue entry with actual claimed data to prevent stale references
+        setOrderQueue(prev => {
+          const updated = [...prev];
+          updated[nextIdx] = claimed;
+          return updated;
+        });
+        setCurrentIndex(nextIdx);
+        return;
       }
       nextIdx++;
     }
