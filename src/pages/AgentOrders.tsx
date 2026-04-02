@@ -486,6 +486,17 @@ const AgentOrders = () => {
     setSubmitting(true);
 
     try {
+      // If agent didn't change the status, release the order back instead of treating it
+      if (selectedStatus === currentOrder.confirmation_status) {
+        await supabase.rpc("release_order_lock" as any, { p_order_id: currentOrder.id, p_agent_id: authUser.id });
+        // For non-new orders, also un-assign agent
+        if (currentOrder.confirmation_status !== "new") {
+          await supabase.from("orders").update({ agent_id: null, assigned_at: null, last_activity_at: null } as any).eq("id", currentOrder.id);
+        }
+        toast.info(`Order ${currentOrder.order_id} released — no status change`);
+        await loadNextOrder();
+        return;
+      }
       const updateData: Record<string, any> = {
         confirmation_status: selectedStatus,
         customer_name: editCustomer.name,
