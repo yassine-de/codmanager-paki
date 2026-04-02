@@ -431,6 +431,7 @@ export type Database = {
           fragile: boolean | null
           id: string
           invoice_id: string | null
+          is_manual_price: boolean
           last_activity_at: string | null
           last_price: number | null
           note: string | null
@@ -477,6 +478,7 @@ export type Database = {
           fragile?: boolean | null
           id?: string
           invoice_id?: string | null
+          is_manual_price?: boolean
           last_activity_at?: string | null
           last_price?: number | null
           note?: string | null
@@ -523,6 +525,7 @@ export type Database = {
           fragile?: boolean | null
           id?: string
           invoice_id?: string | null
+          is_manual_price?: boolean
           last_activity_at?: string | null
           last_price?: number | null
           note?: string | null
@@ -1177,6 +1180,7 @@ export type Database = {
           fragile: boolean | null
           id: string
           invoice_id: string | null
+          is_manual_price: boolean
           last_activity_at: string | null
           last_price: number | null
           note: string | null
