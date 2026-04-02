@@ -85,8 +85,7 @@ const AgentOrders = () => {
   const [loading, setLoading] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [orderQueue, setOrderQueue] = useState<DbOrder[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentOrder, setCurrentOrder] = useState<DbOrder | null>(null);
   const [newOrderCount, setNewOrderCount] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   const [duplicateCount, setDuplicateCount] = useState(0);
@@ -112,9 +111,6 @@ const AgentOrders = () => {
   const [postponeNote, setPostponeNote] = useState("");
   const [shippingStatus, setShippingStatus] = useState("");
 
-  // Track new/retry assignment count for balanced distribution
-  const [newAssignedCount, setNewAssignedCount] = useState(0);
-
   // ─── LEASE HEARTBEAT & AUTO-RELEASE ───
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const currentOrderRef = useRef<DbOrder | null>(null);
@@ -122,9 +118,35 @@ const AgentOrders = () => {
   const orderTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ORDER_WARNING_SEC = 5 * 60; // 5 minutes warning threshold
 
-  const currentOrder = orderQueue[currentIndex];
+  const resetForm = useCallback(() => {
+    setSelectedStatus("");
+    setCancelReason("");
+    setNote("");
+    setPostponeDate(undefined);
+    setPostponeTime("10:00 AM");
+    setPostponeNote("");
+    setShippingStatus("");
+    setEditMode(false);
+    setEditingCustomer(false);
+  }, []);
 
-  // Keep ref in sync for use in event handlers
+  const clearActiveOrderState = useCallback(() => {
+    currentOrderRef.current = null;
+    setCurrentOrder(null);
+    setEditItems([]);
+    setEditCustomer({ name: "", phone: "", city: "", address: "" });
+    setSellerProducts([]);
+    setHistoricalOffers(null);
+    setHistoricalLastPrice(null);
+    setOrderElapsedSec(0);
+    if (orderTimerRef.current) {
+      clearInterval(orderTimerRef.current);
+      orderTimerRef.current = null;
+    }
+    resetForm();
+  }, [resetForm]);
+
+  // Keep ref in sync for use in event handlers and async guards
   useEffect(() => {
     currentOrderRef.current = currentOrder || null;
   }, [currentOrder]);
@@ -143,23 +165,18 @@ const AgentOrders = () => {
     const releaseLock = () => {
       const order = currentOrderRef.current;
       if (order && order.confirmation_status === "new") {
-        // Best effort: use supabase RPC (works for navigation away / unmount)
         supabase.rpc("release_order_lock" as any, { p_order_id: order.id, p_agent_id: authUser.id }).then();
       }
     };
 
-    // Heartbeat every 30s
     heartbeatRef.current = setInterval(touchLock, 30_000);
 
-    // On visibility change: just pause/resume heartbeat, DON'T release
-    // The 5-min backend timeout is the safety net for truly abandoned orders
     const handleVisibility = () => {
       if (!document.hidden) {
-        touchLock(); // Resume heartbeat when tab regains focus
+        touchLock();
       }
     };
 
-    // Page unload — best effort release
     const handleBeforeUnload = () => {
       releaseLock();
     };
@@ -172,19 +189,66 @@ const AgentOrders = () => {
       if (orderTimerRef.current) clearInterval(orderTimerRef.current);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      // Release on unmount (navigating away within the app)
       releaseLock();
     };
   }, [started, authUser?.id]);
 
-  const activeItems = editItems.length > 0 ? editItems : currentOrder
-    ? [{ name: currentOrder.product_name, qty: currentOrder.quantity, price: Number(currentOrder.price) }]
-    : [];
+  const activeItems = editItems.length > 0
+    ? editItems
+    : currentOrder
+      ? [{ name: currentOrder.product_name, qty: currentOrder.quantity, price: Number(currentOrder.price) }]
+      : [];
   const orderTotal = activeItems.reduce((s, p) => s + p.qty * p.price, 0);
 
-  // Fetch agent's assigned products + counts
+  const refreshAvailableCounts = useCallback(async (productNamesParam?: string[] | null) => {
+    if (!authUser) return;
+
+    const productNames = productNamesParam === undefined ? assignedProducts : productNamesParam;
+
+    let newQuery = supabase
+      .from("orders")
+      .select("id, customer_phone, product_name")
+      .eq("confirmation_status", "new")
+      .is("agent_id", null);
+    if (productNames) newQuery = newQuery.in("product_name", productNames);
+    const { data: newOrders } = await newQuery;
+
+    const normalizedNewOrders = newOrders || [];
+    setNewOrderCount(normalizedNewOrders.length);
+
+    const duplicateGroups = new Map<string, number>();
+    normalizedNewOrders.forEach((order) => {
+      const key = `${String(order.customer_phone).replace(/\s/g, "")}::${order.product_name}`;
+      duplicateGroups.set(key, (duplicateGroups.get(key) || 0) + 1);
+    });
+    setDuplicateCount(Array.from(duplicateGroups.values()).filter((count) => count > 1).length);
+
+    const nowIso = new Date().toISOString();
+
+    let noAnswerQuery = supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("confirmation_status", "no_answer")
+      .is("agent_id", null)
+      .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS);
+    if (productNames) noAnswerQuery = noAnswerQuery.in("product_name", productNames);
+    const { count: noAnswerCount } = await noAnswerQuery;
+
+    let postponedQuery = supabase
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("confirmation_status", "postponed")
+      .is("agent_id", null)
+      .lte("postpone_date", nowIso);
+    if (productNames) postponedQuery = postponedQuery.in("product_name", productNames);
+    const { count: postponedCount } = await postponedQuery;
+
+    setRetryCount((noAnswerCount || 0) + (postponedCount || 0));
+  }, [authUser, assignedProducts]);
+
   useEffect(() => {
     if (!authUser) return;
+
     const init = async () => {
       const { data: agentProds } = await supabase
         .from("agent_products")
@@ -192,358 +256,105 @@ const AgentOrders = () => {
         .eq("agent_id", authUser.id);
 
       const prodNames = agentProds && agentProds.length > 0
-        ? agentProds.map(p => p.product_name)
+        ? agentProds.map((product) => product.product_name)
         : null;
+
       setAssignedProducts(prodNames);
-
-      // Count new orders
-      let newQuery = supabase
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("confirmation_status", "new")
-        .is("agent_id", null);
-      if (prodNames) newQuery = newQuery.in("product_name", prodNames);
-      const { count: newCount } = await newQuery;
-      setNewOrderCount(newCount || 0);
-
-      // Count retries (no_answer + postponed ready)
-      const now = new Date().toISOString();
-      let naQuery = supabase
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("confirmation_status", "no_answer")
-        .eq("agent_id", authUser.id)
-        .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS);
-      if (prodNames) naQuery = naQuery.in("product_name", prodNames);
-      const { count: naCount } = await naQuery;
-
-      let ppQuery = supabase
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("confirmation_status", "postponed")
-        .lte("postpone_date", now);
-      // Postponed orders either assigned to this agent or unassigned (from inactive agents)
-      if (prodNames) ppQuery = ppQuery.in("product_name", prodNames);
-      const { count: ppCount } = await ppQuery;
-
-      setRetryCount((naCount || 0) + (ppCount || 0));
-
-      // Count duplicates (orders with same phone+product, status=new)
-      // We'll just show a rough count
-      setDuplicateCount(0); // Will be calculated on fetch
+      await refreshAvailableCounts(prodNames);
     };
+
     init();
+  }, [authUser, refreshAvailableCounts]);
+
+  const fetchFreshAssignedOrder = useCallback(async (orderId: string): Promise<DbOrder | null> => {
+    if (!authUser) return null;
+
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", orderId)
+      .eq("agent_id", authUser.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[AgentOrders] Failed to fetch fresh assigned order", error);
+      return null;
+    }
+
+    return (data as DbOrder | null) || null;
   }, [authUser]);
 
-  // ─── SMART QUEUE: Fetch prioritized orders ───
-  const fetchPrioritizedOrders = async (): Promise<DbOrder[]> => {
-    const userId = authUser!.id;
-    const now = new Date();
-    const cooldownCutoff = new Date(now.getTime() - RETRY_COOLDOWN_MS).toISOString();
-    const agingCutoff = new Date(now.getTime() - RETRY_AGING_MS).toISOString();
+  const enrichClaimedOrder = useCallback(async (rawOrder: DbOrder, orderType: string): Promise<DbOrder | null> => {
+    const freshOrder = await fetchFreshAssignedOrder(rawOrder.id);
+    const resolvedOrder = freshOrder ?? rawOrder;
 
-    // ── 1. DUPLICATES (highest priority) ──
-    // Find orders with same phone+product that are "new" and unassigned
-    let dupQuery = supabase
-      .from("orders")
-      .select("*")
-      .eq("confirmation_status", "new")
-      .is("agent_id", null)
-      .order("created_at", { ascending: true });
-    if (assignedProducts) dupQuery = dupQuery.in("product_name", assignedProducts);
-    const { data: allNewOrders } = await dupQuery;
-
-    const newOrders = (allNewOrders || []) as DbOrder[];
-
-    // Detect duplicates: group by phone+product
-    const phoneProductMap: Record<string, DbOrder[]> = {};
-    for (const o of newOrders) {
-      const key = `${o.customer_phone.replace(/\s/g, "")}::${o.product_name}`;
-      if (!phoneProductMap[key]) phoneProductMap[key] = [];
-      phoneProductMap[key].push(o);
+    if (!resolvedOrder.id || !resolvedOrder.order_id) {
+      console.error("[AgentOrders] Invalid claimed order payload", { rawOrder, freshOrder });
+      return null;
     }
 
-    const duplicateGroups: DbOrder[][] = [];
-    const nonDuplicateNew: DbOrder[] = [];
-    for (const [, group] of Object.entries(phoneProductMap)) {
-      if (group.length > 1) {
-        duplicateGroups.push(group);
-      } else {
-        nonDuplicateNew.push(group[0]);
-      }
-    }
-
-    // Also get new orders already assigned to this agent
-    let myNewQuery = supabase
-      .from("orders")
-      .select("*")
-      .eq("confirmation_status", "new")
-      .eq("agent_id", userId)
-      .order("created_at", { ascending: true });
-    if (assignedProducts) myNewQuery = myNewQuery.in("product_name", assignedProducts);
-    const { data: myNewData } = await myNewQuery;
-    const myNewOrders = (myNewData || []) as DbOrder[];
-
-    // ── 2. RETRIES: No Answer (cooled down) ──
-    let noAnswerQuery = supabase
-      .from("orders")
-      .select("*")
-      .eq("confirmation_status", "no_answer")
-      .eq("agent_id", userId)
-      .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS)
-      .lt("updated_at", cooldownCutoff)
-      .order("attempt_count", { ascending: true })
-      .order("updated_at", { ascending: true });
-    if (assignedProducts) noAnswerQuery = noAnswerQuery.in("product_name", assignedProducts);
-    const { data: noAnswerData } = await noAnswerQuery;
-
-    // Also get urgent no-answer retries (aged >2h) — these get boosted priority
-    let urgentNaQuery = supabase
-      .from("orders")
-      .select("*")
-      .eq("confirmation_status", "no_answer")
-      .eq("agent_id", userId)
-      .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS)
-      .lt("updated_at", agingCutoff)
-      .order("updated_at", { ascending: true });
-    if (assignedProducts) urgentNaQuery = urgentNaQuery.in("product_name", assignedProducts);
-    const { data: urgentNaData } = await urgentNaQuery;
-
-    const urgentRetries = ((urgentNaData || []) as DbOrder[]).map(o => ({ ...o, _isFollowUp: true }));
-    const normalRetries = ((noAnswerData || []) as DbOrder[])
-      .filter(o => !urgentRetries.find(u => u.id === o.id))
-      .map(o => ({ ...o, _isFollowUp: true }));
-
-    // ── 3. POSTPONED (due now) ──
-    const nowIso = now.toISOString();
-
-    // Postponed assigned to THIS agent
-    let myPostQuery = supabase
-      .from("orders")
-      .select("*")
-      .eq("confirmation_status", "postponed")
-      .eq("agent_id", userId)
-      .lte("postpone_date", nowIso)
-      .order("postpone_date", { ascending: true });
-    if (assignedProducts) myPostQuery = myPostQuery.in("product_name", assignedProducts);
-    const { data: myPostData } = await myPostQuery;
-    const myPostponed = ((myPostData || []) as DbOrder[]).map(o => ({ ...o, _isFollowUp: true }));
-
-    // Postponed from OTHER agents (unassigned / reassigned to queue)
-    let otherPostQuery = supabase
-      .from("orders")
-      .select("*")
-      .eq("confirmation_status", "postponed")
-      .is("agent_id", null)
-      .lte("postpone_date", nowIso)
-      .order("postpone_date", { ascending: true });
-    if (assignedProducts) otherPostQuery = otherPostQuery.in("product_name", assignedProducts);
-    const { data: otherPostData } = await otherPostQuery;
-    const otherPostponed = ((otherPostData || []) as DbOrder[]).map(o => ({
-      ...o,
-      _isFollowUp: true,
-      _isPostponedReassign: true,
-    }));
-
-    // ── 4. BUILD BALANCED QUEUE ──
-    const allRetries = [...urgentRetries, ...myPostponed, ...otherPostponed, ...normalRetries];
-
-    // Flatten duplicate groups — mark first of each group, attach group
-    const duplicateOrders: DbOrder[] = [];
-    for (const group of duplicateGroups) {
-      const first = { ...group[0], _isDuplicate: true, _duplicateGroup: group };
-      duplicateOrders.push(first);
-      // The rest will be assigned together when the first is processed
-    }
-
-    // Build balanced queue: duplicates first, then 3:1 new:retry ratio
-    const queue: DbOrder[] = [];
-
-    // Already-assigned orders first (agent's own pending work)
-    queue.push(...myNewOrders);
-
-    // Duplicates always highest priority
-    queue.push(...duplicateOrders);
-
-    // Interleave new and retries with 3:1 ratio
-    let newIdx = 0;
-    let retryIdx = 0;
-    const allNew = nonDuplicateNew;
-
-    while (newIdx < allNew.length || retryIdx < allRetries.length) {
-      // Every 4th order should be a retry (3 new : 1 retry)
-      const shouldDoRetry = (newIdx > 0 && newIdx % NEW_TO_RETRY_RATIO === 0 && retryIdx < allRetries.length)
-        || newIdx >= allNew.length;
-
-      if (shouldDoRetry && retryIdx < allRetries.length) {
-        queue.push(allRetries[retryIdx]);
-        retryIdx++;
-      } else if (newIdx < allNew.length) {
-        queue.push(allNew[newIdx]);
-        newIdx++;
-      } else {
-        break;
-      }
-    }
-
-    // Append any remaining retries
-    while (retryIdx < allRetries.length) {
-      queue.push(allRetries[retryIdx]);
-      retryIdx++;
-    }
-
-    return queue;
-  };
-
-  const handleStart = async () => {
-    setLoading(true);
-    try {
-      // Clear all previous state completely before starting
-      setOrderQueue([]);
-      setCurrentIndex(0);
-      resetForm();
-      setEditItems([]);
-      setEditCustomer({ name: "", phone: "", city: "", address: "" });
-      setHistoricalOffers(null);
-      setHistoricalLastPrice(null);
-
-      // Always use atomic claim for the first order — single source of truth
-      const types: string[] = ["duplicate", "new", "postponed", "no_answer"];
-      let claimedOrder: DbOrder | null = null;
-
-      for (const t of types) {
-        claimedOrder = await claimOrderAtomic(t);
-        if (claimedOrder) break;
-      }
-
-      if (!claimedOrder) {
-        toast.info("No orders to process right now! 🎉");
-        setLoading(false);
-        return;
-      }
-
-      // Verify claimed order data integrity
-      if (!claimedOrder.id || !claimedOrder.order_id) {
-        console.error("[AgentOrders] Invalid claimed order data:", claimedOrder);
-        toast.error("Data integrity error — please try again");
-        setLoading(false);
-        return;
-      }
-
-      // Set queue with the verified claimed order
-      setOrderQueue([claimedOrder]);
-      setCurrentIndex(0);
-      setStarted(true);
-      setNewAssignedCount(0);
-      initOrderState(claimedOrder);
-
-      toast.success(`Order ${claimedOrder.order_id} claimed — Let's go! 🚀`);
-
-      // Fetch full queue in background (for count display only, not for data)
-      fetchPrioritizedOrders().then(fresh => {
-        if (fresh.length > 0) {
-          // Replace queue but keep index at 0 — current order is already correct
-          const idx = fresh.findIndex(o => o.id === claimedOrder!.id);
-          if (idx >= 0) {
-            setOrderQueue(fresh);
-            setCurrentIndex(idx);
-          }
-        }
+    if (freshOrder && (freshOrder.id !== rawOrder.id || freshOrder.order_id !== rawOrder.order_id)) {
+      console.error("[AgentOrders] Mismatch detected after atomic claim. Reloading backend order.", {
+        raw: { id: rawOrder.id, order_id: rawOrder.order_id },
+        fresh: { id: freshOrder.id, order_id: freshOrder.order_id },
       });
-    } catch (err: any) {
-      toast.error(err.message || "Failed to load orders");
-    } finally {
-      setLoading(false);
     }
-  };
 
-  // Atomic claim via DB function — prevents race conditions
-  const claimOrderAtomic = async (orderType: string): Promise<DbOrder | null> => {
+    return {
+      ...resolvedOrder,
+      _isFollowUp: orderType === "postponed" || orderType === "no_answer",
+      _isPostponedReassign: orderType === "postponed"
+        ? !!resolvedOrder.original_agent_id && resolvedOrder.original_agent_id !== authUser?.id
+        : false,
+      _isDuplicate: orderType === "duplicate",
+    };
+  }, [authUser?.id, fetchFreshAssignedOrder]);
+
+  const claimOrderAtomic = useCallback(async (orderType: string): Promise<DbOrder | null> => {
     if (!authUser) return null;
+
     const { data, error } = await supabase.rpc("claim_next_order", {
       p_agent_id: authUser.id,
       p_product_names: assignedProducts || null,
       p_order_type: orderType,
     });
+
     if (error) {
-      console.error("claim_next_order error:", error);
+      console.error("[AgentOrders] claim_next_order error", error);
       return null;
     }
+
     const rows = data as DbOrder[] | null;
     if (!rows || rows.length === 0) return null;
-    return rows[0];
-  };
 
-  const claimOrder = async (order: DbOrder): Promise<DbOrder | null> => {
-    if (!authUser) return null;
-    setClaiming(true);
-    try {
-      // If already assigned to us, re-fetch fresh data from DB to ensure consistency
-      if (order.agent_id === authUser.id) {
-        const { data: fresh } = await supabase
-          .from("orders")
-          .select("*")
-          .eq("id", order.id)
-          .eq("agent_id", authUser.id)
-          .maybeSingle();
-        if (fresh) {
-          const freshOrder = fresh as DbOrder;
-          // Validate data consistency
-          if (freshOrder.id !== order.id || freshOrder.order_id !== order.order_id) {
-            console.error("[AgentOrders] Data mismatch on re-fetch!", { expected: order.order_id, got: freshOrder.order_id });
-            toast.error("Data mismatch detected — reloading");
-            return null;
-          }
-          initOrderState(freshOrder);
-          return freshOrder;
-        }
-        return null;
-      }
+    return enrichClaimedOrder(rows[0], orderType);
+  }, [authUser, assignedProducts, enrichClaimedOrder]);
 
-      // Determine order type for atomic claim
-      let orderType = "new";
-      if (order._isDuplicate) orderType = "duplicate";
-      else if (order.confirmation_status === "postponed") orderType = "postponed";
-      else if (order.confirmation_status === "no_answer") orderType = "no_answer";
+  const claimNextAvailableOrder = useCallback(async (): Promise<DbOrder | null> => {
+    const priority: string[] = ["duplicate", "new", "postponed", "no_answer"];
 
-      // Always use atomic claim — single source of truth from backend
-      const claimed = await claimOrderAtomic(orderType);
-      if (!claimed) {
-        toast.warning(`No more ${orderType} orders available`);
-        return null;
-      }
-
-      // Validate claimed order data
-      if (!claimed.id || !claimed.order_id) {
-        console.error("[AgentOrders] Invalid atomic claim result:", claimed);
-        return null;
-      }
-
-      if (order._isDuplicate) {
-        toast.info(`📋 Duplicate orders assigned atomically`, { duration: 4000 });
-      } else if (claimed.id !== order.id) {
-        toast.info(`Order was taken, got next available ✅`);
-      }
-
-      initOrderState(claimed);
-      return claimed;
-    } catch (err: any) {
-      toast.error("Failed to claim order");
-      return null;
-    } finally {
-      setClaiming(false);
+    for (const orderType of priority) {
+      const claimedOrder = await claimOrderAtomic(orderType);
+      if (claimedOrder) return claimedOrder;
     }
-  };
 
-  const initOrderState = (order: DbOrder) => {
-    // Touch the lease heartbeat on init
+    return null;
+  }, [claimOrderAtomic]);
+
+  const initOrderState = useCallback((order: DbOrder) => {
+    const activeOrderId = order.id;
+
+    setCurrentOrder(order);
+    currentOrderRef.current = order;
+
     if (authUser && order.confirmation_status === "new") {
       supabase.rpc("touch_order_lock" as any, { p_order_id: order.id, p_agent_id: authUser.id });
     }
-    // Reset elapsed timer for new order
+
     setOrderElapsedSec(0);
     if (orderTimerRef.current) clearInterval(orderTimerRef.current);
-    orderTimerRef.current = setInterval(() => setOrderElapsedSec(s => s + 1), 1000);
+    orderTimerRef.current = setInterval(() => setOrderElapsedSec((seconds) => seconds + 1), 1000);
+
     setEditItems([{ name: order.product_name, qty: order.quantity, price: Number(order.price) }]);
     setEditCustomer({
       name: order.customer_name,
@@ -557,16 +368,20 @@ const AgentOrders = () => {
     setHistoricalOffers(null);
     setHistoricalLastPrice(null);
 
-    // Fetch seller's products for add-item and product_url lookup
     supabase
       .from("products")
       .select("id, name, price, last_price, offers, product_url, video_url, display_id")
       .eq("seller_id", order.seller_id)
       .then(({ data }) => {
-        setSellerProducts((data || []).map(p => ({ ...p, price: Number(p.price), last_price: Number((p as any).last_price || 0), offers: (p as any).offers || [] })));
+        if (currentOrderRef.current?.id !== activeOrderId) return;
+        setSellerProducts((data || []).map((product) => ({
+          ...product,
+          price: Number(product.price),
+          last_price: Number((product as any).last_price || 0),
+          offers: (product as any).offers || [],
+        })));
       });
 
-    // Fetch historical offers & last_price from previous confirmed orders of same product
     supabase
       .from("orders")
       .select("offers, last_price, price")
@@ -577,29 +392,69 @@ const AgentOrders = () => {
       .order("confirmed_at", { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(({ data: histOrder }) => {
-        if (histOrder) {
-          if (histOrder.offers && String(histOrder.offers).trim()) {
-            setHistoricalOffers(String(histOrder.offers));
+      .then(({ data: historicalOrder }) => {
+        if (currentOrderRef.current?.id !== activeOrderId) return;
+        if (historicalOrder) {
+          if (historicalOrder.offers && String(historicalOrder.offers).trim()) {
+            setHistoricalOffers(String(historicalOrder.offers));
           }
-          const lp = histOrder.last_price ?? histOrder.price;
-          if (lp != null && Number(lp) > 0) {
-            setHistoricalLastPrice(Number(lp));
+          const lastPrice = historicalOrder.last_price ?? historicalOrder.price;
+          if (lastPrice != null && Number(lastPrice) > 0) {
+            setHistoricalLastPrice(Number(lastPrice));
           }
         }
       });
-  };
+  }, [authUser, resetForm]);
 
-  const resetForm = () => {
-    setSelectedStatus("");
-    setCancelReason("");
-    setNote("");
-    setPostponeDate(undefined);
-    setPostponeTime("10:00 AM");
-    setPostponeNote("");
-    setShippingStatus("");
-    setEditMode(false);
-    setEditingCustomer(false);
+  const loadNextOrder = useCallback(async () => {
+    clearActiveOrderState();
+    setClaiming(true);
+
+    try {
+      const nextOrder = await claimNextAvailableOrder();
+
+      if (!nextOrder) {
+        setStarted(false);
+        await refreshAvailableCounts();
+        toast.success("All orders processed! 🎉");
+        return;
+      }
+
+      initOrderState(nextOrder);
+      setStarted(true);
+      await refreshAvailableCounts();
+    } catch (error: any) {
+      console.error("[AgentOrders] Failed to load next order", error);
+      toast.error(error?.message || "Failed to load next order");
+    } finally {
+      setClaiming(false);
+    }
+  }, [clearActiveOrderState, claimNextAvailableOrder, initOrderState, refreshAvailableCounts]);
+
+  const handleStart = async () => {
+    setLoading(true);
+
+    try {
+      clearActiveOrderState();
+      const claimedOrder = await claimNextAvailableOrder();
+
+      if (!claimedOrder) {
+        setStarted(false);
+        await refreshAvailableCounts();
+        toast.info("No orders to process right now! 🎉");
+        return;
+      }
+
+      initOrderState(claimedOrder);
+      setStarted(true);
+      await refreshAvailableCounts();
+      toast.success(`Order ${claimedOrder.order_id} claimed — Let's go! 🚀`);
+    } catch (error: any) {
+      console.error("[AgentOrders] Failed to start confirmation flow", error);
+      toast.error(error?.message || "Failed to load orders");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const canSubmit = useMemo(() => {
@@ -611,7 +466,7 @@ const AgentOrders = () => {
     }
     if (selectedStatus === "postponed") {
       if (!postponeDate || !postponeTime.split(":")[1]?.replace(/ (AM|PM)/, "")) return false;
-      if (!postponeNote.trim()) return false; // REQUIRED note for postponed
+      if (!postponeNote.trim()) return false;
     }
     return true;
   }, [selectedStatus, shippingStatus, cancelReason, note, postponeDate, postponeTime, postponeNote]);
@@ -628,7 +483,7 @@ const AgentOrders = () => {
         customer_city: editCustomer.city,
         customer_address: editCustomer.address,
         product_name: activeItems[0]?.name || currentOrder.product_name,
-        quantity: activeItems.reduce((s, i) => s + i.qty, 0),
+        quantity: activeItems.reduce((sum, item) => sum + item.qty, 0),
         price: activeItems[0]?.price || currentOrder.price,
         total_amount: orderTotal,
         note: note.trim() || currentOrder.note,
@@ -643,7 +498,6 @@ const AgentOrders = () => {
         updateData.cancel_reason = cancelReason === "other" ? note.trim() : cancelReason;
       }
       if (selectedStatus === "postponed" && postponeDate) {
-        // Combine date + time
         const [hourStr, rest] = postponeTime.split(":");
         const minuteStr = rest?.replace(/ (AM|PM)/, "") || "0";
         const ampm = postponeTime.includes("PM") ? "PM" : "AM";
@@ -654,13 +508,9 @@ const AgentOrders = () => {
         combined.setHours(hour, parseInt(minuteStr) || 0, 0, 0);
         updateData.postpone_date = combined.toISOString();
         updateData.postpone_note = postponeNote.trim();
-        updateData.original_agent_id = authUser.id; // Track who postponed it
-      }
-      if (selectedStatus === "no_answer") {
-        // Keep agent_id so it comes back to same agent as retry
+        updateData.original_agent_id = authUser.id;
       }
 
-      // Update order in DB
       const { error: updateError } = await supabase
         .from("orders")
         .update(updateData as any)
@@ -668,7 +518,6 @@ const AgentOrders = () => {
 
       if (updateError) throw updateError;
 
-      // Log history
       const historyEntries: { order_id: string; changed_by: string; changed_by_role: string; field_changed: string; old_value: string | null; new_value: string | null }[] = [];
       const trackChange = (field: string, oldVal: any, newVal: any) => {
         const oldStr = oldVal != null ? String(oldVal) : null;
@@ -684,7 +533,7 @@ const AgentOrders = () => {
       trackChange("customer_city", currentOrder.customer_city, editCustomer.city);
       trackChange("customer_address", currentOrder.customer_address, editCustomer.address);
       trackChange("product_name", currentOrder.product_name, activeItems[0]?.name);
-      trackChange("quantity", currentOrder.quantity, activeItems.reduce((s, i) => s + i.qty, 0));
+      trackChange("quantity", currentOrder.quantity, activeItems.reduce((sum, item) => sum + item.qty, 0));
       trackChange("price", currentOrder.price, activeItems[0]?.price);
       trackChange("total_amount", currentOrder.total_amount, orderTotal);
       if (selectedStatus === "confirmed") trackChange("delivery_status", currentOrder.delivery_status, shippingStatus === "shipped" ? "shipped" : "pending");
@@ -701,72 +550,13 @@ const AgentOrders = () => {
         style: { background: "hsl(155, 50%, 96%)", border: "1px solid hsl(155, 50%, 42%)", color: "hsl(155, 50%, 25%)", fontWeight: 600 },
       });
 
-      await moveToNext();
-    } catch (err: any) {
-      console.error("Submit error:", err);
-      toast.error(err.message || "Failed to update order");
+      await loadNextOrder();
+    } catch (error: any) {
+      console.error("[AgentOrders] Submit error", error);
+      toast.error(error?.message || "Failed to update order");
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const moveToNext = async () => {
-    // Clear previous order state completely before loading next
-    resetForm();
-    setEditItems([]);
-    setEditCustomer({ name: "", phone: "", city: "", address: "" });
-    setHistoricalOffers(null);
-    setHistoricalLastPrice(null);
-
-    // Try claiming from remaining queue entries
-    let nextIdx = currentIndex + 1;
-    while (nextIdx < orderQueue.length) {
-      const nextOrder = orderQueue[nextIdx];
-      const claimed = await claimOrder(nextOrder);
-      if (claimed) {
-        // Update queue entry with actual claimed data to prevent stale references
-        setOrderQueue(prev => {
-          const updated = [...prev];
-          updated[nextIdx] = claimed;
-          return updated;
-        });
-        setCurrentIndex(nextIdx);
-        return;
-      }
-      nextIdx++;
-    }
-
-    // Queue exhausted — try atomic claim directly
-    const types = ["duplicate", "new", "postponed", "no_answer"];
-    for (const t of types) {
-      const order = await claimOrderAtomic(t);
-      if (order) {
-        // Validate data integrity
-        if (!order.id || !order.order_id) {
-          console.error("[AgentOrders] Invalid atomic claim in moveToNext:", order);
-          continue;
-        }
-        setOrderQueue([order]);
-        setCurrentIndex(0);
-        initOrderState(order);
-        toast.info(`Got next ${t} order — ${order.order_id} ✅`);
-        // Refetch full queue in background
-        fetchPrioritizedOrders().then(fresh => {
-          if (fresh.length > 0) {
-            const idx = fresh.findIndex(o => o.id === order.id);
-            if (idx >= 0) {
-              setOrderQueue(fresh);
-              setCurrentIndex(idx);
-            }
-          }
-        });
-        return;
-      }
-    }
-
-    toast.success("All orders processed! 🎉");
-    setStarted(false);
-    setOrderQueue([]);
   };
 
   const handleWhatsApp = () => {
@@ -775,14 +565,14 @@ const AgentOrders = () => {
   };
 
   const updateItem = (index: number, field: "qty" | "price", value: number) => {
-    setEditItems((items) => items.map((it, i) => i === index ? { ...it, [field]: value } : it));
+    setEditItems((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
   };
+
   const removeItem = (index: number) => {
-    setEditItems((items) => items.filter((_, i) => i !== index));
+    setEditItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
     toast.info("Item removed");
   };
 
-  // ─── NOT STARTED SCREEN ───
   if (!started) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 p-6">
@@ -797,9 +587,9 @@ const AgentOrders = () => {
               <>, <span className="font-bold text-blue-500">{retryCount}</span> retries</>
             )}
             {duplicateCount > 0 && (
-              <>, <span className="font-bold text-amber-500">{duplicateCount}</span> duplicates</>
+              <>, <span className="font-bold text-amber-500">{duplicateCount}</span> duplicate groups</>
             )}
-            {" "}waiting. Orders come one by one with smart prioritization.
+            {" "}waiting. Orders are loaded one by one directly from the backend.
           </p>
         </div>
         <Button
@@ -825,18 +615,16 @@ const AgentOrders = () => {
 
   return (
     <div className="p-4 md:p-6 max-w-[1100px] mx-auto space-y-4">
-      {/* Progress bar */}
-      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-        <span className="font-semibold text-foreground">
-          Order {currentIndex + 1} / {orderQueue.length}
-        </span>
-        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary rounded-full transition-all duration-500"
-            style={{ width: `${((currentIndex + 1) / orderQueue.length) * 100}%` }}
-          />
+      <div className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Live backend assignment</p>
+          <p className="text-sm font-semibold text-foreground">This order is loaded fresh from the backend and is the only active source of truth.</p>
         </div>
-        <span className="text-xs">{Math.round(((currentIndex + 1) / orderQueue.length) * 100)}%</span>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="secondary" className="text-[10px]">New {newOrderCount}</Badge>
+          <Badge variant="outline" className="text-[10px]">Retries {retryCount}</Badge>
+          {duplicateCount > 0 && <Badge variant="outline" className="text-[10px]">Duplicate groups {duplicateCount}</Badge>}
+        </div>
       </div>
 
       {/* ⚠️ Taking too long warning */}
