@@ -550,6 +550,18 @@ const AgentOrders = () => {
       if (note.trim() && note.trim() !== (currentOrder.note || "")) trackChange("note", currentOrder.note, note.trim());
       if (selectedStatus === "postponed" && postponeNote.trim()) trackChange("postpone_note", currentOrder.postpone_note, postponeNote.trim());
 
+      // Audit log for manual pricing
+      if (isManualPrice && manualTotal !== autoTotal) {
+        historyEntries.push({
+          order_id: currentOrder.order_id,
+          changed_by: authUser.id,
+          changed_by_role: "agent",
+          field_changed: "manual_price",
+          old_value: String(autoTotal),
+          new_value: String(manualTotal),
+        });
+      }
+
       if (historyEntries.length > 0) {
         await supabase.from("order_history").insert(historyEntries);
       }
