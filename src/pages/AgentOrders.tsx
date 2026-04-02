@@ -822,11 +822,15 @@ const AgentOrders = () => {
                               />
                             </div>
                             <div className="space-y-0.5">
-                              <Label className="text-[9px] text-muted-foreground">Price ($)</Label>
+                              <Label className="text-[9px] text-muted-foreground">Total Price</Label>
                               <Input
-                                type="number" min={0} value={op.price}
-                                onChange={(e) => updateItem(i, "price", parseInt(e.target.value) || 0)}
-                                className="h-7 w-20 text-xs"
+                                type="number" min={0} value={isManualPrice ? manualTotal : op.qty * op.price}
+                                onChange={(e) => {
+                                  const val = Math.max(0, parseInt(e.target.value) || 0);
+                                  setIsManualPrice(true);
+                                  setManualTotal(val);
+                                }}
+                                className="h-7 w-24 text-xs"
                               />
                             </div>
                             {activeItems.length > 1 && (
