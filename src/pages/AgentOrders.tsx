@@ -963,65 +963,11 @@ const AgentOrders = () => {
                 </Popover>
               )}
 
-              <div className="pt-2 border-t space-y-2">
+              <div className="pt-2 border-t">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">Total</span>
-                    <div className="flex items-center gap-1.5">
-                      <Switch
-                        checked={!isManualPrice}
-                        onCheckedChange={(checked) => {
-                          setIsManualPrice(!checked);
-                          if (!checked) {
-                            setManualTotal(autoTotal);
-                          }
-                        }}
-                        className="h-4 w-8 [&>span]:h-3 [&>span]:w-3 data-[state=checked]:[&>span]:translate-x-4"
-                      />
-                      <span className="text-[10px] text-muted-foreground">
-                        {isManualPrice ? "Manual" : "Auto"}
-                      </span>
-                    </div>
-                  </div>
-                  {isManualPrice ? (
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={manualTotal}
-                        onChange={(e) => setManualTotal(Math.max(0, parseInt(e.target.value) || 0))}
-                        className="h-8 w-28 text-right text-sm font-bold"
-                      />
-                      <span className="text-sm font-semibold text-muted-foreground">PKR</span>
-                    </div>
-                  ) : (
-                    <span className="text-lg font-bold text-primary tabular-nums">{orderTotal} PKR</span>
-                  )}
+                  <span className="text-sm font-semibold">Total</span>
+                  <span className="text-lg font-bold text-primary tabular-nums">{orderTotal} PKR</span>
                 </div>
-
-                {/* Mode indicator */}
-                <div className="flex items-center gap-1.5">
-                  <span className={cn(
-                    "inline-block h-2 w-2 rounded-full",
-                    isManualPrice ? "bg-amber-500" : "bg-emerald-500"
-                  )} />
-                  <span className="text-[10px] text-muted-foreground">
-                    {isManualPrice ? "🟡 Manual mode — total is locked" : "🟢 Auto mode — total updates with qty/price"}
-                  </span>
-                </div>
-
-                {isManualPrice && manualTotal !== autoTotal && (
-                  <p className="text-[10px] text-amber-600 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    Manual price differs from calculated ({autoTotal} PKR)
-                  </p>
-                )}
-                {isManualPrice && manualTotal > autoTotal * 2 && (
-                  <p className="text-[10px] text-destructive flex items-center gap-1 font-semibold">
-                    <AlertCircle className="h-3 w-3" />
-                    ⚠️ Unusually high price — more than 2× the calculated total
-                  </p>
-                )}
               </div>
             </CardContent>
           </Card>
