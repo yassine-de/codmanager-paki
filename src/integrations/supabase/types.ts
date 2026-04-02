@@ -454,6 +454,7 @@ export type Database = {
           shipping_status: string | null
           source_sheet_id: string | null
           store_url: string | null
+          system_id: number | null
           total_amount: number
           updated_at: string
           video_url: string | null
@@ -499,6 +500,7 @@ export type Database = {
           shipping_status?: string | null
           source_sheet_id?: string | null
           store_url?: string | null
+          system_id?: number | null
           total_amount?: number
           updated_at?: string
           video_url?: string | null
@@ -544,6 +546,7 @@ export type Database = {
           shipping_status?: string | null
           source_sheet_id?: string | null
           store_url?: string | null
+          system_id?: number | null
           total_amount?: number
           updated_at?: string
           video_url?: string | null
@@ -1197,6 +1200,7 @@ export type Database = {
           shipping_status: string | null
           source_sheet_id: string | null
           store_url: string | null
+          system_id: number | null
           total_amount: number
           updated_at: string
           video_url: string | null
