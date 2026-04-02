@@ -512,6 +512,14 @@ const AgentOrders = () => {
         attempt_count: currentOrder.attempt_count + (selectedStatus === "no_answer" ? 1 : 0),
       };
 
+      // Set original_agent_id for no_answer and postponed so retries come back to same agent
+      if (selectedStatus === "no_answer") {
+        updateData.original_agent_id = currentOrder.original_agent_id || authUser.id;
+        updateData.agent_id = null;
+        updateData.assigned_at = null;
+        updateData.last_activity_at = null;
+      }
+
       if (selectedStatus === "confirmed") {
         updateData.confirmed_at = new Date().toISOString();
         updateData.delivery_status = shippingStatus === "shipped" ? "shipped" : "pending";
@@ -530,7 +538,7 @@ const AgentOrders = () => {
         combined.setHours(hour, parseInt(minuteStr) || 0, 0, 0);
         updateData.postpone_date = combined.toISOString();
         updateData.postpone_note = postponeNote.trim();
-        updateData.original_agent_id = authUser.id;
+        updateData.original_agent_id = currentOrder.original_agent_id || authUser.id;
       }
 
       const { error: updateError } = await supabase
