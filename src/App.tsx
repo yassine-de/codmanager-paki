@@ -38,6 +38,8 @@ import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const queryClient = new QueryClient();
+
 /* Full-page skeleton that mimics sidebar + header + content */
 function AppSkeleton() {
   return (
