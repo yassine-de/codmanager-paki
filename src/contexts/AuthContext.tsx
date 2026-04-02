@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserDetails = async (supabaseUser: User) => {
+  const fetchUserDetails = async (supabaseUser: User): Promise<AuthUser> => {
     const fallbackName =
       typeof supabaseUser.user_metadata?.name === "string" && supabaseUser.user_metadata.name.trim().length > 0
         ? supabaseUser.user_metadata.name
@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.from("user_permissions").select("permission_key").eq("user_id", supabaseUser.id),
       ]);
 
-      setAuthUser({
+      return {
         id: supabaseUser.id,
         email: profile?.email || supabaseUser.email || "",
         name: profile?.name || fallbackName,
@@ -53,10 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         permissions: permsData?.map((p) => p.permission_key) || [],
         phone: profile?.phone || "",
         active: profile?.active ?? true,
-      });
+      };
     } catch (err) {
       console.error("Error fetching user details:", err);
-      setAuthUser({
+      return {
         id: supabaseUser.id,
         email: supabaseUser.email || "",
         name: fallbackName,
@@ -64,38 +64,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         permissions: [],
         phone: "",
         active: true,
-      });
+      };
     }
   };
 
   const refreshUser = async () => {
     if (!user) return;
     setLoading(true);
-    await fetchUserDetails(user);
+    const details = await fetchUserDetails(user);
+    setAuthUser(details);
     setLoading(false);
   };
 
   useEffect(() => {
     let isMounted = true;
 
-    const syncAuthState = (sessionUser: User | null) => {
+    const syncAuthState = async (sessionUser: User | null) => {
       if (!isMounted) return;
 
       if (sessionUser) {
+        // If same user is already fully loaded, skip refetch
+        if (authUser?.id === sessionUser.id && authUser.role !== "custom") {
+          setUser(sessionUser);
+          setLoading(false);
+          return;
+        }
+        // Fetch ALL user data before rendering UI
+        const details = await fetchUserDetails(sessionUser);
+        if (!isMounted) return;
         setUser(sessionUser);
-        // Set basic user info immediately so the app renders instantly
-        setAuthUser((prev) => prev?.id === sessionUser.id ? prev : {
-          id: sessionUser.id,
-          email: sessionUser.email || "",
-          name: sessionUser.user_metadata?.name || sessionUser.email?.split("@")[0] || "User",
-          role: "custom",
-          permissions: [],
-          phone: "",
-          active: true,
-        });
+        setAuthUser(details);
         setLoading(false);
-        // Enrich with DB data in background
-        fetchUserDetails(sessionUser);
       } else {
         setUser(null);
         setAuthUser(null);
