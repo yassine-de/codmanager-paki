@@ -996,10 +996,28 @@ const AgentOrders = () => {
                     <span className="text-lg font-bold text-primary tabular-nums">{orderTotal} PKR</span>
                   )}
                 </div>
+
+                {/* Mode indicator */}
+                <div className="flex items-center gap-1.5">
+                  <span className={cn(
+                    "inline-block h-2 w-2 rounded-full",
+                    isManualPrice ? "bg-amber-500" : "bg-emerald-500"
+                  )} />
+                  <span className="text-[10px] text-muted-foreground">
+                    {isManualPrice ? "🟡 Manual mode — total is locked" : "🟢 Auto mode — total updates with qty/price"}
+                  </span>
+                </div>
+
                 {isManualPrice && manualTotal !== autoTotal && (
                   <p className="text-[10px] text-amber-600 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
                     Manual price differs from calculated ({autoTotal} PKR)
+                  </p>
+                )}
+                {isManualPrice && manualTotal > autoTotal * 2 && (
+                  <p className="text-[10px] text-destructive flex items-center gap-1 font-semibold">
+                    <AlertCircle className="h-3 w-3" />
+                    ⚠️ Unusually high price — more than 2× the calculated total
                   </p>
                 )}
               </div>
