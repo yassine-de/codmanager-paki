@@ -79,7 +79,39 @@ const Integrations = () => {
     setServiceEmailLoaded(true);
   };
 
-  const saveServiceEmail = async () => {
+  const fetchApiConfig = async () => {
+    const { data } = await supabase
+      .from("app_settings")
+      .select("key, value")
+      .in("key", ["orio_api_enabled", "orio_api_token", "orio_account_number"]);
+    if (data) {
+      data.forEach((d) => {
+        if (d.key === "orio_api_enabled") setApiEnabled(d.value === "true");
+        if (d.key === "orio_api_token") setApiKey(d.value);
+        if (d.key === "orio_account_number") setApiAccountNumber(d.value);
+      });
+    }
+    setApiLoaded(true);
+  };
+
+  const saveApiConfig = async () => {
+    setApiSaving(true);
+    const now = new Date().toISOString();
+    const settings = [
+      { key: "orio_api_enabled", value: String(apiEnabled), updated_at: now },
+      { key: "orio_api_token", value: apiKey, updated_at: now },
+      { key: "orio_account_number", value: apiAccountNumber, updated_at: now },
+    ];
+    const { error } = await supabase
+      .from("app_settings")
+      .upsert(settings, { onConflict: "key" });
+    if (error) {
+      toast.error("Error saving API configuration");
+    } else {
+      toast.success("API configuration saved");
+    }
+    setApiSaving(false);
+  };
     setServiceEmailSaving(true);
     const { error } = await supabase
       .from("app_settings")
