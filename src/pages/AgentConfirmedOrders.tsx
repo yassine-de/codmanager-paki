@@ -88,7 +88,7 @@ const AgentConfirmedOrders = () => {
       const { data, error } = await supabase
         .from("orders")
         .select("*")
-        .eq("agent_id", userId)
+        .or(`agent_id.eq.${userId},original_agent_id.eq.${userId}`)
         .neq("confirmation_status", "new")
         .order("updated_at", { ascending: false });
       if (error) throw error;
