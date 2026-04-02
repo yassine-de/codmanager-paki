@@ -352,8 +352,6 @@ export default function Dashboard() {
   const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 100) : 0;
 
   if (isLoading) {
-    // Use lazy import to avoid circular deps
-    const { DashboardSkeleton } = require("@/components/DashboardSkeleton");
     return <DashboardSkeleton />;
   }
 
