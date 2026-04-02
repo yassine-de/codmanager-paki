@@ -54,34 +54,28 @@ Deno.serve(async (req) => {
     // For postponed orders, keep original_agent_id for context
     const orderIds = stuckOrders.map((o: any) => o.id);
 
-    // Update: set agent_id to null, preserve original_agent_id for postponed
+    // Before nullifying agent_id, preserve original_agent_id for ALL treated orders
+    // (no_answer, postponed — any status where the agent actually worked on it)
+    for (const agentId of inactiveAgentIds) {
+      const agentOrders = stuckOrders
+        .filter((o: any) => o.agent_id === agentId && o.confirmation_status !== "new")
+        .map((o: any) => o.id);
+      if (agentOrders.length > 0) {
+        await supabase
+          .from("orders")
+          .update({ original_agent_id: agentId })
+          .in("id", agentOrders)
+          .is("original_agent_id", null);
+      }
+    }
+
+    // Now release orders back to global queue
     const { error: updateErr } = await supabase
       .from("orders")
       .update({ agent_id: null })
       .in("id", orderIds);
 
     if (updateErr) throw updateErr;
-
-    // For postponed orders, set original_agent_id if not already set
-    const postponedIds = stuckOrders
-      .filter((o: any) => o.confirmation_status === "postponed")
-      .map((o: any) => o.id);
-
-    if (postponedIds.length > 0) {
-      // We need to set original_agent_id for each — batch update per agent
-      for (const agentId of inactiveAgentIds) {
-        const agentPostponed = stuckOrders
-          .filter((o: any) => o.confirmation_status === "postponed" && o.agent_id === agentId)
-          .map((o: any) => o.id);
-        if (agentPostponed.length > 0) {
-          await supabase
-            .from("orders")
-            .update({ original_agent_id: agentId })
-            .in("id", agentPostponed)
-            .is("original_agent_id", null);
-        }
-      }
-    }
 
     console.log(`Redistributed ${orderIds.length} orders from ${inactiveAgentIds.length} inactive agents`);
 
