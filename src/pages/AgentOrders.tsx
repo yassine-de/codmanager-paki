@@ -494,6 +494,7 @@ const AgentOrders = () => {
         quantity: activeItems.reduce((sum, item) => sum + item.qty, 0),
         price: activeItems[0]?.price || currentOrder.price,
         total_amount: orderTotal,
+        is_manual_price: isManualPrice,
         note: note.trim() || currentOrder.note,
         attempt_count: currentOrder.attempt_count + (selectedStatus === "no_answer" ? 1 : 0),
       };
@@ -548,6 +549,18 @@ const AgentOrders = () => {
       if (selectedStatus === "cancelled") trackChange("cancel_reason", currentOrder.cancel_reason, cancelReason === "other" ? note.trim() : cancelReason);
       if (note.trim() && note.trim() !== (currentOrder.note || "")) trackChange("note", currentOrder.note, note.trim());
       if (selectedStatus === "postponed" && postponeNote.trim()) trackChange("postpone_note", currentOrder.postpone_note, postponeNote.trim());
+
+      // Audit log for manual pricing
+      if (isManualPrice && manualTotal !== autoTotal) {
+        historyEntries.push({
+          order_id: currentOrder.order_id,
+          changed_by: authUser.id,
+          changed_by_role: "agent",
+          field_changed: "manual_price",
+          old_value: String(autoTotal),
+          new_value: String(manualTotal),
+        });
+      }
 
       if (historyEntries.length > 0) {
         await supabase.from("order_history").insert(historyEntries);
@@ -983,10 +996,28 @@ const AgentOrders = () => {
                     <span className="text-lg font-bold text-primary tabular-nums">{orderTotal} PKR</span>
                   )}
                 </div>
+
+                {/* Mode indicator */}
+                <div className="flex items-center gap-1.5">
+                  <span className={cn(
+                    "inline-block h-2 w-2 rounded-full",
+                    isManualPrice ? "bg-amber-500" : "bg-emerald-500"
+                  )} />
+                  <span className="text-[10px] text-muted-foreground">
+                    {isManualPrice ? "🟡 Manual mode — total is locked" : "🟢 Auto mode — total updates with qty/price"}
+                  </span>
+                </div>
+
                 {isManualPrice && manualTotal !== autoTotal && (
                   <p className="text-[10px] text-amber-600 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
                     Manual price differs from calculated ({autoTotal} PKR)
+                  </p>
+                )}
+                {isManualPrice && manualTotal > autoTotal * 2 && (
+                  <p className="text-[10px] text-destructive flex items-center gap-1 font-semibold">
+                    <AlertCircle className="h-3 w-3" />
+                    ⚠️ Unusually high price — more than 2× the calculated total
                   </p>
                 )}
               </div>
