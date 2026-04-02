@@ -162,14 +162,14 @@ const AgentOrders = () => {
 
     const touchLock = () => {
       const order = currentOrderRef.current;
-      if (order && order.confirmation_status === "new") {
+      if (order && ["new", "no_answer", "postponed"].includes(order.confirmation_status)) {
         supabase.rpc("touch_order_lock", { p_order_id: order.id, p_agent_id: authUser.id });
       }
     };
 
     const releaseLock = () => {
       const order = currentOrderRef.current;
-      if (order && order.confirmation_status === "new") {
+      if (order && ["new", "no_answer", "postponed"].includes(order.confirmation_status)) {
         supabase.rpc("release_order_lock" as any, { p_order_id: order.id, p_agent_id: authUser.id }).then();
       }
     };
