@@ -187,7 +187,7 @@ const AgentDashboard = () => {
         <Card className="border-l-4 border-l-primary/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-[11px] font-medium uppercase tracking-wide">
-              <TrendingUp className="h-3.5 w-3.5" /> Orders Treated
+              <TrendingUp className="h-3.5 w-3.5" /> Claimed Orders
             </div>
             <p className="text-3xl font-bold text-foreground mt-1">{stats.total}</p>
           </CardContent>
