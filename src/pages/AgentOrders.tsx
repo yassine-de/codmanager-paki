@@ -121,6 +121,7 @@ const AgentOrders = () => {
   const orderTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ORDER_WARNING_SEC = 5 * 60; // 5 minutes warning threshold
   const ORDER_AUTO_RELEASE_SEC = 6 * 60; // 6 minutes auto-release
+  const releasedRef = useRef(false);
 
   const resetForm = useCallback(() => {
     setSelectedStatus("");
@@ -145,6 +146,7 @@ const AgentOrders = () => {
     setHistoricalOffers(null);
     setHistoricalLastPrice(null);
     setOrderElapsedSec(0);
+    releasedRef.current = false;
     if (orderTimerRef.current) {
       clearInterval(orderTimerRef.current);
       orderTimerRef.current = null;
@@ -463,7 +465,8 @@ const AgentOrders = () => {
 
   // Auto-release order at 6 minutes
   useEffect(() => {
-    if (orderElapsedSec >= ORDER_AUTO_RELEASE_SEC && currentOrder && authUser) {
+    if (orderElapsedSec >= ORDER_AUTO_RELEASE_SEC && currentOrder && authUser && !releasedRef.current) {
+      releasedRef.current = true;
       toast.warning(`Order ${currentOrder.order_id} auto-released — took too long`);
       supabase.rpc("release_order_lock" as any, { p_order_id: currentOrder.id, p_agent_id: authUser.id });
       loadNextOrder();
