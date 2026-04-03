@@ -120,6 +120,7 @@ const AgentOrders = () => {
   const [orderElapsedSec, setOrderElapsedSec] = useState(0);
   const orderTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ORDER_WARNING_SEC = 5 * 60; // 5 minutes warning threshold
+  const ORDER_AUTO_RELEASE_SEC = 6 * 60; // 6 minutes auto-release
 
   const resetForm = useCallback(() => {
     setSelectedStatus("");
@@ -301,16 +302,18 @@ const AgentOrders = () => {
       return null;
     }
 
-    if (freshOrder && (freshOrder.id !== rawOrder.id || freshOrder.order_id !== rawOrder.order_id)) {
-      console.error("[AgentOrders] Mismatch detected after atomic claim. Reloading backend order.", {
+    // HARD STOP on mismatch: use only the fresh backend order
+    if (freshOrder && freshOrder.id !== rawOrder.id) {
+      console.error("[AgentOrders] CRITICAL MISMATCH — stopping. Using backend order.", {
         raw: { id: rawOrder.id, order_id: rawOrder.order_id },
         fresh: { id: freshOrder.id, order_id: freshOrder.order_id },
       });
+      toast.error("Order mismatch detected — reloading correct order");
+      // Use freshOrder as the source of truth
     }
 
     let duplicateGroup: DbOrder[] | undefined;
     if (orderType === "duplicate" && authUser) {
-      // Fetch all orders in this duplicate group (same phone + product, assigned to this agent)
       const { data: groupOrders } = await supabase
         .from("orders")
         .select("*")
@@ -433,6 +436,7 @@ const AgentOrders = () => {
   }, [authUser, resetForm]);
 
   const loadNextOrder = useCallback(async () => {
+    if (claiming) return; // prevent double invocation
     clearActiveOrderState();
     setClaiming(true);
 
@@ -455,11 +459,20 @@ const AgentOrders = () => {
     } finally {
       setClaiming(false);
     }
-  }, [clearActiveOrderState, claimNextAvailableOrder, initOrderState, refreshAvailableCounts]);
+  }, [claiming, clearActiveOrderState, claimNextAvailableOrder, initOrderState, refreshAvailableCounts]);
+
+  // Auto-release order at 6 minutes
+  useEffect(() => {
+    if (orderElapsedSec >= ORDER_AUTO_RELEASE_SEC && currentOrder && authUser) {
+      toast.warning(`Order ${currentOrder.order_id} auto-released — took too long`);
+      supabase.rpc("release_order_lock" as any, { p_order_id: currentOrder.id, p_agent_id: authUser.id });
+      loadNextOrder();
+    }
+  }, [orderElapsedSec]);
 
   const handleStart = async () => {
+    if (loading || claiming) return; // prevent double click
     setLoading(true);
-
     try {
       clearActiveOrderState();
       const claimedOrder = await claimNextAvailableOrder();
@@ -557,22 +570,13 @@ const AgentOrders = () => {
         updateData.original_agent_id = currentOrder.original_agent_id || authUser.id;
       }
 
-      // Handle duplicate resolution: mark other orders in the group as "double"
-      if (selectedStatus === "double" && currentOrder._isDuplicate && currentOrder._duplicateGroup) {
-        // The selected order stays as-is (marked double by the agent)
-        // But if agent picked a DIFFERENT order from the group as valid, mark the REST as double
-        // In this flow: the currentOrder IS the one marked double, others remain new
-      } else if (selectedStatus !== "double" && currentOrder._isDuplicate && currentOrder._duplicateGroup) {
-        // Agent is confirming/processing the selected order — mark all OTHER duplicates as "double"
-        const otherIds = currentOrder._duplicateGroup
-          .filter((dup) => dup.id !== currentOrder.id)
-          .map((dup) => dup.id);
-        if (otherIds.length > 0) {
-          await supabase
-            .from("orders")
-            .update({ confirmation_status: "double", note: `Duplicate of ${currentOrder.order_id}` } as any)
-            .in("id", otherIds);
-        }
+      // Handle duplicate resolution atomically via backend RPC
+      if (selectedStatus !== "double" && currentOrder._isDuplicate && currentOrder._duplicateGroup && currentOrder._duplicateGroup.length > 1) {
+        // Agent is processing the selected order — mark all OTHER duplicates as "double" atomically
+        await supabase.rpc("resolve_duplicate_group" as any, {
+          p_valid_order_id: currentOrder.id,
+          p_agent_id: authUser.id,
+        });
       }
 
       const { error: updateError } = await supabase
@@ -672,7 +676,7 @@ const AgentOrders = () => {
           size="lg"
           className="gap-2 text-base px-8 py-6 rounded-xl shadow-lg hover:shadow-xl transition-all"
           onClick={handleStart}
-          disabled={(newOrderCount === 0 && retryCount === 0) || loading}
+          disabled={(newOrderCount === 0 && retryCount === 0) || loading || claiming}
         >
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
           Start Smart Confirmation
@@ -1197,7 +1201,7 @@ const AgentOrders = () => {
                 <Textarea placeholder="Add a note (optional)" value={note} onChange={(e) => setNote(e.target.value)} className="text-xs min-h-[50px]" />
               )}
 
-              <Button className="w-full gap-2" onClick={handleSubmit} disabled={!canSubmit || submitting}>
+              <Button className="w-full gap-2" onClick={handleSubmit} disabled={!canSubmit || submitting || claiming}>
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
                 Confirm & Next Order
               </Button>
