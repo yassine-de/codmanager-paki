@@ -678,7 +678,8 @@ const AgentOrders = () => {
       }
 
       if (historyEntries.length > 0) {
-        await supabase.from("order_history").insert(historyEntries as any);
+        const { error: historyError } = await supabase.from("order_history").insert(historyEntries as any);
+        if (historyError) console.error("[AgentOrders] History insert failed:", historyError);
       }
 
       toast.success(`Order ${currentOrder.order_id} → ${selectedStatus.toUpperCase()} ✅`, {
