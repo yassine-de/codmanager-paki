@@ -570,22 +570,13 @@ const AgentOrders = () => {
         updateData.original_agent_id = currentOrder.original_agent_id || authUser.id;
       }
 
-      // Handle duplicate resolution: mark other orders in the group as "double"
-      if (selectedStatus === "double" && currentOrder._isDuplicate && currentOrder._duplicateGroup) {
-        // The selected order stays as-is (marked double by the agent)
-        // But if agent picked a DIFFERENT order from the group as valid, mark the REST as double
-        // In this flow: the currentOrder IS the one marked double, others remain new
-      } else if (selectedStatus !== "double" && currentOrder._isDuplicate && currentOrder._duplicateGroup) {
-        // Agent is confirming/processing the selected order — mark all OTHER duplicates as "double"
-        const otherIds = currentOrder._duplicateGroup
-          .filter((dup) => dup.id !== currentOrder.id)
-          .map((dup) => dup.id);
-        if (otherIds.length > 0) {
-          await supabase
-            .from("orders")
-            .update({ confirmation_status: "double", note: `Duplicate of ${currentOrder.order_id}` } as any)
-            .in("id", otherIds);
-        }
+      // Handle duplicate resolution atomically via backend RPC
+      if (selectedStatus !== "double" && currentOrder._isDuplicate && currentOrder._duplicateGroup && currentOrder._duplicateGroup.length > 1) {
+        // Agent is processing the selected order — mark all OTHER duplicates as "double" atomically
+        await supabase.rpc("resolve_duplicate_group" as any, {
+          p_valid_order_id: currentOrder.id,
+          p_agent_id: authUser.id,
+        });
       }
 
       const { error: updateError } = await supabase
