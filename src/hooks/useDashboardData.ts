@@ -104,6 +104,17 @@ function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
   };
 }
 
+function getTreatmentDate(o: DashboardOrder): Date {
+  if (o.confirmation_status === 'confirmed' && o.confirmed_at) {
+    return new Date(o.confirmed_at);
+  } else if (o.last_attempt_at) {
+    return new Date(o.last_attempt_at);
+  } else if (o.last_activity_at) {
+    return new Date(o.last_activity_at);
+  }
+  return new Date(o.updated_at);
+}
+
 function computeDailyData(orders: DashboardOrder[], numDays: number) {
   const days = eachDayOfInterval({
     start: startOfDay(subDays(new Date(), numDays - 1)),
