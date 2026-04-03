@@ -546,10 +546,17 @@ const AgentOrders = () => {
 
       // Set original_agent_id for no_answer and postponed so retries come back to same agent
       if (selectedStatus === "no_answer") {
+        const newAttemptCount = currentOrder.attempt_count + 1;
         updateData.original_agent_id = currentOrder.original_agent_id || authUser.id;
+        updateData.last_attempt_at = new Date().toISOString();
         updateData.agent_id = null;
         updateData.assigned_at = null;
         updateData.last_activity_at = null;
+
+        // Auto-close as unreachable at 9 attempts
+        if (newAttemptCount >= NO_ANSWER_MAX_ATTEMPTS) {
+          updateData.confirmation_status = "unreachable";
+        }
       }
 
       if (selectedStatus === "confirmed") {
