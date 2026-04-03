@@ -121,6 +121,7 @@ const AgentOrders = () => {
   const orderTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ORDER_WARNING_SEC = 5 * 60; // 5 minutes warning threshold
   const ORDER_AUTO_RELEASE_SEC = 6 * 60; // 6 minutes auto-release
+  const releasedRef = useRef(false);
 
   const resetForm = useCallback(() => {
     setSelectedStatus("");
