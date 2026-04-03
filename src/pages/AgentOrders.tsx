@@ -630,7 +630,22 @@ const AgentOrders = () => {
         }
       };
 
-      trackChange("confirmation_status", currentOrder.confirmation_status, finalStatus);
+      // For retries (no_answer → no_answer), always log even if status text didn't change
+      if (actionType === "retry") {
+        historyEntries.push({
+          order_id: currentOrder.order_id,
+          changed_by: authUser.id,
+          changed_by_role: "agent",
+          field_changed: "confirmation_status",
+          old_value: currentOrder.confirmation_status,
+          new_value: finalStatus,
+          action_type: "retry",
+          attempt_number: newAttemptCount,
+          group_id: groupId,
+        });
+      } else {
+        trackChange("confirmation_status", currentOrder.confirmation_status, finalStatus);
+      }
       trackChange("customer_name", currentOrder.customer_name, editCustomer.name);
       trackChange("customer_phone", currentOrder.customer_phone, editCustomer.phone);
       trackChange("customer_city", currentOrder.customer_city, editCustomer.city);
