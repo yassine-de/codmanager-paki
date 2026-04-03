@@ -441,12 +441,15 @@ export default function ConfirmationAnalytics() {
       <SmartRecommendations
         orders={filteredOrders.map(o => ({
           agent_id: o.agent_id || '',
+          original_agent_id: o.original_agent_id || null,
           confirmation_status: o.confirmation_status,
           delivery_status: o.delivery_status,
           created_at: o.created_at,
+          assigned_at: o.assigned_at || null,
+          confirmed_at: o.confirmed_at || null,
           attempt_count: o.attempt_count ?? 0,
           postpone_date: o.postpone_date,
-        })).filter(o => o.agent_id !== '')}
+        })).filter(o => o.agent_id !== '' || o.original_agent_id !== null)}
         orderHistory={orderHistory}
         calls={callsData}
         profileNameMap={profileNameMap}
