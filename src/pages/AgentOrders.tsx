@@ -471,8 +471,8 @@ const AgentOrders = () => {
   }, [orderElapsedSec]);
 
   const handleStart = async () => {
+    if (loading || claiming) return; // prevent double click
     setLoading(true);
-
     try {
       clearActiveOrderState();
       const claimedOrder = await claimNextAvailableOrder();
