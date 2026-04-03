@@ -71,8 +71,9 @@ interface AgentRow {
 
 export function DailyConfirmationReport({ orders, profileNameMap, agentIds }: DailyConfirmationReportProps) {
   // Global summary
-  // "Handled" = agent claimed AND changed status (not still "new")
-  const handledOrders = useMemo(() => orders.filter(o => o.agent_id && o.confirmation_status !== "new"), [orders]);
+  // "Handled" = agent claimed AND submitted any action (status is not "new")
+  // Use original_agent_id as fallback for released/redistributed orders
+  const handledOrders = useMemo(() => orders.filter(o => (o.agent_id || o.original_agent_id) && o.confirmation_status !== "new"), [orders]);
 
   const summary = useMemo(() => {
     const total = handledOrders.length;
