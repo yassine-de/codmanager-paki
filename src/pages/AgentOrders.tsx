@@ -764,7 +764,7 @@ const AgentOrders = () => {
       <div className="flex flex-wrap gap-2">
         {currentOrder._isFollowUp && (
           <Badge variant="outline" className="text-[10px] gap-1 bg-blue-500/10 text-blue-600 border-blue-500/20">
-            <RotateCcw className="h-3 w-3" /> Follow-up · Attempt #{currentOrder.attempt_count + 1}
+            <RotateCcw className="h-3 w-3" /> Follow-up
           </Badge>
         )}
         {currentOrder._isDuplicate && (
