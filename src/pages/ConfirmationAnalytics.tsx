@@ -370,7 +370,7 @@ export default function ConfirmationAnalytics() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">
         <KPICard title="Total Orders" value={stats.total} icon={ShoppingCart} iconBg="bg-primary/10" iconColor="text-primary" delay={0} />
         <KPICard title="Treated Orders" value={stats.treated} subtitle={`${stats.total > 0 ? Math.round((stats.treated / stats.total) * 100) : 0}% of total`} icon={ClipboardCheck} iconBg="bg-accent/10" iconColor="text-accent-foreground" delay={50} />
         <KPICard title="Claimed Orders" value={stats.claimed} subtitle={`${stats.total > 0 ? Math.round((stats.claimed / stats.total) * 100) : 0}% of total`} icon={MousePointerClick} iconBg="bg-primary/10" iconColor="text-primary" delay={100} />
