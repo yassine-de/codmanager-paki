@@ -114,8 +114,8 @@ function computeDailyData(orders: DashboardOrder[], numDays: number) {
     const nextDay = new Date(date);
     nextDay.setDate(nextDay.getDate() + 1);
     const dayOrders = orders.filter((o) => {
-      const created = new Date(o.created_at);
-      return isAfter(created, date) && !isAfter(created, nextDay);
+      const treatDate = getTreatmentDate(o);
+      return isAfter(treatDate, date) && !isAfter(treatDate, nextDay);
     });
     const total = dayOrders.length;
     const confirmed = dayOrders.filter(o => o.confirmation_status === 'confirmed').length;
