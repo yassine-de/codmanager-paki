@@ -85,12 +85,11 @@ const AgentDashboard = () => {
     const doubleOrders = filteredOrders.filter((o) => o.confirmation_status === "double").length;
     const wrongNumber = filteredOrders.filter((o) => o.confirmation_status === "wrong_number").length;
     const other = doubleOrders + wrongNumber;
-    // Confirmation rate = confirmed / decided (excluding no_answer & postponed which are still in progress)
-    const decided = total - noAnswer - postponed;
+    // Confirmation rate = confirmed / treated (all non-new orders)
     return {
       total,
       confirmed,
-      confirmedPct: decided > 0 ? Math.round((confirmed / decided) * 100) : 0,
+      confirmedPct: total > 0 ? Math.round((confirmed / total) * 100) : 0,
       postponed,
       postponedPct: total ? Math.round((postponed / total) * 100) : 0,
       noAnswer,
