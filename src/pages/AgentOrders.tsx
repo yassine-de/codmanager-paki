@@ -362,7 +362,8 @@ const AgentOrders = () => {
   }, [authUser, assignedProducts, enrichClaimedOrder]);
 
   const claimNextAvailableOrder = useCallback(async (): Promise<DbOrder | null> => {
-    const priority: string[] = ["duplicate", "new", "no_answer", "postponed"];
+    // Priority: duplicates first, then agent's own postponed/retry, then new orders
+    const priority: string[] = ["duplicate", "postponed", "no_answer", "new"];
 
     for (const orderType of priority) {
       const claimedOrder = await claimOrderAtomic(orderType);
