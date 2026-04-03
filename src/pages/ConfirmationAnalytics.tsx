@@ -58,7 +58,7 @@ export default function ConfirmationAnalytics() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("order_history")
-        .select("order_id, field_changed, old_value, new_value, created_at")
+        .select("order_id, field_changed, old_value, new_value, created_at, changed_by")
         .in("field_changed", ["confirmation_status", "agent_id"])
         .order("created_at", { ascending: true });
       if (error) throw error;
