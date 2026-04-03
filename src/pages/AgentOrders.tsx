@@ -233,28 +233,32 @@ const AgentOrders = () => {
     setDuplicateCount(Array.from(duplicateGroups.values()).filter((count) => count > 1).length);
 
     const nowIso = new Date().toISOString();
+    const cooldownCutoff = new Date(Date.now() - RETRY_COOLDOWN_MS).toISOString();
 
+    // no_answer retries: own orders only, respecting cooldown
     let noAnswerQuery = supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("confirmation_status", "no_answer")
       .is("agent_id", null)
       .eq("original_agent_id", authUser.id)
-      .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS);
+      .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS)
+      .or(`last_attempt_at.is.null,last_attempt_at.lte.${cooldownCutoff}`);
     if (productNames) noAnswerQuery = noAnswerQuery.in("product_name", productNames);
     const { count: noAnswerCount } = await noAnswerQuery;
 
-    let postponedQuery = supabase
+    // Postponed: own orders + orphaned (original agent offline) — count both
+    let postponedOwnQuery = supabase
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("confirmation_status", "postponed")
       .is("agent_id", null)
       .eq("original_agent_id", authUser.id)
       .lte("postpone_date", nowIso);
-    if (productNames) postponedQuery = postponedQuery.in("product_name", productNames);
-    const { count: postponedCount } = await postponedQuery;
+    if (productNames) postponedOwnQuery = postponedOwnQuery.in("product_name", productNames);
+    const { count: postponedOwnCount } = await postponedOwnQuery;
 
-    setRetryCount((noAnswerCount || 0) + (postponedCount || 0));
+    setRetryCount((noAnswerCount || 0) + (postponedOwnCount || 0));
   }, [authUser, assignedProducts]);
 
   useEffect(() => {
