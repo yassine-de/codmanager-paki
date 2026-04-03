@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
-import { format, subDays, startOfDay, eachDayOfInterval, isAfter } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, eachDayOfInterval, isAfter, isWithinInterval } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
 export interface DashboardOrder {
