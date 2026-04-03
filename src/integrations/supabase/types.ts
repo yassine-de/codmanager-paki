@@ -418,6 +418,7 @@ export type Database = {
           agent_id: string | null
           assigned_at: string | null
           attempt_count: number
+          attempts_today: number
           cancel_reason: string | null
           confirmation_status: string
           confirmed_at: string | null
@@ -434,6 +435,7 @@ export type Database = {
           is_manual_price: boolean
           last_activity_at: string | null
           last_attempt_at: string | null
+          last_attempt_date: string | null
           last_price: number | null
           note: string | null
           offers: string | null
@@ -466,6 +468,7 @@ export type Database = {
           agent_id?: string | null
           assigned_at?: string | null
           attempt_count?: number
+          attempts_today?: number
           cancel_reason?: string | null
           confirmation_status?: string
           confirmed_at?: string | null
@@ -482,6 +485,7 @@ export type Database = {
           is_manual_price?: boolean
           last_activity_at?: string | null
           last_attempt_at?: string | null
+          last_attempt_date?: string | null
           last_price?: number | null
           note?: string | null
           offers?: string | null
@@ -514,6 +518,7 @@ export type Database = {
           agent_id?: string | null
           assigned_at?: string | null
           attempt_count?: number
+          attempts_today?: number
           cancel_reason?: string | null
           confirmation_status?: string
           confirmed_at?: string | null
@@ -530,6 +535,7 @@ export type Database = {
           is_manual_price?: boolean
           last_activity_at?: string | null
           last_attempt_at?: string | null
+          last_attempt_date?: string | null
           last_price?: number | null
           note?: string | null
           offers?: string | null
@@ -1170,6 +1176,7 @@ export type Database = {
           agent_id: string | null
           assigned_at: string | null
           attempt_count: number
+          attempts_today: number
           cancel_reason: string | null
           confirmation_status: string
           confirmed_at: string | null
@@ -1186,6 +1193,7 @@ export type Database = {
           is_manual_price: boolean
           last_activity_at: string | null
           last_attempt_at: string | null
+          last_attempt_date: string | null
           last_price: number | null
           note: string | null
           offers: string | null
