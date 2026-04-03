@@ -92,9 +92,9 @@ export function DailyConfirmationReport({ orders, profileNameMap, agentIds }: Da
   // Per agent breakdown
   const agentRows: AgentRow[] = useMemo(() => {
     const map: Record<string, { total: number; new: number; noAnswer: number; postponed: number; confirmed: number; cancelled: number }> = {};
-    // Only count handled orders (status changed from "new")
+    // Count handled orders — attribute to agent_id, fallback to original_agent_id for released orders
     handledOrders.forEach(o => {
-      const aid = o.agent_id;
+      const aid = o.agent_id || o.original_agent_id;
       if (!aid) return;
       if (!map[aid]) map[aid] = { total: 0, new: 0, noAnswer: 0, postponed: 0, confirmed: 0, cancelled: 0 };
       map[aid].total++;
