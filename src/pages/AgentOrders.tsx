@@ -746,7 +746,6 @@ const AgentOrders = () => {
           </CardContent>
         </Card>
       )}
-      </div>
 
       {/* Postponed context from previous agent */}
       {currentOrder._isPostponedReassign && currentOrder.postpone_note && (
