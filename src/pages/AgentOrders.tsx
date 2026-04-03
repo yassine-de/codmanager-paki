@@ -236,6 +236,7 @@ const AgentOrders = () => {
       .select("id", { count: "exact", head: true })
       .eq("confirmation_status", "no_answer")
       .is("agent_id", null)
+      .eq("original_agent_id", authUser.id)
       .lt("attempt_count", NO_ANSWER_MAX_ATTEMPTS);
     if (productNames) noAnswerQuery = noAnswerQuery.in("product_name", productNames);
     const { count: noAnswerCount } = await noAnswerQuery;
@@ -245,6 +246,7 @@ const AgentOrders = () => {
       .select("id", { count: "exact", head: true })
       .eq("confirmation_status", "postponed")
       .is("agent_id", null)
+      .eq("original_agent_id", authUser.id)
       .lte("postpone_date", nowIso);
     if (productNames) postponedQuery = postponedQuery.in("product_name", productNames);
     const { count: postponedCount } = await postponedQuery;
@@ -306,6 +308,19 @@ const AgentOrders = () => {
       });
     }
 
+    let duplicateGroup: DbOrder[] | undefined;
+    if (orderType === "duplicate" && authUser) {
+      // Fetch all orders in this duplicate group (same phone + product, assigned to this agent)
+      const { data: groupOrders } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("agent_id", authUser.id)
+        .eq("customer_phone", resolvedOrder.customer_phone)
+        .eq("product_name", resolvedOrder.product_name)
+        .eq("confirmation_status", "new");
+      duplicateGroup = (groupOrders as DbOrder[]) || [];
+    }
+
     return {
       ...resolvedOrder,
       _isFollowUp: orderType === "postponed" || orderType === "no_answer",
@@ -313,6 +328,7 @@ const AgentOrders = () => {
         ? !!resolvedOrder.original_agent_id && resolvedOrder.original_agent_id !== authUser?.id
         : false,
       _isDuplicate: orderType === "duplicate",
+      _duplicateGroup: duplicateGroup,
     };
   }, [authUser?.id, fetchFreshAssignedOrder]);
 
@@ -541,6 +557,24 @@ const AgentOrders = () => {
         updateData.original_agent_id = currentOrder.original_agent_id || authUser.id;
       }
 
+      // Handle duplicate resolution: mark other orders in the group as "double"
+      if (selectedStatus === "double" && currentOrder._isDuplicate && currentOrder._duplicateGroup) {
+        // The selected order stays as-is (marked double by the agent)
+        // But if agent picked a DIFFERENT order from the group as valid, mark the REST as double
+        // In this flow: the currentOrder IS the one marked double, others remain new
+      } else if (selectedStatus !== "double" && currentOrder._isDuplicate && currentOrder._duplicateGroup) {
+        // Agent is confirming/processing the selected order — mark all OTHER duplicates as "double"
+        const otherIds = currentOrder._duplicateGroup
+          .filter((dup) => dup.id !== currentOrder.id)
+          .map((dup) => dup.id);
+        if (otherIds.length > 0) {
+          await supabase
+            .from("orders")
+            .update({ confirmation_status: "double", note: `Duplicate of ${currentOrder.order_id}` } as any)
+            .in("id", otherIds);
+        }
+      }
+
       const { error: updateError } = await supabase
         .from("orders")
         .update(updateData as any)
@@ -684,6 +718,52 @@ const AgentOrders = () => {
           </Badge>
         )}
       </div>
+
+      {/* Duplicate Group Resolution */}
+      {currentOrder._isDuplicate && currentOrder._duplicateGroup && currentOrder._duplicateGroup.length > 1 && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-700">
+              <Copy className="h-4 w-4" /> Duplicate Group — {currentOrder._duplicateGroup.length} orders
+            </CardTitle>
+            <p className="text-[10px] text-muted-foreground">Same phone ({currentOrder.customer_phone}) + product ({currentOrder.product_name}). Select the valid order below, others will be marked as duplicate.</p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {currentOrder._duplicateGroup.map((dup) => (
+              <div
+                key={dup.id}
+                className={cn(
+                  "flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all",
+                  currentOrder.id === dup.id
+                    ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                    : "border-border hover:border-primary/40 hover:bg-muted/30"
+                )}
+                onClick={() => {
+                  if (dup.id !== currentOrder.id) {
+                    setCurrentOrder({ ...dup, _isDuplicate: true, _duplicateGroup: currentOrder._duplicateGroup });
+                    currentOrderRef.current = dup;
+                    setEditItems([{ name: dup.product_name, qty: dup.quantity, price: Number(dup.price) }]);
+                    setEditCustomer({ name: dup.customer_name, phone: dup.customer_phone, city: dup.customer_city, address: dup.customer_address || "" });
+                  }
+                }}
+              >
+                <div className="space-y-0.5">
+                  <p className="text-xs font-semibold">{dup.order_id}</p>
+                  <p className="text-[10px] text-muted-foreground">{dup.customer_name} · {dup.customer_city}</p>
+                  <p className="text-[10px] text-muted-foreground">Created: {format(new Date(dup.created_at), "dd/MM/yyyy HH:mm")}</p>
+                </div>
+                <div className="text-right space-y-0.5">
+                  <p className="text-sm font-bold">{Number(dup.price) * dup.quantity} PKR</p>
+                  <p className="text-[10px] text-muted-foreground">Qty: {dup.quantity}</p>
+                  {currentOrder.id === dup.id && (
+                    <Badge className="text-[9px] bg-primary text-primary-foreground">Selected</Badge>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Postponed context from previous agent */}
       {currentOrder._isPostponedReassign && currentOrder.postpone_note && (
