@@ -557,6 +557,17 @@ const AgentOrders = () => {
         updateData.assigned_at = null;
         updateData.last_activity_at = null;
 
+        // Track daily attempts: reset counter if new day, otherwise increment
+        const today = new Date().toISOString().split("T")[0];
+        const lastAttemptDate = (currentOrder as any).last_attempt_date;
+        const attemptsToday = (currentOrder as any).attempts_today || 0;
+        if (lastAttemptDate === today) {
+          updateData.attempts_today = attemptsToday + 1;
+        } else {
+          updateData.attempts_today = 1;
+        }
+        updateData.last_attempt_date = today;
+
         // Auto-close as unreachable at 9 attempts
         if (newAttemptCount >= NO_ANSWER_MAX_ATTEMPTS) {
           updateData.confirmation_status = "unreachable";
