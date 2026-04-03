@@ -131,6 +131,7 @@ const AgentConfirmedOrders = () => {
           }
         }
         if (changes.length > 0) {
+          const gid = crypto.randomUUID();
           await supabase.from("order_history").insert(
             changes.map((c) => ({
               order_id: editOrder.order_id,
@@ -139,7 +140,9 @@ const AgentConfirmedOrders = () => {
               field_changed: c.field,
               old_value: c.old_val,
               new_value: c.new_val,
-            }))
+              action_type: "edit",
+              group_id: gid,
+            })) as any
           );
         }
       }
