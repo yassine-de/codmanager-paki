@@ -17,6 +17,9 @@ export interface DashboardOrder {
   created_at: string;
   confirmed_at: string | null;
   delivered_at: string | null;
+  last_attempt_at: string | null;
+  last_activity_at: string | null;
+  updated_at: string;
 }
 
 export interface DashboardKPIs {
