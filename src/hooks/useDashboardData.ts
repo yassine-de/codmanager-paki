@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
-import { format, subDays, startOfDay, eachDayOfInterval, isAfter } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, eachDayOfInterval, isAfter, isWithinInterval } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
 export interface DashboardOrder {
@@ -17,6 +17,9 @@ export interface DashboardOrder {
   created_at: string;
   confirmed_at: string | null;
   delivered_at: string | null;
+  last_attempt_at: string | null;
+  last_activity_at: string | null;
+  updated_at: string;
 }
 
 export interface DashboardKPIs {
@@ -101,6 +104,17 @@ function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
   };
 }
 
+function getTreatmentDate(o: DashboardOrder): Date {
+  if (o.confirmation_status === 'confirmed' && o.confirmed_at) {
+    return new Date(o.confirmed_at);
+  } else if (o.last_attempt_at) {
+    return new Date(o.last_attempt_at);
+  } else if (o.last_activity_at) {
+    return new Date(o.last_activity_at);
+  }
+  return new Date(o.updated_at);
+}
+
 function computeDailyData(orders: DashboardOrder[], numDays: number) {
   const days = eachDayOfInterval({
     start: startOfDay(subDays(new Date(), numDays - 1)),
@@ -111,8 +125,8 @@ function computeDailyData(orders: DashboardOrder[], numDays: number) {
     const nextDay = new Date(date);
     nextDay.setDate(nextDay.getDate() + 1);
     const dayOrders = orders.filter((o) => {
-      const created = new Date(o.created_at);
-      return isAfter(created, date) && !isAfter(created, nextDay);
+      const treatDate = getTreatmentDate(o);
+      return isAfter(treatDate, date) && !isAfter(treatDate, nextDay);
     });
     const total = dayOrders.length;
     const confirmed = dayOrders.filter(o => o.confirmation_status === 'confirmed').length;
@@ -136,20 +150,22 @@ export function useDashboardData(dateRange?: DateRange) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, total_amount, price, quantity, product_name, seller_id, created_at, confirmed_at, delivered_at");
+        .select("id, order_id, confirmation_status, delivery_status, total_amount, price, quantity, product_name, seller_id, created_at, confirmed_at, delivered_at, last_attempt_at, last_activity_at, updated_at");
       if (error) throw error;
       return (data || []) as DashboardOrder[];
     },
   });
 
-  // Filter by date range on created_at
+  // Filter by date range on treatment date
+
+  // Filter by date range on treatment date
   const orders = useMemo(() => {
     if (!dateRange?.from) return allOrders;
+    const from = startOfDay(dateRange.from);
+    const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
     return allOrders.filter(o => {
-      const created = new Date(o.created_at);
-      if (dateRange.from && created < dateRange.from) return false;
-      if (dateRange.to && created > dateRange.to) return false;
-      return true;
+      const treatDate = getTreatmentDate(o);
+      return isWithinInterval(treatDate, { start: from, end: to });
     });
   }, [allOrders, dateRange]);
 
