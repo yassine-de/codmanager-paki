@@ -25,7 +25,7 @@ export default function ConfirmationAnalytics() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, cancel_reason, product_name, seller_id, agent_id, created_at, confirmed_at, delivered_at, price, quantity, postpone_date, attempt_count")
+        .select("id, order_id, confirmation_status, delivery_status, cancel_reason, product_name, seller_id, agent_id, original_agent_id, created_at, confirmed_at, delivered_at, assigned_at, price, quantity, postpone_date, attempt_count")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
