@@ -302,16 +302,18 @@ const AgentOrders = () => {
       return null;
     }
 
-    if (freshOrder && (freshOrder.id !== rawOrder.id || freshOrder.order_id !== rawOrder.order_id)) {
-      console.error("[AgentOrders] Mismatch detected after atomic claim. Reloading backend order.", {
+    // HARD STOP on mismatch: use only the fresh backend order
+    if (freshOrder && freshOrder.id !== rawOrder.id) {
+      console.error("[AgentOrders] CRITICAL MISMATCH — stopping. Using backend order.", {
         raw: { id: rawOrder.id, order_id: rawOrder.order_id },
         fresh: { id: freshOrder.id, order_id: freshOrder.order_id },
       });
+      toast.error("Order mismatch detected — reloading correct order");
+      // Use freshOrder as the source of truth
     }
 
     let duplicateGroup: DbOrder[] | undefined;
     if (orderType === "duplicate" && authUser) {
-      // Fetch all orders in this duplicate group (same phone + product, assigned to this agent)
       const { data: groupOrders } = await supabase
         .from("orders")
         .select("*")
