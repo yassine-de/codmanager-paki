@@ -11,6 +11,7 @@ import {
 
 interface Order {
   agent_id: string | null;
+  original_agent_id: string | null;
   confirmation_status: string;
   postpone_date: string | null;
 }
@@ -71,8 +72,9 @@ interface AgentRow {
 
 export function DailyConfirmationReport({ orders, profileNameMap, agentIds }: DailyConfirmationReportProps) {
   // Global summary
-  // "Handled" = agent claimed AND changed status (not still "new")
-  const handledOrders = useMemo(() => orders.filter(o => o.agent_id && o.confirmation_status !== "new"), [orders]);
+  // "Handled" = agent claimed AND submitted any action (status is not "new")
+  // Use original_agent_id as fallback for released/redistributed orders
+  const handledOrders = useMemo(() => orders.filter(o => (o.agent_id || o.original_agent_id) && o.confirmation_status !== "new"), [orders]);
 
   const summary = useMemo(() => {
     const total = handledOrders.length;
@@ -91,9 +93,9 @@ export function DailyConfirmationReport({ orders, profileNameMap, agentIds }: Da
   // Per agent breakdown
   const agentRows: AgentRow[] = useMemo(() => {
     const map: Record<string, { total: number; new: number; noAnswer: number; postponed: number; confirmed: number; cancelled: number }> = {};
-    // Only count handled orders (status changed from "new")
+    // Count handled orders — attribute to agent_id, fallback to original_agent_id for released orders
     handledOrders.forEach(o => {
-      const aid = o.agent_id;
+      const aid = o.agent_id || o.original_agent_id;
       if (!aid) return;
       if (!map[aid]) map[aid] = { total: 0, new: 0, noAnswer: 0, postponed: 0, confirmed: 0, cancelled: 0 };
       map[aid].total++;

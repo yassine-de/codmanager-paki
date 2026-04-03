@@ -43,7 +43,7 @@ const AgentDashboard = () => {
       if (!userId) return [];
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, product_name, price, quantity, total_amount, confirmed_at, created_at, updated_at")
+        .select("id, order_id, confirmation_status, delivery_status, product_name, price, quantity, total_amount, confirmed_at, created_at, updated_at, last_attempt_at, last_activity_at")
         .or(`agent_id.eq.${userId},original_agent_id.eq.${userId}`)
         .neq("confirmation_status", "new");
       if (error) throw error;
@@ -52,13 +52,23 @@ const AgentDashboard = () => {
     enabled: !!userId,
   });
 
-  // Filter by confirmed_at date (when the agent actually treated the order)
+  // Filter by treatment date — use the most accurate timestamp per status
   const filteredOrders = useMemo(() => {
-    return agentOrders.filter((o) => {
-      // Use confirmed_at for confirmed orders, updated_at for others (actual treatment timestamp)
-      const treatDate = o.confirmation_status === 'confirmed' && o.confirmed_at
-        ? new Date(o.confirmed_at)
-        : new Date(o.updated_at);
+    return agentOrders.filter((o: any) => {
+      // Pick the best timestamp reflecting when the agent actually treated this order:
+      // - confirmed orders → confirmed_at
+      // - no_answer/retry orders → last_attempt_at (each retry updates this)
+      // - all others → last_activity_at or updated_at as fallback
+      let treatDate: Date;
+      if (o.confirmation_status === 'confirmed' && o.confirmed_at) {
+        treatDate = new Date(o.confirmed_at);
+      } else if (o.last_attempt_at) {
+        treatDate = new Date(o.last_attempt_at);
+      } else if (o.last_activity_at) {
+        treatDate = new Date(o.last_activity_at);
+      } else {
+        treatDate = new Date(o.updated_at);
+      }
       if (!dateRange?.from) return true;
       const from = startOfDay(dateRange.from);
       const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);

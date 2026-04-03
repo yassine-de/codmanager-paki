@@ -373,6 +373,7 @@ export default function ConfirmationAnalytics() {
       <DailyConfirmationReport
         orders={filteredOrders.map(o => ({
           agent_id: o.agent_id,
+          original_agent_id: o.original_agent_id,
           confirmation_status: o.confirmation_status,
           postpone_date: o.postpone_date,
         }))}
