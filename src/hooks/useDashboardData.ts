@@ -156,17 +156,7 @@ export function useDashboardData(dateRange?: DateRange) {
     },
   });
 
-  // Helper: get the treatment date for an order (same logic as Agent Dashboard)
-  const getTreatmentDate = (o: DashboardOrder): Date => {
-    if (o.confirmation_status === 'confirmed' && o.confirmed_at) {
-      return new Date(o.confirmed_at);
-    } else if (o.last_attempt_at) {
-      return new Date(o.last_attempt_at);
-    } else if (o.last_activity_at) {
-      return new Date(o.last_activity_at);
-    }
-    return new Date(o.updated_at);
-  };
+  // Filter by date range on treatment date
 
   // Filter by date range on treatment date
   const orders = useMemo(() => {
