@@ -1253,6 +1253,10 @@ export type Database = {
         Args: { p_agent_id: string; p_order_id: string }
         Returns: undefined
       }
+      resolve_duplicate_group: {
+        Args: { p_agent_id: string; p_valid_order_id: string }
+        Returns: undefined
+      }
       touch_order_lock: {
         Args: { p_agent_id: string; p_order_id: string }
         Returns: undefined
