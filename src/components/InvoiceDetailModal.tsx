@@ -1,10 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Package, Truck, Phone, CreditCard, ArrowDownCircle, ArrowUpCircle, BarChart3, ArrowUpDown, Wallet } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Package, Truck, Phone, CreditCard, ArrowDownCircle, ArrowUpCircle, BarChart3, ArrowUpDown, Wallet, Trash2 } from "lucide-react";
 import { formatUSD } from "@/lib/currency";
 import { InvoiceOrdersTable } from "@/components/invoice/InvoiceOrdersTable";
 import { fetchInvoiceSummary } from "@/lib/invoice-summary";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -17,6 +22,22 @@ interface Props {
 export function InvoiceDetailModal({
   open, onOpenChange, invoiceId, invoiceNumber, sellerName,
 }: Props) {
+  const queryClient = useQueryClient();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const removeAddonMutation = useMutation({
+    mutationFn: async (addonId: string) => {
+      const { error } = await supabase.rpc("remove_invoice_addon", { p_addon_id: addonId } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoice-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["invoice-summaries"] });
+      setConfirmDeleteId(null);
+      toast.success("Addon removed");
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to remove addon"),
+  });
   const { data: summary, isLoading } = useQuery({
     queryKey: ["invoice-summary", invoiceId],
     queryFn: async () => {
@@ -47,6 +68,7 @@ export function InvoiceDetailModal({
   );
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[92vh] p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b">
@@ -120,13 +142,26 @@ export function InvoiceDetailModal({
                   <SectionHeader icon={ArrowDownCircle} title="Addons" color="text-primary" count={addons.length} />
                   <div className="py-2">
                     {addons.map(addon => (
-                      <div key={addon.id} className="flex justify-between px-4 py-1 text-xs items-center">
-                        <span className="flex items-center gap-1.5 text-muted-foreground">
-                          {addon.type === "in" ? <ArrowDownCircle className="h-3 w-3 text-success" /> : <ArrowUpCircle className="h-3 w-3 text-destructive" />}
-                          {addon.reason || (addon.type === "in" ? "Bonus" : "Deduction")}
+                      <div key={addon.id} className="flex justify-between px-4 py-1 text-xs items-center gap-2">
+                        <span className="flex items-center gap-1.5 text-muted-foreground flex-1 min-w-0">
+                          {addon.type === "in" ? <ArrowDownCircle className="h-3 w-3 text-success shrink-0" /> : <ArrowUpCircle className="h-3 w-3 text-destructive shrink-0" />}
+                          <span className="truncate">{addon.reason || (addon.type === "in" ? "Bonus" : "Deduction")}</span>
                         </span>
-                        <span className={`font-semibold tabular-nums ${addon.type === "in" ? "text-success" : "text-destructive"}`}>
-                          {addon.type === "in" ? "+" : "-"}{formatUSD(addon.amount)}
+                        <span className="flex items-center gap-1.5">
+                          <span className={`font-semibold tabular-nums ${addon.type === "in" ? "text-success" : "text-destructive"}`}>
+                            {addon.type === "in" ? "+" : "-"}{formatUSD(addon.amount)}
+                          </span>
+                          {summary?.invoice.status !== "paid" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                              disabled={removeAddonMutation.isPending}
+                              onClick={() => setConfirmDeleteId(addon.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
                         </span>
                       </div>
                     ))}
@@ -214,5 +249,26 @@ export function InvoiceDetailModal({
         </ScrollArea>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={!!confirmDeleteId} onOpenChange={(open) => !open && setConfirmDeleteId(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove Addon</AlertDialogTitle>
+          <AlertDialogDescription>Are you sure you want to remove this addon? This action cannot be undone.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={removeAddonMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={removeAddonMutation.isPending}
+            onClick={() => confirmDeleteId && removeAddonMutation.mutate(confirmDeleteId)}
+          >
+            {removeAddonMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            Remove
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
