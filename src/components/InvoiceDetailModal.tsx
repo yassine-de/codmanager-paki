@@ -67,7 +67,11 @@ export function InvoiceDetailModal({
             <div>
               {/* SECTION 1: DELIVERED ORDERS (listed individually) */}
               <SectionHeader icon={Package} title="Delivered Orders" color="text-success" count={counts?.delivered_count ?? 0} />
-              <InvoiceOrdersTable orders={deliveredOrders} productWeightMap={productWeightMap} />
+              {deliveredOrders.length > 0 ? (
+                <InvoiceOrdersTable orders={deliveredOrders} productWeightMap={productWeightMap} />
+              ) : (
+                <div className="text-center py-4 text-muted-foreground text-xs">No delivered orders.</div>
+              )}
 
               {/* SECTION 2: SHIPPING FEES (summary only — count × rate by weight bracket) */}
               <SectionHeader icon={Truck} title="Shipping Fees" color="text-info" count={counts?.shipped_count ?? 0} />
