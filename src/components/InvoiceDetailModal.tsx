@@ -68,6 +68,7 @@ export function InvoiceDetailModal({
   );
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[92vh] p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b">
