@@ -333,7 +333,7 @@ export default function Invoices() {
         sellerName: sellerNameMap[inv.seller_id] || inv.seller_id.slice(0, 8),
       };
     });
-  }, [invoices, invoiceOrders, sellerRatesMap, callCenterRatesMap, addonsByInvoice, sellerNameMap, productWeightMap, codFeeMap]);
+  }, [invoices, invoiceOrders, sellerRatesMap, callCenterRatesMap, addonsByInvoice, sellerNameMap, productWeightMap, codFeeMap, totalOrdersCountMap]);
 
   // All invoices as rows (no more virtual drafts)
   const combined = useMemo(() => {
