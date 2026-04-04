@@ -141,13 +141,26 @@ export function InvoiceDetailModal({
                   <SectionHeader icon={ArrowDownCircle} title="Addons" color="text-primary" count={addons.length} />
                   <div className="py-2">
                     {addons.map(addon => (
-                      <div key={addon.id} className="flex justify-between px-4 py-1 text-xs items-center">
-                        <span className="flex items-center gap-1.5 text-muted-foreground">
-                          {addon.type === "in" ? <ArrowDownCircle className="h-3 w-3 text-success" /> : <ArrowUpCircle className="h-3 w-3 text-destructive" />}
-                          {addon.reason || (addon.type === "in" ? "Bonus" : "Deduction")}
+                      <div key={addon.id} className="flex justify-between px-4 py-1 text-xs items-center gap-2">
+                        <span className="flex items-center gap-1.5 text-muted-foreground flex-1 min-w-0">
+                          {addon.type === "in" ? <ArrowDownCircle className="h-3 w-3 text-success shrink-0" /> : <ArrowUpCircle className="h-3 w-3 text-destructive shrink-0" />}
+                          <span className="truncate">{addon.reason || (addon.type === "in" ? "Bonus" : "Deduction")}</span>
                         </span>
-                        <span className={`font-semibold tabular-nums ${addon.type === "in" ? "text-success" : "text-destructive"}`}>
-                          {addon.type === "in" ? "+" : "-"}{formatUSD(addon.amount)}
+                        <span className="flex items-center gap-1.5">
+                          <span className={`font-semibold tabular-nums ${addon.type === "in" ? "text-success" : "text-destructive"}`}>
+                            {addon.type === "in" ? "+" : "-"}{formatUSD(addon.amount)}
+                          </span>
+                          {summary?.invoice.status !== "paid" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                              disabled={removeAddonMutation.isPending}
+                              onClick={() => setConfirmDeleteId(addon.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
                         </span>
                       </div>
                     ))}
