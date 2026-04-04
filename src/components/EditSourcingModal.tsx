@@ -172,7 +172,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       const { error: addonErr } = await supabase
         .from("invoice_addons")
         .insert({
-          invoice_id: draftInvoiceId,
+          invoice_id: openInvoiceId,
           type: "out",
           amount: totalPrice,
           reason: `Sourcing: ${request.product_name}`,

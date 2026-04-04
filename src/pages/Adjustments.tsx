@@ -100,7 +100,7 @@ export default function Adjustments() {
         .from("invoice_adjustments")
         .update({
           status: "approved",
-          applied_invoice_id: draftInvoiceId,
+          applied_invoice_id: openInvoiceId,
           reviewed_at: new Date().toISOString(),
         })
         .eq("id", adj.id);
