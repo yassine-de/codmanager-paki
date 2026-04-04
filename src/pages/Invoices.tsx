@@ -271,7 +271,7 @@ export default function Invoices() {
     return productWeightMap[`${sellerId}|${productName}`] ?? null;
   };
 
-  // Compute invoice summaries (all invoices including drafts from DB)
+  // Compute invoice summaries using centralized calculation engine
   const invoiceSummaries = useMemo(() => {
     const ordersByInvoice: Record<string, typeof invoiceOrders> = {};
     invoiceOrders.forEach(o => {
@@ -282,45 +282,31 @@ export default function Invoices() {
 
     return invoices.map(inv => {
       const orders = ordersByInvoice[inv.id] || [];
-      const rates = sellerRatesMap[inv.seller_id] || null;
       const ccRates = callCenterRatesMap[inv.seller_id] || { confirmedRate: 0, droppedRate: 0 };
-      
-      // Delivered orders → revenue in USD
-      const delivered = orders.filter(o => o.delivery_status === "delivered");
-      const deliveredRevenuePKR = delivered.reduce((sum, o) => sum + (o.price * o.quantity), 0);
-      const deliveredRevenueUSD = pkrToUsd(deliveredRevenuePKR);
-      
-      // Shipping: only shipped orders
-      const shippable = orders.filter(o => o.delivery_status === "shipped");
-      const shippingFees = shippable.reduce((sum, o) => sum + calcShippingFee(getProductWeightKg(inv.seller_id, o.product_name), o.quantity, rates), 0);
-      
-      // Call center fees (already in USD)
-      // Dropped = ALL orders for this seller in system (not just invoice-linked)
-      const confirmedCount = orders.filter(o => o.confirmation_status === "confirmed").length;
-      const droppedCount = totalOrdersCountMap[inv.seller_id] || orders.length;
-      const callCenterFees = (confirmedCount * ccRates.confirmedRate) + (droppedCount * ccRates.droppedRate);
-      
-      // COD fees (percentage of USD revenue)
-      const codPct = (codFeeMap[inv.seller_id] ?? 5) / 100;
-      const codFees = deliveredRevenueUSD * codPct;
-      
-      // Addons (already in USD)
-      const addons = addonsByInvoice[inv.id] || [];
-      const addonNet = addons.reduce((sum, a) => a.type === "out" ? sum - a.amount : sum + a.amount, 0);
-      
-      const totalDeductions = shippingFees + callCenterFees + codFees;
-      const netPayable = deliveredRevenueUSD - totalDeductions + addonNet;
-      
+
+      const summary = calculateInvoiceSummary({
+        orders,
+        totalSellerOrders: totalOrdersCountMap[inv.seller_id] || orders.length,
+        shippingRates: sellerRatesMap[inv.seller_id] || null,
+        confirmedRate: ccRates.confirmedRate,
+        droppedRate: ccRates.droppedRate,
+        codFeePercentage: codFeeMap[inv.seller_id] ?? 5,
+        addons: addonsByInvoice[inv.id] || [],
+        previousBalance: inv.previous_balance ?? 0,
+        getProductWeight: (name) => getProductWeightKg(inv.seller_id, name),
+      });
+
       return {
         ...inv,
         ordersCount: orders.length,
-        deliveredCount: delivered.length,
-        totalAmountPKR: deliveredRevenueUSD,
-        shippingFees,
-        callCenterFees,
-        codFees,
-        addonNet,
-        netPayable,
+        deliveredCount: summary.deliveredCount,
+        totalAmountPKR: summary.deliveredRevenueUSD,
+        shippingFees: summary.shippingFees,
+        callCenterFees: summary.callCenterFees,
+        codFees: summary.codFees,
+        addonNet: summary.addonNet,
+        previousBalance: summary.previousBalance,
+        netPayable: summary.netPayable,
         sellerName: sellerNameMap[inv.seller_id] || inv.seller_id.slice(0, 8),
       };
     });
