@@ -88,7 +88,7 @@ export default function Adjustments() {
 
       // Add as addon to the open invoice
       const { error: addonErr } = await supabase.from("invoice_addons").insert({
-        invoice_id: draftInvoiceId,
+        invoice_id: openInvoiceId,
         type: adj.difference >= 0 ? "in" : "out",
         amount: Math.abs(adj.difference),
         reason: `Adjustment: ${adj.order_id} (${adj.old_status} → ${adj.new_status})`,
