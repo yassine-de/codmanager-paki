@@ -137,7 +137,7 @@ export default function Invoices() {
     enabled: invoiceIds.length > 0,
   });
 
-  // No more virtual drafts - DB trigger auto-creates draft invoices
+  // DB trigger auto-creates open invoices
   const loadingDrafts = false;
 
   // Fetch all seller profiles
