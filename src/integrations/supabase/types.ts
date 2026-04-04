@@ -1178,6 +1178,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_invoice_adjustment: {
+        Args: { p_adjustment_id: string }
+        Returns: Json
+      }
       claim_next_order: {
         Args: {
           p_agent_id: string
@@ -1273,6 +1277,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      reject_invoice_adjustment: {
+        Args: { p_adjustment_id: string }
+        Returns: Json
+      }
       release_expired_order_locks: { Args: never; Returns: undefined }
       release_order_lock: {
         Args: { p_agent_id: string; p_order_id: string }
