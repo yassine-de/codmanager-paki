@@ -99,6 +99,21 @@ export function InvoiceDetailModal({
     enabled: !!invoiceId && open,
   });
 
+  // Fetch ALL orders for this seller (dropped = total orders in system)
+  const { data: allSellerOrders = [] } = useQuery({
+    queryKey: ["all-seller-orders-count", resolvedSellerId],
+    queryFn: async () => {
+      if (!resolvedSellerId) return [];
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_id, confirmation_status")
+        .eq("seller_id", resolvedSellerId);
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!resolvedSellerId && open,
+  });
+
   // Categorize orders
   const deliveredOrders = displayOrders.filter(o => o.delivery_status === "delivered");
   const shippableOrders = displayOrders.filter(o =>
@@ -106,7 +121,8 @@ export function InvoiceDetailModal({
     o.delivery_status === "in_transit" || o.delivery_status === "with_courier"
   );
   const confirmedOrders = displayOrders.filter(o => o.confirmation_status === "confirmed");
-  const droppedOrders = displayOrders;
+  // Dropped = ALL orders for this seller in system
+  const droppedOrders = allSellerOrders;
 
   // Revenue
   const deliveredRevenuePKR = deliveredOrders.reduce((sum, o) => sum + (o.price * o.quantity), 0);
