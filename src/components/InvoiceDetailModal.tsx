@@ -248,5 +248,26 @@ export function InvoiceDetailModal({
         </ScrollArea>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={!!confirmDeleteId} onOpenChange={(open) => !open && setConfirmDeleteId(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove Addon</AlertDialogTitle>
+          <AlertDialogDescription>Are you sure you want to remove this addon? This action cannot be undone.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={removeAddonMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            disabled={removeAddonMutation.isPending}
+            onClick={() => confirmDeleteId && removeAddonMutation.mutate(confirmDeleteId)}
+          >
+            {removeAddonMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            Remove
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
