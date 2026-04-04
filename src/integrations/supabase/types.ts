@@ -353,6 +353,7 @@ export type Database = {
           paid_at: string | null
           paid_by: string | null
           payment_proof_url: string | null
+          previous_balance: number
           seller_id: string
           status: string
         }
@@ -364,6 +365,7 @@ export type Database = {
           paid_at?: string | null
           paid_by?: string | null
           payment_proof_url?: string | null
+          previous_balance?: number
           seller_id: string
           status?: string
         }
@@ -375,6 +377,7 @@ export type Database = {
           paid_at?: string | null
           paid_by?: string | null
           payment_proof_url?: string | null
+          previous_balance?: number
           seller_id?: string
           status?: string
         }
