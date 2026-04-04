@@ -116,10 +116,7 @@ export function InvoiceDetailModal({
 
   // Categorize orders
   const deliveredOrders = displayOrders.filter(o => o.delivery_status === "delivered");
-  const shippableOrders = displayOrders.filter(o =>
-    o.delivery_status === "delivered" || o.delivery_status === "shipped" ||
-    o.delivery_status === "in_transit" || o.delivery_status === "with_courier"
-  );
+  const shippableOrders = displayOrders.filter(o => o.delivery_status === "shipped");
   const confirmedOrders = displayOrders.filter(o => o.confirmation_status === "confirmed");
   // Dropped = ALL orders for this seller in system
   const droppedOrders = allSellerOrders;
