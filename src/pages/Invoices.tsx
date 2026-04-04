@@ -312,7 +312,7 @@ export default function Invoices() {
     });
   }, [invoices, invoiceOrders, sellerRatesMap, callCenterRatesMap, addonsByInvoice, sellerNameMap, productWeightMap, codFeeMap, totalOrdersCountMap]);
 
-  // All invoices as rows (no more virtual drafts)
+  // All invoices as rows
   const combined = useMemo(() => {
     return invoiceSummaries
       .filter(inv => isSeller ? inv.status !== "open" : true)
