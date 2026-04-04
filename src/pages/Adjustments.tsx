@@ -62,54 +62,17 @@ export default function Adjustments() {
 
   const approveMutation = useMutation({
     mutationFn: async (adj: Adjustment) => {
-      // Find seller's current open invoice to apply adjustment
-      let openInvoiceId: string | null = null;
-      const { data: openInv } = await supabase
-        .from("invoices")
-        .select("id")
-        .eq("seller_id", adj.seller_id)
-        .eq("status", "open")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (openInv) {
-        openInvoiceId = openInv.id;
-      } else {
-        // Create a new open invoice
-        const { data: newInv, error } = await supabase
-          .from("invoices")
-          .insert({ seller_id: adj.seller_id, status: "open" })
-          .select("id")
-          .single();
-        if (error) throw error;
-        openInvoiceId = newInv.id;
-      }
-
-      // Add as addon to the open invoice
-      const { error: addonErr } = await supabase.from("invoice_addons").insert({
-        invoice_id: openInvoiceId,
-        type: adj.difference >= 0 ? "in" : "out",
-        amount: Math.abs(adj.difference),
-        reason: `Adjustment: ${adj.order_id} (${adj.old_status} → ${adj.new_status})`,
+      const { data, error } = await supabase.rpc("approve_invoice_adjustment", {
+        p_adjustment_id: adj.id,
       });
-      if (addonErr) throw addonErr;
-
-      // Update adjustment status
-      const { error: updErr } = await supabase
-        .from("invoice_adjustments")
-        .update({
-          status: "approved",
-          applied_invoice_id: openInvoiceId,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", adj.id);
-      if (updErr) throw updErr;
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       toast.success("Adjustment approved and applied to next invoice");
       queryClient.invalidateQueries({ queryKey: ["invoice-adjustments"] });
       queryClient.invalidateQueries({ queryKey: ["pending-adjustments-count"] });
+      queryClient.invalidateQueries({ queryKey: ["invoice-summary"] });
       setSelectedAdj(null);
     },
     onError: () => toast.error("Failed to approve adjustment"),
@@ -117,14 +80,11 @@ export default function Adjustments() {
 
   const rejectMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("invoice_adjustments")
-        .update({
-          status: "rejected",
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", id);
+      const { data, error } = await supabase.rpc("reject_invoice_adjustment", {
+        p_adjustment_id: id,
+      });
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       toast.success("Adjustment rejected");
