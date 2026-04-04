@@ -483,7 +483,7 @@ export default function Invoices() {
     },
   });
 
-  // No more finalizeAndAddonMutation - addons can be added directly to DB draft invoices
+  // Addons can be added directly to open invoices
 
   // Add addon
   const addAddonMutation = useMutation({
