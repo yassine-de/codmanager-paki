@@ -315,11 +315,17 @@ export default function Invoices() {
 
   // Addons can be added directly to open invoices
 
-  // Add addon
+  // Add addon via RPC (validates status + logs history)
   const addAddonMutation = useMutation({
     mutationFn: async ({ invoiceId, type, amount, reason }: { invoiceId: string; type: string; amount: number; reason: string }) => {
-      const { error } = await supabase.from("invoice_addons").insert({ invoice_id: invoiceId, type, amount, reason } as any);
+      const { data, error } = await supabase.rpc("add_invoice_addon", {
+        p_invoice_id: invoiceId,
+        p_type: type,
+        p_amount: amount,
+        p_reason: reason,
+      } as any);
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invoice-summaries"] });
@@ -329,6 +335,7 @@ export default function Invoices() {
       setAddonReason("");
       toast.success("Addon added");
     },
+    onError: (err: any) => toast.error(err.message || "Failed to add addon"),
   });
 
   // Upload proof
