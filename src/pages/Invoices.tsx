@@ -52,15 +52,7 @@ interface DbAddon {
   created_at: string;
 }
 
-function calcShippingFee(weightKg: number | null, qty: number, rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number; rate_3kg_plus?: number } | null): number {
-  if (!rates || !weightKg || weightKg <= 0) return 0;
-  const totalWeight = weightKg * qty;
-  const rounded = Math.ceil(totalWeight);
-  if (rounded <= 1) return rates.rate_1kg;
-  if (rounded <= 2) return rates.rate_2kg;
-  if (rounded <= 3) return rates.rate_3kg;
-  return rates.rate_3kg_plus ?? rates.rate_3kg;
-}
+// Shipping fee calculation now imported from @/lib/invoice-utils
 
 export default function Invoices() {
   const { t } = useLanguage();
