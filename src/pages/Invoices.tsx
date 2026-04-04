@@ -420,48 +420,40 @@ export default function Invoices() {
         .eq("id", invoiceId);
       if (error) throw error;
       await logInvoiceHistory(invoiceId, "status_change", "status", currentStatus, newStatus);
-      if (!isPaid) {
-        await logInvoiceHistory(invoiceId, "status_change", "paid_at", null, new Date().toISOString());
 
-        // If netPayable is negative, carry over to next draft invoice as addon
-        if (netPayable !== undefined && netPayable < 0 && sellerId) {
-          const carryAmount = Math.abs(netPayable);
+      // When marking as paid: carry negative balance to next open invoice
+      if (!isPaid && netPayable !== undefined && netPayable < 0 && sellerId) {
+        const carryAmount = netPayable; // negative value
 
-          // Find or create a draft invoice for this seller (exclude current one)
-          const { data: existingDraft } = await supabase
+        // Find or create open invoice for this seller
+        const { data: existingOpen } = await supabase
+          .from("invoices")
+          .select("id")
+          .eq("seller_id", sellerId)
+          .eq("status", "open")
+          .neq("id", invoiceId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        let targetInvoiceId: string;
+        if (existingOpen) {
+          targetInvoiceId = existingOpen.id;
+        } else {
+          const { data: newInv, error: newErr } = await supabase
             .from("invoices")
+            .insert({ seller_id: sellerId, status: "open" } as any)
             .select("id")
-            .eq("seller_id", sellerId)
-            .eq("status", "draft")
-            .neq("id", invoiceId)
-            .order("created_at", { ascending: false })
-            .limit(1)
             .single();
-
-          let targetInvoiceId: string;
-          if (existingDraft) {
-            targetInvoiceId = existingDraft.id;
-          } else {
-            const { data: newInv, error: newErr } = await supabase
-              .from("invoices")
-              .insert({ seller_id: sellerId, status: "draft" } as any)
-              .select("id")
-              .single();
-            if (newErr) throw newErr;
-            targetInvoiceId = newInv.id;
-          }
-
-          // Add the negative carry-over as an "out" addon
-          const { error: addonErr } = await supabase
-            .from("invoice_addons")
-            .insert({
-              invoice_id: targetInvoiceId,
-              type: "out",
-              amount: carryAmount,
-              reason: `From last invoice (${invoiceId.slice(0, 8)})`,
-            } as any);
-          if (addonErr) throw addonErr;
+          if (newErr) throw newErr;
+          targetInvoiceId = newInv.id;
         }
+
+        // Set previous_balance on the next open invoice
+        await supabase
+          .from("invoices")
+          .update({ previous_balance: carryAmount } as any)
+          .eq("id", targetInvoiceId);
       }
     },
     onSuccess: () => {
