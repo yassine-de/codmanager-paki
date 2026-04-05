@@ -858,13 +858,20 @@ const AgentOrders = () => {
       )}
 
       {/* Also show postpone note for own follow-ups */}
-      {currentOrder._isFollowUp && !currentOrder._isPostponedReassign && currentOrder.postpone_note && (
+      {currentOrder._isFollowUp && !currentOrder._isPostponedReassign && (currentOrder.postpone_note || currentOrder.postpone_date) && (
         <Card className="border-blue-500/30 bg-blue-500/5">
-          <CardContent className="py-3 px-4 space-y-1">
+          <CardContent className="py-3 px-4 space-y-1.5">
             <p className="text-[10px] uppercase tracking-wide text-blue-600 font-semibold flex items-center gap-1">
-              <StickyNote className="h-3 w-3" /> Your Previous Note
+              <StickyNote className="h-3 w-3" /> Postponed Order
             </p>
-            <p className="text-sm text-foreground">{currentOrder.postpone_note}</p>
+            {currentOrder.postpone_date && (
+              <p className="text-xs text-blue-700 font-medium">
+                📅 This order was postponed to {format(new Date(currentOrder.postpone_date), "dd/MM/yyyy")} at {format(new Date(currentOrder.postpone_date), "hh:mm a")}
+              </p>
+            )}
+            {currentOrder.postpone_note && (
+              <p className="text-sm text-foreground">📝 {currentOrder.postpone_note}</p>
+            )}
           </CardContent>
         </Card>
       )}
