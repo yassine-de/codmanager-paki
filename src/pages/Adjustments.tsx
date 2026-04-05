@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatUSD, pkrToUsd, formatPKR } from "@/lib/currency";
+import { formatPKR } from "@/lib/currency";
 import { toast } from "sonner";
 import { AlertTriangle, Check, X, Eye, ArrowUpDown } from "lucide-react";
 import { format } from "date-fns";
