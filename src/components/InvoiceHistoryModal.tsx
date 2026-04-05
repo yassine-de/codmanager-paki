@@ -533,25 +533,28 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <Tabs defaultValue="all" className="w-full">
+          <Tabs defaultValue="by-order" className="w-full">
             <div className="px-5 pt-3">
               <TabsList className="w-full h-8">
+                <TabsTrigger value="by-order" className="text-[11px] flex-1">
+                  By Order ({orderGrouped.length})
+                </TabsTrigger>
                 <TabsTrigger value="all" className="text-[11px] flex-1">
                   All ({timeline.length})
                 </TabsTrigger>
                 <TabsTrigger value="orders" className="text-[11px] flex-1">
-                  Orders ({orderMovements.length})
+                  Movements ({orderMovements.length})
                 </TabsTrigger>
                 <TabsTrigger value="status" className="text-[11px] flex-1">
                   Status ({statusChanges.length})
-                </TabsTrigger>
-                <TabsTrigger value="details" className="text-[11px] flex-1">
-                  Details ({otherEvents.length})
                 </TabsTrigger>
               </TabsList>
             </div>
             <ScrollArea className="flex-1 overflow-auto" style={{ maxHeight: "calc(85vh - 120px)" }}>
               <div className="px-5 py-4">
+                <TabsContent value="by-order" className="mt-0">
+                  {renderOrderGrouped()}
+                </TabsContent>
                 <TabsContent value="all" className="mt-0">
                   {renderTimeline(timeline)}
                 </TabsContent>
@@ -560,9 +563,6 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
                 </TabsContent>
                 <TabsContent value="status" className="mt-0">
                   {renderTimeline(statusChanges)}
-                </TabsContent>
-                <TabsContent value="details" className="mt-0">
-                  {renderTimeline(otherEvents)}
                 </TabsContent>
               </div>
             </ScrollArea>
