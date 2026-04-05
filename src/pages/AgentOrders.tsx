@@ -468,13 +468,24 @@ const AgentOrders = () => {
     }
   }, [claiming, clearActiveOrderState, claimNextAvailableOrder, initOrderState, refreshAvailableCounts]);
 
-  // Auto-release order at 6 minutes
+  // Auto-release order at 6 minutes — STRICT for new orders, FLEXIBLE for retries
   useEffect(() => {
     if (orderElapsedSec >= ORDER_AUTO_RELEASE_SEC && currentOrder && authUser && !releasedRef.current) {
-      releasedRef.current = true;
-      toast.warning(`Order ${currentOrder.order_id} auto-released — took too long`);
-      supabase.rpc("release_order_lock" as any, { p_order_id: currentOrder.id, p_agent_id: authUser.id });
-      loadNextOrder();
+      const isRetryOrder = ["no_answer", "postponed"].includes(currentOrder.confirmation_status);
+
+      if (isRetryOrder) {
+        // Retry orders: warn but DON'T auto-release — agent can still complete
+        // The lease may expire server-side but the new RLS policy allows original_agent to submit
+        if (orderElapsedSec === ORDER_AUTO_RELEASE_SEC) {
+          toast.warning(`Lease expired — but you can still complete this follow-up order`);
+        }
+      } else {
+        // NEW orders: strict — auto-release immediately
+        releasedRef.current = true;
+        toast.warning(`Order ${currentOrder.order_id} auto-released — took too long`);
+        supabase.rpc("release_order_lock" as any, { p_order_id: currentOrder.id, p_agent_id: authUser.id });
+        loadNextOrder();
+      }
     }
   }, [orderElapsedSec]);
 
