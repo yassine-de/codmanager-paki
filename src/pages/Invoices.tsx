@@ -7,7 +7,7 @@ import {
   Loader2, ChevronLeft, ChevronRight, Package, Download, Printer
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { formatUSD } from "@/lib/currency";
+import { formatUSD, formatPKR } from "@/lib/currency";
 import { fetchInvoiceSummary, type InvoiceSummaryResponse } from "@/lib/invoice-summary";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
