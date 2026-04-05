@@ -3,7 +3,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { eachDayOfInterval, startOfDay, subDays, isAfter, format as fmtDate } from "date-fns";
-import { Search, SlidersHorizontal, X, Columns3, CalendarIcon, Filter, Pencil, History, MessageCircle, Download, RefreshCw, ChevronDown } from "lucide-react";
+import { Search, SlidersHorizontal, X, Columns3, CalendarIcon, Filter, Pencil, History, MessageCircle, Download, RefreshCw, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDataVisibility, MaskedValue } from "@/contexts/DataVisibilityContext";
@@ -356,6 +356,20 @@ export default function Orders() {
     };
   });
 
+  // Sorting
+  type SortableKey = 'systemId' | 'createdAt' | 'updatedAt';
+  const [sortKey, setSortKey] = useState<SortableKey>('createdAt');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const toggleSort = (key: SortableKey) => {
+    if (sortKey === key) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
+
   // Column visibility
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
     new Set(allColumns.filter(c => c.defaultVisible).map(c => c.key))
@@ -417,7 +431,20 @@ export default function Orders() {
         }
         return true;
       })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a, b) => {
+        let valA: number, valB: number;
+        if (sortKey === 'systemId') {
+          valA = a.systemId ?? 0;
+          valB = b.systemId ?? 0;
+        } else if (sortKey === 'updatedAt') {
+          valA = new Date(a.updatedAt).getTime();
+          valB = new Date(b.updatedAt).getTime();
+        } else {
+          valA = new Date(a.createdAt).getTime();
+          valB = new Date(b.createdAt).getTime();
+        }
+        return sortDir === 'asc' ? valA - valB : valB - valA;
+      });
   }, [search, appliedFilters, orders]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
