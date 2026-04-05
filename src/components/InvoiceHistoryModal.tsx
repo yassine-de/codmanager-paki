@@ -190,6 +190,99 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
   const statusChanges = timeline.filter(e => e.type === "status_change");
   const otherEvents = timeline.filter(e => e.type === "order_change" || e.type === "addon" || e.type === "addon_added" || e.type === "addon_removed");
 
+  // Group events by order_id for the "By Order" tab
+  const orderGrouped = (() => {
+    const orderEvents = timeline.filter(e => e.order_id);
+    const groups = new Map<string, { events: TimelineEntry[]; direction: "in" | "out" | "changed" }>();
+    
+    orderEvents.forEach(e => {
+      const oid = e.order_id!;
+      if (!groups.has(oid)) {
+        groups.set(oid, { events: [], direction: "changed" });
+      }
+      groups.get(oid)!.events.push(e);
+    });
+
+    // Determine direction per order
+    groups.forEach((group) => {
+      const hasAdded = group.events.some(e => e.type === "order_added");
+      const hasRemoved = group.events.some(e => e.type === "order_removed");
+      if (hasAdded && !hasRemoved) group.direction = "in";
+      else if (hasRemoved && !hasAdded) group.direction = "out";
+      else if (hasRemoved) group.direction = "out";
+      else group.direction = "changed";
+    });
+
+    return Array.from(groups.entries()).sort((a, b) => {
+      const aLatest = Math.max(...a[1].events.map(e => new Date(e.created_at).getTime()));
+      const bLatest = Math.max(...b[1].events.map(e => new Date(e.created_at).getTime()));
+      return bLatest - aLatest;
+    });
+  })();
+
+  const renderOrderGrouped = () => {
+    if (orderGrouped.length === 0) {
+      return <p className="text-sm text-muted-foreground text-center py-8">No order events recorded</p>;
+    }
+    return (
+      <div className="space-y-3">
+        {orderGrouped.map(([orderId, group]) => {
+          const dirBadge = group.direction === "in"
+            ? { label: "IN", cls: "bg-success/15 text-success border-success/20" }
+            : group.direction === "out"
+            ? { label: "OUT", cls: "bg-destructive/15 text-destructive border-destructive/20" }
+            : { label: "CHANGED", cls: "bg-warning/15 text-warning border-warning/20" };
+
+          return (
+            <div key={orderId} className="rounded-lg border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2.5 pb-2 border-b">
+                <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-mono font-semibold">{orderId}</span>
+                <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${dirBadge.cls}`}>
+                  {dirBadge.label}
+                </span>
+                <span className="text-[10px] text-muted-foreground ml-auto">
+                  {group.events.length} event{group.events.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {group.events
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                  .map(event => {
+                    const label = event.type === "order_added" ? "Added to invoice"
+                      : event.type === "order_removed" ? "Removed from invoice"
+                      : event.type === "adjustment_created" ? "Adjustment created"
+                      : event.type === "adjustment_approved" ? "Adjustment approved"
+                      : event.type === "adjustment_rejected" ? "Adjustment rejected"
+                      : event.type === "order_change" ? (fieldLabels[event.field_changed || ""] || event.field_changed || "Change")
+                      : event.description || event.type;
+
+                    return (
+                      <div key={event.id} className="flex items-start gap-2 text-xs">
+                        <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap mt-0.5">
+                          {format(new Date(event.created_at), "dd MMM · HH:mm")}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium">{label}</span>
+                          {(event.old_value || event.new_value) && (
+                            <span className="ml-1.5 text-muted-foreground">
+                              {event.old_value && <span className="line-through">{event.old_value}</span>}
+                              {event.old_value && event.new_value && " → "}
+                              {event.new_value && <span className="text-foreground font-medium">{event.new_value}</span>}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderEvent = (event: TimelineEntry) => {
     // Status change
     if (event.type === "status_change") {
