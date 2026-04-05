@@ -188,7 +188,7 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
 
   const orderMovements = timeline.filter(e => e.type === "order_added" || e.type === "order_removed");
   const statusChanges = timeline.filter(e => e.type === "status_change");
-  const otherEvents = timeline.filter(e => e.type === "order_change" || e.type === "addon");
+  const otherEvents = timeline.filter(e => e.type === "order_change" || e.type === "addon" || e.type === "addon_added" || e.type === "addon_removed");
 
   const renderEvent = (event: TimelineEntry) => {
     // Status change
