@@ -549,6 +549,8 @@ const AgentOrders = () => {
       }
       const updateData: Record<string, any> = {
         confirmation_status: selectedStatus,
+        agent_id: authUser.id,
+        last_activity_at: new Date().toISOString(),
         customer_name: editCustomer.name,
         customer_phone: editCustomer.phone,
         customer_city: editCustomer.city,
