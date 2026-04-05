@@ -841,6 +841,24 @@ export type Database = {
         }
         Relationships: []
       }
+      seller_invoice_counters: {
+        Row: {
+          current_counter: number
+          id: string
+          seller_id: string
+        }
+        Insert: {
+          current_counter?: number
+          id?: string
+          seller_id: string
+        }
+        Update: {
+          current_counter?: number
+          id?: string
+          seller_id?: string
+        }
+        Relationships: []
+      }
       seller_order_prefixes: {
         Row: {
           current_counter: number
