@@ -44,7 +44,8 @@ export function InvoiceOrdersTable({ orders, productWeightMap }: Props) {
     });
   }, [orders, search, productFilter]);
 
-  const totalRevenueUsd = filtered.reduce((sum, o) => sum + (o.amount_usd ?? pkrToUsd(o.price * o.quantity)), 0);
+  const totalRevenuePkr = filtered.reduce((sum, o) => sum + (o.price * o.quantity), 0);
+  const totalRevenueUsd = pkrToUsd(totalRevenuePkr);
 
   return (
     <div>
