@@ -82,50 +82,8 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
       setLoading(true);
       const entries: TimelineEntry[] = [];
 
-      // 1. Fetch order history
-      let resolvedOrderIds = orderIds || [];
-      if (!orderIds?.length && invoiceId) {
-        const { data: orders } = await supabase
-          .from("orders")
-          .select("order_id")
-          .eq("invoice_id", invoiceId);
-        resolvedOrderIds = (orders || []).map(o => o.order_id);
-      }
-
-      if (resolvedOrderIds.length > 0) {
-        const { data: histData } = await supabase
-          .from("order_history")
-          .select("*")
-          .in("order_id", resolvedOrderIds)
-          .order("created_at", { ascending: false });
-
-        const userIds = [...new Set((histData || []).map(h => h.changed_by))];
-        let nameMap = new Map<string, string>();
-        if (userIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from("profiles")
-            .select("user_id, name")
-            .in("user_id", userIds);
-          nameMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
-        }
-
-        (histData || []).forEach(h => {
-          entries.push({
-            id: h.id,
-            type: "order_change",
-            created_at: h.created_at,
-            order_id: h.order_id,
-            field_changed: h.field_changed,
-            old_value: h.old_value,
-            new_value: h.new_value,
-            changed_by_role: h.changed_by_role,
-            agent_name: nameMap.get(h.changed_by) || "Unknown",
-          });
-        });
-      }
-
-      // 2. Fetch addons
       if (invoiceId) {
+        // 1. Fetch addons
         const { data: addons } = await supabase
           .from("invoice_addons")
           .select("*")
@@ -143,7 +101,7 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
           });
         });
 
-        // 3. Fetch invoice history (status changes + order movements)
+        // 2. Fetch invoice history (financially-relevant events only)
         const { data: invHistory } = await supabase
           .from("invoice_history")
           .select("*")
