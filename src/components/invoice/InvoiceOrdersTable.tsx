@@ -95,7 +95,7 @@ export function InvoiceOrdersTable({ orders, productWeightMap }: Props) {
               filtered.map((o, i) => {
                 const wKg = o.weight_kg ?? productWeightMap[o.product_name] ?? 0;
                 const totalWeight = o.total_weight_kg ?? (wKg * o.quantity);
-                const amountUsd = o.amount_usd ?? pkrToUsd(o.price * o.quantity);
+                const amountPkr = o.price * o.quantity;
                 return (
                   <tr key={o.id} className={`border-b ${i % 2 === 0 ? "bg-background" : "bg-muted/20"}`}>
                     <td className="px-3 py-1.5 font-mono text-[11px]">{o.order_id}</td>
@@ -106,7 +106,7 @@ export function InvoiceOrdersTable({ orders, productWeightMap }: Props) {
                     <td className="px-3 py-1.5">{o.product_name}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{o.quantity}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{totalWeight > 0 ? `${totalWeight.toFixed(1)} KG` : "—"}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{formatUSD(amountUsd)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{formatPKR(amountPkr)}</td>
                   </tr>
                 );
               })
