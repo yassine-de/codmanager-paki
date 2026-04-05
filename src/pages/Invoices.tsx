@@ -504,7 +504,7 @@ export default function Invoices() {
                   return (
                     <TableRow key={inv.id} className={`text-xs ${isOpen ? "bg-warning/5 hover:bg-warning/10" : ""}`}>
                       <TableCell className={`font-semibold ${isOpen ? "text-warning" : "text-primary"}`}>
-                        {isOpen ? "Open" : inv.invoice_number}
+                        {inv.invoice_number || "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-[11px]">{format(new Date(inv.created_at), "dd MMM yyyy")}</TableCell>
                       {!isSeller && (
