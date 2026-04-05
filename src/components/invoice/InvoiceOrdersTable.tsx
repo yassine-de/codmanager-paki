@@ -26,6 +26,7 @@ interface Props {
 }
 
 export function InvoiceOrdersTable({ orders, productWeightMap }: Props) {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("all");
 
