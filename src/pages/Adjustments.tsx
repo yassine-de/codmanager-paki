@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatPKR } from "@/lib/currency";
+import { formatUSD } from "@/lib/currency";
 import { toast } from "sonner";
 import { AlertTriangle, Check, X, Eye, ArrowUpDown, Truck } from "lucide-react";
 import { format } from "date-fns";
@@ -171,18 +171,18 @@ export default function Adjustments() {
                     <TableCell><Badge variant="outline" className="text-[10px]">{adj.old_status}</Badge></TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px]">{adj.new_status}</Badge></TableCell>
                     <TableCell className={`text-right tabular-nums font-semibold ${adj.difference >= 0 ? "text-success" : "text-destructive"}`}>
-                      {adj.difference !== 0 ? (adj.difference >= 0 ? "+" : "") + formatPKR(adj.difference) : "—"}
+                      {adj.difference !== 0 ? (adj.difference >= 0 ? "+" : "") + formatUSD(adj.difference) : "—"}
                     </TableCell>
                     <TableCell className={`text-right tabular-nums font-semibold ${shippingDiff >= 0 ? "text-success" : "text-destructive"}`}>
                       {shippingDiff !== 0 ? (
                         <span className="flex items-center justify-end gap-1">
                           <Truck className="h-3 w-3" />
-                          {shippingDiff >= 0 ? "+" : ""}{formatPKR(shippingDiff)}
+                          {shippingDiff >= 0 ? "+" : ""}{formatUSD(shippingDiff)}
                         </span>
                       ) : "—"}
                     </TableCell>
                     <TableCell className={`text-right tabular-nums font-bold ${totalDiff >= 0 ? "text-success" : "text-destructive"}`}>
-                      {totalDiff !== 0 ? (totalDiff >= 0 ? "+" : "") + formatPKR(totalDiff) : "—"}
+                      {totalDiff !== 0 ? (totalDiff >= 0 ? "+" : "") + formatUSD(totalDiff) : "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{format(new Date(adj.created_at), "dd/MM/yy HH:mm")}</TableCell>
                     <TableCell>{statusBadge(adj.status)}</TableCell>
@@ -281,17 +281,17 @@ function AdjustmentDetail({ adj, sellerMap, onApprove, onReject }: {
         <CardContent className="py-3 px-4 space-y-2">
           <p className="text-xs font-semibold mb-2">Revenue Impact</p>
           <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Previous Amount (PKR)</span>
-            <span className="tabular-nums">{formatPKR(adj.previous_amount)}</span>
+            <span className="text-muted-foreground">Previous Amount (USD)</span>
+            <span className="tabular-nums">{formatUSD(adj.previous_amount)}</span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">New Amount (PKR)</span>
-            <span className="tabular-nums">{formatPKR(adj.new_amount)}</span>
+            <span className="text-muted-foreground">New Amount (USD)</span>
+            <span className="tabular-nums">{formatUSD(adj.new_amount)}</span>
           </div>
           <div className="border-t pt-2 flex justify-between text-xs font-bold">
-            <span>Revenue Δ (PKR)</span>
+            <span>Revenue Δ (USD)</span>
             <span className={`tabular-nums ${adj.difference >= 0 ? "text-success" : "text-destructive"}`}>
-              {adj.difference >= 0 ? "+" : ""}{formatPKR(adj.difference)}
+              {adj.difference >= 0 ? "+" : ""}{formatUSD(adj.difference)}
             </span>
           </div>
         </CardContent>
@@ -307,16 +307,16 @@ function AdjustmentDetail({ adj, sellerMap, onApprove, onReject }: {
             </p>
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Previous Shipping Fee</span>
-              <span className="tabular-nums">{formatPKR(adj.previous_shipping_fee)}</span>
+              <span className="tabular-nums">{formatUSD(adj.previous_shipping_fee)}</span>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">New Shipping Fee</span>
-              <span className="tabular-nums">{formatPKR(adj.new_shipping_fee)}</span>
+              <span className="tabular-nums">{formatUSD(adj.new_shipping_fee)}</span>
             </div>
             <div className="border-t pt-2 flex justify-between text-xs font-bold">
               <span>Shipping Δ</span>
               <span className={`tabular-nums ${shippingDiff >= 0 ? "text-success" : "text-destructive"}`}>
-                {shippingDiff >= 0 ? "+" : ""}{formatPKR(shippingDiff)}
+                {shippingDiff >= 0 ? "+" : ""}{formatUSD(shippingDiff)}
               </span>
             </div>
           </CardContent>
@@ -328,9 +328,9 @@ function AdjustmentDetail({ adj, sellerMap, onApprove, onReject }: {
         <Card className="bg-muted/50">
           <CardContent className="py-3 px-4">
             <div className="flex justify-between text-xs font-bold">
-              <span>Total Adjustment (PKR)</span>
+              <span>Total Adjustment (USD)</span>
               <span className={`tabular-nums text-sm ${totalDiff >= 0 ? "text-success" : "text-destructive"}`}>
-                {totalDiff >= 0 ? "+" : ""}{formatPKR(totalDiff)}
+                {totalDiff >= 0 ? "+" : ""}{formatUSD(totalDiff)}
               </span>
             </div>
           </CardContent>
