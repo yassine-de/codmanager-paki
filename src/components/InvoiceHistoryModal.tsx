@@ -4,64 +4,40 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Loader2, ArrowRightLeft, UserCheck, PlusCircle, Package,
-  ArrowDownCircle, ArrowUpCircle, CheckCircle2, XCircle, LogIn, LogOut, RefreshCw
+  Loader2, Package, ArrowDownCircle, ArrowUpCircle, ArrowUpDown,
+  LogIn, LogOut, Truck
 } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatUSD } from "@/lib/currency";
 
-interface TimelineEntry {
+interface OrderEvent {
   id: string;
-  type: "order_change" | "addon" | "status_change" | "order_added" | "order_removed" | "addon_added" | "addon_removed" | "adjustment_created" | "adjustment_approved" | "adjustment_rejected" | string;
+  order_id: string;
+  direction: "in" | "out";
+  old_status: string | null;
+  new_status: string | null;
   created_at: string;
-  // Order change fields
-  order_id?: string;
-  field_changed?: string;
-  old_value?: string | null;
-  new_value?: string | null;
-  changed_by_role?: string;
-  agent_name?: string;
-  // Addon fields
-  addon_type?: string;
-  amount?: number;
-  reason?: string;
-  // History fields
-  description?: string;
-  metadata?: Record<string, any>;
+  by: string | null;
 }
 
-const fieldLabels: Record<string, string> = {
-  confirmation_status: "Confirmation Status",
-  delivery_status: "Delivery Status",
-  customer_name: "Customer Name",
-  customer_phone: "Phone",
-  customer_city: "City",
-  customer_address: "Address",
-  product_name: "Product",
-  quantity: "Quantity",
-  price: "Price",
-  total_amount: "Total Amount",
-  note: "Note",
-  agent_id: "Assigned Agent",
-  shipping_status: "Shipping Status",
-  cancel_reason: "Cancel Reason",
-  postpone_date: "Postpone Date",
-  status: "Invoice Status",
-  paid_at: "Payment Date",
-};
+interface AddonEvent {
+  id: string;
+  type: "in" | "out";
+  amount: number;
+  reason: string;
+  created_at: string;
+}
 
-const fieldIcon = (field: string) => {
-  if (field === "agent_id") return UserCheck;
-  if (field === "created") return PlusCircle;
-  return ArrowRightLeft;
-};
-
-const fieldColor = (field: string) => {
-  if (field === "confirmation_status") return "text-info bg-info/10";
-  if (field === "delivery_status") return "text-success bg-success/10";
-  if (field === "agent_id") return "text-[hsl(270,50%,55%)] bg-[hsl(270,50%,55%)]/10";
-  if (field === "cancel_reason") return "text-destructive bg-destructive/10";
-  return "text-warning bg-warning/10";
-};
+interface AdjustmentEvent {
+  id: string;
+  order_id: string;
+  old_status: string;
+  new_status: string;
+  difference: number;
+  shipping_difference: number;
+  reason: string;
+  status: string;
+  created_at: string;
+}
 
 interface Props {
   open: boolean;
@@ -71,409 +47,106 @@ interface Props {
   orderIds?: string[];
 }
 
-export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, invoiceNumber, orderIds }: Props) {
-  const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
+export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, invoiceNumber }: Props) {
+  const [orders, setOrders] = useState<OrderEvent[]>([]);
+  const [addons, setAddons] = useState<AddonEvent[]>([]);
+  const [adjustments, setAdjustments] = useState<AdjustmentEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !invoiceId) return;
 
-    const fetchAll = async () => {
+    const fetch = async () => {
       setLoading(true);
-      const entries: TimelineEntry[] = [];
 
-      if (invoiceId) {
-        // 1. Fetch addons
-        const { data: addons } = await supabase
-          .from("invoice_addons")
-          .select("*")
-          .eq("invoice_id", invoiceId)
-          .order("created_at", { ascending: false });
+      // 1. Invoice history — filter delivery events only
+      const { data: history } = await supabase
+        .from("invoice_history")
+        .select("*")
+        .eq("invoice_id", invoiceId)
+        .in("event_type", ["adjustment_created"])
+        .eq("field_changed", "delivery_status")
+        .order("created_at", { ascending: false });
 
-        (addons || []).forEach(a => {
-          entries.push({
-            id: a.id,
-            type: "addon",
-            created_at: a.created_at || new Date().toISOString(),
-            addon_type: a.type,
-            amount: a.amount,
-            reason: a.reason,
-          });
-        });
-
-        // 2. Fetch invoice history (financially-relevant events only)
-        const { data: invHistory } = await supabase
-          .from("invoice_history")
-          .select("*")
-          .eq("invoice_id", invoiceId)
-          .order("created_at", { ascending: false });
-
-        // Resolve changed_by names
-        const invUserIds = [...new Set((invHistory || []).filter(h => h.changed_by).map(h => h.changed_by))];
-        let invNameMap = new Map<string, string>();
-        if (invUserIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from("profiles")
-            .select("user_id, name")
-            .in("user_id", invUserIds);
-          invNameMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
-        }
-
-        (invHistory || []).forEach((h: any) => {
-          entries.push({
-            id: h.id,
-            type: h.event_type as TimelineEntry["type"],
-            created_at: h.created_at,
-            order_id: h.order_id,
-            field_changed: h.field_changed,
-            old_value: h.old_value,
-            new_value: h.new_value,
-            agent_name: h.changed_by ? invNameMap.get(h.changed_by) || "Unknown" : undefined,
-            description: h.description,
-            metadata: h.metadata,
-          });
-        });
+      const userIds = [...new Set((history || []).filter(h => h.changed_by).map(h => h.changed_by!))];
+      let nameMap = new Map<string, string>();
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase.from("profiles").select("user_id, name").in("user_id", userIds);
+        nameMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
       }
 
-      // Sort by date desc
-      entries.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setTimeline(entries);
+      const orderEvents: OrderEvent[] = (history || []).map(h => {
+        const isIn = h.new_value === "delivered";
+        return {
+          id: h.id,
+          order_id: h.order_id || "—",
+          direction: isIn ? "in" as const : "out" as const,
+          old_status: h.old_value,
+          new_status: h.new_value,
+          created_at: h.created_at,
+          by: h.changed_by ? nameMap.get(h.changed_by) || null : null,
+        };
+      });
+
+      // 2. Addons
+      const { data: addonData } = await supabase
+        .from("invoice_addons")
+        .select("*")
+        .eq("invoice_id", invoiceId)
+        .order("created_at", { ascending: false });
+
+      const addonEvents: AddonEvent[] = (addonData || []).map(a => ({
+        id: a.id,
+        type: a.type as "in" | "out",
+        amount: a.amount,
+        reason: a.reason,
+        created_at: a.created_at || new Date().toISOString(),
+      }));
+
+      // 3. Adjustments
+      const { data: adjData } = await supabase
+        .from("invoice_adjustments")
+        .select("*")
+        .or(`invoice_id.eq.${invoiceId},applied_invoice_id.eq.${invoiceId}`)
+        .order("created_at", { ascending: false });
+
+      const adjEvents: AdjustmentEvent[] = (adjData || []).map(a => ({
+        id: a.id,
+        order_id: a.order_id,
+        old_status: a.old_status,
+        new_status: a.new_status,
+        difference: a.difference,
+        shipping_difference: a.shipping_difference,
+        reason: a.reason,
+        status: a.status,
+        created_at: a.created_at,
+      }));
+
+      setOrders(orderEvents);
+      setAddons(addonEvents);
+      setAdjustments(adjEvents);
       setLoading(false);
     };
 
-    fetchAll();
-  }, [open, invoiceId, orderIds]);
+    fetch();
+  }, [open, invoiceId]);
 
-  const orderMovements = timeline.filter(e => e.type === "order_added" || e.type === "order_removed");
-  const statusChanges = timeline.filter(e => e.type === "status_change");
-  const otherEvents = timeline.filter(e => e.type === "order_change" || e.type === "addon" || e.type === "addon_added" || e.type === "addon_removed");
-
-  // Group events by order_id for the "By Order" tab
-  const orderGrouped = (() => {
-    const orderEvents = timeline.filter(e => e.order_id);
-    const groups = new Map<string, { events: TimelineEntry[]; direction: "in" | "out" | "changed" }>();
-    
-    orderEvents.forEach(e => {
-      const oid = e.order_id!;
-      if (!groups.has(oid)) {
-        groups.set(oid, { events: [], direction: "changed" });
-      }
-      groups.get(oid)!.events.push(e);
-    });
-
-    // Determine direction per order
-    groups.forEach((group) => {
-      const hasAdded = group.events.some(e => e.type === "order_added");
-      const hasRemoved = group.events.some(e => e.type === "order_removed");
-      if (hasAdded && !hasRemoved) group.direction = "in";
-      else if (hasRemoved && !hasAdded) group.direction = "out";
-      else if (hasRemoved) group.direction = "out";
-      else group.direction = "changed";
-    });
-
-    return Array.from(groups.entries()).sort((a, b) => {
-      const aLatest = Math.max(...a[1].events.map(e => new Date(e.created_at).getTime()));
-      const bLatest = Math.max(...b[1].events.map(e => new Date(e.created_at).getTime()));
-      return bLatest - aLatest;
-    });
-  })();
-
-  const renderOrderGrouped = () => {
-    if (orderGrouped.length === 0) {
-      return <p className="text-sm text-muted-foreground text-center py-8">No order events recorded</p>;
-    }
-    return (
-      <div className="space-y-3">
-        {orderGrouped.map(([orderId, group]) => {
-          const dirBadge = group.direction === "in"
-            ? { label: "IN", cls: "bg-success/15 text-success border-success/20" }
-            : group.direction === "out"
-            ? { label: "OUT", cls: "bg-destructive/15 text-destructive border-destructive/20" }
-            : { label: "CHANGED", cls: "bg-warning/15 text-warning border-warning/20" };
-
-          return (
-            <div key={orderId} className="rounded-lg border bg-card p-3">
-              <div className="flex items-center gap-2 mb-2.5 pb-2 border-b">
-                <Package className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs font-mono font-semibold">{orderId}</span>
-                <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${dirBadge.cls}`}>
-                  {dirBadge.label}
-                </span>
-                <span className="text-[10px] text-muted-foreground ml-auto">
-                  {group.events.length} event{group.events.length !== 1 ? "s" : ""}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {group.events
-                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                  .map(event => {
-                    const label = event.type === "order_added" ? "Added to invoice"
-                      : event.type === "order_removed" ? "Removed from invoice"
-                      : event.type === "adjustment_created" ? "Adjustment created"
-                      : event.type === "adjustment_approved" ? "Adjustment approved"
-                      : event.type === "adjustment_rejected" ? "Adjustment rejected"
-                      : event.type === "order_change" ? (fieldLabels[event.field_changed || ""] || event.field_changed || "Change")
-                      : event.description || event.type;
-
-                    return (
-                      <div key={event.id} className="flex items-start gap-2 text-xs">
-                        <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap mt-0.5">
-                          {format(new Date(event.created_at), "dd MMM · HH:mm")}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <span className="font-medium">{label}</span>
-                          {(event.old_value || event.new_value) && (
-                            <span className="ml-1.5 text-muted-foreground">
-                              {event.old_value && <span className="line-through">{event.old_value}</span>}
-                              {event.old_value && event.new_value && " → "}
-                              {event.new_value && <span className="text-foreground font-medium">{event.new_value}</span>}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderEvent = (event: TimelineEntry) => {
-    // Status change
-    if (event.type === "status_change") {
-      const isPaidAt = event.field_changed === "paid_at";
-      const statusLabel = (v: string | null | undefined) => {
-        if (v === "draft") return "Draft";
-        if (v === "ready") return "Ready";
-        if (v === "paid") return "Paid";
-        return v || "—";
-      };
-      const formatValue = (v: string | null | undefined) => {
-        if (isPaidAt && v) {
-          try { return format(new Date(v), "dd MMM yyyy · HH:mm"); } catch { return v; }
-        }
-        return statusLabel(v);
-      };
-      const eventLabel = isPaidAt ? "Payment Date Recorded" : "Invoice Status Changed";
-      const EventIcon = isPaidAt ? CheckCircle2 : RefreshCw;
-      const eventColor = isPaidAt ? "text-success bg-success/10" : "text-info bg-info/10";
-      return (
-        <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-          <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${eventColor}`}>
-            <EventIcon className="w-3.5 h-3.5" />
-          </div>
-          <div className="flex-1 min-w-0 pt-0.5">
-            <p className="text-sm font-medium leading-snug">{eventLabel}</p>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              {event.old_value && (
-                <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground line-through">
-                  {formatValue(event.old_value)}
-                </span>
-              )}
-              {event.old_value && event.new_value && <span className="text-muted-foreground text-[10px]">→</span>}
-              {event.new_value && (
-                <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                  {formatValue(event.new_value)}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
-              </span>
-              {event.agent_name && (
-                <span className="text-[11px] text-muted-foreground">
-                  by <span className="font-medium text-foreground/70">{event.agent_name}</span>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Addon added / removed (from invoice_history)
-    if (event.type === "addon_added" || event.type === "addon_removed") {
-      const isAdded = event.type === "addon_added";
-      const meta = event.metadata || {};
-      const addonAmount = meta.amount as number | undefined;
-      const addonReason = meta.reason as string | undefined;
-      const addonSubType = meta.type as string | undefined;
-      const isIn = addonSubType === "in";
-      const AddonEvIcon = isAdded ? (isIn ? ArrowDownCircle : ArrowUpCircle) : XCircle;
-      const addonEvColor = isAdded
-        ? (isIn ? "text-success bg-success/10" : "text-warning bg-warning/10")
-        : "text-destructive bg-destructive/10";
-
-      return (
-        <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-          <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${addonEvColor}`}>
-            <AddonEvIcon className="w-3.5 h-3.5" />
-          </div>
-          <div className="flex-1 min-w-0 pt-0.5">
-            <p className="text-sm font-medium leading-snug">
-              {isAdded ? "Addon Added" : "Addon Removed"}
-              {isAdded && addonSubType && (
-                <span className={`ml-1.5 inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ${isIn ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
-                  {isIn ? "Bonus" : "Deduction"}
-                </span>
-              )}
-            </p>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              {addonAmount != null && (
-                <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold ${isIn ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                  {isIn ? "+" : "-"}{addonAmount.toFixed(2)} $
-                </span>
-              )}
-              {addonReason && (
-                <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  {addonReason}
-                </span>
-              )}
-            </div>
-            {event.description && (
-              <p className="text-[11px] text-muted-foreground mt-1">{event.description}</p>
-            )}
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
-              </span>
-              {event.agent_name && (
-                <span className="text-[11px] text-muted-foreground">
-                  by <span className="font-medium text-foreground/70">{event.agent_name}</span>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Order added / removed
-    if (event.type === "order_added" || event.type === "order_removed") {
-      const isAdded = event.type === "order_added";
-      return (
-        <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-          <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${isAdded ? "text-success bg-success/10" : "text-destructive bg-destructive/10"}`}>
-            {isAdded ? <LogIn className="w-3.5 h-3.5" /> : <LogOut className="w-3.5 h-3.5" />}
-          </div>
-          <div className="flex-1 min-w-0 pt-0.5">
-            <p className="text-sm font-medium leading-snug">
-              Order {isAdded ? "Added" : "Removed"}
-            </p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold font-mono ${isAdded ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                {event.order_id}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
-              </span>
-              {event.agent_name && (
-                <span className="text-[11px] text-muted-foreground">
-                  by <span className="font-medium text-foreground/70">{event.agent_name}</span>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Addon
-    if (event.type === "addon") {
-      const isIn = event.addon_type === "in";
-      const AddonIcon = isIn ? ArrowDownCircle : ArrowUpCircle;
-      const addonColor = isIn ? "text-success bg-success/10" : "text-destructive bg-destructive/10";
-      return (
-        <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-          <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${addonColor}`}>
-            <AddonIcon className="w-3.5 h-3.5" />
-          </div>
-          <div className="flex-1 min-w-0 pt-0.5">
-            <p className="text-sm font-medium leading-snug">
-              Addon — {isIn ? "Bonus" : "Deduction"}
-            </p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold ${isIn ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>
-                {isIn ? "+" : "-"}{event.amount?.toFixed(2)} $
-              </span>
-              {event.reason && (
-                <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  {event.reason}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[11px] text-muted-foreground tabular-nums">
-                {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
-              </span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Order change
-    const Icon = fieldIcon(event.field_changed || "");
-    const color = fieldColor(event.field_changed || "");
-    const label = fieldLabels[event.field_changed || ""] || event.field_changed;
-
-    return (
-      <div key={event.id} className="relative flex gap-3 pb-5 last:pb-0">
-        <div className={`relative z-10 flex items-center justify-center w-[31px] h-[31px] rounded-full shrink-0 ${color}`}>
-          <Icon className="w-3.5 h-3.5" />
-        </div>
-        <div className="flex-1 min-w-0 pt-0.5">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium leading-snug">{label}</p>
-            <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{event.order_id}</span>
-          </div>
-          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            {event.old_value && (
-              <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground line-through">
-                {event.old_value}
-              </span>
-            )}
-            {event.old_value && event.new_value && <span className="text-muted-foreground text-[10px]">→</span>}
-            {event.new_value && (
-              <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                {event.new_value}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-[11px] text-muted-foreground tabular-nums">
-              {format(new Date(event.created_at), "dd MMM yyyy · HH:mm")}
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              by <span className="font-medium text-foreground/70">{event.agent_name}</span>
-            </span>
-            <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-              {event.changed_by_role}
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderTimeline = (events: TimelineEntry[]) => (
-    events.length === 0 ? (
-      <p className="text-sm text-muted-foreground text-center py-8">No events recorded</p>
-    ) : (
-      <div className="relative">
-        <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
-        <div className="space-y-0">
-          {events.map(renderEvent)}
-        </div>
-      </div>
-    )
+  const SectionHeader = ({ icon: Icon, title, count, color }: { icon: any; title: string; count: number; color: string }) => (
+    <div className="flex items-center gap-2 py-2 px-1 border-b">
+      <Icon className={`h-3.5 w-3.5 ${color}`} />
+      <span className="text-xs font-bold uppercase tracking-wider text-foreground">{title}</span>
+      <span className="ml-auto text-[10px] font-semibold bg-muted px-2 py-0.5 rounded-full text-muted-foreground">{count}</span>
+    </div>
   );
+
+  const EmptyState = ({ text }: { text: string }) => (
+    <p className="text-xs text-muted-foreground text-center py-4">{text}</p>
+  );
+
+  const statusLabel = (s: string | null) => {
+    if (!s || s === "none") return "—";
+    return s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -486,46 +159,153 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
           </DialogTitle>
         </DialogHeader>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <Tabs defaultValue="by-order" className="w-full">
-            <div className="px-5 pt-3">
-              <TabsList className="w-full h-8">
-                <TabsTrigger value="by-order" className="text-[11px] flex-1">
-                  By Order ({orderGrouped.length})
-                </TabsTrigger>
-                <TabsTrigger value="all" className="text-[11px] flex-1">
-                  All ({timeline.length})
-                </TabsTrigger>
-                <TabsTrigger value="orders" className="text-[11px] flex-1">
-                  Movements ({orderMovements.length})
-                </TabsTrigger>
-                <TabsTrigger value="status" className="text-[11px] flex-1">
-                  Status ({statusChanges.length})
-                </TabsTrigger>
-              </TabsList>
+        <ScrollArea className="flex-1 overflow-auto" style={{ maxHeight: "calc(85vh - 80px)" }}>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-            <ScrollArea className="flex-1 overflow-auto" style={{ maxHeight: "calc(85vh - 120px)" }}>
-              <div className="px-5 py-4">
-                <TabsContent value="by-order" className="mt-0">
-                  {renderOrderGrouped()}
-                </TabsContent>
-                <TabsContent value="all" className="mt-0">
-                  {renderTimeline(timeline)}
-                </TabsContent>
-                <TabsContent value="orders" className="mt-0">
-                  {renderTimeline(orderMovements)}
-                </TabsContent>
-                <TabsContent value="status" className="mt-0">
-                  {renderTimeline(statusChanges)}
-                </TabsContent>
+          ) : (
+            <div className="px-4 py-3 space-y-4">
+              {/* ORDERS — delivery events only */}
+              <div>
+                <SectionHeader icon={Truck} title="Orders" count={orders.length} color="text-success" />
+                {orders.length === 0 ? (
+                  <EmptyState text="No delivery events" />
+                ) : (
+                  <div className="divide-y">
+                    {orders.map(o => (
+                      <div key={o.id} className="flex items-center gap-3 py-2.5 px-1">
+                        <div className={`flex items-center justify-center w-6 h-6 rounded-full shrink-0 ${o.direction === "in" ? "bg-success/10" : "bg-destructive/10"}`}>
+                          {o.direction === "in"
+                            ? <LogIn className="w-3 h-3 text-success" />
+                            : <LogOut className="w-3 h-3 text-destructive" />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-semibold">{o.order_id}</span>
+                            <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${o.direction === "in" ? "bg-success/15 text-success border-success/20" : "bg-destructive/15 text-destructive border-destructive/20"}`}>
+                              {o.direction === "in" ? "IN" : "OUT"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-[10px] text-muted-foreground">
+                              {statusLabel(o.old_status)} → {statusLabel(o.new_status)}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
+                          {format(new Date(o.created_at), "dd MMM · HH:mm")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </ScrollArea>
-          </Tabs>
-        )}
+
+              {/* ADDONS */}
+              <div>
+                <SectionHeader icon={ArrowDownCircle} title="Addons" count={addons.length} color="text-primary" />
+                {addons.length === 0 ? (
+                  <EmptyState text="No addons" />
+                ) : (
+                  <div className="divide-y">
+                    {addons.map(a => (
+                      <div key={a.id} className="flex items-center gap-3 py-2.5 px-1">
+                        <div className={`flex items-center justify-center w-6 h-6 rounded-full shrink-0 ${a.type === "in" ? "bg-success/10" : "bg-destructive/10"}`}>
+                          {a.type === "in"
+                            ? <ArrowDownCircle className="w-3 h-3 text-success" />
+                            : <ArrowUpCircle className="w-3 h-3 text-destructive" />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold tabular-nums ${a.type === "in" ? "text-success" : "text-destructive"}`}>
+                              {a.type === "in" ? "+" : "-"}{formatUSD(a.amount)}
+                            </span>
+                            <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ${a.type === "in" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
+                              {a.type === "in" ? "Bonus" : "Deduction"}
+                            </span>
+                          </div>
+                          {a.reason && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{a.reason}</p>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
+                          {format(new Date(a.created_at), "dd MMM · HH:mm")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ADJUSTMENTS */}
+              <div>
+                <SectionHeader icon={ArrowUpDown} title="Adjustments" count={adjustments.length} color="text-warning" />
+                {adjustments.length === 0 ? (
+                  <EmptyState text="No adjustments" />
+                ) : (
+                  <div className="divide-y">
+                    {adjustments.map(adj => {
+                      const totalDiff = adj.difference + adj.shipping_difference;
+                      const totalUsd = totalDiff / 290;
+                      const isQuantity = adj.reason === "quantity_change";
+                      return (
+                        <div key={adj.id} className="py-2.5 px-1">
+                          <div className="flex items-center gap-2">
+                            <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-xs font-mono font-semibold">{adj.order_id}</span>
+                            <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${adj.status === "approved" ? "bg-success/10 text-success border-success/20" : adj.status === "rejected" ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-warning/10 text-warning border-warning/20"}`}>
+                              {adj.status.toUpperCase()}
+                            </span>
+                            <span className="ml-auto text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
+                              {format(new Date(adj.created_at), "dd MMM · HH:mm")}
+                            </span>
+                          </div>
+                          <div className="ml-5.5 mt-1.5 space-y-0.5 pl-1">
+                            {!isQuantity && (
+                              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <span>{statusLabel(adj.old_status)} → {statusLabel(adj.new_status)}</span>
+                              </div>
+                            )}
+                            {isQuantity && (
+                              <div className="text-[10px] text-muted-foreground">Quantity changed</div>
+                            )}
+                            {adj.difference !== 0 && (
+                              <div className="flex justify-between text-[11px]">
+                                <span className="text-muted-foreground">Revenue</span>
+                                <span className={`tabular-nums font-semibold ${adj.difference >= 0 ? "text-success" : "text-destructive"}`}>
+                                  {adj.difference >= 0 ? "+" : ""}{formatUSD(adj.difference / 290)}
+                                </span>
+                              </div>
+                            )}
+                            {adj.shipping_difference !== 0 && (
+                              <div className="flex justify-between text-[11px]">
+                                <span className="text-muted-foreground">Shipping</span>
+                                <span className={`tabular-nums font-semibold ${adj.shipping_difference >= 0 ? "text-success" : "text-destructive"}`}>
+                                  {adj.shipping_difference >= 0 ? "+" : ""}{formatUSD(adj.shipping_difference)}
+                                </span>
+                              </div>
+                            )}
+                            {(adj.difference !== 0 || adj.shipping_difference !== 0) && (
+                              <div className="flex justify-between text-[11px] border-t pt-0.5 mt-0.5">
+                                <span className="font-medium">Total</span>
+                                <span className={`tabular-nums font-bold ${totalUsd >= 0 ? "text-success" : "text-destructive"}`}>
+                                  {totalUsd >= 0 ? "+" : ""}{formatUSD(Math.abs(totalUsd))}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );
