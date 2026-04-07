@@ -569,6 +569,20 @@ export default function Orders() {
               />
             </div>
             )}
+            {/* Agent - admin only */}
+            {isAdmin && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Agent</label>
+              <SearchableSelect
+                value={filterAgent}
+                onValueChange={setFilterAgent}
+                options={agentNames.map(a => ({ value: a, label: a }))}
+                placeholder="Agent"
+                allLabel="All Agents"
+                className="w-full"
+              />
+            </div>
+            )}
             {/* Confirmation */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Confirmation</label>
