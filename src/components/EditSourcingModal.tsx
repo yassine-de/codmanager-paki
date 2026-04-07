@@ -113,12 +113,12 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
 
   const doUpdate = async (productCreated?: boolean) => {
     if (!request) return;
-    const updateData: Record<string, unknown> = {
-      unit_price: unitPrice,
-      shipping_cost: shippingCost,
-      landed_price: landedPrice,
-      seller_price: sellerPrice,
-      quantity,
+    const updateData = {
+      unit_price: unitPrice as number,
+      shipping_cost: shippingCost as number,
+      landed_price: landedPrice as number,
+      seller_price: sellerPrice as number,
+      quantity: quantity as number,
       total_price: totalPrice,
       status,
       notes: notes.trim() || "",
@@ -128,10 +128,8 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       product_weight: productWeight,
       updated_at: new Date().toISOString(),
       seller_seen: false,
+      ...(productCreated !== undefined ? { product_created: productCreated } : {}),
     };
-    if (productCreated !== undefined) {
-      updateData.product_created = productCreated;
-    }
     const { error } = await supabase
       .from("sourcing_requests")
       .update(updateData)
@@ -225,7 +223,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     const newQty = currentQty + n(quantity);
 
     // If sourcing has variants, merge quantities into existing product variants
-    const updateData: Record<string, unknown> = {
+    const updateData: any = {
       quantity: newQty,
       updated_at: new Date().toISOString(),
       seller_seen: false,

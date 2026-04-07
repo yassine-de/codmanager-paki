@@ -11,7 +11,7 @@ const statusFilters = [
   "All", "New", "Confirmed", "No Answer", "Postponed", "Cancelled", "Returned",
 ] as const;
 
-const countries = ["All", "Lebanon", "Iraq", "Libya"] as const;
+const countries = ["All", "Pakistan"] as const;
 
 interface FilterBarProps {
   onFiltersChange?: (filters: {

@@ -229,7 +229,7 @@ export default function Orders() {
     
     const { error } = await supabase
       .from("orders")
-      .update({ [field]: newValue, updated_at: new Date().toISOString() })
+      .update({ [field]: newValue, updated_at: new Date().toISOString() } as any)
       .in("order_id", orderIds);
     
     if (error) {
@@ -912,7 +912,7 @@ export default function Orders() {
           order={editOrder}
           onSave={async (updated) => {
             // Update in DB
-            const dbUpdate: Record<string, any> = {
+            const dbUpdate: any = {
               customer_name: updated.customer,
               customer_phone: updated.phone,
               customer_city: updated.city,

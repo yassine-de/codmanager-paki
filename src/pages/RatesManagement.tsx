@@ -253,7 +253,7 @@ export default function RatesManagement() {
   // Save seller rates
   const saveSellerMutation = useMutation({
     mutationFn: async () => {
-      const payload: Record<string, any> = {
+      const payload: any = {
         dropped_order_rate: sellerRates.dropped_order_rate,
         confirmed_order_rate: sellerRates.confirmed_order_rate,
         shipping_rate_1kg: sellerRates.shipping_rate_1kg,

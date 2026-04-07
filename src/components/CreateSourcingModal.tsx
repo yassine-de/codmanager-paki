@@ -10,10 +10,7 @@ import { Link2, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-const countries = [
-  "Morocco", "Turkey", "China", "UAE", "Saudi Arabia", "Egypt",
-  "France", "Spain", "Germany", "USA", "UK", "India",
-];
+const countries = ["Pakistan"];
 
 interface Props {
   open: boolean;
