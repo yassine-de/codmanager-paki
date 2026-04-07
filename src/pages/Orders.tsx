@@ -362,7 +362,7 @@ export default function Orders() {
     const del = new URLSearchParams(window.location.search).get('delivery');
     return {
       dateRange: undefined as DateRange | undefined,
-      product: 'all', seller: 'all', 
+      product: 'all', seller: 'all', agent: 'all',
       confirmation: conf || 'all',
       delivery: del || 'all', 
       upsell: 'all', warehouse: 'all',
@@ -390,19 +390,19 @@ export default function Orders() {
 
   const applyFilters = useCallback(() => {
     setAppliedFilters({
-      dateRange, product: filterProduct, seller: filterSeller,
+      dateRange, product: filterProduct, seller: filterSeller, agent: filterAgent,
       confirmation: filterConfirmation, delivery: filterDelivery,
       upsell: filterUpsell, warehouse: filterWarehouse,
     });
-  }, [dateRange, filterProduct, filterSeller, filterConfirmation, filterDelivery, filterUpsell, filterWarehouse]);
+  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterUpsell, filterWarehouse]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
-    setFilterProduct('all'); setFilterSeller('all');
+    setFilterProduct('all'); setFilterSeller('all'); setFilterAgent('all');
     setFilterConfirmation('all'); setFilterDelivery('all');
     setFilterUpsell('all'); setFilterWarehouse('all');
     setAppliedFilters({
-      dateRange: undefined, product: 'all', seller: 'all',
+      dateRange: undefined, product: 'all', seller: 'all', agent: 'all',
       confirmation: 'all', delivery: 'all', upsell: 'all', warehouse: 'all',
     });
   }, []);
