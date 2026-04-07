@@ -138,7 +138,7 @@ export default function Products() {
         totalQty: p.quantity || 0,
         delivered: orderStats.delivered,
         shipped: orderStats.shipped,
-        cancelled: orderStats.cancelled,
+        cancelled: orderStats.returned,
         available: availableQty,
         createdAt: p.created_at,
         variants: mappedVariants,
