@@ -110,14 +110,14 @@ export default function ProductDetail() {
   const stats = useMemo(() => {
     if (!product) return null;
     const totalOrders = productOrders.length;
-    const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').reduce((sum, o) => sum + (o.quantity || 1), 0);
+    const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').length;
     const shipped = productOrders.filter(o =>
       ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
-    ).reduce((sum, o) => sum + (o.quantity || 1), 0);
+    ).length;
     const delivered = productOrders.filter(o =>
       o.delivery_status === 'delivered' || o.delivery_status === 'paid'
-    ).reduce((sum, o) => sum + (o.quantity || 1), 0);
-    const cancelled = productOrders.filter(o => o.confirmation_status === 'cancelled').reduce((sum, o) => sum + (o.quantity || 1), 0);
+    ).length;
+    const cancelled = productOrders.filter(o => o.confirmation_status === 'cancelled').length;
     // Total sales = sum of total_amount for confirmed/shipped/delivered orders
     const activeSales = productOrders.filter(o =>
       !['cancelled', 'no_answer', 'wrong_number', 'double'].includes(o.confirmation_status)
@@ -146,16 +146,16 @@ export default function ProductDetail() {
       const date = subDays(new Date(), 29 - i);
       const dayStr = format(date, "yyyy-MM-dd");
       // Orders count by creation date (units)
-      const orders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr).reduce((sum, o) => sum + (o.quantity || 1), 0);
-      // Shipped/delivered count by updated_at (units)
+      const orders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr).length;
+      // Shipped/delivered count by updated_at (orders)
       const shipped = productOrders.filter(o =>
         ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
         && format(new Date(o.updated_at), "yyyy-MM-dd") === dayStr
-      ).reduce((sum, o) => sum + (o.quantity || 1), 0);
+      ).length;
       const delivered = productOrders.filter(o =>
         (o.delivery_status === 'delivered' || o.delivery_status === 'paid')
         && format(new Date(o.delivered_at || o.updated_at), "yyyy-MM-dd") === dayStr
-      ).reduce((sum, o) => sum + (o.quantity || 1), 0);
+      ).length;
       return {
         date: format(date, "dd MMM"),
         shortDate: format(date, "dd"),
