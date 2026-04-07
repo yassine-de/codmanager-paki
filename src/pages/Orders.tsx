@@ -110,7 +110,7 @@ function OrderSparklineCards({ orders }: { orders: Order[] }) {
 
   const cards = [
     { title: "Total Orders", value: totals.total, dataKey: "total", color: "hsl(210,60%,52%)" },
-    { title: "Fulfilled orders over time", value: totals.confirmed, dataKey: "confirmed", color: "hsl(210,60%,52%)" },
+    { title: "Shipped", value: totals.confirmed, dataKey: "confirmed", color: "hsl(210,60%,52%)" },
     { title: "Delivered orders over time", value: totals.delivered, dataKey: "delivered", color: "hsl(155,50%,42%)" },
     { title: "Returns", value: totals.returned, dataKey: "returned", color: "hsl(210,60%,52%)" },
   ];
