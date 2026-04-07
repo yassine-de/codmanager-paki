@@ -273,14 +273,21 @@ export default function Orders() {
         return;
       }
 
-      // Fetch seller names for display
+      // Fetch seller & agent names for display
       const sellerIds = [...new Set((data || []).map(o => o.seller_id))];
+      const agentIdsSet = new Set<string>();
+      (data || []).forEach(o => {
+        if (o.agent_id) agentIdsSet.add(o.agent_id);
+        if (o.original_agent_id) agentIdsSet.add(o.original_agent_id);
+      });
+      const allUserIds = [...new Set([...sellerIds, ...agentIdsSet])];
+
       const { data: profiles } = await supabase
         .from("profiles")
         .select("user_id, name")
-        .in("user_id", sellerIds);
+        .in("user_id", allUserIds);
 
-      const sellerMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
+      const profileMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
 
       const mapped: Order[] = (data || []).map(o => ({
         id: o.order_id,
@@ -300,7 +307,8 @@ export default function Orders() {
         confirmedAt: o.confirmed_at || undefined,
         deliveredAt: o.delivered_at || undefined,
         notes: o.note || undefined,
-        seller: sellerMap.get(o.seller_id) || "Unknown",
+        seller: profileMap.get(o.seller_id) || "Unknown",
+        agentName: o.agent_id ? (profileMap.get(o.agent_id) || undefined) : (o.original_agent_id ? (profileMap.get(o.original_agent_id) || undefined) : undefined),
         upsell: false,
         warehouseState: "in_stock" as const,
         history: [],

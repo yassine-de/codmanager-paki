@@ -33,6 +33,7 @@ export interface Order {
   deliveredAt?: string;
   notes?: string;
   seller: string;
+  agentName?: string;
   upsell: boolean;
   warehouseState: 'in_stock' | 'out_of_stock' | 'reserved';
   history: OrderHistoryEvent[];
