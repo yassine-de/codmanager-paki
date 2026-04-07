@@ -25,7 +25,7 @@ export default function DeliveryAnalytics() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, agent_id, customer_city, created_at, confirmed_at, delivered_at, shipping_status")
+        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, shipping_status")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -66,14 +66,22 @@ export default function DeliveryAnalytics() {
     return filtered;
   }, [orders, sellerFilter, productFilter, dateRange]);
 
-  // Only orders that have been shipped (have a delivery_status)
-  const shippedStatuses = ["shipped", "pending", "delivered"];
+  // Accurate delivery status definitions
+  const inTransitStatuses = ["shipped", "in_transit", "with_courier"];
+  const deliveredStatuses = ["delivered", "paid"];
+  const allShippedStatuses = [...inTransitStatuses, ...deliveredStatuses, "returned"];
 
   const stats = useMemo(() => {
-    const shipped = filteredOrders.filter(o => o.delivery_status && shippedStatuses.includes(o.delivery_status)).length;
-    const delivered = filteredOrders.filter(o => o.delivery_status === "delivered").length;
-    const pending = filteredOrders.filter(o => o.delivery_status === "pending").length;
-    const shippedOnly = filteredOrders.filter(o => o.delivery_status === "shipped").length;
+    // Confirmed = base for delivery rate
+    const confirmed = filteredOrders.filter(o => o.confirmation_status === "confirmed").length;
+    // Shipped = currently in transit (not yet delivered/returned)
+    const inTransit = filteredOrders.filter(o => o.delivery_status && inTransitStatuses.includes(o.delivery_status)).length;
+    // Delivered = successfully delivered
+    const delivered = filteredOrders.filter(o => o.delivery_status && deliveredStatuses.includes(o.delivery_status)).length;
+    // Returned
+    const returned = filteredOrders.filter(o => o.delivery_status === "returned").length;
+    // Total shipped (all that have been sent out)
+    const totalShipped = inTransit + delivered + returned;
 
     // Compute avg delivery time
     const deliveryTimes = filteredOrders
@@ -85,55 +93,56 @@ export default function DeliveryAnalytics() {
     const avgDeliveryTime = deliveryTimes.length > 0 ? (deliveryTimes.reduce((a, b) => a + b, 0) / deliveryTimes.length).toFixed(1) : '—';
 
     return {
-      shipped,
+      totalShipped,
+      inTransit,
+      inTransitRate: totalShipped > 0 ? Math.round((inTransit / totalShipped) * 100) : 0,
       delivered,
-      deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
-      pending,
-      pendingRate: shipped > 0 ? Math.round((pending / shipped) * 100) : 0,
-      shippedOnly,
-      shippedOnlyRate: shipped > 0 ? Math.round((shippedOnly / shipped) * 100) : 0,
+      deliveryRate: confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0,
+      returned,
+      returnedRate: totalShipped > 0 ? Math.round((returned / totalShipped) * 100) : 0,
+      confirmed,
       avgDeliveryTime,
     };
   }, [filteredOrders]);
 
-  // Delivery by confirmation agent
+  // Delivery by confirmation agent — use original_agent_id as fallback
   const byConfAgent = useMemo(() => {
-    const map: Record<string, { shipped: number; delivered: number }> = {};
+    const map: Record<string, { confirmed: number; delivered: number }> = {};
     filteredOrders.forEach(o => {
-      const agentId = o.agent_id;
+      const agentId = o.agent_id || o.original_agent_id;
       if (!agentId) return;
-      if (!map[agentId]) map[agentId] = { shipped: 0, delivered: 0 };
-      if (o.delivery_status && shippedStatuses.includes(o.delivery_status)) map[agentId].shipped++;
-      if (o.delivery_status === "delivered") map[agentId].delivered++;
+      if (!map[agentId]) map[agentId] = { confirmed: 0, delivered: 0 };
+      if (o.confirmation_status === "confirmed") map[agentId].confirmed++;
+      if (o.delivery_status && deliveredStatuses.includes(o.delivery_status)) map[agentId].delivered++;
     });
     return Object.entries(map)
-      .map(([id, d]) => ({ name: profileNameMap[id] || id.slice(0, 8), ...d, rate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0 }))
+      .map(([id, d]) => ({ name: profileNameMap[id] || id.slice(0, 8), confirmed: d.confirmed, delivered: d.delivered, rate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0 }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders, profileNameMap]);
 
-  // Delivery by product
+  // Delivery by product — rate = delivered / confirmed
   const byProduct = useMemo(() => {
-    const map: Record<string, { shipped: number; delivered: number }> = {};
+    const map: Record<string, { confirmed: number; delivered: number }> = {};
     filteredOrders.forEach(o => {
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { shipped: 0, delivered: 0 };
-      if (o.delivery_status && shippedStatuses.includes(o.delivery_status)) map[name].shipped++;
-      if (o.delivery_status === "delivered") map[name].delivered++;
+      if (!map[name]) map[name] = { confirmed: 0, delivered: 0 };
+      if (o.confirmation_status === "confirmed") map[name].confirmed++;
+      if (o.delivery_status && deliveredStatuses.includes(o.delivery_status)) map[name].delivered++;
     });
     return Object.entries(map)
-      .map(([name, d]) => ({ name, ...d, rate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0 }))
+      .map(([name, d]) => ({ name, confirmed: d.confirmed, delivered: d.delivered, rate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0 }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
 
   // Delivery by city
   const byCity = useMemo(() => {
-    const map: Record<string, { shipped: number; delivered: number; pending: number }> = {};
+    const map: Record<string, { shipped: number; delivered: number; inTransit: number }> = {};
     filteredOrders.forEach(o => {
       const city = o.customer_city || "Unknown";
-      if (!map[city]) map[city] = { shipped: 0, delivered: 0, pending: 0 };
-      if (o.delivery_status && shippedStatuses.includes(o.delivery_status)) map[city].shipped++;
-      if (o.delivery_status === "delivered") map[city].delivered++;
-      if (o.delivery_status === "pending" || o.delivery_status === "shipped") map[city].pending++;
+      if (!map[city]) map[city] = { shipped: 0, delivered: 0, inTransit: 0 };
+      if (o.delivery_status && allShippedStatuses.includes(o.delivery_status)) map[city].shipped++;
+      if (o.delivery_status && deliveredStatuses.includes(o.delivery_status)) map[city].delivered++;
+      if (o.delivery_status && inTransitStatuses.includes(o.delivery_status)) map[city].inTransit++;
     });
     return Object.entries(map)
       .map(([city, d]) => {
@@ -176,9 +185,9 @@ export default function DeliveryAnalytics() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPICard title="Shipped Orders" value={stats.shipped} icon={Package} iconBg="bg-info/10" iconColor="text-info" delay={0} />
-        <KPICard title="Delivered" value={stats.delivered} subtitle={`${stats.deliveryRate}% rate`} icon={CheckCircle2} iconBg="bg-success/10" iconColor="text-success" delay={50} />
-        <KPICard title="Pending" value={stats.pending} subtitle={`${stats.pendingRate}% of shipped`} icon={Clock} iconBg="bg-warning/10" iconColor="text-warning" delay={100} />
+        <KPICard title="Total Shipped" value={stats.totalShipped} icon={Package} iconBg="bg-info/10" iconColor="text-info" delay={0} />
+        <KPICard title="Delivered" value={stats.delivered} subtitle={`${stats.deliveryRate}% of confirmed`} icon={CheckCircle2} iconBg="bg-success/10" iconColor="text-success" delay={50} />
+        <KPICard title="In Transit" value={stats.inTransit} subtitle={`${stats.inTransitRate}% of shipped`} icon={Truck} iconBg="bg-warning/10" iconColor="text-warning" delay={100} />
         <KPICard title="Avg Delivery Time" value={`${stats.avgDeliveryTime} days`} icon={Clock} iconBg="bg-muted" iconColor="text-muted-foreground" delay={150} />
       </div>
 
@@ -235,7 +244,7 @@ export default function DeliveryAnalytics() {
                 <text x={cx} y={cy + 22} textAnchor="middle" dominantBaseline="middle"
                   className="text-[10px] font-bold" fill={statusColor}>{status}</text>
                 <text x={cx - 70} y={cy + 48} textAnchor="middle" className="text-[10px] font-medium" fill="hsl(30,6%,55%)">
-                  {stats.shipped} Shipped
+                  {stats.confirmed} Confirmed
                 </text>
                 <text x={cx} y={cy + 48} textAnchor="middle" className="text-[10px] font-medium" fill="hsl(155,50%,42%)">
                   {stats.delivered} Delivered
@@ -256,14 +265,14 @@ export default function DeliveryAnalytics() {
                 <Pie
                   data={[
                     { name: 'Delivered', value: stats.delivered },
-                    { name: 'Pending', value: stats.pending },
-                    { name: 'Shipped', value: stats.shippedOnly },
+                    { name: 'In Transit', value: stats.inTransit },
+                    { name: 'Returned', value: stats.returned },
                   ].filter(d => d.value > 0)}
                   cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value"
                 >
                   <Cell fill="hsl(155, 50%, 42%)" />
-                  <Cell fill="hsl(38, 90%, 55%)" />
                   <Cell fill="hsl(210, 60%, 52%)" />
+                  <Cell fill="hsl(0, 65%, 52%)" />
                 </Pie>
                 <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
               </PieChart>
@@ -272,8 +281,8 @@ export default function DeliveryAnalytics() {
           <div className="w-full md:w-1/2 space-y-2.5">
             {[
               { name: 'Delivered', value: stats.delivered, color: 'hsl(155, 50%, 42%)', pct: stats.deliveryRate },
-              { name: 'Pending', value: stats.pending, color: 'hsl(38, 90%, 55%)', pct: stats.pendingRate },
-              { name: 'Shipped', value: stats.shippedOnly, color: 'hsl(210, 60%, 52%)', pct: stats.shippedOnlyRate },
+              { name: 'In Transit', value: stats.inTransit, color: 'hsl(210, 60%, 52%)', pct: stats.inTransitRate },
+              { name: 'Returned', value: stats.returned, color: 'hsl(0, 65%, 52%)', pct: stats.returnedRate },
             ].filter(d => d.value > 0).map((item) => (
               <div key={item.name} className="flex items-center gap-3">
                 <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
@@ -299,7 +308,7 @@ export default function DeliveryAnalytics() {
                 <tr className="border-b text-muted-foreground text-xs">
                   <th className="text-left py-2 pr-4">Rank</th>
                   <th className="text-left py-2 pr-4">Agent</th>
-                  <th className="text-right py-2 pr-4">Shipped</th>
+                  <th className="text-right py-2 pr-4">Confirmed</th>
                   <th className="text-right py-2 pr-4">Delivered</th>
                   <th className="text-right py-2">Del. Rate</th>
                 </tr>
@@ -313,7 +322,7 @@ export default function DeliveryAnalytics() {
                       )}>{i + 1}</span>
                     </td>
                     <td className="py-2.5 pr-4 font-medium">{a.name}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums">{a.shipped}</td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">{a.confirmed}</td>
                     <td className="py-2.5 pr-4 text-right tabular-nums text-success">{a.delivered}</td>
                     <td className="py-2.5 text-right">
                       <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", rateBadge(a.rate))}>{a.rate}%</span>
@@ -357,7 +366,7 @@ export default function DeliveryAnalytics() {
                 <tr className="border-b text-muted-foreground text-xs">
                   <th className="text-left py-2 pr-4">City</th>
                   <th className="text-right py-2 pr-4">Shipped</th>
-                  <th className="text-right py-2 pr-4">Pending</th>
+                  <th className="text-right py-2 pr-4">In Transit</th>
                   <th className="text-right py-2 pr-4">Delivered</th>
                   <th className="text-right py-2 pr-4">Rate</th>
                   <th className="text-right py-2 pr-4">Avg Time</th>
@@ -371,7 +380,7 @@ export default function DeliveryAnalytics() {
                       onClick={() => setExpandedCity(expandedCity === c.city ? null : c.city)}>
                       <td className="py-2.5 pr-4 font-medium">{c.city}</td>
                       <td className="py-2.5 pr-4 text-right tabular-nums">{c.shipped}</td>
-                      <td className="py-2.5 pr-4 text-right tabular-nums text-info">{c.pending}</td>
+                      <td className="py-2.5 pr-4 text-right tabular-nums text-info">{c.inTransit}</td>
                       <td className="py-2.5 pr-4 text-right tabular-nums text-success">{c.delivered}</td>
                       <td className="py-2.5 pr-4 text-right">
                         <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold", rateBadge(c.rate))}>{c.rate}%</span>
@@ -397,7 +406,7 @@ export default function DeliveryAnalytics() {
                             <div className="bg-card rounded-lg border p-3">
                               <p className="text-muted-foreground font-medium mb-1">Avg Delivery</p>
                               <p className="text-lg font-bold">{c.avgTime} days</p>
-                              <p className="text-muted-foreground mt-0.5">{c.pending} still pending</p>
+                              <p className="text-muted-foreground mt-0.5">{c.inTransit} in transit</p>
                             </div>
                           </div>
                         </td>
