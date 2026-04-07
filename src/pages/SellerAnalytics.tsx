@@ -129,7 +129,7 @@ export default function SellerAnalytics() {
       const id = o.seller_id;
       if (!map[id]) map[id] = { revenue: 0, orders: 0, delivered: 0 };
       map[id].orders++;
-      if (o.delivery_status === "delivered") {
+      if (o.delivery_status && deliveredStatuses.includes(o.delivery_status)) {
         map[id].revenue += o.price * o.quantity;
         map[id].delivered++;
       }
