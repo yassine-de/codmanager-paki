@@ -272,6 +272,10 @@ export default function ProductDetail() {
             />
             <div
               className="h-full transition-all"
+              style={{ width: `${returnedPercent}%`, backgroundColor: "hsl(0, 65%, 52%)" }}
+            />
+            <div
+              className="h-full transition-all"
               style={{ width: `${inventoryPercent}%`, backgroundColor: "hsl(210, 60%, 52%)" }}
             />
           </div>
