@@ -56,11 +56,16 @@ export default function SellerAnalytics() {
     return filtered;
   }, [orders, sellerFilter, dateRange]);
 
+  const deliveredStatuses = ["delivered", "paid"];
+  const shippedStatuses = ["shipped", "in_transit", "with_courier", "delivered", "paid", "returned"];
+
   const stats = useMemo(() => {
     const total = filteredOrders.length;
     const confirmed = filteredOrders.filter(o => o.confirmation_status === "confirmed").length;
-    const shipped = filteredOrders.filter(o => o.delivery_status && ["shipped", "pending", "delivered"].includes(o.delivery_status)).length;
-    const delivered = filteredOrders.filter(o => o.delivery_status === "delivered").length;
+    // Shipped = all orders that left warehouse (in transit + delivered + returned)
+    const shipped = filteredOrders.filter(o => o.delivery_status && shippedStatuses.includes(o.delivery_status)).length;
+    // Delivered = successfully received by customer
+    const delivered = filteredOrders.filter(o => o.delivery_status && deliveredStatuses.includes(o.delivery_status)).length;
     return { total, confirmed, shipped, delivered };
   }, [filteredOrders]);
 
