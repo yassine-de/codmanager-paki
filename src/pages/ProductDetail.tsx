@@ -110,14 +110,14 @@ export default function ProductDetail() {
   const stats = useMemo(() => {
     if (!product) return null;
     const totalOrders = productOrders.length;
-    const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').length;
+    const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').reduce((sum, o) => sum + (o.quantity || 1), 0);
     const shipped = productOrders.filter(o =>
       ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
-    ).length;
+    ).reduce((sum, o) => sum + (o.quantity || 1), 0);
     const delivered = productOrders.filter(o =>
       o.delivery_status === 'delivered' || o.delivery_status === 'paid'
-    ).length;
-    const cancelled = productOrders.filter(o => o.confirmation_status === 'cancelled').length;
+    ).reduce((sum, o) => sum + (o.quantity || 1), 0);
+    const cancelled = productOrders.filter(o => o.confirmation_status === 'cancelled').reduce((sum, o) => sum + (o.quantity || 1), 0);
     // Total sales = sum of total_amount for confirmed/shipped/delivered orders
     const activeSales = productOrders.filter(o =>
       !['cancelled', 'no_answer', 'wrong_number', 'double'].includes(o.confirmation_status)
@@ -145,17 +145,17 @@ export default function ProductDetail() {
     return Array.from({ length: 30 }, (_, i) => {
       const date = subDays(new Date(), 29 - i);
       const dayStr = format(date, "yyyy-MM-dd");
-      // Orders count by creation date
-      const orders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr).length;
-      // Shipped/delivered count by updated_at (when the status actually changed)
+      // Orders count by creation date (units)
+      const orders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr).reduce((sum, o) => sum + (o.quantity || 1), 0);
+      // Shipped/delivered count by updated_at (units)
       const shipped = productOrders.filter(o =>
         ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
         && format(new Date(o.updated_at), "yyyy-MM-dd") === dayStr
-      ).length;
+      ).reduce((sum, o) => sum + (o.quantity || 1), 0);
       const delivered = productOrders.filter(o =>
         (o.delivery_status === 'delivered' || o.delivery_status === 'paid')
         && format(new Date(o.delivered_at || o.updated_at), "yyyy-MM-dd") === dayStr
-      ).length;
+      ).reduce((sum, o) => sum + (o.quantity || 1), 0);
       return {
         date: format(date, "dd MMM"),
         shortDate: format(date, "dd"),
@@ -179,12 +179,12 @@ export default function ProductDetail() {
     );
   }
 
-  // Compute real shipped/delivered/returned counts from orders
-  const realDelivered = productOrders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
+  // Compute real shipped/delivered/returned counts from orders (by units/quantity)
+  const realDelivered = productOrders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').reduce((sum, o) => sum + (o.quantity || 1), 0);
   const realShipped = productOrders.filter(o =>
     ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
-  ).length;
-  const realReturned = productOrders.filter(o => o.delivery_status === 'returned').length;
+  ).reduce((sum, o) => sum + (o.quantity || 1), 0);
+  const realReturned = productOrders.filter(o => o.delivery_status === 'returned').reduce((sum, o) => sum + (o.quantity || 1), 0);
   const realAvailable = Math.max(0, product.totalQty - realShipped - realDelivered + realReturned);
 
   const inventoryData = [
