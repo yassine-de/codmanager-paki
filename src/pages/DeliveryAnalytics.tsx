@@ -283,12 +283,6 @@ export default function DeliveryAnalytics() {
                   className="text-[11px] font-semibold uppercase tracking-[0.08em]" fill="hsl(30,6%,55%)">Delivery Rate</text>
                 <text x={cx} y={cy + 22} textAnchor="middle" dominantBaseline="middle"
                   className="text-[10px] font-bold" fill={statusColor}>{status}</text>
-                <text x={cx - 70} y={cy + 48} textAnchor="middle" className="text-[10px] font-medium" fill="hsl(30,6%,55%)">
-                  {stats.confirmed} Confirmed
-                </text>
-                <text x={cx} y={cy + 48} textAnchor="middle" className="text-[10px] font-medium" fill="hsl(155,50%,42%)">
-                  {stats.delivered} Delivered
-                </text>
               </svg>
             );
           })()}
