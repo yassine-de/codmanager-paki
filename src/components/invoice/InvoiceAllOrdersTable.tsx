@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { formatPKR } from "@/lib/currency";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Copy, Check, AlertTriangle } from "lucide-react";
+import { Search, Copy, Check, AlertTriangle, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
@@ -23,10 +23,12 @@ interface Order {
   has_adjustment: boolean;
   adjustment_invoice_id?: string | null;
   adjustment_invoice_number?: string | null;
+  was_delivered?: boolean;
 }
 
 interface Props {
   orders: Order[];
+  invoiceStatus: string;
 }
 
 const statusColors: Record<string, string> = {
@@ -46,13 +48,27 @@ function getDisplayStatus(order: Order) {
   return order.confirmation_status;
 }
 
-export function InvoiceAllOrdersTable({ orders }: Props) {
+function shouldShowOrder(order: Order, invoiceStatus: string): boolean {
+  // OPEN invoice: only show delivered orders
+  if (invoiceStatus === "open") {
+    return order.delivery_status === "delivered";
+  }
+  // CLOSED/PAID invoice: show delivered OR was previously delivered
+  return order.delivery_status === "delivered" || order.was_delivered === true;
+}
+
+export function InvoiceAllOrdersTable({ orders, invoiceStatus }: Props) {
   const [search, setSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
 
+  // Filter orders based on invoice status visibility rules
+  const visibleOrders = useMemo(() => {
+    return orders.filter(o => shouldShowOrder(o, invoiceStatus));
+  }, [orders, invoiceStatus]);
+
   const filtered = useMemo(() => {
-    return orders.filter(o => {
+    return visibleOrders.filter(o => {
       if (search) {
         const s = search.toLowerCase();
         if (!o.order_id.toLowerCase().includes(s) && !o.customer_phone.includes(s) && !o.customer_name.toLowerCase().includes(s)) return false;
@@ -63,12 +79,12 @@ export function InvoiceAllOrdersTable({ orders }: Props) {
       }
       return true;
     });
-  }, [orders, search, statusFilter]);
+  }, [visibleOrders, search, statusFilter]);
 
   const statuses = useMemo(() => {
-    const s = new Set(orders.map(o => getDisplayStatus(o)));
+    const s = new Set(visibleOrders.map(o => getDisplayStatus(o)));
     return Array.from(s).sort();
-  }, [orders]);
+  }, [visibleOrders]);
 
   return (
     <div>
@@ -116,6 +132,7 @@ export function InvoiceAllOrdersTable({ orders }: Props) {
               filtered.map((o, i) => {
                 const displayStatus = getDisplayStatus(o);
                 const amountPkr = o.price * o.quantity;
+                const isReturnedAfterDelivery = o.was_delivered && o.delivery_status !== "delivered";
                 return (
                   <tr
                     key={o.id}
@@ -136,15 +153,6 @@ export function InvoiceAllOrdersTable({ orders }: Props) {
                         >
                           {copiedId === o.id ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
                         </button>
-                        {o.has_adjustment && (
-                          <span
-                            title={o.adjustment_invoice_number ? `Adjusted in ${o.adjustment_invoice_number}` : "Has adjustment"}
-                            className="inline-flex items-center gap-0.5 text-[9px] font-medium text-warning bg-warning/10 px-1 py-0.5 rounded"
-                          >
-                            <AlertTriangle className="w-3 h-3" />
-                            {o.adjustment_invoice_number ? o.adjustment_invoice_number : "Adj"}
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-3 py-1.5">
@@ -154,9 +162,26 @@ export function InvoiceAllOrdersTable({ orders }: Props) {
                     <td className="px-3 py-1.5">{o.product_name}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{o.quantity}</td>
                     <td className="px-3 py-1.5 text-center">
-                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusColors[displayStatus] || statusColors.none}`}>
-                        {displayStatus}
-                      </Badge>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusColors[displayStatus] || statusColors.none}`}>
+                          {displayStatus}
+                        </Badge>
+                        {isReturnedAfterDelivery && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-success">
+                            <CheckCircle className="w-2.5 h-2.5" />
+                            Was Delivered
+                          </span>
+                        )}
+                        {o.has_adjustment && (
+                          <span
+                            title={o.adjustment_invoice_number ? `Adjusted in ${o.adjustment_invoice_number}` : "Has adjustment"}
+                            className="inline-flex items-center gap-0.5 text-[9px] font-medium text-warning bg-warning/10 px-1 py-0.5 rounded"
+                          >
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            {o.adjustment_invoice_number || "Adj"}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{formatPKR(amountPkr)}</td>
                   </tr>
