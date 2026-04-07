@@ -545,14 +545,33 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">Status</Label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map(s => (
-                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {(() => {
+                  const shippingStatuses = ["ordered", "shipped", "received"];
+                  const isSellerValidated = request?.seller_validated === true;
+                  const hasSellerPrice = n(sellerPrice) > 0;
+                  const canSelectShipping = isSellerValidated && hasSellerPrice;
+                  return (
+                    <Select value={status} onValueChange={setStatus}>
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map(s => (
+                          <SelectItem
+                            key={s.value}
+                            value={s.value}
+                            disabled={shippingStatuses.includes(s.value) && !canSelectShipping}
+                          >
+                            {s.label}
+                            {shippingStatuses.includes(s.value) && !canSelectShipping && (
+                              <span className="text-[10px] text-muted-foreground ml-1">
+                                ({!isSellerValidated ? "needs validation" : "needs price"})
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  );
+                })()}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Product Weight {canValidateProduct && <span className="text-destructive">*</span>}</Label>
