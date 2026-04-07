@@ -34,6 +34,7 @@ export interface InvoiceSummaryResponse {
     dropped_count: number;
     cross_shipped_count: number;
     cross_delivered_count: number;
+    cross_confirmed_count: number;
   };
   call_center_breakdown: {
     confirmed_count: number;
