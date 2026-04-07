@@ -412,6 +412,7 @@ export default function Orders() {
     if (appliedFilters.dateRange?.from) count++;
     if (appliedFilters.product !== 'all') count++;
     if (appliedFilters.seller !== 'all') count++;
+    if (appliedFilters.agent !== 'all') count++;
     if (appliedFilters.confirmation !== 'all') count++;
     if (appliedFilters.delivery !== 'all') count++;
     if (appliedFilters.upsell !== 'all') count++;
@@ -430,6 +431,7 @@ export default function Orders() {
         }
         if (f.product !== 'all' && !o.products.some(p => p.name === f.product)) return false;
         if (f.seller !== 'all' && o.seller !== f.seller) return false;
+        if (f.agent !== 'all' && o.agentName !== f.agent) return false;
         if (f.confirmation !== 'all' && o.confirmationStatus !== f.confirmation) return false;
         if (f.delivery !== 'all' && o.deliveryStatus !== f.delivery) return false;
         if (f.upsell !== 'all') {
