@@ -111,7 +111,7 @@ export default function Products() {
   const products = useMemo(() => {
     const dbMapped: Product[] = dbProducts.map(p => {
       const orderStats = productOrderStatsMap[`${p.seller_id}::${p.name}`] || { delivered: 0, shipped: 0, returned: 0 };
-      const availableQty = Math.max(0, (p.quantity || 0) - orderStats.delivered - orderStats.shipped);
+      const availableQty = Math.max(0, (p.quantity || 0) - orderStats.delivered - orderStats.shipped + orderStats.returned);
 
       // Map sourcing-style variants to product variants
       const rawVariants = (p as any).variants as any[] | null;
