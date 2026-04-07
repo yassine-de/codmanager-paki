@@ -103,6 +103,7 @@ export default function ProductDetail() {
       return data || [];
     },
     enabled: !!dbProduct?.name && !!dbProduct?.seller_id,
+    refetchInterval: 10000, // refresh every 10s to catch status changes
   });
 
   // Compute real stats from orders
