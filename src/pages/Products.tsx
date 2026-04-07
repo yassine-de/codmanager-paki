@@ -35,6 +35,56 @@ export default function Products() {
     },
   });
 
+  // Fetch order status rows so delivered/shipped/available match the real orders system
+  const { data: productOrderRows = [] } = useQuery({
+    queryKey: ["product-order-stats", authUser?.role],
+    queryFn: async () => {
+      const pageSize = 1000;
+      const allRows: Array<{ seller_id: string; product_name: string; delivery_status: string | null }> = [];
+      let from = 0;
+
+      while (true) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("seller_id, product_name, delivery_status")
+          .in("delivery_status", ["shipped", "in_transit", "with_courier", "delivered", "paid", "returned"])
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        allRows.push(...data);
+
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+
+      return allRows;
+    },
+    refetchInterval: 10000,
+  });
+
+  const productOrderStatsMap = useMemo(() => {
+    const map: Record<string, { delivered: number; shipped: number; returned: number }> = {};
+
+    productOrderRows.forEach((row) => {
+      const key = `${row.seller_id}::${row.product_name}`;
+      const current = map[key] || { delivered: 0, shipped: 0, returned: 0 };
+
+      if (row.delivery_status === "delivered" || row.delivery_status === "paid") {
+        current.delivered += 1;
+      } else if (["shipped", "in_transit", "with_courier"].includes(row.delivery_status || "")) {
+        current.shipped += 1;
+      } else if (row.delivery_status === "returned") {
+        current.returned += 1;
+      }
+
+      map[key] = current;
+    });
+
+    return map;
+  }, [productOrderRows]);
+
   // Fetch seller profiles for DB products (admin only needs this)
   const dbSellerIds = useMemo(() => [...new Set(dbProducts.map(p => p.seller_id))], [dbProducts]);
   const { data: dbSellerProfiles = [] } = useQuery({
@@ -60,6 +110,9 @@ export default function Products() {
   // Merge: admin sees mock + DB, seller sees only their DB products
   const products = useMemo(() => {
     const dbMapped: Product[] = dbProducts.map(p => {
+      const orderStats = productOrderStatsMap[`${p.seller_id}::${p.name}`] || { delivered: 0, shipped: 0, returned: 0 };
+      const availableQty = Math.max(0, (p.quantity || 0) - orderStats.delivered - orderStats.shipped);
+
       // Map sourcing-style variants to product variants
       const rawVariants = (p as any).variants as any[] | null;
       const mappedVariants: Product["variants"] = rawVariants
@@ -80,9 +133,9 @@ export default function Products() {
         image: p.image_url || "",
         price: Number((p as any).landed_price) || 0,
         totalQty: p.quantity || 0,
-        delivered: 0,
-        shipped: 0,
-        available: p.quantity || 0,
+        delivered: orderStats.delivered,
+        shipped: orderStats.shipped,
+        available: availableQty,
         createdAt: p.created_at,
         variants: mappedVariants,
         storeLink: p.product_url || "",
@@ -97,7 +150,7 @@ export default function Products() {
     });
     // Sellers only see DB products, admins see both
     return isAdmin ? [...dbMapped, ...localProducts] : dbMapped;
-  }, [dbProducts, dbSellerNameMap, localProducts, isAdmin, authUser]);
+  }, [dbProducts, dbSellerNameMap, localProducts, isAdmin, authUser, productOrderStatsMap]);
 
   // Mark unseen products as seen for sellers
   useEffect(() => {
