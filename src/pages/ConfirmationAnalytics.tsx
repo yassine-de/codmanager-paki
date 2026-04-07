@@ -106,10 +106,10 @@ export default function ConfirmationAnalytics() {
     return [...names].map(n => ({ value: n, label: n })).sort((a, b) => a.label.localeCompare(b.label));
   }, [orders]);
 
-  // Filter orders
+  // Filter orders — use original_agent_id as fallback for released orders
   const filteredOrders = useMemo(() => {
     let filtered = [...orders];
-    if (agentFilter !== "all") filtered = filtered.filter(o => o.agent_id === agentFilter);
+    if (agentFilter !== "all") filtered = filtered.filter(o => o.agent_id === agentFilter || o.original_agent_id === agentFilter);
     if (sellerFilter !== "all") filtered = filtered.filter(o => o.seller_id === sellerFilter);
     if (productFilter !== "all") filtered = filtered.filter(o => o.product_name === productFilter);
     if (dateRange?.from) filtered = filtered.filter(o => new Date(o.created_at) >= dateRange.from!);
@@ -122,21 +122,17 @@ export default function ConfirmationAnalytics() {
     const total = filteredOrders.length;
     const confirmed = filteredOrders.filter(o => o.confirmation_status === "confirmed").length;
     const cancelled = filteredOrders.filter(o => o.confirmation_status === "cancelled").length;
-    const postponed = filteredOrders.filter(o => o.postpone_date !== null).length;
-    const delivered = filteredOrders.filter(o => o.delivery_status === "delivered").length;
-    const shipped = filteredOrders.filter(o => o.delivery_status && ["shipped", "pending", "delivered"].includes(o.delivery_status)).length;
+    const postponed = filteredOrders.filter(o => o.confirmation_status === "postponed" || o.postpone_date !== null).length;
+    const delivered = filteredOrders.filter(o => o.delivery_status === "delivered" || o.delivery_status === "paid").length;
 
     // Build set of filtered order_ids for cross-referencing
     const filteredOrderIds = new Set(filteredOrders.map(o => o.order_id));
 
     // Treated = each status change action from order_history (not unique orders)
-    // Count every confirmation_status change entry that matches current filters
     const treatedActions = orderHistory.filter(h => {
       if (h.field_changed !== "confirmation_status") return false;
       if (!filteredOrderIds.has(h.order_id)) return false;
-      // Filter by agent if set
       if (agentFilter !== "all" && h.changed_by !== agentFilter) return false;
-      // Filter by date range
       if (dateRange?.from && new Date(h.created_at) < dateRange.from) return false;
       if (dateRange?.to && new Date(h.created_at) > dateRange.to) return false;
       return true;
@@ -149,6 +145,9 @@ export default function ConfirmationAnalytics() {
     // Confirmation rate from claimed orders
     const confirmationRate = claimed > 0 ? Math.round((confirmed / claimed) * 100) : 0;
 
+    // Delivery rate = delivered / confirmed (not shipped)
+    const deliveryRate = confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0;
+
     return {
       total,
       confirmed,
@@ -160,7 +159,7 @@ export default function ConfirmationAnalytics() {
       postponed,
       postponedRate: claimed > 0 ? Math.round((postponed / claimed) * 100) : 0,
       delivered,
-      deliveredRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
+      deliveredRate: deliveryRate,
     };
   }, [filteredOrders, orderHistory, agentFilter, dateRange]);
 
@@ -237,32 +236,33 @@ export default function ConfirmationAnalytics() {
     };
   }, [orderHistory, filteredOrders]);
 
-  // Agent scores — delivery tracked by the agent who CONFIRMED the order
+  // Agent scores — use original_agent_id as fallback for attribution
   const agentScores = useMemo(() => {
     // Build a map: order_id -> agent who confirmed it (from order_history)
     const confirmedByAgent: Record<string, string> = {};
     orderHistory.forEach(h => {
       if (h.field_changed === "confirmation_status" && h.new_value === "confirmed" && !confirmedByAgent[h.order_id]) {
-        // The agent who made the change — find from orders
         const order = orders.find(o => o.order_id === h.order_id);
-        if (order?.agent_id) confirmedByAgent[h.order_id] = order.agent_id;
+        const agentId = order?.agent_id || order?.original_agent_id;
+        if (agentId) confirmedByAgent[h.order_id] = agentId;
       }
     });
 
     const map: Record<string, { total: number; answered: number; confirmed: number; delivered: number }> = {};
     orders.forEach(o => {
-      const agentId = o.agent_id;
-      if (!agentId) return;
+      // Use original_agent_id as fallback for released orders
+      const agentId = o.agent_id || o.original_agent_id;
+      if (!agentId || o.confirmation_status === "new") return;
       if (!map[agentId]) map[agentId] = { total: 0, answered: 0, confirmed: 0, delivered: 0 };
       map[agentId].total++;
-      if (["confirmed", "cancelled", "reported"].includes(o.confirmation_status) || o.postpone_date !== null) map[agentId].answered++;
+      if (["confirmed", "cancelled", "wrong_number", "reported"].includes(o.confirmation_status) || o.confirmation_status === "postponed" || o.postpone_date !== null) map[agentId].answered++;
       if (o.confirmation_status === "confirmed") map[agentId].confirmed++;
     });
 
     // Count delivered orders per confirming agent
     orders.forEach(o => {
-      if (o.delivery_status === "delivered") {
-        const confirmingAgent = confirmedByAgent[o.order_id] || o.agent_id;
+      if (o.delivery_status === "delivered" || o.delivery_status === "paid") {
+        const confirmingAgent = confirmedByAgent[o.order_id] || o.agent_id || o.original_agent_id;
         if (confirmingAgent && map[confirmingAgent]) {
           map[confirmingAgent].delivered++;
         }
@@ -296,31 +296,33 @@ export default function ConfirmationAnalytics() {
       .sort((a, b) => b.count - a.count);
   }, [filteredOrders]);
 
-  // Confirmation rate by product
+  // Confirmation rate by product — based on claimed orders (not total)
   const confirmByProduct = useMemo(() => {
-    const map: Record<string, { total: number; confirmed: number }> = {};
+    const map: Record<string, { claimed: number; confirmed: number }> = {};
     filteredOrders.forEach(o => {
+      if (o.confirmation_status === "new") return; // skip unclaimed
+      if (!(o.agent_id || o.original_agent_id)) return;
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { total: 0, confirmed: 0 };
-      map[name].total++;
+      if (!map[name]) map[name] = { claimed: 0, confirmed: 0 };
+      map[name].claimed++;
       if (o.confirmation_status === "confirmed") map[name].confirmed++;
     });
     return Object.entries(map)
-      .map(([name, d]) => ({ name, rate: d.total > 0 ? Math.round((d.confirmed / d.total) * 100) : 0, total: d.total }))
+      .map(([name, d]) => ({ name, rate: d.claimed > 0 ? Math.round((d.confirmed / d.claimed) * 100) : 0, total: d.claimed }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
 
-  // Delivery rate by product
+  // Delivery rate by product — delivered / confirmed
   const deliveryByProduct = useMemo(() => {
-    const map: Record<string, { shipped: number; delivered: number }> = {};
+    const map: Record<string, { confirmed: number; delivered: number }> = {};
     filteredOrders.forEach(o => {
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { shipped: 0, delivered: 0 };
-      if (o.delivery_status && ["shipped", "pending", "delivered"].includes(o.delivery_status)) map[name].shipped++;
-      if (o.delivery_status === "delivered") map[name].delivered++;
+      if (!map[name]) map[name] = { confirmed: 0, delivered: 0 };
+      if (o.confirmation_status === "confirmed") map[name].confirmed++;
+      if (o.delivery_status === "delivered" || o.delivery_status === "paid") map[name].delivered++;
     });
     return Object.entries(map)
-      .map(([name, d]) => ({ name, rate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0, shipped: d.shipped }))
+      .map(([name, d]) => ({ name, rate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0, shipped: d.confirmed }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
 
