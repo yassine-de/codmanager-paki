@@ -467,6 +467,11 @@ export default function Products() {
                           </span>
                         </td>
                         <td className="py-2 px-3 text-center">
+                          <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20">
+                            {product.cancelled}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-center">
                           <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${
                             product.available > 0
                               ? "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20"
