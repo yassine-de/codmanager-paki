@@ -138,20 +138,29 @@ export default function ProductDetail() {
   }, [product, productOrders]);
 
   // Compute real daily data from orders (last 30 days)
+  // Orders use created_at, shipped/delivered use updated_at
   const dailyData = useMemo(() => {
     if (!product) return [];
     return Array.from({ length: 30 }, (_, i) => {
       const date = subDays(new Date(), 29 - i);
       const dayStr = format(date, "yyyy-MM-dd");
-      const dayOrders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr);
-      const shipped = dayOrders.filter(o => ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')).length;
-      const delivered = dayOrders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
+      // Orders count by creation date
+      const orders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr).length;
+      // Shipped/delivered count by updated_at (when the status actually changed)
+      const shipped = productOrders.filter(o =>
+        ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
+        && format(new Date(o.updated_at), "yyyy-MM-dd") === dayStr
+      ).length;
+      const delivered = productOrders.filter(o =>
+        (o.delivery_status === 'delivered' || o.delivery_status === 'paid')
+        && format(new Date(o.delivered_at || o.updated_at), "yyyy-MM-dd") === dayStr
+      ).length;
       return {
         date: format(date, "dd MMM"),
         shortDate: format(date, "dd"),
         shipped,
         delivered,
-        orders: dayOrders.length,
+        orders,
       };
     });
   }, [product, productOrders]);
