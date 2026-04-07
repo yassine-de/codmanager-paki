@@ -107,14 +107,22 @@ export function InvoiceDetailModal({
 
               {/* SECTION 2: SHIPPING FEES (summary only — count × rate by weight bracket) */}
               <SectionHeader icon={Truck} title={`Shipping Fees${(counts?.cross_shipped_count ?? 0) > 0 ? ` (incl. ${counts.cross_shipped_count} cross-invoice)` : ''}`} color="text-info" count={counts?.shipped_count ?? 0} />
-              <div className="px-4 py-2 space-y-1">
-                {shippingBreakdown.map((item) => (
-                  <div key={item.bracket} className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">{item.bracket} × {item.count} orders</span>
-                    <span className="tabular-nums font-semibold text-destructive">-{formatUSD(item.fee)}</span>
-                  </div>
-                ))}
-                <div className="border-t pt-1 mt-1 flex justify-between text-xs font-bold">
+              <div className="px-4 py-2 space-y-1.5">
+                {shippingBreakdown.map((item) => {
+                  const unitRate = item.count > 0 ? item.fee / item.count : 0;
+                  return (
+                    <div key={item.bracket} className="flex justify-between items-center text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium text-foreground">{item.bracket}</span>
+                        <span className="text-muted-foreground">×</span>
+                        <span className="text-muted-foreground">{item.count} order{item.count !== 1 ? 's' : ''}</span>
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">@ {formatUSD(unitRate)}/ea</span>
+                      </div>
+                      <span className="tabular-nums font-semibold text-destructive">-{formatUSD(item.fee)}</span>
+                    </div>
+                  );
+                })}
+                <div className="border-t pt-1.5 mt-1 flex justify-between text-xs font-bold">
                   <span>Total Shipping</span>
                   <span className="tabular-nums text-destructive">-{formatUSD(totals?.shipping_fees ?? 0)}</span>
                 </div>
