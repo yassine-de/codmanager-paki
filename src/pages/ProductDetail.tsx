@@ -110,14 +110,14 @@ export default function ProductDetail() {
   const stats = useMemo(() => {
     if (!product) return null;
     const totalOrders = productOrders.length;
-    const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').length;
+    const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').reduce((sum, o) => sum + (o.quantity || 1), 0);
     const shipped = productOrders.filter(o =>
       ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
-    ).length;
+    ).reduce((sum, o) => sum + (o.quantity || 1), 0);
     const delivered = productOrders.filter(o =>
       o.delivery_status === 'delivered' || o.delivery_status === 'paid'
-    ).length;
-    const cancelled = productOrders.filter(o => o.confirmation_status === 'cancelled').length;
+    ).reduce((sum, o) => sum + (o.quantity || 1), 0);
+    const cancelled = productOrders.filter(o => o.confirmation_status === 'cancelled').reduce((sum, o) => sum + (o.quantity || 1), 0);
     // Total sales = sum of total_amount for confirmed/shipped/delivered orders
     const activeSales = productOrders.filter(o =>
       !['cancelled', 'no_answer', 'wrong_number', 'double'].includes(o.confirmation_status)
