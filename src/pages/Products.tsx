@@ -40,14 +40,13 @@ export default function Products() {
     queryKey: ["product-order-stats", authUser?.role],
     queryFn: async () => {
       const pageSize = 1000;
-      const allRows: Array<{ seller_id: string; product_name: string; delivery_status: string | null; quantity: number }> = [];
+      const allRows: Array<{ seller_id: string; product_name: string; delivery_status: string | null; confirmation_status: string; quantity: number }> = [];
       let from = 0;
 
       while (true) {
         const { data, error } = await supabase
           .from("orders")
-          .select("seller_id, product_name, delivery_status, quantity")
-          .in("delivery_status", ["shipped", "in_transit", "with_courier", "delivered", "paid", "returned"])
+          .select("seller_id, product_name, delivery_status, confirmation_status, quantity")
           .range(from, from + pageSize - 1);
 
         if (error) throw error;
