@@ -115,7 +115,7 @@ export default function SellerAnalytics() {
     const map: Record<string, number> = {};
     filteredOrders.forEach(o => {
       const name = o.product_name || "Unknown";
-      map[name] = (map[name] || 0) + o.quantity;
+      map[name] = (map[name] || 0) + 1;
     });
     return Object.entries(map)
       .map(([name, count]) => ({ name, count }))
