@@ -111,7 +111,7 @@ export default function ProductDetail() {
     const totalOrders = productOrders.length;
     const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').length;
     const shipped = productOrders.filter(o =>
-      o.shipping_status && ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status)
+      ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
     ).length;
     const delivered = productOrders.filter(o =>
       o.delivery_status === 'delivered' || o.delivery_status === 'paid'
@@ -144,7 +144,7 @@ export default function ProductDetail() {
       const date = subDays(new Date(), 29 - i);
       const dayStr = format(date, "yyyy-MM-dd");
       const dayOrders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr);
-      const shipped = dayOrders.filter(o => o.shipping_status && ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status)).length;
+      const shipped = dayOrders.filter(o => ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')).length;
       const delivered = dayOrders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
       return {
         date: format(date, "dd MMM"),
@@ -173,8 +173,7 @@ export default function ProductDetail() {
   // "Shipped" = orders that have been shipped but NOT yet delivered
   const realDelivered = productOrders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
   const realShipped = productOrders.filter(o =>
-    o.shipping_status && ['shipped', 'in_transit', 'with_courier'].includes(o.shipping_status)
-    && o.delivery_status !== 'delivered' && o.delivery_status !== 'paid'
+    ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
   ).length;
   const realAvailable = Math.max(0, product.totalQty - realShipped - realDelivered);
 
