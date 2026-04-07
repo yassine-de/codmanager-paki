@@ -169,12 +169,12 @@ export default function ProductDetail() {
     );
   }
 
-  // Compute real shipped/delivered counts from orders
-  // "Shipped" = orders that have been shipped but NOT yet delivered
+  // Compute real shipped/delivered/returned counts from orders
   const realDelivered = productOrders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
   const realShipped = productOrders.filter(o =>
     ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
   ).length;
+  const realReturned = productOrders.filter(o => o.delivery_status === 'returned').length;
   const realAvailable = Math.max(0, product.totalQty - realShipped - realDelivered);
 
   const inventoryData = [
@@ -182,11 +182,13 @@ export default function ProductDetail() {
     { label: "In Stock", value: realAvailable, color: "hsl(210, 60%, 52%)" },
     { label: "Shipped", value: realShipped, color: "hsl(270, 50%, 55%)" },
     { label: "Delivered", value: realDelivered, color: "hsl(155, 50%, 42%)" },
+    { label: "Returned", value: realReturned, color: "hsl(0, 65%, 52%)" },
   ];
 
   const inventoryPercent = product.totalQty > 0 ? (realAvailable / product.totalQty) * 100 : 0;
   const shippedPercent = product.totalQty > 0 ? (realShipped / product.totalQty) * 100 : 0;
   const deliveredPercent = product.totalQty > 0 ? (realDelivered / product.totalQty) * 100 : 0;
+  const returnedPercent = product.totalQty > 0 ? (realReturned / product.totalQty) * 100 : 0;
 
   return (
     <div className="space-y-5 max-w-7xl animate-fade-in">
