@@ -585,6 +585,7 @@ export default function Products() {
                         <span className="font-medium">{product.price}</span>
                         <span className="text-muted-foreground">Selling: {product.lastSellingPrice}</span>
                         <span className="text-muted-foreground">Qty: {product.totalQty}</span>
+                        <span className="text-destructive">Cancel: {product.cancelled}</span>
                         <span className="text-muted-foreground">Avail: {product.available}</span>
                       </div>
                     </div>
