@@ -29,30 +29,44 @@ export default function DeliveryAnalytics() {
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      // Fetch delivery dates from order_history for orders missing delivered_at
-      const deliveredOrderIds = (data || [])
+      // Collect order_ids that need shipped_at or delivered_at from history
+      const needsShippedAt = (data || []).filter(o => 
+        o.delivery_status && ['shipped','in_transit','with_courier','delivered','paid','returned'].includes(o.delivery_status)
+      ).map(o => o.order_id);
+
+      const needsDeliveredAt = (data || [])
         .filter(o => (o.delivery_status === 'delivered' || o.delivery_status === 'paid') && !o.delivered_at)
         .map(o => o.order_id);
 
+      const allNeeded = [...new Set([...needsShippedAt, ...needsDeliveredAt])];
+
+      let shippedDateMap: Record<string, string> = {};
       let deliveryDateMap: Record<string, string> = {};
-      if (deliveredOrderIds.length > 0) {
+
+      if (allNeeded.length > 0) {
         const { data: historyData } = await supabase
           .from("order_history")
-          .select("order_id, created_at")
-          .in("order_id", deliveredOrderIds)
+          .select("order_id, created_at, new_value")
+          .in("order_id", allNeeded)
           .eq("field_changed", "delivery_status")
-          .eq("new_value", "delivered")
-          .order("created_at", { ascending: false });
+          .in("new_value", ["shipped", "delivered"])
+          .order("created_at", { ascending: true });
         if (historyData) {
           historyData.forEach(h => {
-            if (!deliveryDateMap[h.order_id]) deliveryDateMap[h.order_id] = h.created_at;
+            if (h.new_value === 'shipped' && !shippedDateMap[h.order_id]) {
+              shippedDateMap[h.order_id] = h.created_at;
+            }
+            if (h.new_value === 'delivered' && !deliveryDateMap[h.order_id]) {
+              deliveryDateMap[h.order_id] = h.created_at;
+            }
           });
         }
       }
 
-      // Enrich orders with fallback delivered_at
+      // Enrich orders with shipped_at and fallback delivered_at
       return (data || []).map(o => ({
         ...o,
+        shipped_at: shippedDateMap[o.order_id] || null,
         delivered_at: o.delivered_at || deliveryDateMap[o.order_id] || null,
       }));
     },
