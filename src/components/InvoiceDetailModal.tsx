@@ -111,19 +111,15 @@ export function InvoiceDetailModal({
                 {shippingBreakdown.length === 0 ? (
                   <div className="text-center py-2 text-muted-foreground text-xs">No shipping fees</div>
                 ) : (
-                  shippingBreakdown.map((item) => {
-                    const unitRate = item.count > 0 ? item.fee / item.count : 0;
-                    return (
+                  shippingBreakdown.map((item) => (
                       <div key={item.bracket} className="flex justify-between items-center text-xs">
                         <span className="text-muted-foreground">
                           <span className="font-medium text-foreground">{item.bracket}</span>
-                          {' × '}{item.count}{' '}
-                          <span className="text-[10px] opacity-70">@ {formatUSD(unitRate)}/ea</span>
+                          {' × '}{item.count}
                         </span>
                         <span className="tabular-nums font-semibold text-destructive">-{formatUSD(item.fee)}</span>
                       </div>
-                    );
-                  })
+                    ))
                 )}
                 <div className="border-t border-border/60 pt-2 mt-1 flex justify-between text-xs font-bold">
                   <span>Total Shipping</span>
