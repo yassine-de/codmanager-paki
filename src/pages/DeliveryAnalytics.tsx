@@ -25,7 +25,7 @@ export default function DeliveryAnalytics() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, agent_id, customer_city, created_at, confirmed_at, delivered_at, shipping_status")
+        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, shipping_status")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -66,14 +66,22 @@ export default function DeliveryAnalytics() {
     return filtered;
   }, [orders, sellerFilter, productFilter, dateRange]);
 
-  // Only orders that have been shipped (have a delivery_status)
-  const shippedStatuses = ["shipped", "pending", "delivered"];
+  // Accurate delivery status definitions
+  const inTransitStatuses = ["shipped", "in_transit", "with_courier"];
+  const deliveredStatuses = ["delivered", "paid"];
+  const allShippedStatuses = [...inTransitStatuses, ...deliveredStatuses, "returned"];
 
   const stats = useMemo(() => {
-    const shipped = filteredOrders.filter(o => o.delivery_status && shippedStatuses.includes(o.delivery_status)).length;
-    const delivered = filteredOrders.filter(o => o.delivery_status === "delivered").length;
-    const pending = filteredOrders.filter(o => o.delivery_status === "pending").length;
-    const shippedOnly = filteredOrders.filter(o => o.delivery_status === "shipped").length;
+    // Confirmed = base for delivery rate
+    const confirmed = filteredOrders.filter(o => o.confirmation_status === "confirmed").length;
+    // Shipped = currently in transit (not yet delivered/returned)
+    const inTransit = filteredOrders.filter(o => o.delivery_status && inTransitStatuses.includes(o.delivery_status)).length;
+    // Delivered = successfully delivered
+    const delivered = filteredOrders.filter(o => o.delivery_status && deliveredStatuses.includes(o.delivery_status)).length;
+    // Returned
+    const returned = filteredOrders.filter(o => o.delivery_status === "returned").length;
+    // Total shipped (all that have been sent out)
+    const totalShipped = inTransit + delivered + returned;
 
     // Compute avg delivery time
     const deliveryTimes = filteredOrders
@@ -85,13 +93,14 @@ export default function DeliveryAnalytics() {
     const avgDeliveryTime = deliveryTimes.length > 0 ? (deliveryTimes.reduce((a, b) => a + b, 0) / deliveryTimes.length).toFixed(1) : '—';
 
     return {
-      shipped,
+      totalShipped,
+      inTransit,
+      inTransitRate: totalShipped > 0 ? Math.round((inTransit / totalShipped) * 100) : 0,
       delivered,
-      deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
-      pending,
-      pendingRate: shipped > 0 ? Math.round((pending / shipped) * 100) : 0,
-      shippedOnly,
-      shippedOnlyRate: shipped > 0 ? Math.round((shippedOnly / shipped) * 100) : 0,
+      deliveryRate: confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0,
+      returned,
+      returnedRate: totalShipped > 0 ? Math.round((returned / totalShipped) * 100) : 0,
+      confirmed,
       avgDeliveryTime,
     };
   }, [filteredOrders]);
