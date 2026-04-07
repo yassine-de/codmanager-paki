@@ -50,6 +50,8 @@ const deliveryConfig: Record<DeliveryStatus, { label: string; cls: string }> = {
   postponed: { label: 'Postponed', cls: 'bg-[hsl(25,85%,55%)]/12 text-[hsl(25,85%,55%)] border-[hsl(25,85%,55%)]/20' },
 };
 
+const shippedDeliveryStatuses: DeliveryStatus[] = ["shipped", "in_transit", "with_courier"];
+
 function StatusBadge({ label, cls }: { label: string; cls: string }) {
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap ${cls}`}>
@@ -94,16 +96,16 @@ function OrderSparklineCards({ orders }: { orders: Order[] }) {
       return {
         d: fmtDate(date, "dd"),
         total: dayOrders.length,
-        confirmed: dayOrders.filter(o => ["confirmed","shipped","delivered","in_transit","with_courier"].includes(o.status)).length,
-        delivered: dayOrders.filter(o => o.status === "delivered").length,
-        returned: dayOrders.filter(o => o.status === "returned").length,
+        shipped: dayOrders.filter(o => shippedDeliveryStatuses.includes(o.deliveryStatus)).length,
+        delivered: dayOrders.filter(o => o.deliveryStatus === "delivered").length,
+        returned: dayOrders.filter(o => o.deliveryStatus === "returned").length,
       };
     });
   }, [orders]);
 
   const totals = useMemo(() => ({
     total: orders.length,
-    confirmed: orders.filter(o => ["shipped","in_transit","with_courier"].includes(o.deliveryStatus || "")).length,
+    shipped: orders.filter(o => shippedDeliveryStatuses.includes(o.deliveryStatus)).length,
     delivered: orders.filter(o => o.deliveryStatus === "delivered").length,
     returned: orders.filter(o => o.deliveryStatus === "returned").length,
   }), [orders]);
@@ -111,7 +113,7 @@ function OrderSparklineCards({ orders }: { orders: Order[] }) {
   const cards = [
     { title: "Total Orders", value: totals.total, dataKey: "total", color: "hsl(210,60%,52%)" },
     { title: "Delivered Orders", value: totals.delivered, dataKey: "delivered", color: "hsl(155,50%,42%)" },
-    { title: "Delivered orders over time", value: totals.delivered, dataKey: "delivered", color: "hsl(155,50%,42%)" },
+    { title: "Shipped Orders", value: totals.shipped, dataKey: "shipped", color: "hsl(210,60%,52%)" },
     { title: "Returns", value: totals.returned, dataKey: "returned", color: "hsl(210,60%,52%)" },
   ];
 
