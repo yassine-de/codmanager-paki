@@ -40,13 +40,13 @@ export default function Products() {
     queryKey: ["product-order-stats", authUser?.role],
     queryFn: async () => {
       const pageSize = 1000;
-      const allRows: Array<{ seller_id: string; product_name: string; delivery_status: string | null }> = [];
+      const allRows: Array<{ seller_id: string; product_name: string; delivery_status: string | null; quantity: number }> = [];
       let from = 0;
 
       while (true) {
         const { data, error } = await supabase
           .from("orders")
-          .select("seller_id, product_name, delivery_status")
+          .select("seller_id, product_name, delivery_status, quantity")
           .in("delivery_status", ["shipped", "in_transit", "with_courier", "delivered", "paid", "returned"])
           .range(from, from + pageSize - 1);
 
@@ -70,13 +70,14 @@ export default function Products() {
     productOrderRows.forEach((row) => {
       const key = `${row.seller_id}::${row.product_name}`;
       const current = map[key] || { delivered: 0, shipped: 0, returned: 0 };
+      const qty = row.quantity || 1;
 
       if (row.delivery_status === "delivered" || row.delivery_status === "paid") {
-        current.delivered += 1;
+        current.delivered += qty;
       } else if (["shipped", "in_transit", "with_courier"].includes(row.delivery_status || "")) {
-        current.shipped += 1;
+        current.shipped += qty;
       } else if (row.delivery_status === "returned") {
-        current.returned += 1;
+        current.returned += qty;
       }
 
       map[key] = current;
