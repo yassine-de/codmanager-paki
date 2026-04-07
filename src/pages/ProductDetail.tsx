@@ -127,12 +127,12 @@ export default function ProductDetail() {
 
     return {
       totalOrders,
-      confirmed: confirmed + shipped + delivered, // all that passed confirmation
+      confirmed, // orders with confirmation_status === 'confirmed' (includes shipped/delivered)
       shipped,
       delivered,
       cancelled,
-      confirmationRate: totalOrders > 0 ? (((confirmed + shipped + delivered) / totalOrders) * 100).toFixed(1) : "0.0",
-      deliveryRate: (confirmed + shipped + delivered) > 0 ? ((delivered / (confirmed + shipped + delivered)) * 100).toFixed(1) : "0.0",
+      confirmationRate: totalOrders > 0 ? ((confirmed / totalOrders) * 100).toFixed(1) : "0.0",
+      deliveryRate: confirmed > 0 ? ((delivered / confirmed) * 100).toFixed(1) : "0.0",
       totalSales,
       avgOrderValue,
     };
