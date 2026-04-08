@@ -106,9 +106,9 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
       const orderEventTypes = ["order_added", "order_removed", "status_change", "adjustment_created"];
       const orderEvents: OrderEvent[] = (history || [])
         .filter(h => {
-          // Order assignment events
           if (h.event_type === "order_added" || h.event_type === "order_removed") return true;
-          // Delivery IN/OUT events
+          if (h.event_type === "delivery_in" || h.event_type === "delivery_out") return true;
+          // Legacy: delivery_status field changes
           if (h.field_changed === "delivery_status" && (h.new_value === "delivered" || h.old_value === "delivered")) return true;
           return false;
         })
