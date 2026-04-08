@@ -66,7 +66,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   });
   const prevLandedPrice = prevPricing?.landed_price;
   const prevSellerPrice = prevPricing?.seller_price;
-  const [unitPrice, setUnitPrice] = useState<number | "">(0);
+  const [shippingCost, setShippingCost] = useState<number | "">(0);
   const [shippingCost, setShippingCost] = useState<number | "">(0);
   const [landedPrice, setLandedPrice] = useState<number | "">(0);
   const [sellerPrice, setSellerPrice] = useState<number | "">(0);
@@ -82,7 +82,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   const [prevId, setPrevId] = useState<string | null>(null);
   if (request && request.id !== prevId) {
     setPrevId(request.id);
-    setUnitPrice(request.unit_price ?? 0);
+    setShippingCost(request.shipping_cost ?? 0);
     setShippingCost(request.shipping_cost ?? 0);
     setLandedPrice(request.landed_price || prevLandedPrice || 0);
     setSellerPrice(request.seller_price || prevSellerPrice || 0);
@@ -96,14 +96,14 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   }
 
   const n = (v: number | "") => typeof v === "number" ? v : 0;
-  const totalPrice = n(quantity) * n(unitPrice) + n(shippingCost);
+  const totalPrice = n(quantity) * n(landedPrice) + n(shippingCost);
   const sourcingProfit = n(sellerPrice) > 0 && n(landedPrice) > 0 ? n(sellerPrice) - n(landedPrice) : 0;
   const profitMargin = n(sellerPrice) > 0 ? ((sourcingProfit / n(sellerPrice)) * 100) : 0;
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
     if (n(quantity) <= 0) errs.quantity = "Quantity must be greater than 0";
-    if (n(unitPrice) < 0) errs.unitPrice = "Price cannot be negative";
+    
     if (n(shippingCost) < 0) errs.shippingCost = "Shipping cost cannot be negative";
     if (n(landedPrice) < 0) errs.landedPrice = "Landed price cannot be negative";
     if (n(sellerPrice) < 0) errs.sellerPrice = "Seller price cannot be negative";
@@ -114,7 +114,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   const doUpdate = async (productCreated?: boolean) => {
     if (!request) return;
     const updateData = {
-      unit_price: unitPrice as number,
+      unit_price: 0,
       shipping_cost: shippingCost as number,
       landed_price: landedPrice as number,
       seller_price: sellerPrice as number,
