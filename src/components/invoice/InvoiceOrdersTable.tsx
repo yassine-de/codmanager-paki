@@ -29,6 +29,8 @@ interface Props {
 }
 
 export function InvoiceOrdersTable({ orders, productWeightMap }: Props) {
+  const { authUser } = useAuth();
+  const isAdmin = authUser?.role === "admin";
   const [search, setSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [productFilter, setProductFilter] = useState("all");
