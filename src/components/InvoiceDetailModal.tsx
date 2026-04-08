@@ -25,6 +25,8 @@ export function InvoiceDetailModal({
   open, onOpenChange, invoiceId, invoiceNumber, sellerName,
 }: Props) {
   const queryClient = useQueryClient();
+  const { authUser } = useAuth();
+  const isAdmin = authUser?.role === "admin";
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const removeAddonMutation = useMutation({
