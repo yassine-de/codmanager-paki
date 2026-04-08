@@ -67,7 +67,6 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   const prevLandedPrice = prevPricing?.landed_price;
   const prevSellerPrice = prevPricing?.seller_price;
   const [shippingCost, setShippingCost] = useState<number | "">(0);
-  const [shippingCost, setShippingCost] = useState<number | "">(0);
   const [landedPrice, setLandedPrice] = useState<number | "">(0);
   const [sellerPrice, setSellerPrice] = useState<number | "">(0);
   const [quantity, setQuantity] = useState<number | "">(0);
