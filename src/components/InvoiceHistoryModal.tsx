@@ -134,21 +134,22 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
           };
         });
 
-      // 2. Addons with product name
-      const { data: addonData } = await supabase
-        .from("invoice_addons")
-        .select("*, products:product_id(name)")
-        .eq("invoice_id", invoiceId)
-        .order("created_at", { ascending: false });
-
-      const addonEvents: AddonEvent[] = (addonData || []).map((a: any) => ({
-        id: a.id,
-        type: a.type as "in" | "out",
-        amount: a.amount,
-        reason: a.reason,
-        product_name: a.products?.name || null,
-        created_at: a.created_at || new Date().toISOString(),
-      }));
+      // 2. Addon events from invoice_history (not invoice_addons, so removed addons are visible)
+      const addonEvents: AddonEvent[] = (history || [])
+        .filter(h => h.event_type === "addon_added" || h.event_type === "addon_removed")
+        .map(h => {
+          const meta = h.metadata || {};
+          return {
+            id: h.id,
+            type: (meta.type || "in") as "in" | "out",
+            amount: meta.amount || 0,
+            reason: meta.reason || "",
+            product_name: meta.product_name || null,
+            created_at: h.created_at,
+            action: h.event_type === "addon_added" ? "added" as const : "removed" as const,
+            by: h.changed_by ? nameMap.get(h.changed_by) || null : null,
+          };
+        });
 
       // 3. Adjustments
       const { data: adjData } = await supabase
