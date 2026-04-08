@@ -258,17 +258,17 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
 
   // ── Addon row ──
   const renderAddonRow = (a: AddonEvent) => (
-    <div key={a.id} className="flex items-center gap-3 py-2.5 px-2">
-      <div className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 ${a.type === "in" ? "bg-success/10" : "bg-destructive/10"}`}>
-        {a.type === "in" ? <ArrowDownCircle className="w-3.5 h-3.5 text-success" /> : <ArrowUpCircle className="w-3.5 h-3.5 text-destructive" />}
+    <div key={a.id} className={`flex items-center gap-3 py-2.5 px-2 ${a.action === "removed" ? "opacity-60" : ""}`}>
+      <div className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 ${a.action === "removed" ? "bg-muted" : a.type === "in" ? "bg-success/10" : "bg-destructive/10"}`}>
+        {a.action === "removed" ? <Minus className="w-3.5 h-3.5 text-muted-foreground" /> : a.type === "in" ? <Plus className="w-3.5 h-3.5 text-success" /> : <Minus className="w-3.5 h-3.5 text-destructive" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold tabular-nums ${a.type === "in" ? "text-success" : "text-destructive"}`}>
+          <span className={`text-xs font-bold tabular-nums ${a.action === "removed" ? "text-muted-foreground line-through" : a.type === "in" ? "text-success" : "text-destructive"}`}>
             {a.type === "in" ? "+" : "-"}{formatUSD(a.amount)}
           </span>
-          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none ${a.type === "in" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
-            {a.type === "in" ? "Bonus" : "Deduction"}
+          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none ${a.action === "removed" ? "bg-muted text-muted-foreground" : a.type === "in" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}`}>
+            {a.action === "removed" ? "Removed" : a.type === "in" ? "Bonus" : "Deduction"}
           </span>
         </div>
         <div className="flex items-center gap-1.5 mt-1">
@@ -276,6 +276,7 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
           {a.product_name && (
             <span className="text-[10px] text-muted-foreground/60 truncate">· {a.product_name}</span>
           )}
+          {a.by && <span className="text-[10px] text-muted-foreground/60">· {a.by}</span>}
         </div>
       </div>
       <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0">
