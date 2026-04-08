@@ -32,6 +32,8 @@ interface AddonEvent {
   reason: string;
   product_name?: string | null;
   created_at: string;
+  action: "added" | "removed";
+  by: string | null;
 }
 
 interface AdjustmentEvent {
