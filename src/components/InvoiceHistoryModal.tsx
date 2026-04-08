@@ -206,11 +206,18 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
   // ── Order row ──
   const renderOrderRow = (o: OrderEvent) => {
     const isAssignment = o.event_type === "order_added" || o.event_type === "order_removed";
-    const meta = o.metadata || {};
-    const productName = meta.product_name;
-    const qty = meta.quantity;
-    const price = meta.price;
+    const isDelivery = o.event_type === "delivery_in" || o.event_type === "delivery_out";
+    const metaObj = (o.metadata || {}) as Record<string, any>;
+    const productName = metaObj.product_name;
+    const qty = metaObj.quantity;
+    const price = metaObj.price;
     const totalPkr = price && qty ? price * qty : null;
+
+    const eventLabel = isAssignment
+      ? (o.event_type === "order_added" ? "Assigned" : "Removed")
+      : isDelivery
+        ? (o.event_type === "delivery_in" ? "Delivered" : "Undelivered")
+        : null;
 
     return (
       <div
@@ -227,14 +234,14 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
             <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold leading-none ${o.direction === "in" ? "bg-success/15 text-success border-success/20" : "bg-destructive/15 text-destructive border-destructive/20"}`}>
               {o.direction === "in" ? "IN" : "OUT"}
             </span>
-            {isAssignment && (
-              <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none bg-primary/10 text-primary">
-                {o.event_type === "order_added" ? "Assigned" : "Removed"}
+            {eventLabel && (
+              <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium leading-none ${isDelivery ? (o.direction === "in" ? "bg-success/10 text-success" : "bg-warning/10 text-warning") : "bg-primary/10 text-primary"}`}>
+                {eventLabel}
               </span>
             )}
           </div>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-            {isAssignment ? (
+            {(isAssignment || isDelivery) ? (
               <>
                 {productName && <span className="text-[10px] text-muted-foreground">{productName}</span>}
                 {qty && <span className="text-[10px] text-muted-foreground/60">· x{qty}</span>}
