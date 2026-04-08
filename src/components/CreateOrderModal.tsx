@@ -16,11 +16,14 @@ interface CreateOrderModalProps {
   onCreated?: () => void;
 }
 
-const MOROCCAN_CITIES = [
-  "Casablanca", "Rabat", "Marrakech", "Fès", "Tanger", "Agadir", "Meknès",
-  "Oujda", "Kénitra", "Tétouan", "Salé", "Nador", "Mohammedia", "Béni Mellal",
-  "Khouribga", "El Jadida", "Safi", "Taza", "Settat", "Berrechid",
-  "Khémisset", "Larache", "Guelmim", "Errachidia", "Inezgane", "Other",
+const PAKISTANI_CITIES = [
+  "Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan",
+  "Peshawar", "Quetta", "Sialkot", "Gujranwala", "Hyderabad", "Bahawalpur",
+  "Sargodha", "Abbottabad", "Mardan", "Sukkur", "Larkana", "Sahiwal",
+  "Rahim Yar Khan", "Sheikhupura", "Jhang", "Dera Ghazi Khan", "Gujrat",
+  "Kasur", "Mingora", "Chiniot", "Kamoke", "Mandi Bahauddin", "Jhelum",
+  "Sadiqabad", "Jacobabad", "Shikarpur", "Khairpur", "Kohat", "Muzaffargarh",
+  "Okara", "Vehari", "Burewala", "Hafizabad", "Turbat", "Other",
 ];
 
 export default function CreateOrderModal({ open, onOpenChange, onCreated }: CreateOrderModalProps) {
