@@ -161,7 +161,7 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Phone *</Label>
-                <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="06XXXXXXXX" className="h-9 text-sm" />
+                <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="03XXXXXXXXX" className="h-9 text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
