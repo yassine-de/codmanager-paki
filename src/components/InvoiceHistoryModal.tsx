@@ -138,7 +138,7 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
       const addonEvents: AddonEvent[] = (history || [])
         .filter(h => h.event_type === "addon_added" || h.event_type === "addon_removed")
         .map(h => {
-          const meta = h.metadata || {};
+          const meta = (h.metadata || {}) as Record<string, any>;
           return {
             id: h.id,
             type: (meta.type || "in") as "in" | "out",
