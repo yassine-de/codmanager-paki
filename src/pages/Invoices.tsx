@@ -475,7 +475,7 @@ export default function Invoices() {
                 <TableHead className="text-[11px] font-semibold">Invoice #</TableHead>
                 <TableHead className="text-[11px] font-semibold">Date</TableHead>
                 {!isSeller && <TableHead className="text-[11px] font-semibold">Seller</TableHead>}
-                <TableHead className="text-[11px] font-semibold text-center">Orders</TableHead>
+                <TableHead className="text-[11px] font-semibold text-center">Delivered</TableHead>
                 <TableHead className="text-[11px] font-semibold text-right">Revenue</TableHead>
                 <TableHead className="text-[11px] font-semibold text-right">Shipping</TableHead>
                 <TableHead className="text-[11px] font-semibold text-right">Call Center</TableHead>
@@ -518,7 +518,7 @@ export default function Invoices() {
                         </TableCell>
                       )}
                       <TableCell className="text-center">
-                        <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-accent text-[11px] font-semibold">{inv.ordersCount}</span>
+                        <span className="inline-flex items-center justify-center h-6 min-w-[28px] px-1.5 rounded-md bg-accent text-[11px] font-semibold">{inv.deliveredCount}</span>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{formatUSD(inv.totalAmountPKR)}</TableCell>
                       <TableCell className="text-right tabular-nums text-destructive">-{formatUSD(inv.shippingFees)}</TableCell>
