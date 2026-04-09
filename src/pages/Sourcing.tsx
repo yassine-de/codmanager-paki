@@ -225,7 +225,7 @@ export default function Sourcing() {
               <TableHead>Seller</TableHead>
               <TableHead className="text-center">Qty</TableHead>
               <TableHead className="text-center">Weight</TableHead>
-              <TableHead className="text-right">Unit Price</TableHead>
+              <TableHead className="text-right">Seller Price</TableHead>
               <TableHead className="text-right">Total Price</TableHead>
               <TableHead>Country</TableHead>
               <TableHead className="text-center">Status</TableHead>
@@ -285,7 +285,7 @@ export default function Sourcing() {
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {(req.unit_price ?? 0) > 0 ? `$${req.unit_price}` : "—"}
+                      {(req.seller_price ?? 0) > 0 ? `$${req.seller_price}` : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {(req.total_price ?? 0) > 0 ? `$${req.total_price}` : "—"}
