@@ -465,31 +465,46 @@ Deno.serve(async (req) => {
     }
 
     if (action === "list-users") {
-      const { data: profiles, error } = await supabaseAdmin
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
+      // Batch all queries in parallel instead of N+1
+      const [
+        { data: profiles, error },
+        { data: allRoles },
+        { data: allPerms },
+        { data: allRates },
+        { data: allRateSettings },
+      ] = await Promise.all([
+        supabaseAdmin.from("profiles").select("*").order("created_at", { ascending: false }),
+        supabaseAdmin.from("user_roles").select("user_id, role"),
+        supabaseAdmin.from("user_permissions").select("user_id, permission_key"),
+        supabaseAdmin.from("seller_rates").select("*"),
+        supabaseAdmin.from("rate_settings").select("seller_id, dropped_order_rate, confirmed_order_rate, cod_fee_per_delivery"),
+      ]);
 
       if (error) throw error;
 
-      const usersWithDetails = await Promise.all(
-        (profiles || []).map(async (profile) => {
-          const [{ data: roles }, { data: perms }, { data: rates }, { data: rateSettings }] = await Promise.all([
-            supabaseAdmin.from("user_roles").select("role").eq("user_id", profile.user_id),
-            supabaseAdmin.from("user_permissions").select("permission_key").eq("user_id", profile.user_id),
-            supabaseAdmin.from("seller_rates").select("*").eq("user_id", profile.user_id).maybeSingle(),
-            supabaseAdmin.from("rate_settings").select("dropped_order_rate, confirmed_order_rate, cod_fee_per_delivery").eq("seller_id", profile.user_id).maybeSingle(),
-          ]);
+      // Build lookup maps
+      const rolesMap: Record<string, string> = {};
+      (allRoles || []).forEach((r) => { rolesMap[r.user_id] = r.role; });
 
-          return {
-            ...profile,
-            role: roles?.[0]?.role || "custom",
-            permissions: perms?.map((item) => item.permission_key) || [],
-            rates: rates || null,
-            rate_settings: rateSettings || null,
-          };
-        }),
-      );
+      const permsMap: Record<string, string[]> = {};
+      (allPerms || []).forEach((p) => {
+        if (!permsMap[p.user_id]) permsMap[p.user_id] = [];
+        permsMap[p.user_id].push(p.permission_key);
+      });
+
+      const ratesMap: Record<string, any> = {};
+      (allRates || []).forEach((r) => { ratesMap[r.user_id] = r; });
+
+      const rsMap: Record<string, any> = {};
+      (allRateSettings || []).forEach((rs) => { rsMap[rs.seller_id] = rs; });
+
+      const usersWithDetails = (profiles || []).map((profile) => ({
+        ...profile,
+        role: rolesMap[profile.user_id] || "custom",
+        permissions: permsMap[profile.user_id] || [],
+        rates: ratesMap[profile.user_id] || null,
+        rate_settings: rsMap[profile.user_id] || null,
+      }));
 
       return new Response(JSON.stringify({ users: usersWithDetails }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
