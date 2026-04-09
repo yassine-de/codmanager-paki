@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import {
   Play, ChevronRight, Phone, PhoneOff, MessageCircle, User, MapPin, Package, DollarSign,
   Video, Store, Tag, StickyNote, CalendarIcon, ExternalLink, AlertCircle, Zap,
-  Pencil, Plus, Trash2, X, Check, Loader2, Clock, RotateCcw, Copy, AlertTriangle
+  Pencil, Plus, Trash2, X, Check, Loader2, Clock, RotateCcw, Copy, AlertTriangle, ChevronsUpDown
 } from "lucide-react";
 
 const PAKISTANI_CITIES = [
