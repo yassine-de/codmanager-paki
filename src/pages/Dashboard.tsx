@@ -377,8 +377,8 @@ export default function Dashboard() {
 
         {/* ═══════════ TOP: 7-DAY SPARKLINES ═══════════ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <SparkMiniChart data={last7} dataKey="orders" color="hsl(210,60%,52%)" gradientId="spark7O"
-            title="Orders" total={totals7.orders} delay={0} />
+          <SparkMiniChart data={last7} dataKey="dropped" color="hsl(210,60%,52%)" gradientId="spark7O"
+            title="Dropped Orders" total={totals7.dropped} delay={0} />
           <SparkMiniChart data={last7} dataKey="confirmed" color="hsl(155,30%,32%)" gradientId="spark7C"
             title="Confirmed" total={totals7.confirmed} delay={60} />
           <SparkMiniChart data={last7} dataKey="delivered" color="hsl(155,50%,42%)" gradientId="spark7D"
