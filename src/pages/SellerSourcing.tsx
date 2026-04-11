@@ -21,6 +21,7 @@ const paymentStatusConfig: Record<string, { label: string; color: string }> = {
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   waiting_quote: { label: "Waiting Quote", color: "bg-warning/15 text-warning border-warning/25" },
+  working_on_it: { label: "Working On It", color: "bg-orange-500/15 text-orange-600 border-orange-500/25" },
   quoted: { label: "Quoted", color: "bg-info/15 text-info border-info/25" },
   validated: { label: "Validated", color: "bg-success/15 text-success border-success/25" },
   cancelled: { label: "Cancelled", color: "bg-destructive/15 text-destructive border-destructive/25" },
