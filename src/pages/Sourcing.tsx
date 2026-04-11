@@ -393,6 +393,11 @@ export default function Sourcing() {
         open={!!editRequest}
         onOpenChange={open => { if (!open) setEditRequest(null); }}
       />
+      <SourcingHistoryModal
+        requestId={historyRequestId}
+        open={!!historyRequestId}
+        onOpenChange={open => { if (!open) setHistoryRequestId(null); }}
+      />
     </div>
   );
 }
