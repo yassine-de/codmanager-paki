@@ -95,7 +95,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   }
 
   const n = (v: number | "") => typeof v === "number" ? v : 0;
-  const totalPrice = n(quantity) * n(landedPrice) + n(shippingCost);
+  const totalPrice = n(quantity) * n(landedPrice);
   const sourcingProfit = n(sellerPrice) > 0 && n(landedPrice) > 0 ? n(sellerPrice) - n(landedPrice) : 0;
   const profitMargin = n(sellerPrice) > 0 ? ((sourcingProfit / n(sellerPrice)) * 100) : 0;
 
@@ -103,7 +103,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     const errs: Record<string, string> = {};
     if (n(quantity) <= 0) errs.quantity = "Quantity must be greater than 0";
     
-    if (n(shippingCost) < 0) errs.shippingCost = "Shipping cost cannot be negative";
+    
     if (n(landedPrice) < 0) errs.landedPrice = "Landed price cannot be negative";
     if (n(sellerPrice) < 0) errs.sellerPrice = "Seller price cannot be negative";
     setErrors(errs);
@@ -526,12 +526,6 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
               </div>
             </div>
 
-            {/* Shipping Cost */}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Shipping Cost ($)</Label>
-              <Input type="number" min={0} step={0.01} value={shippingCost} onChange={e => setShippingCost(e.target.value === "" ? "" : Number(e.target.value))} className={`h-9 text-sm ${errors.shippingCost ? "border-destructive" : ""}`} />
-              {errors.shippingCost && <p className="text-[11px] text-destructive">{errors.shippingCost}</p>}
-            </div>
 
             {/* Totals */}
             <div className="space-y-2">
