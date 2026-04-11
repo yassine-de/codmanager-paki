@@ -8,9 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Send, X, ArrowLeft, Plus } from "lucide-react";
+import { MessageCircle, Send, X, ArrowLeft, Plus, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { playSellerNotificationSound } from "@/lib/support-sounds";
 
