@@ -317,7 +317,7 @@ export default function Simulation() {
                       <SelectItem key={p.id} value={p.id} className="text-sm">
                         <div className="flex items-center gap-2">
                           {p.image_url && <img src={p.image_url} alt="" className="w-5 h-5 rounded object-cover" />}
-                          {p.name} — {p.price} $
+                          {p.name} — {p.price.toLocaleString()} Rs ({(p.price / USD_TO_PKR).toFixed(2)} $)
                         </div>
                       </SelectItem>
                     ))}
@@ -380,7 +380,7 @@ export default function Simulation() {
               {metrics && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
                   <MetricCard label="Buying Price" value={`${metrics.buyingPrice}`} unit="$" icon={ShoppingCart} color="text-warning" bg="bg-warning/10" />
-                  <MetricCard label="Selling Price" value={`${metrics.sellingPrice}`} unit="$" icon={DollarSign} color="text-success" bg="bg-success/10" />
+                  <MetricCard label="Selling Price" value={`${metrics.sellingPrice.toFixed(2)}`} unit="$" icon={DollarSign} color="text-success" bg="bg-success/10" />
                   <MetricCard label="Confirmation Rate" value={`${(metrics.confirmationRate * 100).toFixed(1)}`} unit="%" icon={Target} color="text-info" bg="bg-info/10" />
                   <MetricCard label="Delivery Rate" value={`${(metrics.deliveryRate * 100).toFixed(1)}`} unit="%" icon={Truck} color="text-primary" bg="bg-primary/10" />
                 </div>
