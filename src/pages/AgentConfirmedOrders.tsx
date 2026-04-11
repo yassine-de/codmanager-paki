@@ -292,7 +292,7 @@ const AgentConfirmedOrders = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredOrders.map((order: any) => {
+                  paginatedOrders.map((order: any) => {
                     const cBadge = confirmationBadge[order.confirmation_status] || { label: order.confirmation_status, className: "bg-muted text-muted-foreground" };
                     const dBadge = order.delivery_status ? (deliveryBadge[order.delivery_status] || { label: order.delivery_status, className: "bg-muted text-muted-foreground" }) : null;
                     const editable = canEdit(order);
