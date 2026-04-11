@@ -757,6 +757,7 @@ export default function Orders() {
                 {isCol('confirmationStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
                 
                 {isCol('deliveryStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
+                {isCol('financial') && <th className="text-center py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Financial</th>}
                 <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -790,6 +791,7 @@ export default function Orders() {
                   {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} PKR</td>}
 {isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} /></td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
+                  {isCol('financial') && <td className="py-2.5 px-4 text-center"><FinancialIndicators confirmationStatus={order.confirmationStatus} deliveryStatus={order.deliveryStatus} invoiceId={order.invoiceId} invoiceStatus={order.invoiceStatus} isAdmin={isAdmin} /></td>}
                   <td className="py-2.5 px-4">
                     <div className="flex items-center gap-1.5">
                       {/* Edit: admin always, seller only when new */}
