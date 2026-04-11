@@ -545,13 +545,20 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
               </div>
               <div className={`flex items-center justify-between rounded-lg border px-4 py-2.5 ${sourcingProfit > 0 ? "bg-success/10 border-success/25" : sourcingProfit < 0 ? "bg-destructive/10 border-destructive/25" : "bg-muted/30"}`}>
                 <span className="text-xs text-muted-foreground">Sourcing Profit</span>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-semibold tabular-nums ${sourcingProfit > 0 ? "text-success" : sourcingProfit < 0 ? "text-destructive" : ""}`}>
-                    {sourcingProfit > 0 ? "+" : ""}{sourcingProfit.toLocaleString()} $
-                  </span>
-                  {n(sellerPrice) > 0 && (
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sourcingProfit > 0 ? "bg-success/15 text-success" : sourcingProfit < 0 ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground"}`}>
-                      {profitMargin.toFixed(1)}%
+                <div className="flex flex-col items-end gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-semibold tabular-nums ${sourcingProfit > 0 ? "text-success" : sourcingProfit < 0 ? "text-destructive" : ""}`}>
+                      {sourcingProfit > 0 ? "+" : ""}{sourcingProfit.toLocaleString()} $/unit
+                    </span>
+                    {n(sellerPrice) > 0 && (
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sourcingProfit > 0 ? "bg-success/15 text-success" : sourcingProfit < 0 ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                        {profitMargin.toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                  {n(quantity) > 1 && sourcingProfit !== 0 && (
+                    <span className={`text-xs tabular-nums ${sourcingProfit > 0 ? "text-success" : "text-destructive"}`}>
+                      Total: {sourcingProfit > 0 ? "+" : ""}{(sourcingProfit * n(quantity)).toLocaleString()} $
                     </span>
                   )}
                 </div>
