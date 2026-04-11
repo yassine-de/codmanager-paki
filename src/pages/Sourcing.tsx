@@ -238,6 +238,7 @@ export default function Sourcing() {
               <TableHead className="text-center">Link</TableHead>
               <TableHead className="text-center w-[70px]">Edit</TableHead>
               <TableHead className="text-center w-[50px]"></TableHead>
+            </TableRow>
           </TableHeader>
           <TableBody>
             {paginated.length === 0 ? (
