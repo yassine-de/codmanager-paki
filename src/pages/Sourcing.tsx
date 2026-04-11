@@ -345,6 +345,16 @@ export default function Sourcing() {
                         <TooltipContent>Edit request</TooltipContent>
                       </Tooltip>
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:bg-muted" onClick={() => setHistoryRequestId(req.id)}>
+                            <History className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>View history</TooltipContent>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                 );
               })
