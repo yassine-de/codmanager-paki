@@ -406,7 +406,24 @@ export default function Support() {
                             hasUnread ? "text-foreground/80 font-medium" : "text-muted-foreground"
                           )}>
                             {issueLabels[ticket.issue_type]}
-                            {ticket.related_id && <span className="ml-1 font-mono">#{ticket.related_id}</span>}
+                            {ticket.related_id && (() => {
+                              const link = getRelatedLink(ticket.issue_type, ticket.related_id);
+                              return link ? (
+                                <Link
+                                  to={link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="ml-1.5 inline-flex items-center gap-0.5 font-mono text-xs px-1.5 py-0.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  #{ticket.related_id}
+                                  <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                                </Link>
+                              ) : (
+                                <span className="ml-1 font-mono">#{ticket.related_id}</span>
+                              );
+                            })()}
+                          </p>
                           </p>
                           <p className={cn(
                             "text-xs mt-1 truncate",
@@ -467,7 +484,24 @@ export default function Support() {
                   </div>
                   <p className="text-[11px] text-muted-foreground">
                     {issueLabels[selectedTicket.issue_type]}
-                    {selectedTicket.related_id && <span className="ml-1 font-mono">· #{selectedTicket.related_id}</span>}
+                    {selectedTicket.related_id && (() => {
+                      const link = getRelatedLink(selectedTicket.issue_type, selectedTicket.related_id);
+                      return link ? (
+                        <Link
+                          to={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-1.5 inline-flex items-center gap-0.5 font-mono text-xs px-1.5 py-0.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                        >
+                          #{selectedTicket.related_id}
+                          <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                        </Link>
+                      ) : (
+                        <span className="ml-1 font-mono">· #{selectedTicket.related_id}</span>
+                      );
+                    })()}
+                    <span className="ml-2">· {format(new Date(selectedTicket.created_at), "MMM dd, yyyy")}</span>
+                  </p>
                     <span className="ml-2">· {format(new Date(selectedTicket.created_at), "MMM dd, yyyy")}</span>
                   </p>
                 </div>
@@ -499,7 +533,7 @@ export default function Support() {
                             ? "bg-primary text-primary-foreground rounded-br-md"
                             : "bg-muted rounded-bl-md"
                         )}>
-                          <p className="text-sm whitespace-pre-wrap break-words">{msg.message}</p>
+                          <p className="text-sm whitespace-pre-wrap break-words">{renderMessageWithLinks(msg.message)}</p>
                           <p className={cn(
                             "text-[10px] mt-1",
                             isAdmin ? "text-primary-foreground/60" : "text-muted-foreground/60"
