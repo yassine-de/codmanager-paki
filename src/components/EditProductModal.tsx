@@ -421,7 +421,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
 
             {/* Last Selling Price (for agent) */}
             <div>
-              <h3 className={sectionTitle}>Last Selling Price</h3>
+              <h3 className={sectionTitle}>Last Selling Price (PKR)</h3>
               <p className="text-[11px] text-muted-foreground mb-2">This price will be shown to the confirmation agent</p>
               <div className="w-1/2">
                 <Input
