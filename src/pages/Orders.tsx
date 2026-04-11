@@ -866,7 +866,7 @@ export default function Orders() {
               <div className="text-xs text-muted-foreground mb-2">{order.products.map(p => p.name).join(', ')}</div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <StatusBadge {...confirmationConfig[order.confirmationStatus]} />
+                  <StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} />
                   <StatusBadge {...deliveryConfig[order.deliveryStatus]} />
                 </div>
                 {(isAdmin || order.confirmationStatus === 'new') && (
