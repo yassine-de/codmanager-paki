@@ -269,7 +269,7 @@ export default function Orders() {
     const fetchOrders = async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*")
+        .select("*, invoices:invoice_id(status)")
         .order("created_at", { ascending: false });
 
       if (error) {
