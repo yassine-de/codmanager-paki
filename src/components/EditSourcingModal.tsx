@@ -536,8 +536,12 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
             {/* Totals */}
             <div className="space-y-2">
               <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2.5">
-                <span className="text-xs text-muted-foreground">Total Cost</span>
+                <span className="text-xs text-muted-foreground">Our Cost</span>
                 <span className="text-sm font-semibold tabular-nums">{totalPrice.toLocaleString()} $</span>
+              </div>
+              <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-2.5">
+                <span className="text-xs text-muted-foreground">Seller Cost</span>
+                <span className="text-sm font-semibold tabular-nums">{(n(sellerPrice) * n(quantity)).toLocaleString()} $</span>
               </div>
               <div className={`flex items-center justify-between rounded-lg border px-4 py-2.5 ${sourcingProfit > 0 ? "bg-success/10 border-success/25" : sourcingProfit < 0 ? "bg-destructive/10 border-destructive/25" : "bg-muted/30"}`}>
                 <span className="text-xs text-muted-foreground">Sourcing Profit</span>
