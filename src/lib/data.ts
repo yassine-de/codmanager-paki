@@ -38,6 +38,8 @@ export interface Order {
   warehouseState: 'in_stock' | 'out_of_stock' | 'reserved';
   history: OrderHistoryEvent[];
   attemptCount?: number;
+  invoiceId?: string | null;
+  invoiceStatus?: string | null;
 }
 
 const cities = ['Casablanca', 'Rabat', 'Marrakech', 'Fes', 'Tangier', 'Agadir', 'Oujda', 'Kenitra', 'Tetouan', 'Meknes'];
