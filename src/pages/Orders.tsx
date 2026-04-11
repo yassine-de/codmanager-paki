@@ -317,6 +317,8 @@ export default function Orders() {
         warehouseState: "in_stock" as const,
         history: [],
         attemptCount: o.attempt_count || 0,
+        invoiceId: o.invoice_id || null,
+        invoiceStatus: (o as any).invoices?.status || null,
       }));
 
       setOrders(mapped);
