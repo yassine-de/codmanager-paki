@@ -557,7 +557,7 @@ export default function Simulation() {
                   <BreakdownRow label="Ads Cost" value={`-${results.adsCost.toFixed(2)} $`} colorClass="text-destructive" />
                   <BreakdownRow label={`Shipping (${shippingRate} $ × ${results.confirmedOrders})`} value={`-${results.totalShipping.toFixed(2)} $`} colorClass="text-destructive" />
                   <BreakdownRow label={`COD Fees (${(codFeePercent * 100).toFixed(0)}% × ${results.revenue.toFixed(0)}$)`} value={`-${results.codFees.toFixed(2)} $`} colorClass="text-destructive" />
-                  <BreakdownRow label={`Call Center (${droppedOrderRate}$ × ${results.droppedOrders} dropped + ${confirmedOrderRate}$ × ${results.confirmedOrders} confirmed)`} value={`-${results.callCenterFees.toFixed(2)} $`} colorClass="text-destructive" />
+                  <BreakdownRow label="Call Center Fees" value={`-${results.callCenterFees.toFixed(2)} $`} colorClass="text-destructive" />
                   <div className="border-t border-border pt-2.5 flex justify-between items-center font-bold">
                     <span className="text-foreground">Net Profit</span>
                     <AnimatedNumber
