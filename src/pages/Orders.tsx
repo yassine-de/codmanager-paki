@@ -52,10 +52,13 @@ const deliveryConfig: Record<DeliveryStatus, { label: string; cls: string }> = {
 
 const shippedDeliveryStatuses: DeliveryStatus[] = ["shipped", "in_transit", "with_courier"];
 
-function StatusBadge({ label, cls }: { label: string; cls: string }) {
+function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string; attemptCount?: number }) {
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap ${cls}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap ${cls}`}>
       {label}
+      {attemptCount && attemptCount > 0 && (
+        <span className="text-[10px] opacity-70">×{attemptCount}</span>
+      )}
     </span>
   );
 }
@@ -748,7 +751,7 @@ export default function Orders() {
                 {isCol('product') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Product</th>}
                 {isCol('amount') && <th className="text-right py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Amount</th>}
                 {isCol('confirmationStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
-                {isCol('attempts') && isAdmin && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Attempts</th>}
+                
                 {isCol('deliveryStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
                 <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
@@ -781,18 +784,7 @@ export default function Orders() {
                   {isCol('phone') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{order.phone}</td>}
                   {isCol('product') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.products.map(p => p.qty > 1 ? `${p.qty}x ${p.name}` : p.name).join(', ')}</td>}
                   {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} PKR</td>}
-                  {isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} /></td>}
-                  {isCol('attempts') && isAdmin && (
-                    <td className="py-2.5 px-4 text-xs">
-                      {(order.attemptCount || 0) > 0 ? (
-                        <span className="inline-flex items-center rounded-full bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border border-[hsl(38,90%,55%)]/20 px-2 py-0.5 text-[11px] font-medium">
-                          {order.attemptCount}× attempt{(order.attemptCount || 0) > 1 ? 's' : ''}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                  )}
+{isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} /></td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
                   <td className="py-2.5 px-4">
                     <div className="flex items-center gap-1.5">
