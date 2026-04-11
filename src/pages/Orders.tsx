@@ -341,6 +341,7 @@ export default function Orders() {
   const [filterConfirmation, setFilterConfirmation] = useState('all');
   const [filterDelivery, setFilterDelivery] = useState('all');
   const [filterUpsell, setFilterUpsell] = useState('all');
+  const [filterFinancial, setFilterFinancial] = useState('all');
   
 
   // Read URL params on mount
@@ -373,6 +374,7 @@ export default function Orders() {
       confirmation: conf || 'all',
       delivery: del || 'all', 
       upsell: 'all',
+      financial: 'all',
     };
   });
 
@@ -399,18 +401,18 @@ export default function Orders() {
     setAppliedFilters({
       dateRange, product: filterProduct, seller: filterSeller, agent: filterAgent,
       confirmation: filterConfirmation, delivery: filterDelivery,
-      upsell: filterUpsell,
+      upsell: filterUpsell, financial: filterFinancial,
     });
-  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterUpsell]);
+  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterUpsell, filterFinancial]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
     setFilterProduct('all'); setFilterSeller('all'); setFilterAgent('all');
     setFilterConfirmation('all'); setFilterDelivery('all');
-    setFilterUpsell('all');
+    setFilterUpsell('all'); setFilterFinancial('all');
     setAppliedFilters({
       dateRange: undefined, product: 'all', seller: 'all', agent: 'all',
-      confirmation: 'all', delivery: 'all', upsell: 'all',
+      confirmation: 'all', delivery: 'all', upsell: 'all', financial: 'all',
     });
   }, []);
 
@@ -423,6 +425,7 @@ export default function Orders() {
     if (appliedFilters.confirmation !== 'all') count++;
     if (appliedFilters.delivery !== 'all') count++;
     if (appliedFilters.upsell !== 'all') count++;
+    if (appliedFilters.financial !== 'all') count++;
     
     return count;
   }, [appliedFilters]);
@@ -444,6 +447,11 @@ export default function Orders() {
         if (f.upsell !== 'all') {
           if (f.upsell === 'yes' && !o.upsell) return false;
           if (f.upsell === 'no' && o.upsell) return false;
+        }
+        if (f.financial !== 'all') {
+          if (f.financial === 'not_invoiced' && o.invoiceId) return false;
+          if (f.financial === 'pending' && (!o.invoiceId || o.invoiceStatus === 'paid')) return false;
+          if (f.financial === 'paid' && o.invoiceStatus !== 'paid') return false;
         }
         
         if (search) {
@@ -622,6 +630,22 @@ export default function Orders() {
                 onValueChange={setFilterUpsell}
                 options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
                 placeholder="Upsell"
+                allLabel="All"
+                className="w-full"
+              />
+            </div>
+            {/* Financial */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Financial</label>
+              <SearchableSelect
+                value={filterFinancial}
+                onValueChange={setFilterFinancial}
+                options={[
+                  { value: "not_invoiced", label: "Not Invoiced" },
+                  { value: "pending", label: "Pending" },
+                  { value: "paid", label: "Paid" },
+                ]}
+                placeholder="Financial"
                 allLabel="All"
                 className="w-full"
               />
