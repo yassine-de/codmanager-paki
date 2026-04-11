@@ -8,9 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageCircle, Send, X, ArrowLeft, Plus } from "lucide-react";
+import { MessageCircle, Send, X, ArrowLeft, Plus, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { playSellerNotificationSound } from "@/lib/support-sounds";
 
@@ -424,7 +425,14 @@ export function SellerSupportChat() {
                 return (
                   <div className="px-4 py-2 border-b bg-muted/30 flex items-center gap-2 text-[11px]">
                     <span className="font-medium">{issueLabels[t.issue_type]}</span>
-                    {t.related_id && <span className="font-mono text-muted-foreground">#{t.related_id}</span>}
+                    {t.related_id && (() => {
+                      const href = t.issue_type === "order" ? `/orders/${t.related_id}` : t.issue_type === "product" ? `/products/${t.related_id}` : t.issue_type === "sourcing" ? `/seller-sourcing` : null;
+                      return href ? (
+                        <Link to={href} className="font-mono text-primary text-[10px] inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-colors" onClick={(e) => e.stopPropagation()}>
+                          #{t.related_id}<ExternalLink className="h-2 w-2 opacity-60" />
+                        </Link>
+                      ) : <span className="font-mono text-muted-foreground">#{t.related_id}</span>;
+                    })()}
                     <Badge variant="outline" className={cn("ml-auto text-[10px] px-1.5 py-0", statusColors[t.status])}>
                       {statusLabels[t.status]}
                     </Badge>
