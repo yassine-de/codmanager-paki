@@ -67,6 +67,8 @@ const AgentConfirmedOrders = () => {
   const [search, setSearch] = useState("");
   const [filterConfirmation, setFilterConfirmation] = useState<string>("all");
   const [filterDelivery, setFilterDelivery] = useState<string>("all");
+  const [pageSize, setPageSize] = useState(25);
+  const [currentPage, setCurrentPage] = useState(1);
   const [editOrder, setEditOrder] = useState<any>(null);
   const [sellerProducts, setSellerProducts] = useState<{ id: string; name: string; price: number; product_url: string | null; video_url: string | null }[]>([]);
   const [editForm, setEditForm] = useState<EditForm>({
