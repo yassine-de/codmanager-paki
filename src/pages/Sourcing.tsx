@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2, ImageIcon } from "lucide-react";
+import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2, ImageIcon, History } from "lucide-react";
 import { SourcingVariantsBadge } from "@/components/SourcingVariantsBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { EditSourcingModal } from "@/components/EditSourcingModal";
 import { CreateSourcingModal } from "@/components/CreateSourcingModal";
+import { SourcingHistoryModal } from "@/components/SourcingHistoryModal";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -79,6 +80,7 @@ export default function Sourcing() {
   const [pageSize, setPageSize] = useState(10);
   const [editRequest, setEditRequest] = useState<DbSourcingRequest | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [historyRequestId, setHistoryRequestId] = useState<string | null>(null);
 
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ["admin-sourcing"],
@@ -235,12 +237,13 @@ export default function Sourcing() {
               <TableHead>Payment Date</TableHead>
               <TableHead className="text-center">Link</TableHead>
               <TableHead className="text-center w-[70px]">Edit</TableHead>
+              <TableHead className="text-center w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginated.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={16} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={17} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
@@ -342,6 +345,16 @@ export default function Sourcing() {
                         <TooltipContent>Edit request</TooltipContent>
                       </Tooltip>
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:bg-muted" onClick={() => setHistoryRequestId(req.id)}>
+                            <History className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>View history</TooltipContent>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                 );
               })
@@ -379,6 +392,11 @@ export default function Sourcing() {
         request={editRequest}
         open={!!editRequest}
         onOpenChange={open => { if (!open) setEditRequest(null); }}
+      />
+      <SourcingHistoryModal
+        requestId={historyRequestId}
+        open={!!historyRequestId}
+        onOpenChange={open => { if (!open) setHistoryRequestId(null); }}
       />
     </div>
   );

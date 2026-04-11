@@ -982,6 +982,39 @@ export type Database = {
         }
         Relationships: []
       }
+      sourcing_history: {
+        Row: {
+          action_type: string
+          changed_by: string
+          created_at: string
+          field_changed: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          sourcing_request_id: string
+        }
+        Insert: {
+          action_type?: string
+          changed_by: string
+          created_at?: string
+          field_changed: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          sourcing_request_id: string
+        }
+        Update: {
+          action_type?: string
+          changed_by?: string
+          created_at?: string
+          field_changed?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          sourcing_request_id?: string
+        }
+        Relationships: []
+      }
       sourcing_requests: {
         Row: {
           admin_seen: boolean | null

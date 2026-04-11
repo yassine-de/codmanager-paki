@@ -111,8 +111,32 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     return Object.keys(errs).length === 0;
   };
 
+  const logHistory = async (fieldChanged: string, oldVal: string | null, newVal: string | null) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !request) return;
+    await supabase.from("sourcing_history").insert({
+      sourcing_request_id: request.id,
+      field_changed: fieldChanged,
+      old_value: oldVal,
+      new_value: newVal,
+      changed_by: user.id,
+    } as any);
+  };
+
   const doUpdate = async (productCreated?: boolean) => {
     if (!request) return;
+
+    // Track changes for history
+    const changes: { field: string; oldV: string | null; newV: string | null }[] = [];
+    if (status !== request.status) changes.push({ field: "status", oldV: request.status, newV: status });
+    if (paymentStatus !== request.payment_status) changes.push({ field: "payment_status", oldV: request.payment_status, newV: paymentStatus });
+    if (Number(quantity) !== request.quantity) changes.push({ field: "quantity", oldV: String(request.quantity), newV: String(quantity) });
+    if (Number(landedPrice) !== (request.landed_price ?? 0)) changes.push({ field: "landed_price", oldV: String(request.landed_price ?? 0), newV: String(landedPrice) });
+    if (Number(sellerPrice) !== (request.seller_price ?? 0)) changes.push({ field: "seller_price", oldV: String(request.seller_price ?? 0), newV: String(sellerPrice) });
+    if ((productWeight || null) !== (request.product_weight || null)) changes.push({ field: "product_weight", oldV: request.product_weight || null, newV: productWeight || null });
+    const newPayMethod = paymentStatus === "paid" ? paymentMethod : null;
+    if (newPayMethod !== (request.payment_method || null)) changes.push({ field: "payment_method", oldV: request.payment_method || null, newV: newPayMethod });
+
     const updateData = {
       unit_price: 0,
       shipping_cost: shippingCost as number,
@@ -135,6 +159,9 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       .update(updateData)
       .eq("id", request.id);
     if (error) throw error;
+
+    // Log history entries
+    await Promise.all(changes.map(c => logHistory(c.field, c.oldV, c.newV)));
 
     // Auto-add deduction to draft invoice when paid via "from_invoice"
     if (
