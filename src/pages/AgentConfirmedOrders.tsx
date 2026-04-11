@@ -174,6 +174,14 @@ const AgentConfirmedOrders = () => {
     });
   }, [orders, search, filterConfirmation, filterDelivery]);
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterConfirmation, filterDelivery, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const paginatedOrders = filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   const canEdit = (order: any) => !SHIPPED_STATUSES.includes(order.delivery_status || "");
 
   const openEdit = (order: any) => {
