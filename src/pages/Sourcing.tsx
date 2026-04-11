@@ -291,7 +291,7 @@ export default function Sourcing() {
                       {(req.seller_price ?? 0) > 0 ? `$${req.seller_price}` : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {(req.total_price ?? 0) > 0 ? `$${req.total_price}` : "—"}
+                      {(req.seller_price ?? 0) > 0 && req.quantity > 0 ? `$${(req.seller_price! * req.quantity).toFixed(2)}` : "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{req.destination_country}</TableCell>
                     <TableCell className="text-center">
