@@ -14,6 +14,7 @@ import type { DbSourcingRequest } from "@/pages/Sourcing";
 
 const statusOptions: { value: string; label: string }[] = [
   { value: "waiting_quote", label: "Waiting Quote" },
+  { value: "working_on_it", label: "Working On It" },
   { value: "quoted", label: "Quoted" },
   { value: "validated", label: "Validated" },
   { value: "ordered", label: "Ordered" },
@@ -560,18 +561,16 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
                 })()}
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Product Weight {canValidateProduct && <span className="text-destructive">*</span>}</Label>
-                <Select value={productWeight || ""} onValueChange={v => { setProductWeight(v); setErrors(prev => { const { productWeight: _, ...rest } = prev; return rest; }); }}>
-                  <SelectTrigger className={`h-9 text-sm ${errors.productWeight ? "border-destructive" : ""}`}>
-                    <SelectValue placeholder="Select weight" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="up_to_1kg">Up to 1kg</SelectItem>
-                    <SelectItem value="up_to_2kg">Up to 2kg</SelectItem>
-                    <SelectItem value="up_to_3kg">Up to 3kg</SelectItem>
-                    <SelectItem value="more_than_3kg">More than 3kg</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs">Product Weight (kg) {canValidateProduct && <span className="text-destructive">*</span>}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.001}
+                  value={productWeight || ""}
+                  onChange={e => { setProductWeight(e.target.value || null); setErrors(prev => { const { productWeight: _, ...rest } = prev; return rest; }); }}
+                  placeholder="e.g. 0.250"
+                  className={`h-9 text-sm ${errors.productWeight ? "border-destructive" : ""}`}
+                />
                 {errors.productWeight && <p className="text-[11px] text-destructive">{errors.productWeight}</p>}
               </div>
             </div>
