@@ -237,12 +237,12 @@ export default function Sourcing() {
               <TableHead>Payment Date</TableHead>
               <TableHead className="text-center">Link</TableHead>
               <TableHead className="text-center w-[70px]">Edit</TableHead>
-            </TableRow>
+              <TableHead className="text-center w-[50px]"></TableHead>
           </TableHeader>
           <TableBody>
             {paginated.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={16} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={17} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
