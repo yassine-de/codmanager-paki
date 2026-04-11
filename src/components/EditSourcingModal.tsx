@@ -16,7 +16,6 @@ const statusOptions: { value: string; label: string }[] = [
   { value: "waiting_quote", label: "Waiting Quote" },
   { value: "working_on_it", label: "Working On It" },
   { value: "quoted", label: "Quoted" },
-  { value: "validated", label: "Validated" },
   { value: "ordered", label: "Ordered" },
   { value: "shipped", label: "Shipped" },
   { value: "received", label: "Received" },
