@@ -27,6 +27,7 @@ const confirmationBadge: Record<string, { label: string; className: string }> = 
 };
 
 const deliveryBadge: Record<string, { label: string; className: string }> = {
+  booked: { label: "📦 Booked", className: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
   shipped: { label: "📦 Shipped", className: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
   in_transit: { label: "🚚 In Transit", className: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
   with_courier: { label: "🏍️ With Courier", className: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
@@ -62,6 +63,7 @@ interface EditForm {
   postpone_date: Date | null;
   postpone_time: string;
   postpone_note: string;
+  delivery_status: string;
 }
 
 const AgentConfirmedOrders = () => {
@@ -88,6 +90,7 @@ const AgentConfirmedOrders = () => {
     postpone_date: null,
     postpone_time: "",
     postpone_note: "",
+    delivery_status: "",
   });
 
   const { data: orders = [], isLoading } = useQuery({
@@ -142,9 +145,12 @@ const AgentConfirmedOrders = () => {
         postpone_date = d.toISOString();
       }
 
-      const { error } = await supabase
-        .from("orders")
-        .update({
+      // Only set delivery_status if agent is booking a confirmed order with no existing shipping status
+      const shouldSetDelivery = editForm.confirmation_status === "confirmed"
+        && !editOrder.delivery_status
+        && editForm.delivery_status === "booked";
+
+      const updatePayload: any = {
           customer_name: editForm.customer_name.trim(),
           customer_phone: editForm.customer_phone.trim(),
           customer_city: editForm.customer_city.trim(),
@@ -158,7 +164,15 @@ const AgentConfirmedOrders = () => {
           note: editForm.note.trim(),
           postpone_date,
           postpone_note: editForm.confirmation_status === "postponed" ? editForm.postpone_note.trim() : null,
-        })
+      };
+
+      if (shouldSetDelivery) {
+        updatePayload.delivery_status = "booked";
+      }
+
+      const { error } = await supabase
+        .from("orders")
+        .update(updatePayload)
         .eq("id", editOrder.id);
       if (error) throw error;
 
@@ -238,6 +252,7 @@ const AgentConfirmedOrders = () => {
       postpone_date: order.postpone_date ? new Date(order.postpone_date) : null,
       postpone_time: order.postpone_date ? format(new Date(order.postpone_date), "HH:mm") : "",
       postpone_note: order.postpone_note || "",
+      delivery_status: order.delivery_status || "",
     });
     // Fetch seller's products for links and add-item
     supabase
@@ -621,14 +636,30 @@ const AgentConfirmedOrders = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Delivery Status (read-only)</Label>
-                  <div className="h-9 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">
-                    {editOrder?.delivery_status
-                      ? (deliveryBadge[editOrder.delivery_status]?.label || editOrder.delivery_status)
-                      : "—"}
+                {/* Show editable "Booked" option only for confirmed orders with no shipping status */}
+                {editForm.confirmation_status === "confirmed" && !editOrder?.delivery_status ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Shipping Status</Label>
+                    <Select value={editForm.delivery_status} onValueChange={(v) => updateField("delivery_status", v)}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue placeholder="No status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Status</SelectItem>
+                        <SelectItem value="booked">📦 Booked</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Delivery Status (read-only)</Label>
+                    <div className="h-9 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">
+                      {editOrder?.delivery_status
+                        ? (deliveryBadge[editOrder.delivery_status]?.label || editOrder.delivery_status)
+                        : "—"}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
