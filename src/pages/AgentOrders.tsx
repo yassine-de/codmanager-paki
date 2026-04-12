@@ -1089,8 +1089,8 @@ const AgentOrders = () => {
                           </div>
                         ) : (
                           <div className="flex flex-wrap gap-2 text-[11px]">
-                            <span className="inline-flex items-center gap-1 text-muted-foreground">
-                              <Tag className="h-3 w-3" /> Qty: {op.qty}
+                            <span className="inline-flex items-center gap-1 text-sm font-bold text-foreground">
+                              Qty: {op.qty}
                             </span>
                             <span className="inline-flex items-center gap-1 text-sm font-bold text-foreground">
                               {orderTotal} PKR
