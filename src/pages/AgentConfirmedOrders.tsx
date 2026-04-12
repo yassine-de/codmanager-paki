@@ -59,6 +59,9 @@ interface EditForm {
   quantity: number;
   confirmation_status: string;
   note: string;
+  postpone_date: Date | null;
+  postpone_time: string;
+  postpone_note: string;
 }
 
 const AgentConfirmedOrders = () => {
