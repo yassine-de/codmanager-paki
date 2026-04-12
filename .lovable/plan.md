@@ -1,51 +1,58 @@
 
 
-# Fix: Add Time Bounds to Direct-Invoice Shipping Queries
+# Fix: Delivered Orders Appearing in Closed Invoices
 
-## Problem Found
-Two queries in `get_invoice_summary` count shipped events for **direct invoice orders** without requiring the shipped event to fall within the invoice period (`v_period_start` to `v_period_end`). This means an order shipped in a previous or future period can be incorrectly counted.
+## Problem
+BS-INV-001 (finalized at 14:23) shows 5 delivered orders with revenue, but all 5 were delivered at 14:51 — **after** the invoice was closed. The function uses the order's **current** `delivery_status` column instead of checking when the delivery event actually occurred.
 
-### Affected Queries
-1. **`v_shipped_count`** — the `EXISTS` subquery that detects a "shipped" event has no `created_at` time filter
-2. **Shipping breakdown (first UNION half)** — same missing time filter on the `EXISTS` check
+## Affected Locations (4 places in `get_invoice_summary`)
 
-### What's Already Correct
-- Cross-invoice shipped: ✅ time-bounded
-- Cross-invoice confirmed: ✅ time-bounded  
-- Direct-invoice confirmed: ✅ time-bounded
-- Dropped count: ✅ uses `o.created_at` within period
-- Cross-invoice delivered-only: ✅ time-bounded
+1. **`v_delivered_count`** — `WHERE o.delivery_status = 'delivered'` with no time check
+2. **`v_delivered_revenue_usd`** — same: sums revenue from currently-delivered orders regardless of timing
+3. **Delivered orders CTE** — builds the delivered orders list using current status
+4. **All orders CTE → `was_delivered`** — checks if order was ever delivered, not if it was delivered within the period
 
 ## Fix (1 migration)
 
-Add `AND oh.created_at > v_period_start AND oh.created_at <= v_period_end` to the initial `EXISTS` check in both locations. This replaces the current approach of "any shipped event exists + exclude pre-period ones" with a direct "shipped event exists within the period."
+Add an `EXISTS` check on `order_history` to each location, requiring the delivery event to fall within `v_period_start` and `v_period_end`.
 
-### Location 1: `v_shipped_count`
+### Location 1: `v_delivered_count`
 ```sql
--- Current (no time filter on initial EXISTS):
-AND EXISTS (
-  SELECT 1 FROM public.order_history oh
-  WHERE oh.order_id = o.order_id 
-    AND oh.field_changed = 'delivery_status' 
-    AND oh.new_value = 'shipped'
-)
-
--- Fixed:
-AND EXISTS (
-  SELECT 1 FROM public.order_history oh
-  WHERE oh.order_id = o.order_id 
-    AND oh.field_changed = 'delivery_status' 
-    AND oh.new_value = 'shipped'
-    AND oh.created_at > v_period_start
-    AND oh.created_at <= v_period_end
-)
+SELECT COUNT(DISTINCT o.id) INTO v_delivered_count
+FROM public.orders o
+WHERE o.invoice_id = p_invoice_id
+  AND o.delivery_status = 'delivered'
+  AND EXISTS (
+    SELECT 1 FROM public.order_history oh
+    WHERE oh.order_id = o.order_id
+      AND oh.field_changed = 'delivery_status'
+      AND oh.new_value = 'delivered'
+      AND oh.created_at > v_period_start
+      AND oh.created_at <= v_period_end
+  );
 ```
 
-With this positive time filter, the second `NOT EXISTS` (excluding pre-period events) becomes redundant and can be removed for clarity.
+### Location 2: `v_delivered_revenue_usd`
+Same `EXISTS` filter added.
 
-### Location 2: Shipping breakdown first UNION half
-Same change — add time bounds to the `EXISTS` check and remove the now-redundant `NOT EXISTS` for pre-period events.
+### Location 3: Delivered orders CTE
+Same `EXISTS` filter in the `WHERE` clause.
 
-### No frontend changes needed
-The function output shape is unchanged. Only the correctness of which orders are counted is affected.
+### Location 4: `was_delivered` in all orders CTE
+Time-bound the `EXISTS` check:
+```sql
+(o.delivery_status = 'delivered' AND EXISTS (
+  SELECT 1 FROM public.order_history oh
+  WHERE oh.order_id = o.order_id
+    AND oh.field_changed = 'delivery_status'
+    AND oh.new_value = 'delivered'
+    AND oh.created_at > v_period_start
+    AND oh.created_at <= v_period_end
+)) AS was_delivered
+```
+
+## Result
+- BS-INV-001 will show 0 delivered, $0 revenue (correct — all deliveries happened after close)
+- The cross-invoice logic in the open invoice already picks these up correctly
+- No frontend changes needed
 
