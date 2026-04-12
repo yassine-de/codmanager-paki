@@ -322,6 +322,7 @@ export default function Orders() {
         attemptCount: o.attempt_count || 0,
         invoiceId: o.invoice_id || null,
         invoiceStatus: (o as any).invoices?.status || null,
+        orioOrderId: o.orio_order_id || null,
       }));
 
       setOrders(mapped);
