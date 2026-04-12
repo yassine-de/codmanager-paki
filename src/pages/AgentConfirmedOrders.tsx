@@ -89,6 +89,7 @@ const AgentConfirmedOrders = () => {
     postpone_date: null,
     postpone_time: "",
     postpone_note: "",
+    delivery_status: "",
   });
 
   const { data: orders = [], isLoading } = useQuery({
