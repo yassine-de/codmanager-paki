@@ -179,7 +179,7 @@ export default function OnlineStatusPanel() {
             <p className="text-xs">No team members found</p>
           </div>
         ) : (
-          users.map((u) => {
+          filteredUsers.map((u) => {
             const cfg = statusConfig[u.status];
             return (
               <div
