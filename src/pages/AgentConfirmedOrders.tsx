@@ -62,6 +62,7 @@ interface EditForm {
   postpone_date: Date | null;
   postpone_time: string;
   postpone_note: string;
+  delivery_status: string;
 }
 
 const AgentConfirmedOrders = () => {
