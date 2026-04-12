@@ -1,39 +1,44 @@
 
 
-# Add ORIO ID Column with Tracking Popup
+# Fix: Cross-Shipped Delivered Revenue Not Counted
 
-## Overview
-Add a clickable "ORIO ID" column (admin-only) after "Seller ID" in the Orders table. Clicking it opens a modal showing tracking details from the ORIO Track API.
+## Problem
+BS-INV-003 shows $81.02 delivered revenue instead of $147.56. Three orders (BS-007, BS-008, BS-013) that were both cross-shipped AND delivered within INV-003's period are added to the delivered orders list but their revenue ($66.54) is never summed.
 
-## Changes
+## Root Cause
+In `get_invoice_summary`, the cross-shipped CTE calculates `v_cross_delivered_orders` (list) but not revenue. The line:
+```sql
+v_cross_delivered_revenue := v_cross_delivered_only_revenue;
+```
+Only includes revenue from the "delivered-only" CTE, ignoring delivered orders that came through the "cross-shipped" path.
 
-### 1. Update `Order` interface (`src/lib/data.ts`)
-Add `orioOrderId?: number | null` to the Order interface.
+## Fix (1 migration)
 
-### 2. Update data mapping (`src/pages/Orders.tsx`)
-- Map `orio_order_id` from the DB query to `orioOrderId` on the Order object
-- Add `'orioId'` to `ColumnKey` type and `allColumns` array (after `'id'`, admin-only)
-- Add table header for "ORIO ID"
-- Add table cell: if `orioOrderId` exists, render it as a clickable link (blue, underlined). On click, stop propagation and open tracking modal.
+### Add revenue sum to the cross-shipped CTE SELECT INTO
 
-### 3. Create `OrioTrackingModal` component (`src/components/OrioTrackingModal.tsx`)
-- Props: `orioOrderId: number`, `open: boolean`, `onClose: () => void`
-- On open, call the `orio-sync` edge function with `action: "track"` and `order_id`
-- Display a dialog styled like the screenshot:
-  - Header: "TRACK DETAIL - {consignment_no}"
-  - Summary row: STATUS, CN#, DATE, CUSTOMER, COD, FROM TO (from `payload` fields)
-  - "COURIER SHIPPING LABEL: {consignment_no}"
-  - Timeline of events from `payload.detail[]` array, each showing `dateTime` and `status`
-- Loading and error states
+Currently the cross-shipped CTE selects:
+```sql
+SELECT COUNT(DISTINCT id), jsonb_agg(...), jsonb_agg(...)
+INTO v_cross_shipped_count, v_cross_delivered_orders, v_cross_orders
+```
 
-### 4. Update edge function tracking (`supabase/functions/orio-sync/index.ts`)
-The existing `trackShipment` function sends `order_id` (the ORIO numeric ID) but expects a DB UUID as input. Need to adjust:
-- Accept ORIO order ID directly for tracking (add a new action `track-by-orio-id` or modify `track` to accept `orio_order_id`)
-- The track API response (from docs) returns: `payload.order_id`, `payload.status`, `payload.consigment_no`, `payload.order_date`, `payload.consignee_name`, `payload.cod_amount`, `payload.shipping_charges`, `payload.origin`, `payload.destination`, `payload.detail[]` (array of `{dateTime, status}`)
-- Return full payload to the frontend
+Change to also sum delivered revenue:
+```sql
+SELECT COUNT(DISTINCT id),
+  COALESCE(SUM(ROUND(price*quantity/v_pkr_rate,2)) FILTER (WHERE is_delivered_in_period), 0),
+  jsonb_agg(...) FILTER (WHERE is_delivered_in_period),
+  jsonb_agg(...)
+INTO v_cross_shipped_count, v_cross_shipping_delivered_revenue, v_cross_delivered_orders, v_cross_orders
+```
 
-### Technical Details
-- Track API: `POST https://apis.orio.digital/api/track` with `{order_id: <integer>, acno: "OR-04820"}`
-- Response: array with `[{status: "1", message: "success", payload: {order_id, status, consigment_no, detail: [{dateTime, status}]}}]`
-- The `order_id` parameter must be an integer (the ORIO order ID stored in `orders.orio_order_id`)
+Add a new variable `v_cross_shipping_delivered_revenue numeric := 0` and update the revenue aggregation:
+```sql
+v_cross_delivered_revenue := v_cross_delivered_only_revenue + v_cross_shipping_delivered_revenue;
+```
+
+This is a single-line logic fix in the existing function. No frontend changes needed.
+
+## Expected Result
+- BS-INV-003: $81.02 + $66.54 = $147.56 delivered revenue
+- BS-INV-001 and BS-INV-002: unaffected (no delivered orders in their periods)
 
