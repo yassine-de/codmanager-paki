@@ -40,6 +40,7 @@ export interface Order {
   attemptCount?: number;
   invoiceId?: string | null;
   invoiceStatus?: string | null;
+  orioOrderId?: number | null;
 }
 
 const cities = ['Casablanca', 'Rabat', 'Marrakech', 'Fes', 'Tangier', 'Agadir', 'Oujda', 'Kenitra', 'Tetouan', 'Meknes'];

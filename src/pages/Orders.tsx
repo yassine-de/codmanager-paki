@@ -27,6 +27,7 @@ import CreateOrderModal from "@/components/CreateOrderModal";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import OrioTrackingModal from "@/components/OrioTrackingModal";
 
 /* ── Status badge configs ── */
 const confirmationConfig: Record<ConfirmationStatus, { label: string; cls: string }> = {
@@ -65,11 +66,12 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'systemId' | 'id' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'attempts' | 'financial';
+type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'attempts' | 'financial';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
   { key: 'id', label: 'Seller ID', defaultVisible: true },
+  { key: 'orioId', label: 'ORIO ID', defaultVisible: true, adminOnly: true },
   { key: 'createdAt', label: 'Created', defaultVisible: true },
   { key: 'updatedAt', label: 'Updated', defaultVisible: true },
   { key: 'seller', label: 'Seller', defaultVisible: true },
@@ -166,6 +168,7 @@ export default function Orders() {
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [trackingOrioId, setTrackingOrioId] = useState<number | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sellerNames, setSellerNames] = useState<string[]>([]);
   const [agentNames, setAgentNames] = useState<string[]>([]);
@@ -321,6 +324,7 @@ export default function Orders() {
         attemptCount: o.attempt_count || 0,
         invoiceId: o.invoice_id || null,
         invoiceStatus: (o as any).invoices?.status || null,
+        orioOrderId: o.orio_order_id || null,
       }));
 
       setOrders(mapped);
@@ -766,6 +770,7 @@ export default function Orders() {
                   <span className="inline-flex items-center gap-1">System ID {sortKey === 'systemId' ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}</span>
                 </th>}
                 {isCol('id') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Seller ID</th>}
+                {isAdmin && isCol('orioId') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">ORIO ID</th>}
                 {isCol('createdAt') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('createdAt')}>
                   <span className="inline-flex items-center gap-1">Created {sortKey === 'createdAt' ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}</span>
                 </th>}
@@ -805,6 +810,20 @@ export default function Orders() {
                   )}
                   {isAdmin && isCol('systemId') && <td className="py-2.5 px-4 font-mono text-xs text-muted-foreground">{order.systemId ?? '—'}</td>}
                   {isCol('id') && <td className="py-2.5 px-4 font-medium text-xs">{order.id}</td>}
+                  {isAdmin && isCol('orioId') && (
+                    <td className="py-2.5 px-4 text-xs" onClick={(e) => e.stopPropagation()}>
+                      {order.orioOrderId ? (
+                        <button
+                          onClick={() => setTrackingOrioId(order.orioOrderId!)}
+                          className="text-[hsl(210,60%,52%)] hover:underline font-medium"
+                        >
+                          {order.orioOrderId}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  )}
                   {isCol('createdAt') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{format(new Date(order.createdAt), 'dd MMM yyyy HH:mm')}</td>}
                   {isCol('updatedAt') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{format(new Date(order.updatedAt), 'dd MMM yyyy HH:mm')}</td>}
                   {isCol('seller') && <td className="py-2.5 px-4 text-xs">{order.seller}</td>}
@@ -941,6 +960,14 @@ export default function Orders() {
         </div>
       </div>
 
+      {/* ORIO Tracking Modal */}
+      {trackingOrioId && (
+        <OrioTrackingModal
+          orioOrderId={trackingOrioId}
+          open={!!trackingOrioId}
+          onClose={() => setTrackingOrioId(null)}
+        />
+      )}
 
       {/* Edit Modal */}
       {editOrder && (

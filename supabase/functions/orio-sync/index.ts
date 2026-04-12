@@ -287,7 +287,8 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = getSupabaseAdmin();
-    const { action, order_id } = await req.json();
+    const body = await req.json();
+    const { action, order_id, orio_order_id } = body;
 
     let result: any;
 
@@ -305,6 +306,25 @@ Deno.serve(async (req) => {
         if (!order_id) throw new Error("order_id required");
         result = await trackShipment(supabase, order_id);
         break;
+
+      case "track-by-orio-id": {
+        if (!orio_order_id) throw new Error("orio_order_id required");
+        const cfg = getOrioConfig();
+        const res = await fetch(`${ORIO_BASE}/track`, {
+          method: "POST",
+          headers: orioHeaders(cfg.token),
+          body: JSON.stringify({ order_id: orio_order_id, acno: cfg.acno }),
+        });
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0 && data[0].payload) {
+          result = data[0].payload;
+        } else if (data?.payload) {
+          result = data.payload;
+        } else {
+          result = data;
+        }
+        break;
+      }
 
       case "sync-all-pending": {
         const { data: pending } = await supabase
