@@ -240,6 +240,7 @@ const AgentConfirmedOrders = () => {
       postpone_date: order.postpone_date ? new Date(order.postpone_date) : null,
       postpone_time: order.postpone_date ? format(new Date(order.postpone_date), "HH:mm") : "",
       postpone_note: order.postpone_note || "",
+      delivery_status: order.delivery_status || "",
     });
     // Fetch seller's products for links and add-item
     supabase
