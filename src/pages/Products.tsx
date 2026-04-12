@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import { mockProducts, type Product } from "@/lib/products-data";
+import { type Product } from "@/lib/products-data";
 import { CreateProductModal } from "@/components/CreateProductModal";
 import { EditProductModal } from "@/components/EditProductModal";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,7 +20,7 @@ export default function Products() {
   const queryClient = useQueryClient();
   const isAdmin = authUser?.role === "admin";
   const isSeller = authUser?.role === "seller";
-  const [localProducts, setLocalProducts] = useState<Product[]>(mockProducts);
+  const [localProducts, setLocalProducts] = useState<Product[]>([]);
 
   // Fetch DB products (RLS ensures sellers only see their own)
   const { data: dbProducts = [] } = useQuery({
@@ -152,8 +152,7 @@ export default function Products() {
         active: (p as any).active ?? false,
       };
     });
-    // Sellers only see DB products, admins see both
-    return isAdmin ? [...dbMapped, ...localProducts] : dbMapped;
+    return dbMapped;
   }, [dbProducts, dbSellerNameMap, localProducts, isAdmin, authUser, productOrderStatsMap]);
 
   // Mark unseen products as seen for sellers
