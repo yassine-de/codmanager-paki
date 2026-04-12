@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { eachDayOfInterval, startOfDay, subDays, isAfter, format as fmtDate } from "date-fns";
 import { Search, SlidersHorizontal, X, Columns3, CalendarIcon, Filter, Pencil, History, MessageCircle, Download, RefreshCw, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
-import { FinancialIndicators } from "@/components/FinancialIndicators";
+
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
 import { useDataVisibility, MaskedValue } from "@/contexts/DataVisibilityContext";
@@ -66,7 +66,7 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'attempts' | 'financial';
+type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'attempts';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
@@ -83,7 +83,7 @@ const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; admi
   { key: 'confirmationStatus', label: 'Confirmation', defaultVisible: true },
   { key: 'attempts', label: 'Attempts', defaultVisible: true },
   { key: 'deliveryStatus', label: 'Delivery', defaultVisible: true },
-  { key: 'financial', label: 'Financial', defaultVisible: true },
+  
 ];
 
 /* ── Sparkline KPI Cards ── */
@@ -274,7 +274,7 @@ export default function Orders() {
     const fetchOrders = async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, invoices:invoice_id(status)")
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -322,8 +322,6 @@ export default function Orders() {
         warehouseState: "in_stock" as const,
         history: [],
         attemptCount: o.attempt_count || 0,
-        invoiceId: o.invoice_id || null,
-        invoiceStatus: (o as any).invoices?.status || null,
         orioOrderId: o.orio_order_id || null,
       }));
 
@@ -345,7 +343,7 @@ export default function Orders() {
   const [filterConfirmation, setFilterConfirmation] = useState('all');
   const [filterDelivery, setFilterDelivery] = useState('all');
   const [filterUpsell, setFilterUpsell] = useState('all');
-  const [filterFinancial, setFilterFinancial] = useState('all');
+  
   
 
   // Read URL params on mount
@@ -378,7 +376,6 @@ export default function Orders() {
       confirmation: conf || 'all',
       delivery: del || 'all', 
       upsell: 'all',
-      financial: 'all',
     };
   });
 
@@ -405,18 +402,18 @@ export default function Orders() {
     setAppliedFilters({
       dateRange, product: filterProduct, seller: filterSeller, agent: filterAgent,
       confirmation: filterConfirmation, delivery: filterDelivery,
-      upsell: filterUpsell, financial: filterFinancial,
+      upsell: filterUpsell,
     });
-  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterUpsell, filterFinancial]);
+  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterUpsell]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
     setFilterProduct('all'); setFilterSeller('all'); setFilterAgent('all');
     setFilterConfirmation('all'); setFilterDelivery('all');
-    setFilterUpsell('all'); setFilterFinancial('all');
+    setFilterUpsell('all');
     setAppliedFilters({
       dateRange: undefined, product: 'all', seller: 'all', agent: 'all',
-      confirmation: 'all', delivery: 'all', upsell: 'all', financial: 'all',
+      confirmation: 'all', delivery: 'all', upsell: 'all',
     });
   }, []);
 
@@ -429,7 +426,7 @@ export default function Orders() {
     if (appliedFilters.confirmation !== 'all') count++;
     if (appliedFilters.delivery !== 'all') count++;
     if (appliedFilters.upsell !== 'all') count++;
-    if (appliedFilters.financial !== 'all') count++;
+    
     
     return count;
   }, [appliedFilters]);
@@ -451,11 +448,6 @@ export default function Orders() {
         if (f.upsell !== 'all') {
           if (f.upsell === 'yes' && !o.upsell) return false;
           if (f.upsell === 'no' && o.upsell) return false;
-        }
-        if (f.financial !== 'all') {
-          if (f.financial === 'not_invoiced' && o.invoiceId) return false;
-          if (f.financial === 'pending' && (!o.invoiceId || o.invoiceStatus === 'paid')) return false;
-          if (f.financial === 'paid' && o.invoiceStatus !== 'paid') return false;
         }
         
         if (search) {
@@ -638,22 +630,6 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
-            {/* Financial */}
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Financial</label>
-              <SearchableSelect
-                value={filterFinancial}
-                onValueChange={setFilterFinancial}
-                options={[
-                  { value: "not_invoiced", label: "Not Invoiced" },
-                  { value: "pending", label: "Pending" },
-                  { value: "paid", label: "Paid" },
-                ]}
-                placeholder="Financial"
-                allLabel="All"
-                className="w-full"
-              />
-            </div>
             {/* Buttons */}
             <div className="flex items-end gap-2">
               <Button size="sm" className="h-9 px-4" onClick={applyFilters}>Apply</Button>
@@ -786,7 +762,7 @@ export default function Orders() {
                 {isCol('confirmationStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
                 
                 {isCol('deliveryStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
-                {isCol('financial') && <th className="text-center py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Financial</th>}
+                
                 <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -834,7 +810,7 @@ export default function Orders() {
                   {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} PKR</td>}
 {isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} /></td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
-                  {isCol('financial') && <td className="py-2.5 px-4 text-center"><FinancialIndicators confirmationStatus={order.confirmationStatus} deliveryStatus={order.deliveryStatus} invoiceId={order.invoiceId} invoiceStatus={order.invoiceStatus} isAdmin={isAdmin} /></td>}
+                  
                   <td className="py-2.5 px-4">
                     <div className="flex items-center gap-1.5">
                       {/* Edit: admin always, seller only when new */}
@@ -917,7 +893,7 @@ export default function Orders() {
                 <div className="flex items-center gap-1.5">
                   <StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} />
                   <StatusBadge {...deliveryConfig[order.deliveryStatus]} />
-                  <FinancialIndicators confirmationStatus={order.confirmationStatus} deliveryStatus={order.deliveryStatus} invoiceId={order.invoiceId} invoiceStatus={order.invoiceStatus} isAdmin={isAdmin} />
+                  
                 </div>
                 {(isAdmin || order.confirmationStatus === 'new') && (
                   <button
