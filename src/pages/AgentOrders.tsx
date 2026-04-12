@@ -1088,10 +1088,11 @@ const AgentOrders = () => {
                             )}
                           </div>
                         ) : (
-                          <div className="flex flex-wrap gap-2 text-[11px]">
-                            <span className="inline-flex items-center gap-1 text-sm font-bold text-foreground">
+                          <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                            <span className="inline-flex items-center gap-1 text-sm font-bold text-foreground bg-muted px-2 py-0.5 rounded">
                               Qty: {op.qty}
                             </span>
+                            <span className="text-muted-foreground font-medium">|</span>
                             <span className="inline-flex items-center gap-1 text-sm font-bold text-foreground">
                               {orderTotal} PKR
                             </span>
