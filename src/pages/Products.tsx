@@ -453,8 +453,8 @@ export default function Products() {
                           </span>
                         </td>
                         <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">
-                          <div>{product.price.toLocaleString()} Rs</div>
-                          <div className="text-[10px] text-muted-foreground">{(product.price / 290).toFixed(2)} $</div>
+                          <div>{product.price.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} $</div>
+                          <div className="text-[10px] text-muted-foreground">{(product.price * 290).toLocaleString()} Rs</div>
                         </td>
                         <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">
                           <div>{product.lastSellingPrice.toLocaleString()} Rs</div>
