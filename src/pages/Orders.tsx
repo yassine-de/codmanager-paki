@@ -960,6 +960,14 @@ export default function Orders() {
         </div>
       </div>
 
+      {/* ORIO Tracking Modal */}
+      {trackingOrioId && (
+        <OrioTrackingModal
+          orioOrderId={trackingOrioId}
+          open={!!trackingOrioId}
+          onClose={() => setTrackingOrioId(null)}
+        />
+      )}
 
       {/* Edit Modal */}
       {editOrder && (
