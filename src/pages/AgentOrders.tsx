@@ -736,20 +736,20 @@ const AgentOrders = () => {
 
   const handleWhatsApp = () => {
     let phone = editCustomer.phone.replace(/[\s\-\(\)]/g, "");
-    // Ensure proper international format (remove leading + or 00, keep digits)
     phone = phone.replace(/^\+/, "");
     if (phone.startsWith("00")) phone = phone.substring(2);
-    // Pakistani numbers: convert leading 0 to 92
     if (phone.startsWith("0")) phone = "92" + phone.substring(1);
-    const url = `https://api.whatsapp.com/send?phone=${phone}`;
-    // Use link click instead of window.open to avoid popup blockers
-    const link = document.createElement("a");
-    link.href = url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    const appUrl = `whatsapp://send?phone=${phone}`;
+    const webUrl = `https://wa.me/${phone}`;
+
+    window.location.href = appUrl;
+
+    window.setTimeout(() => {
+      if (!document.hidden) {
+        window.open(webUrl, "_blank", "noopener,noreferrer");
+      }
+    }, 700);
   };
 
   const updateItem = (index: number, field: "qty" | "price", value: number) => {
