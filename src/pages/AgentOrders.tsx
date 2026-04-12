@@ -1129,20 +1129,26 @@ const AgentOrders = () => {
                         {/* Store & Video Links */}
                         <div className="flex flex-wrap gap-2 pt-1">
                           {productStoreUrl ? (
-                            <a href={productStoreUrl} target="_blank" rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10">
+                            <button
+                              type="button"
+                              onClick={() => openExternalUrl(productStoreUrl)}
+                              className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10"
+                            >
                               <Store className="h-3 w-3" /> Store Link <ExternalLink className="h-2.5 w-2.5" />
-                            </a>
+                            </button>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-md">
                               <Store className="h-3 w-3" /> No Store Link
                             </span>
                           )}
                           {productVideoUrl ? (
-                            <a href={productVideoUrl} target="_blank" rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10">
+                            <button
+                              type="button"
+                              onClick={() => openExternalUrl(productVideoUrl)}
+                              className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline bg-primary/5 px-2 py-1 rounded-md border border-primary/10"
+                            >
                               <Video className="h-3 w-3" /> Video <ExternalLink className="h-2.5 w-2.5" />
-                            </a>
+                            </button>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted px-2 py-1 rounded-md">
                               <Video className="h-3 w-3" /> No Video
