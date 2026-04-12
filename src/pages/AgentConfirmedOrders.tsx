@@ -8,9 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, Search, Package, MapPin, Pencil, DollarSign, Tag, Store, Video, ExternalLink, Plus, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+import { CheckCircle2, Search, Package, MapPin, Pencil, DollarSign, Tag, Store, Video, ExternalLink, Plus, Trash2, CalendarIcon } from "lucide-react";
+import { format, addMinutes, isToday, isBefore, startOfDay } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,6 +59,9 @@ interface EditForm {
   quantity: number;
   confirmation_status: string;
   note: string;
+  postpone_date: Date | null;
+  postpone_time: string;
+  postpone_note: string;
 }
 
 const AgentConfirmedOrders = () => {
@@ -81,6 +85,9 @@ const AgentConfirmedOrders = () => {
     quantity: 1,
     confirmation_status: "",
     note: "",
+    postpone_date: null,
+    postpone_time: "",
+    postpone_note: "",
   });
 
   const { data: orders = [], isLoading } = useQuery({
@@ -99,11 +106,41 @@ const AgentConfirmedOrders = () => {
     enabled: !!userId,
   });
 
+  const isPostponed = editForm.confirmation_status === "postponed";
+
+  // Auto-suggest time 30min from now when selecting today
+  useEffect(() => {
+    if (isPostponed && editForm.postpone_date && isToday(editForm.postpone_date) && !editForm.postpone_time) {
+      const suggested = format(addMinutes(new Date(), 30), "HH:mm");
+      setEditForm(prev => ({ ...prev, postpone_time: suggested }));
+    }
+  }, [editForm.postpone_date, isPostponed]);
+
+  const isPostponeTimeInvalid = useMemo(() => {
+    if (!isPostponed || !editForm.postpone_date || !editForm.postpone_time) return false;
+    if (!isToday(editForm.postpone_date)) return false;
+    const [h, m] = editForm.postpone_time.split(":").map(Number);
+    const scheduled = new Date(editForm.postpone_date);
+    scheduled.setHours(h, m, 0, 0);
+    return isBefore(scheduled, new Date());
+  }, [isPostponed, editForm.postpone_date, editForm.postpone_time]);
+
   const updateMutation = useMutation({
     mutationFn: async () => {
       if (!editOrder) return;
       const totalAmount = editForm.price * editForm.quantity;
       const confirmed_at = editForm.confirmation_status === "confirmed" ? new Date().toISOString() : null;
+
+      // Build postpone_date ISO from date + time
+      let postpone_date: string | null = null;
+      if (editForm.confirmation_status === "postponed" && editForm.postpone_date) {
+        const d = new Date(editForm.postpone_date);
+        if (editForm.postpone_time) {
+          const [h, m] = editForm.postpone_time.split(":").map(Number);
+          d.setHours(h, m, 0, 0);
+        }
+        postpone_date = d.toISOString();
+      }
 
       const { error } = await supabase
         .from("orders")
@@ -119,6 +156,8 @@ const AgentConfirmedOrders = () => {
           confirmation_status: editForm.confirmation_status,
           confirmed_at,
           note: editForm.note.trim(),
+          postpone_date,
+          postpone_note: editForm.confirmation_status === "postponed" ? editForm.postpone_note.trim() : null,
         })
         .eq("id", editOrder.id);
       if (error) throw error;
@@ -196,6 +235,9 @@ const AgentConfirmedOrders = () => {
       quantity: order.quantity || 1,
       confirmation_status: order.confirmation_status || "",
       note: order.note || "",
+      postpone_date: order.postpone_date ? new Date(order.postpone_date) : null,
+      postpone_time: order.postpone_date ? format(new Date(order.postpone_date), "HH:mm") : "",
+      postpone_note: order.postpone_note || "",
     });
     // Fetch seller's products for links and add-item
     supabase
@@ -590,6 +632,59 @@ const AgentConfirmedOrders = () => {
               </div>
             </div>
 
+            {/* Postpone Schedule - shown when status is postponed */}
+            {isPostponed && (
+              <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide flex items-center gap-1.5">
+                  <CalendarIcon className="h-3.5 w-3.5" /> Schedule Follow-up
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Date</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className={cn("h-9 w-full justify-start text-left text-sm font-normal", !editForm.postpone_date && "text-muted-foreground")}>
+                          <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                          {editForm.postpone_date ? format(editForm.postpone_date, "dd/MM/yyyy") : "Pick date"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={editForm.postpone_date || undefined}
+                          onSelect={(d) => setEditForm(prev => ({ ...prev, postpone_date: d || null, postpone_time: "" }))}
+                          disabled={(date) => isBefore(startOfDay(date), startOfDay(new Date()))}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Time</Label>
+                    <Input
+                      type="time"
+                      className="h-9 text-sm"
+                      value={editForm.postpone_time}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, postpone_time: e.target.value }))}
+                    />
+                    {isPostponeTimeInvalid && (
+                      <p className="text-[10px] text-destructive">Time has already passed</p>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Follow-up Note</Label>
+                  <Input
+                    className="h-9 text-sm"
+                    value={editForm.postpone_note}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, postpone_note: e.target.value }))}
+                    maxLength={300}
+                    placeholder="Reason for postponement..."
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Note */}
             <div className="space-y-1.5">
               <Label className="text-xs">Note</Label>
@@ -604,7 +699,11 @@ const AgentConfirmedOrders = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setEditOrder(null)}>Cancel</Button>
-            <Button size="sm" onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>
+            <Button
+              size="sm"
+              onClick={() => updateMutation.mutate()}
+              disabled={updateMutation.isPending || (isPostponed && (!editForm.postpone_date || isPostponeTimeInvalid))}
+            >
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
