@@ -734,6 +734,19 @@ const AgentOrders = () => {
     }
   };
 
+  const openExternalUrl = (url: string) => {
+    const popup = window.open(url, "_blank", "noopener,noreferrer");
+    if (popup) {
+      popup.opener = null;
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(url)
+      .then(() => toast.info("Link copied — paste it in a new tab"))
+      .catch(() => toast.error("Could not open the link"));
+  };
+
   const handleWhatsApp = () => {
     let phone = editCustomer.phone.replace(/[\s\-\(\)]/g, "");
     phone = phone.replace(/^\+/, "");
@@ -747,7 +760,7 @@ const AgentOrders = () => {
 
     window.setTimeout(() => {
       if (!document.hidden) {
-        window.open(webUrl, "_blank", "noopener,noreferrer");
+        openExternalUrl(webUrl);
       }
     }, 700);
   };
