@@ -1019,8 +1019,13 @@ const AgentOrders = () => {
               {activeItems.map((op, i) => {
                 // Look up product_url from seller's products table
                 const matchedProduct = sellerProducts.find(p => p.name === op.name);
-                const productStoreUrl = matchedProduct?.product_url || currentOrder.product_url || currentOrder.store_url;
-                const productVideoUrl = matchedProduct?.video_url || currentOrder.video_url;
+                const ensureProtocol = (url: string | null | undefined): string | null => {
+                  if (!url || !url.trim()) return null;
+                  const trimmed = url.trim();
+                  return trimmed.match(/^https?:\/\//) ? trimmed : `https://${trimmed}`;
+                };
+                const productStoreUrl = ensureProtocol(matchedProduct?.product_url || currentOrder.product_url || currentOrder.store_url);
+                const productVideoUrl = ensureProtocol(matchedProduct?.video_url || currentOrder.video_url);
 
                 return (
                   <div key={i} className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-2">
