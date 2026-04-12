@@ -85,6 +85,9 @@ const AgentConfirmedOrders = () => {
     quantity: 1,
     confirmation_status: "",
     note: "",
+    postpone_date: null,
+    postpone_time: "",
+    postpone_note: "",
   });
 
   const { data: orders = [], isLoading } = useQuery({
