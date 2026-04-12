@@ -741,7 +741,15 @@ const AgentOrders = () => {
     if (phone.startsWith("00")) phone = phone.substring(2);
     // Pakistani numbers: convert leading 0 to 92
     if (phone.startsWith("0")) phone = "92" + phone.substring(1);
-    window.open(`https://api.whatsapp.com/send?phone=${phone}`, "_blank");
+    const url = `https://api.whatsapp.com/send?phone=${phone}`;
+    // Use link click instead of window.open to avoid popup blockers
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const updateItem = (index: number, field: "qty" | "price", value: number) => {
