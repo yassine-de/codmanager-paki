@@ -203,6 +203,9 @@ const AgentConfirmedOrders = () => {
       quantity: order.quantity || 1,
       confirmation_status: order.confirmation_status || "",
       note: order.note || "",
+      postpone_date: order.postpone_date ? new Date(order.postpone_date) : null,
+      postpone_time: order.postpone_date ? format(new Date(order.postpone_date), "HH:mm") : "",
+      postpone_note: order.postpone_note || "",
     });
     // Fetch seller's products for links and add-item
     supabase
