@@ -144,9 +144,12 @@ const AgentConfirmedOrders = () => {
         postpone_date = d.toISOString();
       }
 
-      const { error } = await supabase
-        .from("orders")
-        .update({
+      // Only set delivery_status if agent is booking a confirmed order with no existing shipping status
+      const shouldSetDelivery = editForm.confirmation_status === "confirmed"
+        && !editOrder.delivery_status
+        && editForm.delivery_status === "booked";
+
+      const updatePayload: any = {
           customer_name: editForm.customer_name.trim(),
           customer_phone: editForm.customer_phone.trim(),
           customer_city: editForm.customer_city.trim(),
@@ -160,7 +163,15 @@ const AgentConfirmedOrders = () => {
           note: editForm.note.trim(),
           postpone_date,
           postpone_note: editForm.confirmation_status === "postponed" ? editForm.postpone_note.trim() : null,
-        })
+      };
+
+      if (shouldSetDelivery) {
+        updatePayload.delivery_status = "booked";
+      }
+
+      const { error } = await supabase
+        .from("orders")
+        .update(updatePayload)
         .eq("id", editOrder.id);
       if (error) throw error;
 
