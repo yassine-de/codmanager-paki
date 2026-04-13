@@ -17,7 +17,8 @@ interface FailedSyncModalProps {
 
 export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalProps) {
   const navigate = useNavigate();
-
+  const queryClient = useQueryClient();
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const { data: failedOrders = [], isLoading } = useQuery({
     queryKey: ["failed-sync-orders"],
     queryFn: async () => {
