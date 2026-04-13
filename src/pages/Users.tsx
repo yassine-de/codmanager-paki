@@ -362,6 +362,7 @@ const Users = () => {
                 <TableHeader>
                   <TableRow className="bg-muted/40">
                     <TableHead className="text-[11px] font-semibold h-9">Statut</TableHead>
+                    <TableHead className="text-[11px] font-semibold h-9">ID</TableHead>
                     <TableHead className="text-[11px] font-semibold h-9">Nom</TableHead>
                     <TableHead className="text-[11px] font-semibold h-9">Email</TableHead>
                     <TableHead className="text-[11px] font-semibold h-9">Rôle</TableHead>
@@ -376,6 +377,7 @@ const Users = () => {
                       <TableCell className="py-2.5">
                         <Switch checked={u.active} onCheckedChange={() => toggleActive(u)} className="scale-75" />
                       </TableCell>
+                      <TableCell className="text-[10px] text-muted-foreground py-2.5 font-mono max-w-[120px] truncate" title={u.user_id}>{u.user_id.slice(0, 8)}…</TableCell>
                       <TableCell className="text-xs font-medium py-2.5">{u.name}</TableCell>
                       <TableCell className="text-xs text-muted-foreground py-2.5">{u.email}</TableCell>
                       <TableCell className="py-2.5">
@@ -399,7 +401,7 @@ const Users = () => {
                   ))}
                   {filteredUsers.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-xs text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-xs text-muted-foreground">
                         Aucun utilisateur. Cliquez sur "Créer Utilisateur" pour commencer.
                       </TableCell>
                     </TableRow>
