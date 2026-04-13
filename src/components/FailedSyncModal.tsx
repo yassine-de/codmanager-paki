@@ -34,6 +34,35 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
     refetchInterval: open ? 15_000 : false,
   });
 
+  const handleRetry = async (orderId: string, orderDbId: string) => {
+    setRetryingId(orderId);
+    try {
+      // Reset sync status first so the edge function doesn't skip it
+      await supabase
+        .from("orders")
+        .update({ orio_sync_status: "pending", orio_sync_error: null })
+        .eq("order_id", orderId);
+
+      const { data, error } = await supabase.functions.invoke("orio-sync", {
+        body: { action: "sync-order", order_id: orderId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.skipped) {
+        toast.info(data.reason || "Order skipped");
+      } else {
+        toast.success(`Order ${orderId} synced successfully`);
+      }
+      queryClient.invalidateQueries({ queryKey: ["failed-sync-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["system-failed-syncs"] });
+    } catch (e: any) {
+      toast.error(`Retry failed: ${e.message}`);
+      queryClient.invalidateQueries({ queryKey: ["failed-sync-orders"] });
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
