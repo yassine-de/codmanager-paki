@@ -150,7 +150,7 @@ export default function OrderDetail() {
             </span>
           )}
         </div>
-        {seller && <p className="text-sm text-muted-foreground mt-1">Seller: {seller}</p>}
+        {seller && authUser?.role === 'admin' && <p className="text-sm text-muted-foreground mt-1">Seller: {seller}</p>}
       </div>
 
       {/* Customer Info */}
