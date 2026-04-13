@@ -85,7 +85,7 @@ export default function SystemStatusPanel() {
   const items: StatusItem[] = [
     {
       id: "sync-errors",
-      label: "ORIO Sync Fehler",
+      label: "ORIO Sync Errors",
       count: failedSyncCount,
       severity: failedSyncCount > 0 ? "error" : "ok",
       icon: <AlertTriangle className="w-4 h-4" />,
@@ -93,7 +93,7 @@ export default function SystemStatusPanel() {
     },
     {
       id: "pending-adjustments",
-      label: "Offene Adjustments",
+      label: "Pending Adjustments",
       count: pendingAdjustments,
       severity: pendingAdjustments > 0 ? "warning" : "ok",
       icon: <ShieldAlert className="w-4 h-4" />,
@@ -101,7 +101,7 @@ export default function SystemStatusPanel() {
     },
     {
       id: "unassigned-orders",
-      label: "Unzugewiesene Orders",
+      label: "Unassigned Orders",
       count: unassignedOrders,
       severity: unassignedOrders > 5 ? "warning" : "ok",
       icon: <Package className="w-4 h-4" />,
@@ -174,7 +174,7 @@ export default function SystemStatusPanel() {
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold truncate max-w-[140px]">{item.label}</p>
                   <p className={`text-[9px] font-medium ${cfg.text} mt-0.5 whitespace-nowrap`}>
-                    {item.count === 0 ? "Keine Probleme" : `${item.count} ausstehend`}
+                    {item.count === 0 ? "No issues" : `${item.count} pending`}
                   </p>
                 </div>
 
