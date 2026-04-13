@@ -24,7 +24,7 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("order_id, customer_name, customer_city, orio_sync_error, updated_at, confirmation_status")
+        .select("id, order_id, customer_name, customer_city, orio_sync_error, updated_at, confirmation_status")
         .eq("orio_sync_status", "failed")
         .order("updated_at", { ascending: false });
       if (error) throw error;
