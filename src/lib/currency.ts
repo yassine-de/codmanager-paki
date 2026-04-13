@@ -13,7 +13,8 @@ export function formatPKR(amount: number): string {
 
 /** Format amount as USD */
 export function formatUSD(amount: number): string {
-  return `${amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} $`;
+  const rounded = Math.round(amount * 100) / 100;
+  return `${rounded.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
 }
 
 /** Convert PKR to USD */
