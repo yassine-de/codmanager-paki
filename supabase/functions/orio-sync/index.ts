@@ -37,8 +37,21 @@ async function getCities(supabase: ReturnType<typeof createClient>) {
     .limit(1);
 
   if (cached && cached.length > 0) {
-    const { data: all } = await supabase.from("orio_cities_cache").select("*").limit(5000);
-    return all || [];
+    // Load all cities in batches to avoid the 1000 row default limit
+    let allCities: any[] = [];
+    const batchSize = 1000;
+    let from = 0;
+    while (true) {
+      const { data: batch } = await supabase
+        .from("orio_cities_cache")
+        .select("*")
+        .range(from, from + batchSize - 1);
+      if (!batch || batch.length === 0) break;
+      allCities = allCities.concat(batch);
+      if (batch.length < batchSize) break;
+      from += batchSize;
+    }
+    return allCities;
   }
 
   const cfg = getOrioConfig();
