@@ -1,11 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, ExternalLink, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface FailedSyncModalProps {
   open: boolean;
@@ -14,13 +17,14 @@ interface FailedSyncModalProps {
 
 export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalProps) {
   const navigate = useNavigate();
-
+  const queryClient = useQueryClient();
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const { data: failedOrders = [], isLoading } = useQuery({
     queryKey: ["failed-sync-orders"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("order_id, customer_name, customer_city, orio_sync_error, updated_at, confirmation_status")
+        .select("id, order_id, customer_name, customer_city, orio_sync_error, updated_at, confirmation_status")
         .eq("orio_sync_status", "failed")
         .order("updated_at", { ascending: false });
       if (error) throw error;
@@ -29,6 +33,35 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
     enabled: open,
     refetchInterval: open ? 15_000 : false,
   });
+
+  const handleRetry = async (orderId: string, orderDbId: string) => {
+    setRetryingId(orderId);
+    try {
+      // Reset sync status first so the edge function doesn't skip it
+      await supabase
+        .from("orders")
+        .update({ orio_sync_status: "pending", orio_sync_error: null })
+        .eq("order_id", orderId);
+
+      const { data, error } = await supabase.functions.invoke("orio-sync", {
+        body: { action: "sync-order", order_id: orderId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.skipped) {
+        toast.info(data.reason || "Order skipped");
+      } else {
+        toast.success(`Order ${orderId} synced successfully`);
+      }
+      queryClient.invalidateQueries({ queryKey: ["failed-sync-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["system-failed-syncs"] });
+    } catch (e: any) {
+      toast.error(`Retry failed: ${e.message}`);
+      queryClient.invalidateQueries({ queryKey: ["failed-sync-orders"] });
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -55,6 +88,7 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
                   <TableHead className="text-xs">Status</TableHead>
                   <TableHead className="text-xs">Error</TableHead>
                   <TableHead className="text-xs">Date</TableHead>
+                  <TableHead className="text-xs w-[60px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -85,6 +119,21 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                       {format(new Date(order.updated_at), "dd.MM.yy HH:mm")}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0"
+                        title="Retry sync"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRetry(order.order_id, order.order_id);
+                        }}
+                        disabled={retryingId === order.order_id}
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${retryingId === order.order_id ? "animate-spin" : ""}`} />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
