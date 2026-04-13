@@ -376,7 +376,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   if (!request) return null;
 
   const imageUrl = request.product_image_url;
-  const canValidateProduct = request.status === "received" && request.product_created === false;
+  const canValidateProduct = request.status === "received" && !request.product_created;
 
   return (
     <>
