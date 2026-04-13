@@ -118,18 +118,6 @@ const Login = () => {
                 Sign in
               </Button>
             </form>
-            <div className="mt-6 pt-4 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-sm h-10 rounded-xl"
-                onClick={seedAll}
-                disabled={isSeeding}
-              >
-                {isSeeding ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}
-                Initialize all users
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </div>
