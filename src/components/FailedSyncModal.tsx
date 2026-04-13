@@ -135,7 +135,6 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
                         <RefreshCw className={`w-3.5 h-3.5 ${retryingId === order.order_id ? "animate-spin" : ""}`} />
                       </Button>
                     </TableCell>
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
