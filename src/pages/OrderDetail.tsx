@@ -240,8 +240,8 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      {/* ORIO Shipping */}
-      {isDbOrder && (orioSyncStatus || orioOrderId) && (
+      {/* ORIO Shipping - Admin only */}
+      {isDbOrder && (orioSyncStatus || orioOrderId) && authUser?.role === 'admin' && (
         <div className="bg-card rounded-lg border p-5 space-y-4 animate-slide-up" style={{ animationDelay: '200ms' }}>
           <div className="flex items-center gap-2">
             <Truck className="w-4 h-4 text-primary" />
