@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,8 @@ interface SellerOption {
 }
 
 const Integrations = () => {
+  const { authUser } = useAuth();
+  const isAdmin = authUser?.role === "admin";
   const [sheets, setSheets] = useState<IntegrationSheet[]>([]);
   const [sellers, setSellers] = useState<SellerOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -489,33 +492,37 @@ const Integrations = () => {
                         : "Never"}
                     </td>
                      <td className="px-4 py-4">
-                       <div className="flex flex-col items-center gap-1">
-                         <Input
-                           type="number"
-                           min={1}
-                           max={sheet.last_imported_row}
-                           className="h-7 w-20 text-xs text-center tabular-nums"
-                           defaultValue={sheet.last_imported_row}
-                           onBlur={async (e) => {
-                             const val = parseInt(e.target.value);
-                             if (!val || val === sheet.last_imported_row) return;
-                             if (val > sheet.last_imported_row) {
-                               toast.error(`La valeur ne peut pas dépasser ${sheet.last_imported_row}`);
-                               e.target.value = String(sheet.last_imported_row);
-                               return;
-                             }
-                             const { error } = await supabase
-                               .from("integration_sheets")
-                               .update({ last_imported_row: val })
-                               .eq("id", sheet.id);
-                             if (error) { toast.error("Failed to update"); return; }
-                             toast.success(`Last row updated to ${val}`);
-                             fetchSheets();
-                           }}
-                           onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                         />
-                         <span className="text-[10px] text-muted-foreground">/ {sheet.last_imported_row}</span>
-                       </div>
+                       {isAdmin ? (
+                         <div className="flex flex-col items-center gap-1">
+                           <Input
+                             type="number"
+                             min={1}
+                             max={sheet.last_imported_row}
+                             className="h-7 w-20 text-xs text-center tabular-nums"
+                             defaultValue={sheet.last_imported_row}
+                             onBlur={async (e) => {
+                               const val = parseInt(e.target.value);
+                               if (!val || val === sheet.last_imported_row) return;
+                               if (val > sheet.last_imported_row) {
+                                 toast.error(`La valeur ne peut pas dépasser ${sheet.last_imported_row}`);
+                                 e.target.value = String(sheet.last_imported_row);
+                                 return;
+                               }
+                               const { error } = await supabase
+                                 .from("integration_sheets")
+                                 .update({ last_imported_row: val })
+                                 .eq("id", sheet.id);
+                               if (error) { toast.error("Failed to update"); return; }
+                               toast.success(`Last row updated to ${val}`);
+                               fetchSheets();
+                             }}
+                             onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                           />
+                           <span className="text-[10px] text-muted-foreground">/ {sheet.last_imported_row}</span>
+                         </div>
+                       ) : (
+                         <span className="text-sm tabular-nums font-medium">{sheet.last_imported_row}</span>
+                       )}
                      </td>
                      <td className="px-4 py-4">
                        <Badge
