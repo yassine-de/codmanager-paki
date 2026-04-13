@@ -88,6 +88,7 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
                   <TableHead className="text-xs">Status</TableHead>
                   <TableHead className="text-xs">Error</TableHead>
                   <TableHead className="text-xs">Date</TableHead>
+                  <TableHead className="text-xs w-[60px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
