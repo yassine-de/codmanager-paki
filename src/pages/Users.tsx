@@ -96,7 +96,7 @@ const Users = () => {
     setForm({
       name: "", email: "", password: "", phone: "",
       role: "seller", rate_1kg: "", rate_2kg: "", rate_3kg: "",
-      dropped_order_rate: "", confirmed_order_rate: "", cod_fee_per_delivery: "",
+      dropped_order_rate: "0.2", confirmed_order_rate: "0.3", cod_fee_per_delivery: "",
       selectedPermissions: [], customRoleName: "",
       agentProductScope: "all", agentProducts: [],
     });
