@@ -194,8 +194,8 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
         </div>
         <span className="text-[10px] font-bold text-muted-foreground/50 bg-muted rounded-full px-2.5 py-1 uppercase tracking-widest">7d</span>
       </div>
-      <ResponsiveContainer width="100%" height={105}>
-        <AreaChart data={data} margin={{ top: 18, right: 5, left: 5, bottom: 0 }}>
+      <ResponsiveContainer width="100%" height={115}>
+        <AreaChart data={data} margin={{ top: 28, right: 8, left: 8, bottom: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity={0.3} />
@@ -224,10 +224,10 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
               <LabelList
                 dataKey={dataKey}
                 position="top"
-                offset={10}
-                fontSize={11}
-                fontWeight={800}
-                fill="hsl(var(--foreground))"
+                offset={12}
+                fontSize={10}
+                fontWeight={700}
+                fill={color}
                 formatter={(v: number) => v.toLocaleString()}
               />
             )}
