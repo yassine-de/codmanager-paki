@@ -111,7 +111,7 @@ export default function SellerSourcing() {
         .from("sourcing_requests")
         .update({
           seller_validated: validated,
-          status: validated ? "validated" : "cancelled",
+          ...(validated === false ? { status: "cancelled" } : {}),
           updated_at: new Date().toISOString(),
           admin_seen: false,
         })

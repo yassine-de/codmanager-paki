@@ -203,7 +203,6 @@ export function EditSellerSourcingModal({ request, open, onOpenChange }: Props) 
         .from("sourcing_requests")
         .update({
           seller_validated: true,
-          status: "validated",
           updated_at: new Date().toISOString(),
           admin_seen: false,
         })
