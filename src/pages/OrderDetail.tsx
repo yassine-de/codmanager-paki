@@ -180,7 +180,7 @@ export default function OrderDetail() {
       <div className="bg-card rounded-lg border p-5 space-y-3 animate-slide-up" style={{ animationDelay: '120ms' }}>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Order Details</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {attemptCount > 0 && (
+          {attemptCount > 0 && authUser?.role !== 'seller' && (
             <div className="rounded-lg border bg-muted/30 p-3 text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Attempts</p>
               <p className="text-sm font-semibold tabular-nums mt-0.5">{attemptCount}</p>
