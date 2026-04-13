@@ -1,0 +1,1 @@
+UPDATE sourcing_requests SET status = 'received' WHERE status = 'validated';

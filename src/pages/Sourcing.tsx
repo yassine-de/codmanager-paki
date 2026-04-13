@@ -251,7 +251,7 @@ export default function Sourcing() {
                 const sConfig = statusConfig[req.status] || statusConfig.waiting_quote;
                 const vKey = req.seller_validated === true ? "validated" : req.seller_validated === false ? "cancelled" : "pending";
                 const vConfig = validationConfig[vKey];
-                const isReceivedNoProduct = req.status === "received" && req.product_created === false;
+                const isReceivedNoProduct = req.status === "received" && !req.product_created;
 
                 return (
                   <TableRow key={req.id} className={`text-xs ${isReceivedNoProduct ? "bg-destructive/5 hover:bg-destructive/10" : ""}`}>
