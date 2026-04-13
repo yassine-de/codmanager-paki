@@ -37,7 +37,7 @@ async function getCities(supabase: ReturnType<typeof createClient>) {
     .limit(1);
 
   if (cached && cached.length > 0) {
-    const { data: all } = await supabase.from("orio_cities_cache").select("*");
+    const { data: all } = await supabase.from("orio_cities_cache").select("*").limit(5000);
     return all || [];
   }
 
