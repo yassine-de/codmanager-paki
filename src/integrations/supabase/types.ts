@@ -761,6 +761,7 @@ export type Database = {
         Row: {
           active: boolean
           created_at: string
+          display_id: string | null
           email: string
           id: string
           name: string
@@ -771,6 +772,7 @@ export type Database = {
         Insert: {
           active?: boolean
           created_at?: string
+          display_id?: string | null
           email: string
           id?: string
           name: string
@@ -781,6 +783,7 @@ export type Database = {
         Update: {
           active?: boolean
           created_at?: string
+          display_id?: string | null
           email?: string
           id?: string
           name?: string
@@ -838,6 +841,24 @@ export type Database = {
           shipping_rate_2kg?: number
           shipping_rate_3kg?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      seller_display_id_counters: {
+        Row: {
+          current_counter: number
+          id: string
+          prefix: string
+        }
+        Insert: {
+          current_counter?: number
+          id?: string
+          prefix: string
+        }
+        Update: {
+          current_counter?: number
+          id?: string
+          prefix?: string
         }
         Relationships: []
       }
@@ -1337,6 +1358,7 @@ export type Database = {
         Returns: string
       }
       generate_product_sku: { Args: never; Returns: string }
+      generate_seller_display_id: { Args: { p_name: string }; Returns: string }
       generate_sourcing_display_id: {
         Args: { p_seller_id: string }
         Returns: string

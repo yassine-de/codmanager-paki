@@ -23,6 +23,7 @@ interface UserData {
   active: boolean;
   created_at: string;
   role: string;
+  display_id: string | null;
   permissions: string[];
   rates: { rate_1kg: number; rate_2kg: number; rate_3kg: number } | null;
   rate_settings: { dropped_order_rate: number; confirmed_order_rate: number; cod_fee_per_delivery: number } | null;
@@ -378,14 +379,20 @@ const Users = () => {
                         <Switch checked={u.active} onCheckedChange={() => toggleActive(u)} className="scale-75" />
                       </TableCell>
                       <TableCell className="py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => { navigator.clipboard.writeText(u.user_id); }}
-                          className="inline-flex items-center gap-1 text-[10px] text-muted-foreground font-mono hover:text-foreground transition-colors cursor-pointer"
-                          title={`Click to copy: ${u.user_id}`}
-                        >
-                          {u.user_id.slice(0, 4)}…{u.user_id.slice(-4)}
-                        </button>
+                        {u.role === "seller" && u.display_id ? (
+                          <Badge variant="outline" className="text-[10px] font-mono font-semibold">
+                            {u.display_id}
+                          </Badge>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { navigator.clipboard.writeText(u.user_id); }}
+                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground font-mono hover:text-foreground transition-colors cursor-pointer"
+                            title={`Click to copy: ${u.user_id}`}
+                          >
+                            {u.user_id.slice(0, 4)}…{u.user_id.slice(-4)}
+                          </button>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs font-medium py-2.5">{u.name}</TableCell>
                       <TableCell className="text-xs text-muted-foreground py-2.5">{u.email}</TableCell>
