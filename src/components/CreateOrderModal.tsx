@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import { CitySelect } from "@/components/CitySelect";
 
 interface CreateOrderModalProps {
   open: boolean;
@@ -16,15 +17,6 @@ interface CreateOrderModalProps {
   onCreated?: () => void;
 }
 
-const PAKISTANI_CITIES = [
-  "Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan",
-  "Peshawar", "Quetta", "Sialkot", "Gujranwala", "Hyderabad", "Bahawalpur",
-  "Sargodha", "Abbottabad", "Mardan", "Sukkur", "Larkana", "Sahiwal",
-  "Rahim Yar Khan", "Sheikhupura", "Jhang", "Dera Ghazi Khan", "Gujrat",
-  "Kasur", "Mingora", "Chiniot", "Kamoke", "Mandi Bahauddin", "Jhelum",
-  "Sadiqabad", "Jacobabad", "Shikarpur", "Khairpur", "Kohat", "Muzaffargarh",
-  "Okara", "Vehari", "Burewala", "Hafizabad", "Turbat", "Other",
-];
 
 export default function CreateOrderModal({ open, onOpenChange, onCreated }: CreateOrderModalProps) {
   const { authUser } = useAuth();
@@ -167,16 +159,7 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">City *</Label>
-                <Select value={customerCity} onValueChange={setCustomerCity}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Select city" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAKISTANI_CITIES.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <CitySelect value={customerCity} onValueChange={setCustomerCity} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Address</Label>

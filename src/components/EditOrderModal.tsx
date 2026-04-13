@@ -13,6 +13,7 @@ import { sellerNames, productNames } from "@/lib/data";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { CitySelect } from "@/components/CitySelect";
 
 const confirmationOptions: { value: ConfirmationStatus; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -37,7 +38,7 @@ const deliveryOptions: { value: DeliveryStatus; label: string }[] = [
   { value: 'postponed', label: 'Postponed' },
 ];
 
-const cities = ['Casablanca', 'Rabat', 'Marrakech', 'Fes', 'Tangier', 'Agadir', 'Oujda', 'Kenitra', 'Tetouan', 'Meknes'];
+
 
 interface Props {
   open: boolean;
@@ -184,12 +185,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                 </div>
                 <div>
                   <Label className={fieldLabel}>City</Label>
-                  <Select value={city} onValueChange={setCity}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <CitySelect value={city} onValueChange={setCity} />
                 </div>
                 <div>
                   <Label className={fieldLabel}>Address</Label>
