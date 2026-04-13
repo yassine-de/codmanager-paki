@@ -20,6 +20,7 @@ import { useDashboardData } from "@/hooks/useDashboardData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import OnlineStatusPanel from "@/components/OnlineStatusPanel";
+import SystemStatusPanel from "@/components/SystemStatusPanel";
 import { useDataVisibility, MaskedValue } from "@/contexts/DataVisibilityContext";
 import { formatPKR, formatUSD, pkrToUsd } from "@/lib/currency";
 import { DashboardSkeleton } from "@/components/DashboardSkeleton";
@@ -377,6 +378,9 @@ export default function Dashboard() {
 
         {/* ═══════════ TEAM STATUS (admin only) ═══════════ */}
         {!isSeller && <OnlineStatusPanel />}
+
+        {/* ═══════════ SYSTEM STATUS (admin only) ═══════════ */}
+        {!isSeller && <SystemStatusPanel />}
 
         {/* ═══════════ TOP: 7-DAY SPARKLINES ═══════════ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
