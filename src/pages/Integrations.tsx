@@ -488,25 +488,8 @@ const Integrations = () => {
                         ? formatDistanceToNow(new Date(sheet.last_check), { addSuffix: true })
                         : "Never"}
                     </td>
-                     <td className="px-4 py-4">
-                       <Input
-                         type="number"
-                         min={1}
-                         className="h-7 w-20 text-xs text-center tabular-nums"
-                         defaultValue={sheet.last_imported_row}
-                         onBlur={async (e) => {
-                           const val = parseInt(e.target.value);
-                           if (!val || val === sheet.last_imported_row) return;
-                           const { error } = await supabase
-                             .from("integration_sheets")
-                             .update({ last_imported_row: val })
-                             .eq("id", sheet.id);
-                           if (error) { toast.error("Failed to update"); return; }
-                           toast.success(`Last row updated to ${val}`);
-                           fetchSheets();
-                         }}
-                         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                       />
+                     <td className="px-4 py-4 text-sm text-center tabular-nums font-medium">
+                       {sheet.last_imported_row}
                      </td>
                      <td className="px-4 py-4">
                        <Badge
