@@ -171,9 +171,9 @@ export default function SellerAnalytics() {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard title="Total Orders" value={stats.total} icon={ShoppingCart} iconBg="bg-info/10" iconColor="text-info" delay={0} />
-        <KPICard title="Confirmed" value={stats.confirmed} icon={CheckCircle2} iconBg="bg-success/10" iconColor="text-success" delay={50} />
+        <KPICard title="Confirmed" value={stats.confirmed} subtitle={`${stats.total > 0 ? Math.round((stats.confirmed / stats.total) * 100) : 0}%`} icon={CheckCircle2} iconBg="bg-success/10" iconColor="text-success" delay={50} />
         <KPICard title="Shipped" value={stats.shipped} icon={Package} iconBg="bg-primary/10" iconColor="text-primary" delay={100} />
-        <KPICard title="Delivered" value={stats.delivered} icon={Truck} iconBg="bg-success/10" iconColor="text-success" delay={150} />
+        <KPICard title="Delivered" value={stats.delivered} subtitle={`${stats.confirmed > 0 ? Math.round((stats.delivered / stats.confirmed) * 100) : 0}%`} icon={Truck} iconBg="bg-success/10" iconColor="text-success" delay={150} />
       </div>
 
       {/* Top Sellers by Orders */}
