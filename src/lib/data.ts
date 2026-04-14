@@ -1,7 +1,7 @@
-export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned' | 'postponed' | 'no_answer' | 'double' | 'wrong_number' | 'in_transit' | 'with_courier';
+export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned' | 'postponed' | 'no_answer' | 'double' | 'wrong_number' | 'in_transit' | 'with_courier' | 'failed';
 
 export type ConfirmationStatus = 'new' | 'confirmed' | 'no_answer' | 'postponed' | 'cancelled' | 'wrong_number' | 'double';
-export type DeliveryStatus = 'pending' | 'booked' | 'shipped' | 'in_transit' | 'with_courier' | 'delivered' | 'returned' | 'cancelled' | 'no_answer' | 'postponed';
+export type DeliveryStatus = 'pending' | 'booked' | 'shipped' | 'in_transit' | 'with_courier' | 'delivered' | 'returned' | 'cancelled' | 'no_answer' | 'postponed' | 'failed';
 
 export interface OrderHistoryEvent {
   id: string;
@@ -277,4 +277,5 @@ export const statusConfig: Record<OrderStatus, { label: string; color: string }>
   wrong_number: { label: 'Wrong Number', color: 'bg-destructive/15 text-destructive border-destructive/25' },
   in_transit: { label: 'In Transit', color: 'bg-info/15 text-info border-info/25' },
   with_courier: { label: 'With Courier', color: 'bg-primary/15 text-primary border-primary/25' },
+  failed: { label: 'Failed', color: 'bg-warning/15 text-warning border-warning/25' },
 };
