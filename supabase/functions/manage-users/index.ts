@@ -202,13 +202,24 @@ async function ensureSellerData(
   if (prefixLookupError) throw prefixLookupError;
   if (existingPrefix) return;
 
-  const { data: allPrefixes, error: allPrefixesError } = await supabaseAdmin
-    .from("seller_order_prefixes")
-    .select("prefix");
+  // Gather ALL used prefixes from both order prefixes AND display_ids for collision-avoidance
+  const [{ data: allOrderPrefixes, error: allPrefixesError }, { data: allDisplayIds }] = await Promise.all([
+    supabaseAdmin.from("seller_order_prefixes").select("prefix"),
+    supabaseAdmin.from("profiles").select("display_id").not("display_id", "is", null),
+  ]);
 
   if (allPrefixesError) throw allPrefixesError;
 
-  const prefix = generatePrefix(sellerName, (allPrefixes || []).map((item) => item.prefix));
+  const usedPrefixes = new Set<string>();
+  (allOrderPrefixes || []).forEach((item) => usedPrefixes.add(item.prefix));
+  (allDisplayIds || []).forEach((item) => {
+    if (item.display_id) {
+      const p = item.display_id.split("-")[0];
+      if (p) usedPrefixes.add(p);
+    }
+  });
+
+  const prefix = generatePrefix(sellerName, [...usedPrefixes]);
   const { error } = await supabaseAdmin.from("seller_order_prefixes").insert({
     seller_id: userId,
     prefix,
