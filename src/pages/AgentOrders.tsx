@@ -7,30 +7,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { CitySelect } from "@/components/CitySelect";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
   Play, ChevronRight, Phone, PhoneOff, MessageCircle, User, MapPin, Package, DollarSign,
   Video, Store, Tag, StickyNote, CalendarIcon, ExternalLink, AlertCircle, Zap,
-  Pencil, Plus, Trash2, X, Check, Loader2, Clock, RotateCcw, Copy, AlertTriangle, ChevronsUpDown
+  Pencil, Plus, Trash2, X, Check, Loader2, Clock, RotateCcw, Copy, AlertTriangle
 } from "lucide-react";
 
-const PAKISTANI_CITIES = [
-  "Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan",
-  "Peshawar", "Quetta", "Sialkot", "Gujranwala", "Hyderabad", "Bahawalpur",
-  "Sargodha", "Abbottabad", "Mardan", "Sukkur", "Larkana", "Sahiwal",
-  "Rahim Yar Khan", "Sheikhupura", "Jhang", "Dera Ghazi Khan", "Gujrat",
-  "Kasur", "Mingora", "Chiniot", "Kamoke", "Mandi Bahauddin", "Jhelum",
-  "Sadiqabad", "Jacobabad", "Shikarpur", "Khairpur", "Kohat", "Muzaffargarh",
-  "Okara", "Vehari", "Burewala", "Hafizabad", "Turbat", "Other",
-];
 
 const CANCEL_REASONS = [
   { value: "high_price", label: "💰 High Price" },
@@ -959,30 +951,11 @@ const AgentOrders = () => {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">City</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="h-8 w-full justify-between text-xs font-normal">
-                          <span className="truncate">{editCustomer.city || "Select city"}</span>
-                          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[200px] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search city..." className="h-8 text-xs" />
-                          <CommandList>
-                            <CommandEmpty className="py-2 text-xs text-center text-muted-foreground">No city found.</CommandEmpty>
-                            <CommandGroup>
-                              {PAKISTANI_CITIES.map((city) => (
-                                <CommandItem key={city} value={city} className="text-xs" onSelect={() => setEditCustomer((c) => ({ ...c, city }))}>
-                                  <Check className={cn("mr-1.5 h-3 w-3", editCustomer.city === city ? "opacity-100" : "opacity-0")} />
-                                  {city}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
+                    <CitySelect
+                      value={editCustomer.city}
+                      onValueChange={(city) => setEditCustomer((c) => ({ ...c, city }))}
+                      triggerClassName="h-8 text-xs"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">Address</Label>
