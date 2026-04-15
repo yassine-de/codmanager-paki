@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,9 +44,7 @@ const roleConfig: Record<string, { label: string; icon: typeof Shield; color: st
 };
 
 const Users = () => {
-  const [users, setUsers] = useState<UserData[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
@@ -68,29 +67,28 @@ const Users = () => {
     agentProducts: [] as string[],
   });
 
-  useEffect(() => {
-    fetchUsers();
-    fetchPermissions();
-  }, []);
+  const { data: users = [], isLoading: loading } = useQuery({
+    queryKey: ["manage-users-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("manage-users", {
+        body: { action: "list-users" },
+      });
+      if (error) throw error;
+      return (data.users || []) as UserData[];
+    },
+    staleTime: 60000,
+  });
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.functions.invoke("manage-users", {
-      body: { action: "list-users" },
-    });
-    if (error) {
-      toast.error("Erreur de chargement des utilisateurs");
-      console.error(error);
-    } else {
-      setUsers(data.users || []);
-    }
-    setLoading(false);
-  };
+  const { data: permissions = [] } = useQuery({
+    queryKey: ["permissions-list"],
+    queryFn: async () => {
+      const { data } = await supabase.from("permissions").select("*").order("key");
+      return (data || []) as Permission[];
+    },
+    staleTime: 300000,
+  });
 
-  const fetchPermissions = async () => {
-    const { data } = await supabase.from("permissions").select("*").order("key");
-    if (data) setPermissions(data);
-  };
+  const refetchUsers = () => queryClient.invalidateQueries({ queryKey: ["manage-users-list"] });
 
   const openCreate = () => {
     setEditingUser(null);
@@ -221,7 +219,7 @@ const Users = () => {
         toast.success("Utilisateur créé");
       }
       setModalOpen(false);
-      fetchUsers();
+      refetchUsers();
     } catch (err: any) {
       toast.error(err.message || "Erreur");
     }
@@ -236,7 +234,7 @@ const Users = () => {
       toast.error("Erreur de suppression");
     } else {
       toast.success("Utilisateur supprimé");
-      fetchUsers();
+      refetchUsers();
     }
   };
 
@@ -249,7 +247,7 @@ const Users = () => {
       },
     });
     toast.success(user.active ? "Utilisateur désactivé" : "Utilisateur activé");
-    fetchUsers();
+    refetchUsers();
   };
 
   const togglePermission = (key: string) => {

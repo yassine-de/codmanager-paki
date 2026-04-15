@@ -51,24 +51,22 @@ function generatePrefix(name: string, existingPrefixes: string[]) {
   const first = parts[0] || "";
   const last = parts[parts.length - 1] || "";
 
-  const candidates = [
-    (first.substring(0, 1) + last.substring(0, 1)).toUpperCase(),
-    (first.substring(0, 1) + last.substring(1, 2)).toUpperCase(),
-    (first.substring(0, 2)).toUpperCase(),
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    if (!existingPrefixes.includes(candidate)) return candidate;
+  // Strategy 1: first letter of first name + iterate each letter of last name
+  for (let i = 0; i < last.length; i++) {
+    const candidate = (first[0] + last[i]).toUpperCase();
+    if (candidate.length === 2 && !existingPrefixes.includes(candidate)) return candidate;
   }
 
-  for (let i = 0; i < first.length; i += 1) {
-    for (let j = 0; j < last.length; j += 1) {
+  // Strategy 2: iterate all combinations
+  for (let i = 0; i < first.length; i++) {
+    for (let j = 0; j < last.length; j++) {
       const candidate = (first[i] + last[j]).toUpperCase();
-      if (candidate && !existingPrefixes.includes(candidate)) return candidate;
+      if (candidate.length === 2 && !existingPrefixes.includes(candidate)) return candidate;
     }
   }
 
-  return `${first.substring(0, 1)}${last.substring(0, 1)}`.toUpperCase() || "SL";
+  // Fallback: first two letters of first name
+  return first.substring(0, 2).toUpperCase() || "SL";
 }
 
 async function getAllPermissionKeys(supabaseAdmin: ReturnType<typeof createClient>) {
@@ -204,13 +202,24 @@ async function ensureSellerData(
   if (prefixLookupError) throw prefixLookupError;
   if (existingPrefix) return;
 
-  const { data: allPrefixes, error: allPrefixesError } = await supabaseAdmin
-    .from("seller_order_prefixes")
-    .select("prefix");
+  // Gather ALL used prefixes from both order prefixes AND display_ids for collision-avoidance
+  const [{ data: allOrderPrefixes, error: allPrefixesError }, { data: allDisplayIds }] = await Promise.all([
+    supabaseAdmin.from("seller_order_prefixes").select("prefix"),
+    supabaseAdmin.from("profiles").select("display_id").not("display_id", "is", null),
+  ]);
 
   if (allPrefixesError) throw allPrefixesError;
 
-  const prefix = generatePrefix(sellerName, (allPrefixes || []).map((item) => item.prefix));
+  const usedPrefixes = new Set<string>();
+  (allOrderPrefixes || []).forEach((item) => usedPrefixes.add(item.prefix));
+  (allDisplayIds || []).forEach((item) => {
+    if (item.display_id) {
+      const p = item.display_id.split("-")[0];
+      if (p) usedPrefixes.add(p);
+    }
+  });
+
+  const prefix = generatePrefix(sellerName, [...usedPrefixes]);
   const { error } = await supabaseAdmin.from("seller_order_prefixes").insert({
     seller_id: userId,
     prefix,
