@@ -23,10 +23,6 @@ import {
   Pencil, Plus, Trash2, X, Check, Loader2, Clock, RotateCcw, Copy, AlertTriangle, ChevronsUpDown
 } from "lucide-react";
 
-const PAKISTANI_CITIES_UNUSED = [
-  "Sadiqabad", "Jacobabad", "Shikarpur", "Khairpur", "Kohat", "Muzaffargarh",
-  "Okara", "Vehari", "Burewala", "Hafizabad", "Turbat", "Other",
-];
 
 const CANCEL_REASONS = [
   { value: "high_price", label: "💰 High Price" },
