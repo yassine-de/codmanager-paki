@@ -951,30 +951,11 @@ const AgentOrders = () => {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">City</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="h-8 w-full justify-between text-xs font-normal">
-                          <span className="truncate">{editCustomer.city || "Select city"}</span>
-                          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[200px] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search city..." className="h-8 text-xs" />
-                          <CommandList>
-                            <CommandEmpty className="py-2 text-xs text-center text-muted-foreground">No city found.</CommandEmpty>
-                            <CommandGroup>
-                              {PAKISTANI_CITIES.map((city) => (
-                                <CommandItem key={city} value={city} className="text-xs" onSelect={() => setEditCustomer((c) => ({ ...c, city }))}>
-                                  <Check className={cn("mr-1.5 h-3 w-3", editCustomer.city === city ? "opacity-100" : "opacity-0")} />
-                                  {city}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
+                    <CitySelect
+                      value={editCustomer.city}
+                      onValueChange={(city) => setEditCustomer((c) => ({ ...c, city }))}
+                      triggerClassName="h-8 text-xs"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">Address</Label>
