@@ -219,7 +219,7 @@ const Users = () => {
         toast.success("Utilisateur créé");
       }
       setModalOpen(false);
-      fetchUsers();
+      refetchUsers();
     } catch (err: any) {
       toast.error(err.message || "Erreur");
     }
@@ -234,7 +234,7 @@ const Users = () => {
       toast.error("Erreur de suppression");
     } else {
       toast.success("Utilisateur supprimé");
-      fetchUsers();
+      refetchUsers();
     }
   };
 
@@ -247,7 +247,7 @@ const Users = () => {
       },
     });
     toast.success(user.active ? "Utilisateur désactivé" : "Utilisateur activé");
-    fetchUsers();
+    refetchUsers();
   };
 
   const togglePermission = (key: string) => {
