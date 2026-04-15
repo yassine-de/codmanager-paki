@@ -12,7 +12,14 @@ function getSupabaseAdmin() {
 
 // Status mapping: ORIO status → our delivery_status
 const STATUS_MAP: Record<string, string> = {
+  // Pre-shipment / pickup stages → keep as "booked"
+  "new": "booked",
+  "pickup ready": "booked",
+  "arrived at courier facility": "booked",
+  // In-transit stages → shipped
   "in transit": "shipped",
+  "out for delivery": "shipped",
+  // Terminal statuses
   "delivered": "delivered",
   "return": "returned",
   "cancelled": "cancelled",
