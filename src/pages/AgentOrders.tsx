@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { CitySelect } from "@/components/CitySelect";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -22,12 +23,7 @@ import {
   Pencil, Plus, Trash2, X, Check, Loader2, Clock, RotateCcw, Copy, AlertTriangle, ChevronsUpDown
 } from "lucide-react";
 
-const PAKISTANI_CITIES = [
-  "Karachi", "Lahore", "Islamabad", "Rawalpindi", "Faisalabad", "Multan",
-  "Peshawar", "Quetta", "Sialkot", "Gujranwala", "Hyderabad", "Bahawalpur",
-  "Sargodha", "Abbottabad", "Mardan", "Sukkur", "Larkana", "Sahiwal",
-  "Rahim Yar Khan", "Sheikhupura", "Jhang", "Dera Ghazi Khan", "Gujrat",
-  "Kasur", "Mingora", "Chiniot", "Kamoke", "Mandi Bahauddin", "Jhelum",
+const PAKISTANI_CITIES_UNUSED = [
   "Sadiqabad", "Jacobabad", "Shikarpur", "Khairpur", "Kohat", "Muzaffargarh",
   "Okara", "Vehari", "Burewala", "Hafizabad", "Turbat", "Other",
 ];
