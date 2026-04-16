@@ -64,6 +64,45 @@ function normalizePhone(raw: string): { valid: true; phone: string } | { valid: 
   return { valid: true, phone };
 }
 
+// ── Number parsing helpers ──
+
+/**
+ * Safely parses a number from a sheet cell.
+ * Handles thousand separators ("8,372.00" → 8372), spaces, and currency-like input.
+ * Returns NaN if the value cannot be parsed as a number.
+ */
+function parseSheetNumber(raw: string | undefined | null): number {
+  if (raw === undefined || raw === null) return NaN;
+  const s = String(raw).trim();
+  if (!s) return NaN;
+  // Remove commas (thousand separators) and any spaces
+  const cleaned = s.replace(/,/g, "").replace(/\s/g, "");
+  const n = parseFloat(cleaned);
+  return isFinite(n) ? n : NaN;
+}
+
+/** Convert a spreadsheet column letter (A, B, ..., Z, AA) to a 0-based index. */
+function colLetterToIndex(letter: string): number {
+  const up = letter.toUpperCase().trim();
+  let idx = 0;
+  for (let i = 0; i < up.length; i++) {
+    idx = idx * 26 + (up.charCodeAt(i) - 64);
+  }
+  return idx - 1;
+}
+
+const DEFAULT_MAPPING: Record<string, string> = {
+  order_id: "A", customer_name: "B", phone: "C", address: "D", city: "E",
+  product_name: "F", sku: "G", quantity: "H", price: "I", total: "J",
+};
+
+function getCell(row: string[], mapping: Record<string, string>, key: string): string {
+  const letter = mapping[key] || DEFAULT_MAPPING[key];
+  if (!letter) return "";
+  const idx = colLetterToIndex(letter);
+  return row[idx] ?? "";
+}
+
 // ── Google Sheets helpers ──
 
 function extractSpreadsheetId(url: string): string | null {
@@ -113,7 +152,8 @@ async function getAccessToken(serviceAccountKey: string): Promise<string> {
 async function fetchSheetRows(
   accessToken: string, spreadsheetId: string, sheetName: string, startRow: number
 ): Promise<string[][]> {
-  const range = encodeURIComponent(`'${sheetName}'!A${startRow}:J`);
+  // Read up to column Z so non-default mappings still work
+  const range = encodeURIComponent(`'${sheetName}'!A${startRow}:Z`);
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`;
   const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!resp.ok) {
@@ -196,16 +236,36 @@ Deno.serve(async (req) => {
       let errorsCount = 0;
       let skipped = 0;
 
+      // Resolve per-sheet column mapping (falls back to defaults)
+      const mapping: Record<string, string> = {
+        ...DEFAULT_MAPPING,
+        ...((sheet as any).column_mapping || {}),
+      };
+
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        if (!row || row.length < 7) { skipped++; continue; }
+        if (!row || row.length < 3) { skipped++; continue; }
 
-        const [orderId, customerName, phone, address, city, productName, sku, qtyStr, priceStr, totalStr] = row;
+        const orderId = getCell(row, mapping, "order_id");
+        const customerName = getCell(row, mapping, "customer_name");
+        const phone = getCell(row, mapping, "phone");
+        const address = getCell(row, mapping, "address");
+        const city = getCell(row, mapping, "city");
+        const productName = getCell(row, mapping, "product_name");
+        const sku = getCell(row, mapping, "sku");
+        const qtyStr = getCell(row, mapping, "quantity");
+        const priceStr = getCell(row, mapping, "price");
+        const totalStr = getCell(row, mapping, "total");
 
         if (!sku || !customerName || !phone) { skipped++; continue; }
 
         // ── Phone validation & formatting ──
         const phoneResult = normalizePhone(phone);
+
+        // ── Safe number parsing (handles "8,372.00" → 8372) ──
+        const parsedQty = parseSheetNumber(qtyStr);
+        const parsedPrice = parseSheetNumber(priceStr);
+        const parsedTotal = parseSheetNumber(totalStr);
 
         const orderData = {
           order_id: orderId || "",
@@ -215,9 +275,9 @@ Deno.serve(async (req) => {
           city: city || "",
           product_name: productName || "",
           sku: sku || "",
-          quantity: parseInt(qtyStr) || 1,
-          unit_price: parseFloat(priceStr) || 0,
-          total_amount: parseFloat(totalStr) || 0,
+          quantity: isFinite(parsedQty) && parsedQty > 0 ? Math.floor(parsedQty) : 1,
+          unit_price: isFinite(parsedPrice) ? parsedPrice : 0,
+          total_amount: isFinite(parsedTotal) ? parsedTotal : 0,
         };
 
         if (!phoneResult.valid) {
