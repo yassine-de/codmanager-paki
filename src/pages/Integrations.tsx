@@ -12,6 +12,24 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
+interface ColumnMapping {
+  order_id: string;
+  customer_name: string;
+  phone: string;
+  address: string;
+  city: string;
+  product_name: string;
+  sku: string;
+  quantity: string;
+  price: string;
+  total: string;
+}
+
+const DEFAULT_MAPPING: ColumnMapping = {
+  order_id: "A", customer_name: "B", phone: "C", address: "D", city: "E",
+  product_name: "F", sku: "G", quantity: "H", price: "I", total: "J",
+};
+
 interface IntegrationSheet {
   id: string;
   seller_id: string;
@@ -24,6 +42,7 @@ interface IntegrationSheet {
   active: boolean;
   created_at: string;
   last_imported_row: number;
+  column_mapping?: ColumnMapping | null;
   seller_name?: string;
 }
 
@@ -66,7 +85,10 @@ const Integrations = () => {
   // Create/Edit modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<IntegrationSheet | null>(null);
-  const [form, setForm] = useState({ name: "", sheet_name: "", sheet_url: "", seller_id: "" });
+  const [form, setForm] = useState<{
+    name: string; sheet_name: string; sheet_url: string; seller_id: string;
+    column_mapping: ColumnMapping;
+  }>({ name: "", sheet_name: "", sheet_url: "", seller_id: "", column_mapping: { ...DEFAULT_MAPPING } });
 
   // Errors modal
   const [errorsModalOpen, setErrorsModalOpen] = useState(false);
