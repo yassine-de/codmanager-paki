@@ -77,12 +77,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch orders that need status sync
+    // Fetch orders that need status sync — oldest updated first so all orders rotate through
     const { data: orders, error: fetchErr } = await supabase
       .from("orders")
-      .select("id, order_id, orio_order_id, delivery_status, orio_shipping_status")
+      .select("id, order_id, orio_order_id, delivery_status, orio_shipping_status, updated_at")
       .not("orio_order_id", "is", null)
       .not("delivery_status", "in", '("delivered","returned","cancelled")')
+      .order("updated_at", { ascending: true, nullsFirst: true })
       .limit(50);
 
     if (fetchErr) {

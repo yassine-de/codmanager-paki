@@ -6,6 +6,7 @@ import { Loader2, Package, MapPin, Calendar, User, DollarSign, Truck } from "luc
 interface OrioTrackingModalProps {
   orioOrderId: number;
   systemId?: number | null;
+  sellerId?: string | null;
   open: boolean;
   onClose: () => void;
 }
@@ -28,7 +29,7 @@ interface TrackingPayload {
   detail: TrackingDetail[];
 }
 
-export default function OrioTrackingModal({ orioOrderId, systemId, open, onClose }: OrioTrackingModalProps) {
+export default function OrioTrackingModal({ orioOrderId, systemId, sellerId, open, onClose }: OrioTrackingModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<TrackingPayload | null>(null);
@@ -64,9 +65,10 @@ export default function OrioTrackingModal({ orioOrderId, systemId, open, onClose
             <Package className="w-4 h-4" />
             TRACK DETAIL {payload?.consigment_no ? `- ${payload.consigment_no}` : `- ORIO #${orioOrderId}`}
           </DialogTitle>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="text-[10px] font-semibold text-muted-foreground">ORIO ID: <span className="text-foreground">{orioOrderId}</span></span>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
             {systemId && <span className="text-[10px] font-semibold text-muted-foreground">SYSTEM ID: <span className="text-foreground">{systemId}</span></span>}
+            {sellerId && <span className="text-[10px] font-semibold text-muted-foreground">SELLER ID: <span className="text-foreground">{sellerId}</span></span>}
+            <span className="text-[10px] font-semibold text-muted-foreground">ORIO ID: <span className="text-foreground">{orioOrderId}</span></span>
           </div>
         </DialogHeader>
 

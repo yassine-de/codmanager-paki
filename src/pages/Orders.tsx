@@ -170,7 +170,7 @@ export default function Orders() {
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [trackingOrioId, setTrackingOrioId] = useState<number | null>(null);
+  const [trackingTarget, setTrackingTarget] = useState<{ orioId: number; systemId?: number | null; sellerId?: string | null } | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sellerNames, setSellerNames] = useState<string[]>([]);
   const [agentNames, setAgentNames] = useState<string[]>([]);
@@ -792,7 +792,7 @@ export default function Orders() {
                     <td className="py-2.5 px-4 text-xs" onClick={(e) => e.stopPropagation()}>
                       {order.orioOrderId ? (
                         <button
-                          onClick={() => setTrackingOrioId(order.orioOrderId!)}
+                          onClick={() => setTrackingTarget({ orioId: order.orioOrderId!, systemId: (order as any).systemId ?? null, sellerId: order.id })}
                           className="text-[hsl(210,60%,52%)] hover:underline font-medium"
                         >
                           {order.orioOrderId}
@@ -939,11 +939,13 @@ export default function Orders() {
       </div>
 
       {/* ORIO Tracking Modal */}
-      {trackingOrioId && (
+      {trackingTarget && (
         <OrioTrackingModal
-          orioOrderId={trackingOrioId}
-          open={!!trackingOrioId}
-          onClose={() => setTrackingOrioId(null)}
+          orioOrderId={trackingTarget.orioId}
+          systemId={trackingTarget.systemId}
+          sellerId={trackingTarget.sellerId}
+          open={!!trackingTarget}
+          onClose={() => setTrackingTarget(null)}
         />
       )}
 
