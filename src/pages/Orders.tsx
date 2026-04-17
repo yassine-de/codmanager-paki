@@ -792,7 +792,7 @@ export default function Orders() {
                     <td className="py-2.5 px-4 text-xs" onClick={(e) => e.stopPropagation()}>
                       {order.orioOrderId ? (
                         <button
-                          onClick={() => setTrackingOrioId(order.orioOrderId!)}
+                          onClick={() => setTrackingTarget({ orioId: order.orioOrderId!, systemId: (order as any).systemId ?? null, sellerId: order.id })}
                           className="text-[hsl(210,60%,52%)] hover:underline font-medium"
                         >
                           {order.orioOrderId}
