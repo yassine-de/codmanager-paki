@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           activity_type: string
           agent_id: string
+          agent_name: string | null
           created_at: string
           id: string
           metadata: Json | null
@@ -26,6 +27,7 @@ export type Database = {
         Insert: {
           activity_type: string
           agent_id: string
+          agent_name?: string | null
           created_at?: string
           id?: string
           metadata?: Json | null
@@ -34,6 +36,7 @@ export type Database = {
         Update: {
           activity_type?: string
           agent_id?: string
+          agent_name?: string | null
           created_at?: string
           id?: string
           metadata?: Json | null
