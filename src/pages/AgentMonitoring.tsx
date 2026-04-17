@@ -275,6 +275,7 @@ export default function AgentMonitoring() {
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            <TableHead>Agent</TableHead>
                             <TableHead>Idle Duration</TableHead>
                             <TableHead>From</TableHead>
                             <TableHead>To</TableHead>
@@ -287,6 +288,7 @@ export default function AgentMonitoring() {
                             const severe = g.gapMs >= 10 * 60 * 1000;
                             return (
                               <TableRow key={idx}>
+                                <TableCell className="font-medium text-sm">{agent.name}</TableCell>
                                 <TableCell>
                                   <Badge
                                     variant="secondary"
