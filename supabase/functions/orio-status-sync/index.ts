@@ -103,13 +103,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Processing ${orders.length} orders for status sync`);
+    console.log(`Processing ${orders.length} orders for status sync (parallel batches of 15)`);
 
     const results: any[] = [];
+    const BATCH_SIZE = 15;
 
-    for (const order of orders) {
+    // Process a single order: track + update
+    const processOrder = async (order: any) => {
       try {
-        // Call ORIO track API
         const res = await fetch(`${ORIO_BASE}/track`, {
           method: "POST",
           headers: {
@@ -125,7 +126,6 @@ Deno.serve(async (req) => {
 
         const data = await res.json();
 
-        // Extract payload
         let payload: any = null;
         if (Array.isArray(data) && data.length > 0 && data[0].payload) {
           payload = data[0].payload;
@@ -134,32 +134,25 @@ Deno.serve(async (req) => {
         }
 
         if (!payload || !payload.status) {
-          results.push({ order_id: order.order_id, skipped: true, reason: "No status in tracking response" });
-          continue;
+          return { order_id: order.order_id, skipped: true, reason: "No status in tracking response" };
         }
 
         const orioStatus = payload.status;
         const mappedStatus = mapOrioStatus(orioStatus);
 
-        // Always store the raw ORIO status
         const updateData: any = {
           orio_shipping_status: orioStatus,
           orio_consignment_no: payload.consigment_no || undefined,
         };
 
-        // Only update delivery_status if mapping exists AND status changed
         if (mappedStatus && mappedStatus !== order.delivery_status) {
           updateData.delivery_status = mappedStatus;
-
-          // Set delivered_at for delivered orders
           if (mappedStatus === "delivered") {
             updateData.delivered_at = new Date().toISOString();
           }
-
           console.log(`Order ${order.order_id}: ${order.delivery_status} → ${mappedStatus} (ORIO: ${orioStatus})`);
         }
 
-        // Only update if something changed
         if (orioStatus !== order.orio_shipping_status || mappedStatus !== order.delivery_status) {
           const { error: updateErr } = await supabase
             .from("orders")
@@ -168,21 +161,27 @@ Deno.serve(async (req) => {
 
           if (updateErr) {
             console.error(`Error updating order ${order.order_id}:`, updateErr);
-            results.push({ order_id: order.order_id, error: updateErr.message });
-            continue;
+            return { order_id: order.order_id, error: updateErr.message };
           }
         }
 
-        results.push({
+        return {
           order_id: order.order_id,
           orio_status: orioStatus,
           mapped_status: mappedStatus,
           updated: mappedStatus !== order.delivery_status,
-        });
+        };
       } catch (e) {
         console.error(`Error tracking order ${order.order_id}:`, e);
-        results.push({ order_id: order.order_id, error: (e as Error).message });
+        return { order_id: order.order_id, error: (e as Error).message };
       }
+    };
+
+    // Process orders in parallel batches of BATCH_SIZE
+    for (let i = 0; i < orders.length; i += BATCH_SIZE) {
+      const batch = orders.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map(processOrder));
+      results.push(...batchResults);
     }
 
     // Update last sync timestamp
