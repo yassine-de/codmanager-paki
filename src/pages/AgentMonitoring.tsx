@@ -275,6 +275,7 @@ export default function AgentMonitoring() {
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            <TableHead>Agent</TableHead>
                             <TableHead>Idle Duration</TableHead>
                             <TableHead>From</TableHead>
                             <TableHead>To</TableHead>
