@@ -67,7 +67,7 @@ export default function AgentMonitoring() {
     refetchInterval: 30000,
   });
 
-  // Fetch agent names
+  // Fetch agent names — include ALL agents (even those without profiles) so activities aren't dropped
   const { data: agents = [] } = useQuery({
     queryKey: ["agent-monitoring-profiles"],
     queryFn: async () => {
@@ -81,9 +81,20 @@ export default function AgentMonitoring() {
         .from("profiles")
         .select("user_id, name")
         .in("user_id", ids);
-      return (profiles || []) as AgentProfile[];
+      const profileMap = new Map((profiles || []).map((p) => [p.user_id, p.name]));
+      return ids.map((id) => ({
+        user_id: id,
+        name: profileMap.get(id) || `Agent ${id.slice(0, 8)}`,
+      })) as AgentProfile[];
     },
   });
+
+  // Quick name lookup for any agent_id (handles activities from agents not in roles list)
+  const agentNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of agents) m.set(a.user_id, a.name);
+    return m;
+  }, [agents]);
 
   // Group activities per agent + compute gaps
   const perAgent = useMemo(() => {
@@ -288,7 +299,7 @@ export default function AgentMonitoring() {
                             const severe = g.gapMs >= 10 * 60 * 1000;
                             return (
                               <TableRow key={idx}>
-                                <TableCell className="font-medium text-sm">{agent.name}</TableCell>
+                                <TableCell className="font-medium text-sm">{agentNameById.get(g.activity.agent_id) || agent.name}</TableCell>
                                 <TableCell>
                                   <Badge
                                     variant="secondary"
