@@ -170,7 +170,7 @@ export default function Orders() {
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [trackingOrioId, setTrackingOrioId] = useState<number | null>(null);
+  const [trackingTarget, setTrackingTarget] = useState<{ orioId: number; systemId?: number | null; sellerId?: string | null } | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sellerNames, setSellerNames] = useState<string[]>([]);
   const [agentNames, setAgentNames] = useState<string[]>([]);
