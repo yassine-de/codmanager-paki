@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_activity_log: {
+        Row: {
+          activity_type: string
+          agent_id: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          order_id: string | null
+        }
+        Insert: {
+          activity_type: string
+          agent_id: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+        }
+        Update: {
+          activity_type?: string
+          agent_id?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+        }
+        Relationships: []
+      }
       agent_products: {
         Row: {
           agent_id: string
@@ -1355,6 +1382,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      cleanup_agent_activity_log: { Args: never; Returns: undefined }
       generate_order_id: { Args: { p_seller_id: string }; Returns: string }
       generate_product_display_id: {
         Args: { p_seller_id: string }
