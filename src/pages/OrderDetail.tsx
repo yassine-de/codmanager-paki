@@ -167,10 +167,13 @@ export default function OrderDetail() {
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="w-4 h-4" /> Ordered {format(new Date(createdAt), 'dd MMM yyyy, HH:mm')}
           </div>
-          {notes && (
-            <div className="flex items-start gap-2 text-sm text-muted-foreground">
-              <StickyNote className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>{notes}</span>
+          {notes && authUser?.role !== 'seller' && (
+            <div className="flex items-start gap-2 text-sm">
+              <StickyNote className="w-4 h-4 mt-0.5 shrink-0 text-warning" />
+              <div className="flex-1">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">Agent Note</p>
+                <p className="text-foreground">{notes}</p>
+              </div>
             </div>
           )}
         </div>
