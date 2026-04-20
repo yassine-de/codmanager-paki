@@ -90,7 +90,7 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'attempts';
+type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'subStatus' | 'attempts';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
@@ -107,7 +107,7 @@ const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; admi
   { key: 'confirmationStatus', label: 'Confirmation', defaultVisible: true },
   { key: 'attempts', label: 'Attempts', defaultVisible: true },
   { key: 'deliveryStatus', label: 'Delivery', defaultVisible: true },
-  
+  { key: 'subStatus', label: 'Sub Status', defaultVisible: true },
 ];
 
 /* ── Sparkline KPI Cards ── */
@@ -347,6 +347,7 @@ export default function Orders() {
         history: [],
         attemptCount: o.attempt_count || 0,
         orioOrderId: o.orio_order_id || null,
+        orioShippingStatus: o.orio_shipping_status || null,
       }));
 
       setOrders(mapped);
