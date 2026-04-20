@@ -36,6 +36,10 @@ const deliveryOptions: { value: DeliveryStatus; label: string }[] = [
   { value: 'cancelled', label: 'Cancelled' },
   { value: 'no_answer', label: 'No Answer' },
   { value: 'postponed', label: 'Postponed' },
+  { value: 'failed_attempt', label: 'Failed Attempt' },
+  { value: 'ready_for_return', label: 'Ready for Return' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'return', label: 'Return' },
 ];
 
 
@@ -267,13 +271,29 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                   </Select>
                 </div>
                 <div>
-                  <Label className={fieldLabel}>Delivery</Label>
-                  <Select value={deliveryStatus} onValueChange={v => setDeliveryStatus(v as DeliveryStatus)}>
+                  <Label className={fieldLabel}>
+                    Delivery
+                    {order.orioShippingStatus && (
+                      <span className="ml-2 text-[10px] text-muted-foreground font-normal">
+                        (auto from ORIO Sub Status)
+                      </span>
+                    )}
+                  </Label>
+                  <Select
+                    value={deliveryStatus}
+                    onValueChange={v => setDeliveryStatus(v as DeliveryStatus)}
+                    disabled={!!order.orioShippingStatus}
+                  >
                     <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {deliveryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  {order.orioShippingStatus && (
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Sub Status: <span className="font-medium text-foreground">{order.orioShippingStatus}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

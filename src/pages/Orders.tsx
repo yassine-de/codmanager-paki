@@ -955,7 +955,9 @@ export default function Orders() {
                 <div className="flex items-center gap-1.5">
                   <StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} />
                   <StatusBadge {...deliveryConfig[order.deliveryStatus]} />
-                  
+                  {order.orioShippingStatus && (
+                    <StatusBadge label={subStatusLabel(order.orioShippingStatus)!} cls={subStatusClass(order.orioShippingStatus)} />
+                  )}
                 </div>
                 {(isAdmin || order.confirmationStatus === 'new') && (
                   <button
