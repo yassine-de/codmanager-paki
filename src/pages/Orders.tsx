@@ -865,7 +865,7 @@ export default function Orders() {
                   {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} PKR</td>}
 {isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} /></td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
-                  {isCol('subStatus') && (
+                  {isAdmin && isCol('subStatus') && (
                     <td className="py-2.5 px-4">
                       {order.orioShippingStatus ? (
                         <StatusBadge label={subStatusLabel(order.orioShippingStatus)!} cls={subStatusClass(order.orioShippingStatus)} />
