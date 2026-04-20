@@ -107,7 +107,7 @@ const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; admi
   { key: 'confirmationStatus', label: 'Confirmation', defaultVisible: true },
   { key: 'attempts', label: 'Attempts', defaultVisible: true },
   { key: 'deliveryStatus', label: 'Delivery', defaultVisible: true },
-  { key: 'subStatus', label: 'Sub Status', defaultVisible: true },
+  { key: 'subStatus', label: 'Sub Status', defaultVisible: true, adminOnly: true },
 ];
 
 /* ── Sparkline KPI Cards ── */
