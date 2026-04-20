@@ -10,20 +10,32 @@ function getSupabaseAdmin() {
   );
 }
 
-// Status mapping: ORIO status → our delivery_status
+// Status mapping: ORIO sub-status → our DELIVERY status
+// Source: user-provided ORIO status table (17 statuses)
 const STATUS_MAP: Record<string, string> = {
-  // Pre-shipment / pickup stages → keep as "booked"
+  // Direct mappings
   "new": "booked",
-  "pickup ready": "booked",
-  "arrived at courier facility": "booked",
-  // In-transit stages → shipped
-  "in transit": "shipped",
-  "out for delivery": "shipped",
-  // Terminal statuses
-  "delivered": "delivered",
-  "return": "returned",
+  "shipped": "shipped",
   "cancelled": "cancelled",
-  "failed attempt": "failed",
+  "delivered": "delivered",
+  // All in-flight courier states → shipped
+  "address closed": "shipped",
+  "arrived at courier facility": "shipped",
+  "booked": "shipped",
+  "customer not answering": "shipped",
+  "customer not available": "shipped",
+  "hold on customer's request": "shipped",
+  "hold on customers request": "shipped", // tolerate missing apostrophe
+  "in transit": "shipped",
+  "incomplete address": "shipped",
+  "out for delivery": "shipped",
+  "pickup ready": "shipped",
+  // Terminal / outcome statuses
+  "failed attempt": "failed_attempt",
+  "ready for return": "ready_for_return",
+  "refused to accept": "rejected",
+  "return to shipper": "return",
+  "return": "return",
 };
 
 function mapOrioStatus(orioStatus: string): string | null {
@@ -82,7 +94,7 @@ Deno.serve(async (req) => {
       .from("orders")
       .select("id, order_id, orio_order_id, delivery_status, orio_shipping_status, updated_at")
       .not("orio_order_id", "is", null)
-      .not("delivery_status", "in", '("delivered","returned","cancelled")')
+      .not("delivery_status", "in", '("delivered","returned","cancelled","return","rejected")')
       .order("updated_at", { ascending: true, nullsFirst: true })
       .limit(300);
 

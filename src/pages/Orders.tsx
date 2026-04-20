@@ -52,6 +52,28 @@ const deliveryConfig: Record<DeliveryStatus, { label: string; cls: string }> = {
   no_answer: { label: 'No Answer', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
   postponed: { label: 'Postponed', cls: 'bg-[hsl(25,85%,55%)]/12 text-[hsl(25,85%,55%)] border-[hsl(25,85%,55%)]/20' },
   failed: { label: 'Failed', cls: 'bg-[hsl(25,85%,55%)]/12 text-[hsl(25,85%,55%)] border-[hsl(25,85%,55%)]/20' },
+  failed_attempt: { label: 'Failed Attempt', cls: 'bg-[hsl(25,85%,55%)]/12 text-[hsl(25,85%,55%)] border-[hsl(25,85%,55%)]/20' },
+  ready_for_return: { label: 'Ready for Return', cls: 'bg-[hsl(15,75%,55%)]/12 text-[hsl(15,75%,55%)] border-[hsl(15,75%,55%)]/20' },
+  rejected: { label: 'Rejected', cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
+  return: { label: 'Return', cls: 'bg-[hsl(340,65%,52%)]/12 text-[hsl(340,65%,52%)] border-[hsl(340,65%,52%)]/20' },
+};
+
+// Pretty label for ORIO sub-status (kept verbatim from API)
+const subStatusLabel = (raw?: string | null) => {
+  if (!raw) return null;
+  return raw.replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+const subStatusClass = (raw?: string | null): string => {
+  if (!raw) return 'bg-muted text-muted-foreground border-border';
+  const s = raw.toLowerCase().trim();
+  if (s === 'delivered') return 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20';
+  if (s === 'cancelled' || s === 'refused to accept') return 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20';
+  if (s === 'failed attempt') return 'bg-[hsl(25,85%,55%)]/12 text-[hsl(25,85%,55%)] border-[hsl(25,85%,55%)]/20';
+  if (s === 'ready for return' || s.startsWith('return')) return 'bg-[hsl(340,65%,52%)]/12 text-[hsl(340,65%,52%)] border-[hsl(340,65%,52%)]/20';
+  if (s === 'new') return 'bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20';
+  // All in-flight courier states
+  return 'bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)] border-[hsl(200,65%,50%)]/20';
 };
 
 const shippedDeliveryStatuses: DeliveryStatus[] = ["shipped", "in_transit", "with_courier"];
@@ -68,7 +90,7 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'attempts';
+type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'subStatus' | 'attempts';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
@@ -85,7 +107,7 @@ const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; admi
   { key: 'confirmationStatus', label: 'Confirmation', defaultVisible: true },
   { key: 'attempts', label: 'Attempts', defaultVisible: true },
   { key: 'deliveryStatus', label: 'Delivery', defaultVisible: true },
-  
+  { key: 'subStatus', label: 'Sub Status', defaultVisible: true },
 ];
 
 /* ── Sparkline KPI Cards ── */
@@ -325,6 +347,7 @@ export default function Orders() {
         history: [],
         attemptCount: o.attempt_count || 0,
         orioOrderId: o.orio_order_id || null,
+        orioShippingStatus: o.orio_shipping_status || null,
       }));
 
       setOrders(mapped);
@@ -344,6 +367,7 @@ export default function Orders() {
   const [filterAgent, setFilterAgent] = useState('all');
   const [filterConfirmation, setFilterConfirmation] = useState('all');
   const [filterDelivery, setFilterDelivery] = useState('all');
+  const [filterSubStatus, setFilterSubStatus] = useState('all');
   const [filterUpsell, setFilterUpsell] = useState('all');
   
   
@@ -380,7 +404,8 @@ export default function Orders() {
       dateRange: undefined as DateRange | undefined,
       product: 'all', seller: 'all', agent: 'all',
       confirmation: conf || 'all',
-      delivery: del || 'all', 
+      delivery: del || 'all',
+      subStatus: 'all',
       upsell: 'all',
     };
   });
@@ -404,22 +429,31 @@ export default function Orders() {
     new Set(allColumns.filter(c => c.defaultVisible).map(c => c.key))
   );
 
+  // Unique sub-statuses present in current orders (for filter dropdown)
+  const subStatusOptions = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach(o => { if (o.orioShippingStatus) set.add(o.orioShippingStatus); });
+    return Array.from(set).sort();
+  }, [orders]);
+
   const applyFilters = useCallback(() => {
     setAppliedFilters({
       dateRange, product: filterProduct, seller: filterSeller, agent: filterAgent,
       confirmation: filterConfirmation, delivery: filterDelivery,
+      subStatus: filterSubStatus,
       upsell: filterUpsell,
     });
-  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterUpsell]);
+  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterUpsell]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
     setFilterProduct('all'); setFilterSeller('all'); setFilterAgent('all');
     setFilterConfirmation('all'); setFilterDelivery('all');
+    setFilterSubStatus('all');
     setFilterUpsell('all');
     setAppliedFilters({
       dateRange: undefined, product: 'all', seller: 'all', agent: 'all',
-      confirmation: 'all', delivery: 'all', upsell: 'all',
+      confirmation: 'all', delivery: 'all', subStatus: 'all', upsell: 'all',
     });
   }, []);
 
@@ -431,9 +465,8 @@ export default function Orders() {
     if (appliedFilters.agent !== 'all') count++;
     if (appliedFilters.confirmation !== 'all') count++;
     if (appliedFilters.delivery !== 'all') count++;
+    if (appliedFilters.subStatus !== 'all') count++;
     if (appliedFilters.upsell !== 'all') count++;
-    
-    
     return count;
   }, [appliedFilters]);
 
@@ -451,6 +484,7 @@ export default function Orders() {
         if (f.agent !== 'all' && o.agentName !== f.agent) return false;
         if (f.confirmation !== 'all' && o.confirmationStatus !== f.confirmation) return false;
         if (f.delivery !== 'all' && o.deliveryStatus !== f.delivery) return false;
+        if (f.subStatus !== 'all' && (o.orioShippingStatus || '') !== f.subStatus) return false;
         if (f.upsell !== 'all') {
           if (f.upsell === 'yes' && !o.upsell) return false;
           if (f.upsell === 'no' && o.upsell) return false;
@@ -624,6 +658,18 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
+            {/* Sub Status (ORIO) */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Sub Status</label>
+              <SearchableSelect
+                value={filterSubStatus}
+                onValueChange={setFilterSubStatus}
+                options={subStatusOptions.map(s => ({ value: s, label: subStatusLabel(s) || s }))}
+                placeholder="Sub Status"
+                allLabel="All"
+                className="w-full"
+              />
+            </div>
             {/* Upsell */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Upsell</label>
@@ -768,6 +814,7 @@ export default function Orders() {
                 {isCol('confirmationStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
                 
                 {isCol('deliveryStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
+                {isCol('subStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Sub Status</th>}
                 
                 <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
@@ -816,6 +863,15 @@ export default function Orders() {
                   {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} PKR</td>}
 {isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} /></td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
+                  {isCol('subStatus') && (
+                    <td className="py-2.5 px-4">
+                      {order.orioShippingStatus ? (
+                        <StatusBadge label={subStatusLabel(order.orioShippingStatus)!} cls={subStatusClass(order.orioShippingStatus)} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  )}
                   
                   <td className="py-2.5 px-4">
                     <div className="flex items-center gap-1.5">
@@ -899,7 +955,9 @@ export default function Orders() {
                 <div className="flex items-center gap-1.5">
                   <StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} />
                   <StatusBadge {...deliveryConfig[order.deliveryStatus]} />
-                  
+                  {order.orioShippingStatus && (
+                    <StatusBadge label={subStatusLabel(order.orioShippingStatus)!} cls={subStatusClass(order.orioShippingStatus)} />
+                  )}
                 </div>
                 {(isAdmin || order.confirmationStatus === 'new') && (
                   <button
