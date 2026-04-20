@@ -658,7 +658,8 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
-            {/* Sub Status (ORIO) */}
+            {/* Sub Status (ORIO) - admin only */}
+            {isAdmin && (
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Sub Status</label>
               <SearchableSelect
@@ -670,6 +671,7 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
+            )}
             {/* Upsell */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Upsell</label>
