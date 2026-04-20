@@ -658,6 +658,18 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
+            {/* Sub Status (ORIO) */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Sub Status</label>
+              <SearchableSelect
+                value={filterSubStatus}
+                onValueChange={setFilterSubStatus}
+                options={subStatusOptions.map(s => ({ value: s, label: subStatusLabel(s) || s }))}
+                placeholder="Sub Status"
+                allLabel="All"
+                className="w-full"
+              />
+            </div>
             {/* Upsell */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Upsell</label>
