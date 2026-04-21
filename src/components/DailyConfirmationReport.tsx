@@ -2,12 +2,8 @@ import { useMemo } from "react";
 import { KPICard } from "@/components/KPICard";
 import { cn } from "@/lib/utils";
 import {
-  ShoppingCart, CheckCircle2, PhoneOff, Clock, XCircle, Users, TrendingUp, AlertTriangle, Award, BarChart3,
+  ShoppingCart, CheckCircle2, PhoneOff, Clock, XCircle, Users, TrendingUp,
 } from "lucide-react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  PieChart, Pie, Legend,
-} from "recharts";
 
 interface Order {
   agent_id: string | null;
