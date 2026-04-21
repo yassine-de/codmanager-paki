@@ -16,10 +16,19 @@ interface Order {
   postpone_date: string | null;
 }
 
+interface AgentScore {
+  id: string;
+  confirmed: number;
+  confirmationRate: number;
+  delivered: number;
+  deliveryRate: number;
+}
+
 interface DailyConfirmationReportProps {
   orders: Order[];
   profileNameMap: Record<string, string>;
   agentIds: string[];
+  agentScores?: AgentScore[];
 }
 
 const STATUS_COLORS: Record<string, string> = {
