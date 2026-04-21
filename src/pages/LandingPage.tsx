@@ -7,7 +7,7 @@ import {
   Sparkles, MapPin, Clock, Star, Mail, Phone, Activity,
 } from "lucide-react";
 
-import heroImg from "@/assets/scalers-hero.jpg";
+import heroImg from "@/assets/scalers-hero-banner.png";
 import opportunityImg from "@/assets/scalers-opportunity.jpg";
 import problemImg from "@/assets/scalers-problem.jpg";
 import solutionImg from "@/assets/scalers-solution.jpg";
@@ -151,67 +151,34 @@ export default function LandingPage() {
 
       {/* ─── 1. HERO ─── */}
       <Reveal id="hero" className="relative">
-        <div className="mx-auto max-w-7xl px-6 pt-20 pb-24 md:pt-28 md:pb-36 grid lg:grid-cols-2 gap-12 items-center">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-400/30 bg-blue-500/10 text-xs font-medium text-blue-200 mb-6">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-              Now onboarding sellers in Pakistan
-            </div>
-            <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.05] mb-6">
-              Scale Beyond
-              <br />
-              <span className="bg-gradient-to-r from-blue-300 via-blue-400 to-blue-600 bg-clip-text text-transparent">
-                Borders.
-              </span>
-            </h1>
-            <p className="text-lg md:text-xl text-white/70 max-w-xl mb-10 leading-relaxed">
-              Launch & scale your COD business in Pakistan — without the headache.
-              Sourcing, confirmation, fulfillment, delivery & cash collection. All in one stack.
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <a
-                href="#cta"
-                className="group inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold shadow-[0_0_40px_rgba(56,128,255,0.55)] hover:shadow-[0_0_60px_rgba(56,128,255,0.85)] transition"
-              >
-                Start Scaling Now
-                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-              </a>
-              <a
-                href="#cta"
-                className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl border border-white/15 bg-white/[0.03] text-white/90 hover:bg-white/[0.07] transition"
-              >
-                <PhoneCall className="w-4 h-4" /> Book a Call
-              </a>
-            </div>
-
-            <div className="mt-12 grid grid-cols-3 gap-6 max-w-lg">
-              {[
-                { v: "240M+", l: "Reachable customers" },
-                { v: "85%+", l: "Confirmation rate" },
-                { v: "24/7", l: "Real-time tracking" },
-              ].map((s) => (
-                <div key={s.l}>
-                  <div className="text-2xl md:text-3xl font-bold bg-gradient-to-b from-white to-blue-200 bg-clip-text text-transparent">
-                    {s.v}
-                  </div>
-                  <div className="text-xs text-white/50 mt-1">{s.l}</div>
-                </div>
-              ))}
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-10 pb-16 md:pt-14 md:pb-24">
+          <div className="relative">
+            <div className="absolute inset-0 -m-10 bg-[radial-gradient(closest-side,rgba(56,128,255,0.5),transparent_70%)] blur-3xl" />
+            <div className="relative rounded-3xl overflow-hidden border border-blue-400/20 shadow-[0_0_80px_rgba(56,128,255,0.4)]">
+              <img
+                src={heroImg}
+                alt="Scalers — Scale Beyond Borders. Launch & scale your COD business in Pakistan."
+                width={1536}
+                height={1024}
+                className="w-full h-auto block"
+              />
             </div>
           </div>
 
-          <div className="relative">
-            <div className="absolute inset-0 -m-10 bg-[radial-gradient(closest-side,rgba(56,128,255,0.5),transparent_70%)] blur-3xl" />
-            <div className="relative rounded-3xl overflow-hidden border border-blue-400/20 shadow-[0_0_80px_rgba(56,128,255,0.35)]">
-              <img
-                src={heroImg}
-                alt="Earth from space, network connections converging on Pakistan"
-                width={1536}
-                height={1024}
-                className="w-full h-auto"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#040814]/60 via-transparent to-transparent" />
-            </div>
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+            <a
+              href="#cta"
+              className="group inline-flex items-center gap-2 px-7 py-4 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold shadow-[0_0_50px_rgba(56,128,255,0.6)] hover:shadow-[0_0_70px_rgba(56,128,255,0.9)] transition"
+            >
+              Start Scaling Now
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+            </a>
+            <a
+              href="#cta"
+              className="inline-flex items-center gap-2 px-7 py-4 rounded-xl border border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08] transition"
+            >
+              <PhoneCall className="w-4 h-4" /> Book a Call
+            </a>
           </div>
         </div>
       </Reveal>
