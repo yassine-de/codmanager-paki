@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -22,6 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -42,11 +47,33 @@ import {
   PackageCheck,
   Hourglass,
   X,
+  Columns3,
+  GripVertical,
+  CalendarIcon,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import OrderHistoryModal from "@/components/OrderHistoryModal";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
-type Segment = "all" | "failed_attempt" | "delayed" | "on_going";
+type Segment = "all" | "failed_attempt" | "delayed" | "on_going" | "none";
+type DateField = "created" | "updated";
 
 const FOLLOW_UP_STATUSES = [
   { value: "pending", label: "Pending" },
@@ -57,7 +84,6 @@ const FOLLOW_UP_STATUSES = [
   { value: "closed", label: "Closed" },
 ];
 
-// Modern status colors using project's HSL token style
 const followUpStatusStyle: Record<string, string> = {
   pending: "bg-[hsl(30,6%,50%)]/12 text-[hsl(30,6%,50%)] border-[hsl(30,6%,50%)]/25",
   contacted_courier: "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/25",
@@ -165,6 +191,62 @@ function StatusPill({ value, styleMap }: { value: string | null; styleMap: Recor
   );
 }
 
+/* ── Column system ── */
+type ColumnKey =
+  | "order_id"
+  | "customer"
+  | "phone"
+  | "city"
+  | "seller"
+  | "agent"
+  | "delivery"
+  | "days"
+  | "segment"
+  | "follow_up"
+  | "created"
+  | "updated"
+  | "actions";
+
+const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
+  { key: "order_id", label: "Order ID" },
+  { key: "customer", label: "Customer" },
+  { key: "phone", label: "Phone" },
+  { key: "city", label: "City" },
+  { key: "seller", label: "Seller" },
+  { key: "agent", label: "Agent" },
+  { key: "delivery", label: "Delivery" },
+  { key: "days", label: "Days" },
+  { key: "segment", label: "Segment" },
+  { key: "follow_up", label: "Follow Up" },
+  { key: "created", label: "Created" },
+  { key: "updated", label: "Updated" },
+  { key: "actions", label: "Actions" },
+];
+
+const STORAGE_KEY = "follow-ups:column-config:v1";
+
+type ColumnConfig = { key: ColumnKey; visible: boolean };
+
+function loadColumnConfig(): ColumnConfig[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) throw new Error("none");
+    const parsed = JSON.parse(raw) as ColumnConfig[];
+    // Backfill any new columns appended at the end
+    const existingKeys = new Set(parsed.map((c) => c.key));
+    const merged = [
+      ...parsed.filter((c) => ALL_COLUMNS.some((a) => a.key === c.key)),
+      ...ALL_COLUMNS.filter((a) => !existingKeys.has(a.key)).map((a) => ({
+        key: a.key,
+        visible: true,
+      })),
+    ];
+    return merged;
+  } catch {
+    return ALL_COLUMNS.map((c) => ({ key: c.key, visible: true }));
+  }
+}
+
 export default function FollowUps() {
   const { authUser, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
@@ -176,8 +258,16 @@ export default function FollowUps() {
   const [filterSeller, setFilterSeller] = useState<string>("all");
   const [filterAgent, setFilterAgent] = useState<string>("all");
   const [filterFollowUp, setFilterFollowUp] = useState<string>("all");
+  const [dateField, setDateField] = useState<DateField>("created");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [savingId, setSavingId] = useState<string | null>(null);
   const [historyOrder, setHistoryOrder] = useState<{ id: string; customer: string } | null>(null);
+
+  const [columns, setColumns] = useState<ColumnConfig[]>(() => loadColumnConfig());
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(columns));
+  }, [columns]);
 
   const { data: rows = [], isLoading, refetch } = useQuery({
     queryKey: ["follow-ups-data"],
@@ -190,7 +280,6 @@ export default function FollowUps() {
     refetchInterval: 30000,
   });
 
-  // Realtime
   useEffect(() => {
     const channel = supabase
       .channel("follow-ups-changes")
@@ -210,7 +299,6 @@ export default function FollowUps() {
     [rows]
   );
 
-  // KPIs (over ALL ORIO-synced orders, no filters)
   const kpis = useMemo(() => {
     const total = enriched.length;
     const shipped = enriched.filter((r) =>
@@ -229,14 +317,15 @@ export default function FollowUps() {
     };
   }, [enriched]);
 
-  // Segment counts
   const segCounts = useMemo(() => {
-    const c = { failed_attempt: 0, delayed: 0, on_going: 0 };
-    for (const r of enriched) if (r.segment) c[r.segment]++;
+    const c = { failed_attempt: 0, delayed: 0, on_going: 0, none: 0 };
+    for (const r of enriched) {
+      if (r.segment) c[r.segment]++;
+      else c.none++;
+    }
     return c;
   }, [enriched]);
 
-  // Distinct sellers / agents / delivery statuses for filters
   const filterOptions = useMemo(() => {
     const sellers = new Map<string, string>();
     const agents = new Map<string, string>();
@@ -255,11 +344,23 @@ export default function FollowUps() {
 
   const filtered = useMemo(() => {
     return enriched.filter((r) => {
-      if (segment !== "all" && r.segment !== segment) return false;
+      if (segment !== "all") {
+        if (segment === "none") {
+          if (r.segment !== null) return false;
+        } else if (r.segment !== segment) return false;
+      }
       if (filterDelivery !== "all" && r.delivery_status !== filterDelivery) return false;
       if (filterSeller !== "all" && r.seller_id !== filterSeller) return false;
       if (filterAgent !== "all" && r.agent_id !== filterAgent) return false;
       if (filterFollowUp !== "all" && r.follow_up_status !== filterFollowUp) return false;
+
+      if (dateRange?.from) {
+        const target = new Date(dateField === "created" ? r.order_created_at : r.order_updated_at);
+        const start = startOfDay(dateRange.from);
+        const end = endOfDay(dateRange.to ?? dateRange.from);
+        if (!isWithinInterval(target, { start, end })) return false;
+      }
+
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const hay = [
@@ -276,7 +377,7 @@ export default function FollowUps() {
       }
       return true;
     });
-  }, [enriched, segment, filterDelivery, filterSeller, filterAgent, filterFollowUp, search]);
+  }, [enriched, segment, filterDelivery, filterSeller, filterAgent, filterFollowUp, search, dateRange, dateField]);
 
   const activeFilterCount =
     (segment !== "all" ? 1 : 0) +
@@ -284,6 +385,7 @@ export default function FollowUps() {
     (filterSeller !== "all" ? 1 : 0) +
     (filterAgent !== "all" ? 1 : 0) +
     (filterFollowUp !== "all" ? 1 : 0) +
+    (dateRange?.from ? 1 : 0) +
     (search.trim() ? 1 : 0);
 
   function clearFilters() {
@@ -293,6 +395,7 @@ export default function FollowUps() {
     setFilterAgent("all");
     setFilterFollowUp("all");
     setSearch("");
+    setDateRange(undefined);
   }
 
   async function handleStatusChange(orderId: string, newStatus: string) {
@@ -315,10 +418,11 @@ export default function FollowUps() {
     }
   }
 
-  // Auth gate AFTER all hooks
   if (!authLoading && authUser && authUser.role !== "admin" && authUser.role !== "agent") {
     return <Navigate to="/" replace />;
   }
+
+  const visibleColumns = columns.filter((c) => c.visible);
 
   return (
     <TooltipProvider>
@@ -336,34 +440,10 @@ export default function FollowUps() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPICard
-            icon={Truck}
-            label="Total Shipped to ORIO"
-            value={kpis.total}
-            sub="Orders synced"
-            tone="muted"
-          />
-          <KPICard
-            icon={Activity}
-            label="Currently Shipped"
-            value={kpis.shipped}
-            sub={`${kpis.shippedPct}% of total`}
-            tone="info"
-          />
-          <KPICard
-            icon={PackageCheck}
-            label="Delivered"
-            value={kpis.delivered}
-            sub={`${kpis.deliveredPct}% of total`}
-            tone="success"
-          />
-          <KPICard
-            icon={Hourglass}
-            label="Pending Follow-up"
-            value={kpis.pending}
-            sub={`${kpis.pendingPct}% need action`}
-            tone="warning"
-          />
+          <KPICard icon={Truck} label="Total Shipped to ORIO" value={kpis.total} sub="Orders synced" tone="muted" />
+          <KPICard icon={Activity} label="Currently Shipped" value={kpis.shipped} sub={`${kpis.shippedPct}% of total`} tone="info" />
+          <KPICard icon={PackageCheck} label="Delivered" value={kpis.delivered} sub={`${kpis.deliveredPct}% of total`} tone="success" />
+          <KPICard icon={Hourglass} label="Pending Follow-up" value={kpis.pending} sub={`${kpis.pendingPct}% need action`} tone="warning" />
         </div>
 
         {/* Segment cards */}
@@ -406,20 +486,33 @@ export default function FollowUps() {
                 className="pl-8 h-9"
               />
             </div>
-            {activeFilterCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="h-9 text-xs gap-1"
-              >
-                <X className="h-3.5 w-3.5" />
-                Clear ({activeFilterCount})
-              </Button>
-            )}
+
+            <div className="flex items-center gap-2 ml-auto">
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 text-xs gap-1">
+                  <X className="h-3.5 w-3.5" />
+                  Clear ({activeFilterCount})
+                </Button>
+              )}
+              <ColumnsManager columns={columns} onChange={setColumns} />
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+            {/* Segment filter */}
+            <Select value={segment} onValueChange={(v) => setSegment(v as Segment)}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue placeholder="Segment" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Segments</SelectItem>
+                <SelectItem value="failed_attempt">Failed Attempt</SelectItem>
+                <SelectItem value="delayed">Delayed</SelectItem>
+                <SelectItem value="on_going">On Going</SelectItem>
+                <SelectItem value="none">Unsegmented</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Select value={filterDelivery} onValueChange={setFilterDelivery}>
               <SelectTrigger className="h-9 text-xs">
                 <SelectValue placeholder="Delivery Status" />
@@ -427,9 +520,7 @@ export default function FollowUps() {
               <SelectContent>
                 <SelectItem value="all">All Delivery Status</SelectItem>
                 {filterOptions.deliveries.map((d) => (
-                  <SelectItem key={d} value={d}>
-                    {formatStatus(d)}
-                  </SelectItem>
+                  <SelectItem key={d} value={d}>{formatStatus(d)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -441,9 +532,7 @@ export default function FollowUps() {
               <SelectContent>
                 <SelectItem value="all">All Sellers</SelectItem>
                 {filterOptions.sellers.map(([id, name]) => (
-                  <SelectItem key={id} value={id}>
-                    {name}
-                  </SelectItem>
+                  <SelectItem key={id} value={id}>{name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -455,9 +544,7 @@ export default function FollowUps() {
               <SelectContent>
                 <SelectItem value="all">All Agents</SelectItem>
                 {filterOptions.agents.map(([id, name]) => (
-                  <SelectItem key={id} value={id}>
-                    {name}
-                  </SelectItem>
+                  <SelectItem key={id} value={id}>{name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -469,12 +556,61 @@ export default function FollowUps() {
               <SelectContent>
                 <SelectItem value="all">All Follow Up Status</SelectItem>
                 {FOLLOW_UP_STATUSES.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Date range filter */}
+            <div className="flex gap-1">
+              <Select value={dateField} onValueChange={(v) => setDateField(v as DateField)}>
+                <SelectTrigger className="h-9 text-xs w-[90px] flex-shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="created">Created</SelectItem>
+                  <SelectItem value="updated">Updated</SelectItem>
+                </SelectContent>
+              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`h-9 text-xs flex-1 justify-start gap-1.5 px-2 ${
+                      dateRange?.from ? "" : "text-muted-foreground"
+                    }`}
+                  >
+                    <CalendarIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span className="truncate">
+                      {dateRange?.from
+                        ? dateRange.to
+                          ? `${format(dateRange.from, "dd MMM")} - ${format(dateRange.to, "dd MMM")}`
+                          : format(dateRange.from, "dd MMM yyyy")
+                        : "Pick date"}
+                    </span>
+                    {dateRange?.from && (
+                      <X
+                        className="h-3 w-3 ml-auto hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDateRange(undefined);
+                        }}
+                      />
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="range"
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
         </Card>
 
@@ -484,26 +620,27 @@ export default function FollowUps() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs uppercase tracking-wider">Order ID</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Customer</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Phone</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">City</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Seller</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Delivery</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-center">Days</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Segment</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider min-w-[180px]">Follow Up</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Created</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Updated</TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">Actions</TableHead>
+                  {visibleColumns.map((col) => {
+                    const meta = ALL_COLUMNS.find((c) => c.key === col.key)!;
+                    const isCenter = col.key === "days";
+                    const minW = col.key === "follow_up" ? "min-w-[180px]" : "";
+                    return (
+                      <TableHead
+                        key={col.key}
+                        className={`text-xs uppercase tracking-wider ${isCenter ? "text-center" : ""} ${minW}`}
+                      >
+                        {meta.label}
+                      </TableHead>
+                    );
+                  })}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 12 }).map((_, j) => (
-                        <TableCell key={j}>
+                      {visibleColumns.map((c) => (
+                        <TableCell key={c.key}>
                           <Skeleton className="h-4 w-full" />
                         </TableCell>
                       ))}
@@ -511,7 +648,7 @@ export default function FollowUps() {
                   ))
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={visibleColumns.length} className="text-center text-muted-foreground py-12">
                       No follow-ups found
                     </TableCell>
                   </TableRow>
@@ -520,102 +657,14 @@ export default function FollowUps() {
                     const segMeta = row.segment ? segmentMeta[row.segment] : null;
                     return (
                       <TableRow key={row.order_id} className="hover:bg-muted/40">
-                        <TableCell className="font-mono text-xs font-medium">{row.order_id}</TableCell>
-                        <TableCell className="text-xs">{row.customer_name || "—"}</TableCell>
-                        <TableCell className="text-xs tabular-nums text-muted-foreground">
-                          {row.customer_phone || "—"}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {row.customer_city || "—"}
-                        </TableCell>
-                        <TableCell className="text-xs">{row.seller_name || "—"}</TableCell>
-                        <TableCell>
-                          <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />
-                        </TableCell>
-                        <TableCell className="text-center text-xs tabular-nums font-medium">
-                          {row.days_since_shipped ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          {segMeta ? (
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap ${segMeta.pill}`}
-                            >
-                              <segMeta.icon className="h-3 w-3" />
-                              {segMeta.label}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={row.follow_up_status}
-                            onValueChange={(v) => handleStatusChange(row.order_id, v)}
-                            disabled={savingId === row.order_id}
+                        {visibleColumns.map((col) => (
+                          <TableCell
+                            key={col.key}
+                            className={cellClassFor(col.key)}
                           >
-                            <SelectTrigger
-                              className={`h-7 text-[11px] border rounded-full px-2.5 py-0 w-auto min-w-[140px] gap-1 ${
-                                followUpStatusStyle[row.follow_up_status] ?? ""
-                              }`}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {FOLLOW_UP_STATUSES.map((s) => (
-                                <SelectItem key={s.value} value={s.value} className="text-xs">
-                                  <span
-                                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${
-                                      followUpStatusStyle[s.value] ?? ""
-                                    }`}
-                                  >
-                                    {s.label}
-                                  </span>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="text-[11px] text-muted-foreground tabular-nums">
-                          {format(new Date(row.order_created_at), "dd MMM HH:mm")}
-                        </TableCell>
-                        <TableCell className="text-[11px] text-muted-foreground tabular-nums">
-                          {format(new Date(row.order_updated_at), "dd MMM HH:mm")}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() => navigate(`/orders/${row.order_id}`)}
-                                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[hsl(30,90%,55%)]/10 text-[hsl(30,90%,55%)] hover:bg-[hsl(30,90%,55%)]/20 transition-colors active:scale-95"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">
-                                <p className="text-xs">Edit Order</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  onClick={() =>
-                                    setHistoryOrder({
-                                      id: row.order_id,
-                                      customer: row.customer_name,
-                                    })
-                                  }
-                                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[hsl(210,60%,52%)]/10 text-[hsl(210,60%,52%)] hover:bg-[hsl(210,60%,52%)]/20 transition-colors active:scale-95"
-                                >
-                                  <History className="w-3.5 h-3.5" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top">
-                                <p className="text-xs">Order History</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TableCell>
+                            {renderCell(col.key, row, segMeta, savingId, handleStatusChange, navigate, setHistoryOrder)}
+                          </TableCell>
+                        ))}
                       </TableRow>
                     );
                   })
@@ -635,6 +684,216 @@ export default function FollowUps() {
         )}
       </div>
     </TooltipProvider>
+  );
+}
+
+function cellClassFor(key: ColumnKey): string {
+  switch (key) {
+    case "order_id": return "font-mono text-xs font-medium";
+    case "customer": return "text-xs";
+    case "phone": return "text-xs tabular-nums text-muted-foreground";
+    case "city": return "text-xs text-muted-foreground";
+    case "seller":
+    case "agent": return "text-xs";
+    case "days": return "text-center text-xs tabular-nums font-medium";
+    case "created":
+    case "updated": return "text-[11px] text-muted-foreground tabular-nums";
+    default: return "";
+  }
+}
+
+function renderCell(
+  key: ColumnKey,
+  row: FollowUpRow & { segment: "failed_attempt" | "delayed" | "on_going" | null },
+  segMeta: (typeof segmentMeta)[keyof typeof segmentMeta] | null,
+  savingId: string | null,
+  handleStatusChange: (id: string, status: string) => void,
+  navigate: (to: string) => void,
+  setHistoryOrder: (v: { id: string; customer: string } | null) => void,
+) {
+  switch (key) {
+    case "order_id": return row.order_id;
+    case "customer": return row.customer_name || "—";
+    case "phone": return row.customer_phone || "—";
+    case "city": return row.customer_city || "—";
+    case "seller": return row.seller_name || "—";
+    case "agent": return row.agent_name || "—";
+    case "delivery": return <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />;
+    case "days": return row.days_since_shipped ?? "—";
+    case "segment":
+      return segMeta ? (
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap ${segMeta.pill}`}>
+          <segMeta.icon className="h-3 w-3" />
+          {segMeta.label}
+        </span>
+      ) : <span className="text-muted-foreground text-xs">—</span>;
+    case "follow_up":
+      return (
+        <Select
+          value={row.follow_up_status}
+          onValueChange={(v) => handleStatusChange(row.order_id, v)}
+          disabled={savingId === row.order_id}
+        >
+          <SelectTrigger className={`h-7 text-[11px] border rounded-full px-2.5 py-0 w-auto min-w-[140px] gap-1 ${followUpStatusStyle[row.follow_up_status] ?? ""}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FOLLOW_UP_STATUSES.map((s) => (
+              <SelectItem key={s.value} value={s.value} className="text-xs">
+                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle[s.value] ?? ""}`}>
+                  {s.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
+    case "created": return format(new Date(row.order_created_at), "dd MMM HH:mm");
+    case "updated": return format(new Date(row.order_updated_at), "dd MMM HH:mm");
+    case "actions":
+      return (
+        <div className="flex items-center gap-1.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => navigate(`/orders/${row.order_id}`)}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[hsl(30,90%,55%)]/10 text-[hsl(30,90%,55%)] hover:bg-[hsl(30,90%,55%)]/20 transition-colors active:scale-95"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top"><p className="text-xs">Edit Order</p></TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setHistoryOrder({ id: row.order_id, customer: row.customer_name })}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[hsl(210,60%,52%)]/10 text-[hsl(210,60%,52%)] hover:bg-[hsl(210,60%,52%)]/20 transition-colors active:scale-95"
+              >
+                <History className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top"><p className="text-xs">Order History</p></TooltipContent>
+          </Tooltip>
+        </div>
+      );
+  }
+}
+
+/* ── Columns Manager (reorder + show/hide) ── */
+function ColumnsManager({
+  columns,
+  onChange,
+}: {
+  columns: ColumnConfig[];
+  onChange: (next: ColumnConfig[]) => void;
+}) {
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = columns.findIndex((c) => c.key === active.id);
+    const newIndex = columns.findIndex((c) => c.key === over.id);
+    onChange(arrayMove(columns, oldIndex, newIndex));
+  }
+
+  function toggleVisibility(key: ColumnKey) {
+    onChange(columns.map((c) => (c.key === key ? { ...c, visible: !c.visible } : c)));
+  }
+
+  function resetDefault() {
+    onChange(ALL_COLUMNS.map((c) => ({ key: c.key, visible: true })));
+  }
+
+  const visibleCount = columns.filter((c) => c.visible).length;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-9 text-xs gap-1.5">
+          <Columns3 className="h-3.5 w-3.5" />
+          Columns
+          <span className="text-muted-foreground">({visibleCount})</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 p-0">
+        <div className="flex items-center justify-between px-3 py-2 border-b">
+          <div className="text-xs font-semibold">Reorder & Toggle Columns</div>
+          <button
+            onClick={resetDefault}
+            className="text-[11px] text-muted-foreground hover:text-foreground"
+          >
+            Reset
+          </button>
+        </div>
+        <div className="p-2 max-h-[400px] overflow-y-auto">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={columns.map((c) => c.key)} strategy={verticalListSortingStrategy}>
+              {columns.map((col) => {
+                const meta = ALL_COLUMNS.find((c) => c.key === col.key)!;
+                return (
+                  <SortableColumnItem
+                    key={col.key}
+                    id={col.key}
+                    label={meta.label}
+                    visible={col.visible}
+                    onToggle={() => toggleVisibility(col.key)}
+                  />
+                );
+              })}
+            </SortableContext>
+          </DndContext>
+        </div>
+        <div className="px-3 py-2 border-t text-[11px] text-muted-foreground">
+          Drag <GripVertical className="inline h-3 w-3" /> to reorder. Click eye to show/hide.
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function SortableColumnItem({
+  id,
+  label,
+  visible,
+  onToggle,
+}: {
+  id: ColumnKey;
+  label: string;
+  visible: boolean;
+  onToggle: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/60 group"
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+      <span className={`text-xs flex-1 ${visible ? "" : "text-muted-foreground line-through"}`}>
+        {label}
+      </span>
+      <button
+        onClick={onToggle}
+        className="text-muted-foreground hover:text-foreground p-0.5"
+        aria-label={visible ? "Hide" : "Show"}
+      >
+        {visible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+      </button>
+    </div>
   );
 }
 
