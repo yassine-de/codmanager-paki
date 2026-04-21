@@ -56,6 +56,7 @@ import {
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import OrderHistoryModal from "@/components/OrderHistoryModal";
+import OrioTrackingModal from "@/components/OrioTrackingModal";
 import {
   DndContext,
   closestCenter,
