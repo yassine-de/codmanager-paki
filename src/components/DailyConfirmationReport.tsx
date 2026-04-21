@@ -2,12 +2,8 @@ import { useMemo } from "react";
 import { KPICard } from "@/components/KPICard";
 import { cn } from "@/lib/utils";
 import {
-  ShoppingCart, CheckCircle2, PhoneOff, Clock, XCircle, Users, TrendingUp, AlertTriangle, Award, BarChart3,
+  ShoppingCart, CheckCircle2, PhoneOff, Clock, XCircle, Users, TrendingUp, BarChart3,
 } from "lucide-react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  PieChart, Pie, Legend,
-} from "recharts";
 
 interface Order {
   agent_id: string | null;
@@ -183,48 +179,6 @@ export function DailyConfirmationReport({ orders, profileNameMap, agentIds, agen
         <KPICard title="No Answer" value={summary.noAnswer} subtitle={`${summary.noAnswerRate}%`} icon={PhoneOff} iconBg="bg-warning/10" iconColor="text-warning" />
         <KPICard title="Postponed" value={summary.postponed} subtitle={`${summary.postponedRate}%`} icon={Clock} iconBg="bg-primary/10" iconColor="text-primary" />
         <KPICard title="Cancelled" value={summary.cancelled} icon={XCircle} iconBg="bg-destructive/10" iconColor="text-destructive" />
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Bar Chart - Orders per agent */}
-        <div className="bg-card rounded-lg border p-5">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Orders per Agent</h3>
-          {barData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={barData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
-                <Bar dataKey="confirmed" name="Confirmed" fill="hsl(155, 50%, 42%)" radius={[4, 4, 0, 0]} stackId="stack" />
-                <Bar dataKey="noAnswer" name="No Answer" fill="hsl(38, 90%, 55%)" radius={[0, 0, 0, 0]} stackId="stack" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-muted-foreground text-sm text-center py-10">No data</p>
-          )}
-        </div>
-
-        {/* Pie Chart - Status Distribution */}
-        <div className="bg-card rounded-lg border p-5">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Status Distribution</h3>
-          {pieData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={3} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                  {pieData.map((entry, i) => (
-                    <Cell key={i} fill={entry.fill} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px', background: 'hsl(var(--card))' }} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-muted-foreground text-sm text-center py-10">No data</p>
-          )}
-        </div>
       </div>
 
       {/* Per Agent Table — merged Agent Scores + Breakdown */}
