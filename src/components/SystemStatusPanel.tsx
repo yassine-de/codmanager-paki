@@ -111,6 +111,14 @@ export default function SystemStatusPanel() {
       onClick: () => setSyncModalOpen(true),
     },
     {
+      id: "stuck-pending",
+      label: "Stuck Pending Sync",
+      count: stuckPendingCount,
+      severity: stuckPendingCount > 0 ? "warning" : "ok",
+      icon: <Clock className="w-4 h-4" />,
+      onClick: () => setSyncModalOpen(true),
+    },
+    {
       id: "pending-adjustments",
       label: "Pending Adjustments",
       count: pendingAdjustments,
