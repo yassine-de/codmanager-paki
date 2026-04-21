@@ -441,6 +441,33 @@ export type Database = {
         }
         Relationships: []
       }
+      order_follow_ups: {
+        Row: {
+          created_at: string
+          follow_up_status: string
+          id: string
+          order_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          follow_up_status?: string
+          id?: string
+          order_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          follow_up_status?: string
+          id?: string
+          order_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       order_history: {
         Row: {
           action_type: string
@@ -1403,6 +1430,25 @@ export type Database = {
           agent_id: string
           agent_name: string
           confirmed_count: number
+        }[]
+      }
+      get_follow_ups_data: {
+        Args: never
+        Returns: {
+          customer_city: string
+          customer_name: string
+          customer_phone: string
+          days_since_shipped: number
+          delivery_status: string
+          follow_up_status: string
+          follow_up_updated_at: string
+          follow_up_updated_by: string
+          order_id: string
+          order_updated_at: string
+          orio_consignment_no: string
+          orio_order_id: number
+          shipped_at: string
+          shipping_status: string
         }[]
       }
       get_invoice_summary: { Args: { p_invoice_id: string }; Returns: Json }
