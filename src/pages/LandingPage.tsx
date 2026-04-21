@@ -246,7 +246,7 @@ export default function LandingPage() {
       </Reveal>
 
       {/* ─── 5. SERVICES ─── */}
-      <Reveal id="services" className="relative py-24 md:py-32">
+      <Reveal id="services" className="relative py-20 md:py-24">
         <div className="mx-auto max-w-7xl px-6">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <div className="text-blue-300 text-xs uppercase tracking-[0.2em] font-semibold mb-4">What We Do</div>
@@ -278,7 +278,7 @@ export default function LandingPage() {
       </Reveal>
 
       {/* ─── 6. WHY SCALERS ─── */}
-      <Reveal className="relative py-24 md:py-32">
+      <Reveal className="relative py-20 md:py-24">
         <div className="mx-auto max-w-7xl px-6 grid lg:grid-cols-2 gap-16 items-center">
           <div>
             <div className="text-blue-300 text-xs uppercase tracking-[0.2em] font-semibold mb-4">Why Scalers</div>
@@ -310,7 +310,7 @@ export default function LandingPage() {
       </Reveal>
 
       {/* ─── 7. HOW IT WORKS ─── */}
-      <Reveal id="how" className="relative py-24 md:py-32">
+      <Reveal id="how" className="relative py-20 md:py-24">
         <div className="mx-auto max-w-7xl px-6">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <div className="text-blue-300 text-xs uppercase tracking-[0.2em] font-semibold mb-4">How It Works</div>
@@ -338,7 +338,7 @@ export default function LandingPage() {
       </Reveal>
 
       {/* ─── 8. SYSTEM ─── */}
-      <Reveal className="relative py-24 md:py-32">
+      <Reveal className="relative py-20 md:py-24">
         <div className="mx-auto max-w-7xl px-6 grid lg:grid-cols-2 gap-16 items-center">
           <div className="relative order-2 lg:order-1">
             <div className="absolute inset-0 -m-8 bg-[radial-gradient(closest-side,rgba(56,128,255,0.4),transparent_70%)] blur-3xl" />
@@ -372,7 +372,7 @@ export default function LandingPage() {
       </Reveal>
 
       {/* ─── 9. PRICING ─── */}
-      <Reveal id="pricing" className="relative py-24 md:py-32">
+      <Reveal id="pricing" className="relative py-20 md:py-24">
         <div className="mx-auto max-w-7xl px-6">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <div className="text-blue-300 text-xs uppercase tracking-[0.2em] font-semibold mb-4">Pricing</div>
@@ -452,7 +452,7 @@ export default function LandingPage() {
       </Reveal>
 
       {/* ─── 10. VISION ─── */}
-      <Reveal className="relative py-24 md:py-32">
+      <Reveal className="relative py-20 md:py-24">
         <div className="mx-auto max-w-6xl px-6 text-center">
           <div className="text-blue-300 text-xs uppercase tracking-[0.2em] font-semibold mb-4">The Vision</div>
           <h2 className="text-4xl md:text-6xl font-bold tracking-tight mb-6">
