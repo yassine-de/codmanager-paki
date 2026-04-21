@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { KPICard } from "@/components/KPICard";
 import { cn } from "@/lib/utils";
 import {
-  ShoppingCart, CheckCircle2, PhoneOff, Clock, XCircle, Users, TrendingUp,
+  ShoppingCart, CheckCircle2, PhoneOff, Clock, XCircle, Users, TrendingUp, BarChart3,
 } from "lucide-react";
 
 interface Order {
