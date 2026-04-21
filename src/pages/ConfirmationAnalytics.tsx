@@ -328,31 +328,60 @@ export default function ConfirmationAnalytics() {
 
   // Confirmation rate by product — based on claimed orders (not total)
   const confirmByProduct = useMemo(() => {
-    const map: Record<string, { claimed: number; confirmed: number }> = {};
+    const map: Record<string, { leads: number; claimed: number; confirmed: number; cancelled: number; pending: number }> = {};
     filteredOrders.forEach(o => {
-      if (o.confirmation_status === "new") return; // skip unclaimed
-      if (!(o.agent_id || o.original_agent_id)) return;
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { claimed: 0, confirmed: 0 };
+      if (!map[name]) map[name] = { leads: 0, claimed: 0, confirmed: 0, cancelled: 0, pending: 0 };
+      map[name].leads++;
+      if (o.confirmation_status === "new") {
+        map[name].pending++;
+        return;
+      }
+      if (!(o.agent_id || o.original_agent_id)) return;
       map[name].claimed++;
       if (o.confirmation_status === "confirmed") map[name].confirmed++;
+      if (o.confirmation_status === "cancelled") map[name].cancelled++;
     });
     return Object.entries(map)
-      .map(([name, d]) => ({ name, rate: d.claimed > 0 ? Math.round((d.confirmed / d.claimed) * 100) : 0, total: d.claimed }))
+      .map(([name, d]) => ({
+        name,
+        leads: d.leads,
+        claimed: d.claimed,
+        confirmed: d.confirmed,
+        cancelled: d.cancelled,
+        pending: d.pending,
+        rate: d.claimed > 0 ? Math.round((d.confirmed / d.claimed) * 100) : 0,
+        total: d.claimed,
+      }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
 
   // Delivery rate by product — delivered / confirmed
   const deliveryByProduct = useMemo(() => {
-    const map: Record<string, { confirmed: number; delivered: number }> = {};
+    const map: Record<string, { confirmed: number; shipped: number; delivered: number; returned: number; inTransit: number }> = {};
     filteredOrders.forEach(o => {
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { confirmed: 0, delivered: 0 };
+      if (!map[name]) map[name] = { confirmed: 0, shipped: 0, delivered: 0, returned: 0, inTransit: 0 };
       if (o.confirmation_status === "confirmed") map[name].confirmed++;
-      if (o.delivery_status === "delivered" || o.delivery_status === "paid") map[name].delivered++;
+      const ds = o.delivery_status;
+      if (ds === "shipped" || ds === "in_transit" || ds === "delivered" || ds === "paid" || ds === "returned" || ds === "cancelled") {
+        map[name].shipped++;
+      }
+      if (ds === "delivered" || ds === "paid") map[name].delivered++;
+      if (ds === "returned" || ds === "cancelled") map[name].returned++;
+      if (ds === "shipped" || ds === "in_transit") map[name].inTransit++;
     });
     return Object.entries(map)
-      .map(([name, d]) => ({ name, rate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0, shipped: d.confirmed }))
+      .map(([name, d]) => ({
+        name,
+        confirmed: d.confirmed,
+        shipped: d.shipped,
+        delivered: d.delivered,
+        returned: d.returned,
+        inTransit: d.inTransit,
+        rate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
+        returnRate: d.shipped > 0 ? Math.round((d.returned / d.shipped) * 100) : 0,
+      }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
 
