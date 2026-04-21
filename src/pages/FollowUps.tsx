@@ -194,6 +194,7 @@ function StatusPill({ value, styleMap }: { value: string | null; styleMap: Recor
 /* ── Column system ── */
 type ColumnKey =
   | "order_id"
+  | "orio_id"
   | "customer"
   | "phone"
   | "city"
@@ -209,6 +210,7 @@ type ColumnKey =
 
 const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "order_id", label: "Order ID" },
+  { key: "orio_id", label: "OR-ID" },
   { key: "customer", label: "Customer" },
   { key: "phone", label: "Phone" },
   { key: "city", label: "City" },
@@ -223,7 +225,7 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "actions", label: "Actions" },
 ];
 
-const STORAGE_KEY = "follow-ups:column-config:v1";
+const STORAGE_KEY = "follow-ups:column-config:v2";
 
 type ColumnConfig = { key: ColumnKey; visible: boolean };
 
