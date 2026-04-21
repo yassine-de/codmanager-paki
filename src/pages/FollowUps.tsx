@@ -211,7 +211,7 @@ type ColumnKey =
 
 const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "order_id", label: "Order ID" },
-  { key: "orio_id", label: "OR-ID" },
+  { key: "orio_id", label: "ORIO ID" },
   { key: "customer", label: "Customer" },
   { key: "phone", label: "Phone" },
   { key: "city", label: "City" },
