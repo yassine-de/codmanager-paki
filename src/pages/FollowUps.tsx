@@ -733,10 +733,24 @@ function renderCell(
   handleStatusChange: (id: string, status: string) => void,
   navigate: (to: string) => void,
   setHistoryOrder: (v: { id: string; customer: string } | null) => void,
+  setTrackingTarget: (v: { orioId: number; sellerId: string } | null) => void,
 ) {
   switch (key) {
     case "order_id": return row.order_id;
-    case "orio_id": return row.orio_order_id ? `OR-${row.orio_order_id}` : <span className="text-muted-foreground">—</span>;
+    case "orio_id":
+      return row.orio_order_id ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setTrackingTarget({ orioId: row.orio_order_id!, sellerId: row.seller_id ?? "" });
+          }}
+          className="text-[hsl(210,60%,52%)] hover:underline font-medium"
+        >
+          {row.orio_order_id}
+        </button>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      );
     case "customer": return row.customer_name || "—";
     case "phone": return row.customer_phone || "—";
     case "city": return row.customer_city || "—";
