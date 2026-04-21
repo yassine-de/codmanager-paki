@@ -180,31 +180,43 @@ export default function LandingPage() {
 
       {/* ─── 2. OPPORTUNITY ─── */}
       <Reveal id="opportunity" className="relative py-24 md:py-32">
-        <div className="mx-auto max-w-7xl px-6 grid lg:grid-cols-2 gap-16 items-center">
-          <div className="relative order-2 lg:order-1">
-            <div className="absolute inset-0 -m-8 bg-[radial-gradient(closest-side,rgba(56,128,255,0.35),transparent_70%)] blur-3xl" />
-            <div className="relative rounded-2xl overflow-hidden border border-blue-400/20 shadow-[0_0_60px_rgba(56,128,255,0.25)]">
-              <img src={opportunityImg} alt="Pakistan growth" loading="lazy" width={1280} height={896} className="w-full h-auto" />
-            </div>
-          </div>
-          <div className="order-1 lg:order-2">
-            <div className="text-blue-300 text-xs uppercase tracking-[0.2em] font-semibold mb-4">The Opportunity</div>
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-5">
-              Pakistan = Your Next <span className="bg-gradient-to-r from-blue-300 to-blue-500 bg-clip-text text-transparent">Growth Engine</span>
-            </h2>
-            <p className="text-white/70 text-lg mb-10 leading-relaxed">
-              While everyone fights over saturated markets, Pakistan is wide open — ready, willing and waiting.
-            </p>
-            <div className="grid sm:grid-cols-2 gap-4">
-              {opportunityPoints.map((p) => (
-                <div key={p.title} className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-5 hover:border-blue-400/40 hover:bg-white/[0.06] transition">
-                  <div className="w-10 h-10 rounded-lg grid place-items-center bg-blue-500/15 border border-blue-400/30 text-blue-300 mb-3">
-                    <p.icon className="w-5 h-5" />
-                  </div>
-                  <div className="font-semibold mb-1">{p.title}</div>
-                  <div className="text-sm text-white/60">{p.desc}</div>
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="relative rounded-3xl overflow-hidden border border-blue-400/20 shadow-[0_0_80px_rgba(56,128,255,0.35)]">
+            {/* Background image */}
+            <img
+              src={opportunityImg}
+              alt="Pakistan growth opportunity"
+              loading="lazy"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            {/* Gradient overlays for legibility */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#04060f]/95 via-[#04060f]/70 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#04060f]/80 via-transparent to-transparent" />
+
+            {/* Content */}
+            <div className="relative grid lg:grid-cols-2 gap-10 p-8 md:p-14 lg:p-20 min-h-[640px]">
+              <div className="flex flex-col justify-center">
+                <div className="text-blue-300 text-xs uppercase tracking-[0.2em] font-semibold mb-4">The Opportunity</div>
+                <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-5 text-white">
+                  Pakistan = Your Next <span className="bg-gradient-to-r from-blue-300 to-blue-500 bg-clip-text text-transparent">Growth Engine</span>
+                </h2>
+                <p className="text-white/80 text-lg mb-8 leading-relaxed max-w-xl">
+                  While everyone fights over saturated markets, Pakistan is wide open — ready, willing and waiting.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {opportunityPoints.map((p) => (
+                    <div key={p.title} className="group relative rounded-2xl border border-white/15 bg-white/[0.06] backdrop-blur-md p-5 hover:border-blue-400/50 hover:bg-white/[0.1] transition">
+                      <div className="w-10 h-10 rounded-lg grid place-items-center bg-blue-500/20 border border-blue-400/40 text-blue-300 mb-3">
+                        <p.icon className="w-5 h-5" />
+                      </div>
+                      <div className="font-semibold mb-1 text-white">{p.title}</div>
+                      <div className="text-sm text-white/70">{p.desc}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+              {/* Right column intentionally empty — image fills it on large screens */}
+              <div className="hidden lg:block" />
             </div>
           </div>
         </div>
