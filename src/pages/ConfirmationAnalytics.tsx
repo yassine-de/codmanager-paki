@@ -130,7 +130,7 @@ export default function ConfirmationAnalytics() {
     const total = filteredOrders.length;
     const confirmed = filteredOrders.filter(o => o.confirmation_status === "confirmed").length;
     const cancelled = filteredOrders.filter(o => o.confirmation_status === "cancelled").length;
-    const postponed = filteredOrders.filter(o => o.confirmation_status === "postponed" || o.postpone_date !== null).length;
+    const postponed = filteredOrders.filter(o => o.confirmation_status === "postponed").length;
     const delivered = filteredOrders.filter(o => o.delivery_status === "delivered" || o.delivery_status === "paid").length;
 
     // Build set of filtered order_ids for cross-referencing
