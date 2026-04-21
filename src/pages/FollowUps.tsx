@@ -56,6 +56,7 @@ import {
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import OrderHistoryModal from "@/components/OrderHistoryModal";
+import OrioTrackingModal from "@/components/OrioTrackingModal";
 import {
   DndContext,
   closestCenter,
@@ -210,7 +211,7 @@ type ColumnKey =
 
 const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "order_id", label: "Order ID" },
-  { key: "orio_id", label: "OR-ID" },
+  { key: "orio_id", label: "ORIO ID" },
   { key: "customer", label: "Customer" },
   { key: "phone", label: "Phone" },
   { key: "city", label: "City" },
@@ -264,6 +265,7 @@ export default function FollowUps() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [savingId, setSavingId] = useState<string | null>(null);
   const [historyOrder, setHistoryOrder] = useState<{ id: string; customer: string } | null>(null);
+  const [trackingTarget, setTrackingTarget] = useState<{ orioId: number; sellerId: string } | null>(null);
 
   const [columns, setColumns] = useState<ColumnConfig[]>(() => loadColumnConfig());
 
@@ -672,7 +674,7 @@ export default function FollowUps() {
                             key={col.key}
                             className={cellClassFor(col.key)}
                           >
-                            {renderCell(col.key, row, segMeta, savingId, handleStatusChange, navigate, setHistoryOrder)}
+                            {renderCell(col.key, row, segMeta, savingId, handleStatusChange, navigate, setHistoryOrder, setTrackingTarget)}
                           </TableCell>
                         ))}
                       </TableRow>
@@ -690,6 +692,16 @@ export default function FollowUps() {
             onOpenChange={(o) => !o && setHistoryOrder(null)}
             orderId={historyOrder.id}
             customerName={historyOrder.customer}
+          />
+        )}
+
+        {trackingTarget && (
+          <OrioTrackingModal
+            orioOrderId={trackingTarget.orioId}
+            systemId={null}
+            sellerId={trackingTarget.sellerId}
+            open={!!trackingTarget}
+            onClose={() => setTrackingTarget(null)}
           />
         )}
       </div>
@@ -721,10 +733,24 @@ function renderCell(
   handleStatusChange: (id: string, status: string) => void,
   navigate: (to: string) => void,
   setHistoryOrder: (v: { id: string; customer: string } | null) => void,
+  setTrackingTarget: (v: { orioId: number; sellerId: string } | null) => void,
 ) {
   switch (key) {
     case "order_id": return row.order_id;
-    case "orio_id": return row.orio_order_id ? `OR-${row.orio_order_id}` : <span className="text-muted-foreground">—</span>;
+    case "orio_id":
+      return row.orio_order_id ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setTrackingTarget({ orioId: row.orio_order_id!, sellerId: row.seller_id ?? "" });
+          }}
+          className="text-[hsl(210,60%,52%)] hover:underline font-medium"
+        >
+          {row.orio_order_id}
+        </button>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      );
     case "customer": return row.customer_name || "—";
     case "phone": return row.customer_phone || "—";
     case "city": return row.customer_city || "—";
