@@ -772,7 +772,7 @@ function renderCell(
           onValueChange={(v) => handleStatusChange(row.order_id, v)}
           disabled={savingId === row.order_id}
         >
-          <SelectTrigger className={`h-7 text-[11px] border rounded-full px-2.5 py-0 w-auto min-w-[140px] gap-1 ${followUpStatusStyle[row.follow_up_status] ?? ""}`}>
+          <SelectTrigger className={`h-7 text-[11px] border rounded-full px-2 py-0 w-fit min-w-0 gap-1 [&>span]:truncate ${followUpStatusStyle[row.follow_up_status] ?? ""}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
