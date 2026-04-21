@@ -106,13 +106,14 @@ async function createShipment(
 
   const cfg = getOrioConfig();
 
-  // Resolve city
+  // Resolve city — robust matching: exact, then whitespace-stripped
   const cities = await getCities(supabase);
   console.log(`Cities loaded: ${cities.length}, looking for: "${order.customer_city}"`);
-  const cityName = (order.customer_city || "").trim().toLowerCase();
-  const matchedCity = cities.find(
-    (c: any) => (c.city_name || "").trim().toLowerCase() === cityName
-  );
+  const rawCity = (order.customer_city || "").trim().toLowerCase();
+  const stripped = rawCity.replace(/\s+/g, "");
+  const matchedCity =
+    cities.find((c: any) => (c.city_name || "").trim().toLowerCase() === rawCity) ||
+    cities.find((c: any) => (c.city_name || "").trim().toLowerCase().replace(/\s+/g, "") === stripped);
 
   if (!matchedCity) {
     await supabase
@@ -216,10 +217,22 @@ async function createShipment(
     || responseData?.data?.[0]?.consigment_no
     || null;
 
+  // Guard: ORIO returned 200 but no order_id — treat as failed so it stays visible & retryable
+  if (!orioOrderId) {
+    await supabase
+      .from("orders")
+      .update({
+        orio_sync_status: "failed",
+        orio_sync_error: "ORIO returned 200 but no order_id in response",
+      })
+      .eq("id", order.id);
+    throw new Error("ORIO response missing order_id");
+  }
+
   await supabase
     .from("orders")
     .update({
-      orio_order_id: orioOrderId || null,
+      orio_order_id: orioOrderId,
       orio_consignment_no: consignmentNo,
       orio_sync_status: "synced",
       orio_sync_error: null,
