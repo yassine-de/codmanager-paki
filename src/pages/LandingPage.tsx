@@ -229,57 +229,6 @@ export default function LandingPage() {
         </div>
       </Reveal>
 
-      {/* ─── 3. PROBLEM ─── */}
-      <Reveal className="relative w-full overflow-hidden">
-        {/* Full-bleed background image */}
-        <img
-          src={problemImg}
-          alt="Stressed seller in warehouse"
-          loading="lazy"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        {/* Cinematic overlays */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#04060f] via-[#04060f]/40 to-[#04060f]" />
-        <div className="absolute inset-0 bg-gradient-to-l from-[#04060f]/90 via-transparent to-[#04060f]/70" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(4,6,15,0.6)_100%)]" />
-
-        {/* Content */}
-        <div className="relative mx-auto max-w-7xl px-6 py-28 md:py-36 lg:py-44 min-h-[760px] flex flex-col justify-between gap-16">
-          {/* Top: headline (right-aligned to balance image subject on left) */}
-          <div className="max-w-3xl lg:ml-auto lg:text-right">
-            <div className="inline-flex items-center gap-2 text-red-300/90 text-xs uppercase tracking-[0.25em] font-semibold mb-5">
-              <span className="w-8 h-px bg-red-400/60" />
-              The Problem
-            </div>
-            <h2 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 text-white leading-[1.05]">
-              Why Most Sellers{" "}
-              <span className="bg-gradient-to-r from-red-300 via-red-400 to-red-500 bg-clip-text text-transparent">
-                Fail to Expand
-              </span>
-            </h2>
-            <p className="text-white/75 text-lg md:text-xl leading-relaxed max-w-2xl lg:ml-auto">
-              Going cross-border looks easy on a slide deck. In practice, four things kill 9 out of 10 attempts.
-            </p>
-          </div>
-
-          {/* Bottom: pain-point cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-            {problemPoints.map((p) => (
-              <div
-                key={p.title}
-                className="group relative rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-5 md:p-6 hover:border-red-400/40 hover:bg-white/[0.08] transition-all duration-300 hover:-translate-y-1"
-              >
-                <div className="w-10 h-10 rounded-lg grid place-items-center bg-red-500/15 border border-red-400/30 text-red-300 mb-3">
-                  <p.icon className="w-5 h-5" />
-                </div>
-                <div className="font-semibold mb-1 text-white text-base md:text-lg">{p.title}</div>
-                <div className="text-xs md:text-sm text-white/65 leading-relaxed">{p.desc}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Reveal>
-
       {/* ─── 4. SOLUTION ─── */}
       <Reveal className="relative w-full overflow-hidden">
         {/* Full-bleed background image */}
