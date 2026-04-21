@@ -16,10 +16,19 @@ interface Order {
   postpone_date: string | null;
 }
 
+interface AgentScore {
+  id: string;
+  confirmed: number;
+  confirmationRate: number;
+  delivered: number;
+  deliveryRate: number;
+}
+
 interface DailyConfirmationReportProps {
   orders: Order[];
   profileNameMap: Record<string, string>;
   agentIds: string[];
+  agentScores?: AgentScore[];
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -70,7 +79,7 @@ interface AgentRow {
   workloadPct: number;
 }
 
-export function DailyConfirmationReport({ orders, profileNameMap, agentIds }: DailyConfirmationReportProps) {
+export function DailyConfirmationReport({ orders, profileNameMap, agentIds, agentScores = [] }: DailyConfirmationReportProps) {
   // Global summary
   // "Handled" = agent claimed AND submitted any action (status is not "new")
   // Use original_agent_id as fallback for released/redistributed orders
@@ -218,60 +227,84 @@ export function DailyConfirmationReport({ orders, profileNameMap, agentIds }: Da
         </div>
       </div>
 
-      {/* Per Agent Table */}
-      {agentRows.length > 0 && (
-        <div className="bg-card rounded-lg border p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Users className="h-4 w-4 text-primary" />
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Agent Breakdown</h3>
+      {/* Per Agent Table — merged Agent Scores + Breakdown */}
+      {agentRows.length > 0 && (() => {
+        const scoresMap: Record<string, AgentScore> = {};
+        agentScores.forEach(s => { scoresMap[s.id] = s; });
+        // Sort by confirmation rate (from scores) desc, fallback to handled count
+        const rankedRows = [...agentRows].sort((a, b) => {
+          const ra = scoresMap[a.id]?.confirmationRate ?? a.confirmRate;
+          const rb = scoresMap[b.id]?.confirmationRate ?? b.confirmRate;
+          if (rb !== ra) return rb - ra;
+          return b.total - a.total;
+        });
+        return (
+          <div className="bg-card rounded-lg border p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Agent Performance Breakdown</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-muted-foreground text-xs">
+                    <th className="text-left py-2 pr-3">Rank</th>
+                    <th className="text-left py-2 pr-3">Agent</th>
+                    <th className="text-right py-2 pr-3">Handled</th>
+                    <th className="text-right py-2 pr-3">No Answer</th>
+                    <th className="text-right py-2 pr-3">Postponed</th>
+                    <th className="text-right py-2 pr-3">Confirmed</th>
+                    <th className="text-right py-2 pr-3">Cancelled</th>
+                    <th className="text-right py-2 pr-3">Conf. Rate</th>
+                    <th className="text-right py-2 pr-3">Delivered</th>
+                    <th className="text-right py-2 pr-3">Del. Rate</th>
+                    <th className="text-right py-2 pr-3">Workload</th>
+                    <th className="text-left py-2">Insight</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankedRows.map((a, i) => {
+                    const perf = getPerformanceLabel(a.confirmRate, a.workloadPct, avgWorkload);
+                    const score = scoresMap[a.id];
+                    const confRate = score?.confirmationRate ?? a.confirmRate;
+                    const delivered = score?.delivered ?? 0;
+                    const delRate = score?.deliveryRate ?? 0;
+                    return (
+                      <tr key={a.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="py-2.5 pr-3">
+                          <span className={cn(
+                            "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold",
+                            i === 0 ? "bg-warning/20 text-warning" : i === 1 ? "bg-muted text-muted-foreground" : i === 2 ? "bg-warning/10 text-warning" : "text-muted-foreground"
+                          )}>
+                            {i + 1}
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-3 font-medium">{a.name}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{a.total}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{a.noAnswer}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{a.postponed}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{a.confirmed}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{a.cancelled}</td>
+                        <td className="py-2.5 pr-3 text-right">{rateBadge(confRate)}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{delivered}</td>
+                        <td className="py-2.5 pr-3 text-right">{rateBadge(delRate)}</td>
+                        <td className="py-2.5 pr-3 text-right">
+                          <span className="text-xs font-medium tabular-nums">{a.workloadPct}%</span>
+                        </td>
+                        <td className="py-2.5">
+                          <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", perf.bg, perf.color)}>
+                            {perf.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-muted-foreground text-xs">
-                  <th className="text-left py-2 pr-3">Agent</th>
-                  <th className="text-right py-2 pr-3">Handled</th>
-                  <th className="text-right py-2 pr-3">New</th>
-                  <th className="text-right py-2 pr-3">No Answer</th>
-                  <th className="text-right py-2 pr-3">Postponed</th>
-                  <th className="text-right py-2 pr-3">Confirmed</th>
-                  <th className="text-right py-2 pr-3">Cancelled</th>
-                  <th className="text-right py-2 pr-3">Conf%</th>
-                  <th className="text-right py-2 pr-3">NA%</th>
-                  <th className="text-right py-2 pr-3">Workload</th>
-                  <th className="text-left py-2">Insight</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agentRows.map(a => {
-                  const perf = getPerformanceLabel(a.confirmRate, a.workloadPct, avgWorkload);
-                  return (
-                    <tr key={a.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="py-2.5 pr-3 font-medium">{a.name}</td>
-                      <td className="py-2.5 pr-3 text-right tabular-nums">{a.total}</td>
-                      <td className="py-2.5 pr-3 text-right tabular-nums">{a.newOrders}</td>
-                      <td className="py-2.5 pr-3 text-right tabular-nums">{a.noAnswer}</td>
-                      <td className="py-2.5 pr-3 text-right tabular-nums">{a.postponed}</td>
-                      <td className="py-2.5 pr-3 text-right tabular-nums">{a.confirmed}</td>
-                      <td className="py-2.5 pr-3 text-right tabular-nums">{a.cancelled}</td>
-                      <td className="py-2.5 pr-3 text-right">{rateBadge(a.confirmRate)}</td>
-                      <td className="py-2.5 pr-3 text-right">{rateBadge(100 - a.noAnswerRate)}</td>
-                      <td className="py-2.5 pr-3 text-right">
-                        <span className="text-xs font-medium tabular-nums">{a.workloadPct}%</span>
-                      </td>
-                      <td className="py-2.5">
-                        <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", perf.bg, perf.color)}>
-                          {perf.label}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Insights Panel */}
       {insights.length > 0 && (

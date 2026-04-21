@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { KPICard } from "@/components/KPICard";
-import { Phone, CheckCircle2, PhoneCall, Clock, XCircle, AlertTriangle, Truck, Users, ShoppingCart, Loader2, Timer, Hourglass, ClipboardCheck, MousePointerClick } from "lucide-react";
+import { Phone, CheckCircle2, PhoneCall, Clock, XCircle, AlertTriangle, Truck, ShoppingCart, Loader2, Timer, Hourglass, ClipboardCheck, MousePointerClick } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
@@ -425,7 +425,7 @@ export default function ConfirmationAnalytics() {
         <KPICard title="Handling Time" value={timeStats.handlingTime} icon={Hourglass} iconBg="bg-accent/10" iconColor="text-accent-foreground" delay={400} />
       </div>
 
-      {/* Daily Confirmation Report */}
+      {/* Daily Confirmation Report (includes merged Agent Performance Breakdown) */}
       <DailyConfirmationReport
         orders={filteredOrders.map(o => ({
           agent_id: o.agent_id,
@@ -435,64 +435,15 @@ export default function ConfirmationAnalytics() {
         }))}
         profileNameMap={profileNameMap}
         agentIds={agentIds}
+        agentScores={agentScores.map(a => ({
+          id: a.id,
+          confirmed: a.confirmed,
+          confirmationRate: a.confirmationRate,
+          delivered: a.delivered,
+          deliveryRate: a.deliveryRate,
+        }))}
       />
 
-      {/* Agent Scores Table */}
-      {agentScores.length > 0 && (
-        <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '100ms' }}>
-          <div className="flex items-center gap-2 mb-4">
-            <Users className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Agent Scores</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-muted-foreground text-xs">
-                  <th className="text-left py-2 pr-4">Rank</th>
-                  <th className="text-left py-2 pr-4">Agent</th>
-                  <th className="text-right py-2 pr-4">Orders</th>
-                  <th className="text-right py-2 pr-4">Confirmed</th>
-                  <th className="text-right py-2 pr-4">Conf. Rate</th>
-                  <th className="text-right py-2 pr-4">Delivered</th>
-                  <th className="text-right py-2">Del. Rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agentScores.map((a, i) => (
-                  <tr key={a.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                    <td className="py-2.5 pr-4">
-                      <span className={cn(
-                        "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold",
-                        i === 0 ? "bg-warning/20 text-warning" : i === 1 ? "bg-muted text-muted-foreground" : i === 2 ? "bg-warning/10 text-warning" : "text-muted-foreground"
-                      )}>
-                        {i + 1}
-                      </span>
-                    </td>
-                    <td className="py-2.5 pr-4 font-medium">{a.name}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums">{a.total}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums">{a.confirmed}</td>
-                    <td className="py-2.5 pr-4 text-right">
-                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold",
-                        a.confirmationRate >= 70 ? "bg-success/10 text-success" : a.confirmationRate >= 40 ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
-                      )}>
-                        {a.confirmationRate}%
-                      </span>
-                    </td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums">{a.delivered}</td>
-                    <td className="py-2.5 text-right">
-                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold",
-                        a.deliveryRate >= 70 ? "bg-success/10 text-success" : a.deliveryRate >= 40 ? "bg-warning/10 text-warning" : "bg-destructive/10 text-destructive"
-                      )}>
-                        {a.deliveryRate}%
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Smart Recommendations */}
       <SmartRecommendations
