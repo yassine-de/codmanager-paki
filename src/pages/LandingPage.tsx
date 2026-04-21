@@ -230,37 +230,18 @@ export default function LandingPage() {
       </Reveal>
 
       {/* ─── 4. SOLUTION ─── */}
-      <Reveal className="relative w-full overflow-hidden">
-        {/* Full-bleed background image */}
-        <img
-          src={solutionImg}
-          alt="End-to-end ecommerce system"
-          loading="lazy"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        {/* Cinematic overlays */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#04060f] via-[#04060f]/50 to-[#04060f]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(4,6,15,0.7)_100%)]" />
-
-        {/* Content */}
-        <div className="relative mx-auto max-w-7xl px-6 py-20 md:py-24 lg:py-28 min-h-[440px] flex items-center justify-center text-center">
-          <div className="max-w-4xl">
-            <div className="inline-flex items-center gap-2 text-blue-300 text-xs uppercase tracking-[0.25em] font-semibold mb-5">
-              <span className="w-8 h-px bg-blue-400/60" />
-              The Solution
-              <span className="w-8 h-px bg-blue-400/60" />
-            </div>
-            <h2 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 text-white leading-[1.05]">
-              We Handle Everything.{" "}
-              <br className="hidden md:block" />
-              <span className="bg-gradient-to-r from-blue-300 via-blue-400 to-blue-600 bg-clip-text text-transparent">
-                You Scale.
-              </span>
-            </h2>
-            <p className="text-white/80 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
-              One complete end-to-end e-commerce stack — built specifically for COD-first markets.
-            </p>
-          </div>
+      <Reveal className="relative w-full overflow-hidden bg-[#04060f]">
+        <div className="relative w-full">
+          {/* Hero infographic image carries the message */}
+          <img
+            src={solutionImg}
+            alt="End-to-end ecommerce solution: Sourcing, Call Center, Fulfillment, Delivery, Cash Collection"
+            loading="lazy"
+            className="block w-full h-auto"
+          />
+          {/* Soft top/bottom fades to blend into surrounding sections */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#04060f] to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#04060f] to-transparent" />
         </div>
       </Reveal>
 
