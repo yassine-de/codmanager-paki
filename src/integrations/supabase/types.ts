@@ -1435,6 +1435,8 @@ export type Database = {
       get_follow_ups_data: {
         Args: never
         Returns: {
+          agent_id: string
+          agent_name: string
           customer_city: string
           customer_name: string
           customer_phone: string
@@ -1443,10 +1445,13 @@ export type Database = {
           follow_up_status: string
           follow_up_updated_at: string
           follow_up_updated_by: string
+          order_created_at: string
           order_id: string
           order_updated_at: string
           orio_consignment_no: string
           orio_order_id: number
+          seller_id: string
+          seller_name: string
           shipped_at: string
           shipping_status: string
         }[]
