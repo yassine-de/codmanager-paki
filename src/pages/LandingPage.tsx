@@ -151,35 +151,30 @@ export default function LandingPage() {
 
       {/* ─── 1. HERO ─── */}
       <Reveal id="hero" className="relative">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-10 pb-16 md:pt-14 md:pb-24">
-          <div className="relative">
-            <div className="absolute inset-0 -m-10 bg-[radial-gradient(closest-side,rgba(56,128,255,0.5),transparent_70%)] blur-3xl" />
-            <div className="relative rounded-3xl overflow-hidden border border-blue-400/20 shadow-[0_0_80px_rgba(56,128,255,0.4)]">
-              <img
-                src={heroImg}
-                alt="Scalers — Scale Beyond Borders. Launch & scale your COD business in Pakistan."
-                width={1536}
-                height={1024}
-                className="w-full h-auto block"
-              />
-            </div>
-          </div>
+        <div className="relative w-full">
+          <img
+            src={heroImg}
+            alt="Scalers — Scale Beyond Borders. Launch & scale your COD business in Pakistan."
+            width={1536}
+            height={1024}
+            className="w-screen h-auto block"
+          />
+        </div>
 
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <a
-              href="#cta"
-              className="group inline-flex items-center gap-2 px-7 py-4 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold shadow-[0_0_50px_rgba(56,128,255,0.6)] hover:shadow-[0_0_70px_rgba(56,128,255,0.9)] transition"
-            >
-              Start Scaling Now
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-            </a>
-            <a
-              href="#cta"
-              className="inline-flex items-center gap-2 px-7 py-4 rounded-xl border border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08] transition"
-            >
-              <PhoneCall className="w-4 h-4" /> Book a Call
-            </a>
-          </div>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-8 pb-16 md:pb-24 flex flex-wrap items-center justify-center gap-3">
+          <a
+            href="#cta"
+            className="group inline-flex items-center gap-2 px-7 py-4 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold shadow-[0_0_50px_rgba(56,128,255,0.6)] hover:shadow-[0_0_70px_rgba(56,128,255,0.9)] transition"
+          >
+            Start Scaling Now
+            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+          </a>
+          <a
+            href="#cta"
+            className="inline-flex items-center gap-2 px-7 py-4 rounded-xl border border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08] transition"
+          >
+            <PhoneCall className="w-4 h-4" /> Book a Call
+          </a>
         </div>
       </Reveal>
 
