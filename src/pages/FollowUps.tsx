@@ -724,6 +724,7 @@ function renderCell(
 ) {
   switch (key) {
     case "order_id": return row.order_id;
+    case "orio_id": return row.orio_order_id ? `OR-${row.orio_order_id}` : <span className="text-muted-foreground">—</span>;
     case "customer": return row.customer_name || "—";
     case "phone": return row.customer_phone || "—";
     case "city": return row.customer_city || "—";
