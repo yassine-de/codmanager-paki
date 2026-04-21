@@ -328,31 +328,60 @@ export default function ConfirmationAnalytics() {
 
   // Confirmation rate by product — based on claimed orders (not total)
   const confirmByProduct = useMemo(() => {
-    const map: Record<string, { claimed: number; confirmed: number }> = {};
+    const map: Record<string, { leads: number; claimed: number; confirmed: number; cancelled: number; pending: number }> = {};
     filteredOrders.forEach(o => {
-      if (o.confirmation_status === "new") return; // skip unclaimed
-      if (!(o.agent_id || o.original_agent_id)) return;
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { claimed: 0, confirmed: 0 };
+      if (!map[name]) map[name] = { leads: 0, claimed: 0, confirmed: 0, cancelled: 0, pending: 0 };
+      map[name].leads++;
+      if (o.confirmation_status === "new") {
+        map[name].pending++;
+        return;
+      }
+      if (!(o.agent_id || o.original_agent_id)) return;
       map[name].claimed++;
       if (o.confirmation_status === "confirmed") map[name].confirmed++;
+      if (o.confirmation_status === "cancelled") map[name].cancelled++;
     });
     return Object.entries(map)
-      .map(([name, d]) => ({ name, rate: d.claimed > 0 ? Math.round((d.confirmed / d.claimed) * 100) : 0, total: d.claimed }))
+      .map(([name, d]) => ({
+        name,
+        leads: d.leads,
+        claimed: d.claimed,
+        confirmed: d.confirmed,
+        cancelled: d.cancelled,
+        pending: d.pending,
+        rate: d.claimed > 0 ? Math.round((d.confirmed / d.claimed) * 100) : 0,
+        total: d.claimed,
+      }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
 
   // Delivery rate by product — delivered / confirmed
   const deliveryByProduct = useMemo(() => {
-    const map: Record<string, { confirmed: number; delivered: number }> = {};
+    const map: Record<string, { confirmed: number; shipped: number; delivered: number; returned: number; inTransit: number }> = {};
     filteredOrders.forEach(o => {
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { confirmed: 0, delivered: 0 };
+      if (!map[name]) map[name] = { confirmed: 0, shipped: 0, delivered: 0, returned: 0, inTransit: 0 };
       if (o.confirmation_status === "confirmed") map[name].confirmed++;
-      if (o.delivery_status === "delivered" || o.delivery_status === "paid") map[name].delivered++;
+      const ds = o.delivery_status;
+      if (ds === "shipped" || ds === "in_transit" || ds === "delivered" || ds === "paid" || ds === "returned" || ds === "cancelled") {
+        map[name].shipped++;
+      }
+      if (ds === "delivered" || ds === "paid") map[name].delivered++;
+      if (ds === "returned" || ds === "cancelled") map[name].returned++;
+      if (ds === "shipped" || ds === "in_transit") map[name].inTransit++;
     });
     return Object.entries(map)
-      .map(([name, d]) => ({ name, rate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0, shipped: d.confirmed }))
+      .map(([name, d]) => ({
+        name,
+        confirmed: d.confirmed,
+        shipped: d.shipped,
+        delivered: d.delivered,
+        returned: d.returned,
+        inTransit: d.inTransit,
+        rate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
+        returnRate: d.shipped > 0 ? Math.round((d.returned / d.shipped) * 100) : 0,
+      }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
 
@@ -519,7 +548,7 @@ export default function ConfirmationAnalytics() {
       </div>
 
       {/* Product performance tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="space-y-6">
         <div className="bg-card rounded-lg border animate-slide-up overflow-hidden" style={{ animationDelay: '200ms' }}>
           <div className="p-5 pb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Confirmation Rate by Product</h2>
@@ -528,25 +557,33 @@ export default function ConfirmationAnalytics() {
           {confirmByProduct.length === 0 ? (
             <p className="text-muted-foreground text-sm text-center py-10">No data</p>
           ) : (
-            <div className="max-h-[420px] overflow-y-auto">
+            <div className="max-h-[480px] overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-card z-10 border-y">
                   <tr className="text-left">
                     <th className="px-5 py-2 text-xs font-medium text-muted-foreground w-10">#</th>
                     <th className="px-2 py-2 text-xs font-medium text-muted-foreground">Product</th>
+                    <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">Leads</th>
                     <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">Claimed</th>
-                    <th className="px-5 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums w-20">Rate</th>
+                    <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">Pending</th>
+                    <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">Confirmed</th>
+                    <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">Cancelled</th>
+                    <th className="px-5 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums w-24">Conf. Rate</th>
                   </tr>
                 </thead>
                 <tbody>
                   {confirmByProduct.map((entry, idx) => (
                     <tr key={entry.name} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                       <td className="px-5 py-2.5 text-xs text-muted-foreground tabular-nums">{idx + 1}</td>
-                      <td className="px-2 py-2.5 font-medium truncate max-w-[180px]" title={entry.name}>{entry.name}</td>
-                      <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{entry.total}</td>
+                      <td className="px-2 py-2.5 font-medium truncate max-w-[280px]" title={entry.name}>{entry.name}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{entry.leads}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{entry.claimed}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{entry.pending}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-foreground">{entry.confirmed}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{entry.cancelled}</td>
                       <td className="px-5 py-2.5 text-right">
                         <span
-                          className="inline-flex items-center justify-center min-w-[48px] px-2 py-0.5 rounded-md text-xs font-semibold tabular-nums"
+                          className="inline-flex items-center justify-center min-w-[52px] px-2 py-0.5 rounded-md text-xs font-semibold tabular-nums"
                           style={{ backgroundColor: `${rateColor(entry.rate)}20`, color: rateColor(entry.rate) }}
                         >
                           {entry.rate}%
@@ -568,25 +605,35 @@ export default function ConfirmationAnalytics() {
           {deliveryByProduct.length === 0 ? (
             <p className="text-muted-foreground text-sm text-center py-10">No data</p>
           ) : (
-            <div className="max-h-[420px] overflow-y-auto">
+            <div className="max-h-[480px] overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-card z-10 border-y">
                   <tr className="text-left">
                     <th className="px-5 py-2 text-xs font-medium text-muted-foreground w-10">#</th>
                     <th className="px-2 py-2 text-xs font-medium text-muted-foreground">Product</th>
                     <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">Confirmed</th>
-                    <th className="px-5 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums w-20">Rate</th>
+                    <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">Shipped</th>
+                    <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">In Transit</th>
+                    <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">Delivered</th>
+                    <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums">Returned</th>
+                    <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums w-20">Return %</th>
+                    <th className="px-5 py-2 text-xs font-medium text-muted-foreground text-right tabular-nums w-24">Del. Rate</th>
                   </tr>
                 </thead>
                 <tbody>
                   {deliveryByProduct.map((entry, idx) => (
                     <tr key={entry.name} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                       <td className="px-5 py-2.5 text-xs text-muted-foreground tabular-nums">{idx + 1}</td>
-                      <td className="px-2 py-2.5 font-medium truncate max-w-[180px]" title={entry.name}>{entry.name}</td>
+                      <td className="px-2 py-2.5 font-medium truncate max-w-[280px]" title={entry.name}>{entry.name}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{entry.confirmed}</td>
                       <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{entry.shipped}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{entry.inTransit}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-foreground">{entry.delivered}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">{entry.returned}</td>
+                      <td className="px-2 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{entry.returnRate}%</td>
                       <td className="px-5 py-2.5 text-right">
                         <span
-                          className="inline-flex items-center justify-center min-w-[48px] px-2 py-0.5 rounded-md text-xs font-semibold tabular-nums"
+                          className="inline-flex items-center justify-center min-w-[52px] px-2 py-0.5 rounded-md text-xs font-semibold tabular-nums"
                           style={{ backgroundColor: `${rateColor(entry.rate)}20`, color: rateColor(entry.rate) }}
                         >
                           {entry.rate}%
