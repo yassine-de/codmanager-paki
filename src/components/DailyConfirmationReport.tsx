@@ -78,7 +78,7 @@ interface AgentRow {
   workloadPct: number;
 }
 
-export function DailyConfirmationReport({ orders, profileNameMap, agentIds, agentScores = [] }: DailyConfirmationReportProps) {
+export function DailyConfirmationReport({ orders, profileNameMap, agentIds, agentScores = [], treatedOrders, firstCallAvg, handlingTime }: DailyConfirmationReportProps) {
   // Global summary
   // "Handled" = agent claimed AND submitted any action (status is not "new")
   // Use original_agent_id as fallback for released/redistributed orders
