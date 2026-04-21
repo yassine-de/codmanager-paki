@@ -647,5 +647,6 @@ export default function ConfirmationAnalytics() {
           )}
         </div>
       </div>
+    </div>
   );
 }
