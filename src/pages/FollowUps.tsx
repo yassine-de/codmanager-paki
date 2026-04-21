@@ -700,6 +700,7 @@ export default function FollowUps() {
 function cellClassFor(key: ColumnKey): string {
   switch (key) {
     case "order_id": return "font-mono text-xs font-medium";
+    case "orio_id": return "font-mono text-xs";
     case "customer": return "text-xs";
     case "phone": return "text-xs tabular-nums text-muted-foreground";
     case "city": return "text-xs text-muted-foreground";
