@@ -605,6 +605,20 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
+            {/* Seller - admin only */}
+            {isAdmin && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Seller</label>
+              <SearchableSelect
+                value={filterSeller}
+                onValueChange={setFilterSeller}
+                options={sellerNames.map(s => ({ value: s, label: s }))}
+                placeholder="Seller"
+                allLabel="All Sellers"
+                className="w-full"
+              />
+            </div>
+            )}
             {/* Agent - admin only */}
             {isAdmin && (
             <div className="space-y-1">
