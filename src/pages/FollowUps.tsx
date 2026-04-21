@@ -694,6 +694,16 @@ export default function FollowUps() {
             customerName={historyOrder.customer}
           />
         )}
+
+        {trackingTarget && (
+          <OrioTrackingModal
+            orioOrderId={trackingTarget.orioId}
+            systemId={null}
+            sellerId={trackingTarget.sellerId}
+            isOpen={!!trackingTarget}
+            onClose={() => setTrackingTarget(null)}
+          />
+        )}
       </div>
     </TooltipProvider>
   );
