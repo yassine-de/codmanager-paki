@@ -290,6 +290,28 @@ export default function ConfirmationAnalytics() {
       .sort((a, b) => b.confirmationRate - a.confirmationRate);
   }, [orders, orderHistory, profileNameMap]);
 
+  // No Answer attempts breakdown
+  const noAnswerAttempts = useMemo(() => {
+    const noAnswerOrders = filteredOrders.filter(o => o.confirmation_status === "no_answer");
+    const buckets: Record<number, number> = {};
+    noAnswerOrders.forEach(o => {
+      const n = Math.max(1, o.attempt_count ?? 1);
+      buckets[n] = (buckets[n] || 0) + 1;
+    });
+    const total = noAnswerOrders.length;
+    const maxAttempt = Object.keys(buckets).length > 0 ? Math.max(...Object.keys(buckets).map(Number)) : 0;
+    const rows = [];
+    for (let i = 1; i <= maxAttempt; i++) {
+      const count = buckets[i] || 0;
+      rows.push({
+        attempt: i,
+        count,
+        rate: total > 0 ? Math.round((count / total) * 100) : 0,
+      });
+    }
+    return { rows, total };
+  }, [filteredOrders]);
+
   // Cancel reasons
   const cancelData = useMemo(() => {
     const cancelledOrders = filteredOrders.filter(o => o.confirmation_status === "cancelled");
@@ -490,6 +512,36 @@ export default function ConfirmationAnalytics() {
         profileNameMap={profileNameMap}
         agentIds={agentIds}
       />
+
+      {/* No Answer Attempts Breakdown */}
+      <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '125ms' }}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <PhoneCall className="h-4 w-4 text-warning" />
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">No Answer — Attempts Breakdown</h2>
+          </div>
+          <span className="text-xs text-muted-foreground tabular-nums">{noAnswerAttempts.total} orders</span>
+        </div>
+        {noAnswerAttempts.rows.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No "No Answer" orders in selected period</p>
+        ) : (
+          <div className="space-y-3">
+            {noAnswerAttempts.rows.map(r => (
+              <div key={r.attempt} className="flex items-center gap-3">
+                <div className="flex-1">
+                  <div className="flex justify-between mb-1">
+                    <span className="text-sm font-medium">Attempt {r.attempt}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{r.count} orders · {r.rate}%</span>
+                  </div>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-warning/70 rounded-full transition-all" style={{ width: `${r.rate}%` }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Cancel Reasons */}
       <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: '150ms' }}>
