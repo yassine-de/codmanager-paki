@@ -194,6 +194,7 @@ function StatusPill({ value, styleMap }: { value: string | null; styleMap: Recor
 /* ── Column system ── */
 type ColumnKey =
   | "order_id"
+  | "orio_id"
   | "customer"
   | "phone"
   | "city"
@@ -209,6 +210,7 @@ type ColumnKey =
 
 const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "order_id", label: "Order ID" },
+  { key: "orio_id", label: "OR-ID" },
   { key: "customer", label: "Customer" },
   { key: "phone", label: "Phone" },
   { key: "city", label: "City" },
@@ -223,7 +225,7 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "actions", label: "Actions" },
 ];
 
-const STORAGE_KEY = "follow-ups:column-config:v1";
+const STORAGE_KEY = "follow-ups:column-config:v2";
 
 type ColumnConfig = { key: ColumnKey; visible: boolean };
 
@@ -698,6 +700,7 @@ export default function FollowUps() {
 function cellClassFor(key: ColumnKey): string {
   switch (key) {
     case "order_id": return "font-mono text-xs font-medium";
+    case "orio_id": return "font-mono text-xs";
     case "customer": return "text-xs";
     case "phone": return "text-xs tabular-nums text-muted-foreground";
     case "city": return "text-xs text-muted-foreground";
@@ -721,6 +724,7 @@ function renderCell(
 ) {
   switch (key) {
     case "order_id": return row.order_id;
+    case "orio_id": return row.orio_order_id ? `OR-${row.orio_order_id}` : <span className="text-muted-foreground">—</span>;
     case "customer": return row.customer_name || "—";
     case "phone": return row.customer_phone || "—";
     case "city": return row.customer_city || "—";
