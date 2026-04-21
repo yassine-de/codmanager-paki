@@ -205,12 +205,6 @@ export default function FollowUps() {
     }
   }
 
-  const isAuthorized = authUser?.role === "admin" || authUser?.role === "agent";
-
-  if (!authLoading && !isAuthorized) {
-    return <Navigate to="/" replace />;
-  }
-
   return (
     <div className="space-y-6 max-w-[1400px] animate-fade-in">
       {/* Header */}
