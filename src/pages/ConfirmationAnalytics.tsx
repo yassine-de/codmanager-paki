@@ -290,6 +290,28 @@ export default function ConfirmationAnalytics() {
       .sort((a, b) => b.confirmationRate - a.confirmationRate);
   }, [orders, orderHistory, profileNameMap]);
 
+  // No Answer attempts breakdown
+  const noAnswerAttempts = useMemo(() => {
+    const noAnswerOrders = filteredOrders.filter(o => o.confirmation_status === "no_answer");
+    const buckets: Record<number, number> = {};
+    noAnswerOrders.forEach(o => {
+      const n = Math.max(1, o.attempt_count ?? 1);
+      buckets[n] = (buckets[n] || 0) + 1;
+    });
+    const total = noAnswerOrders.length;
+    const maxAttempt = Object.keys(buckets).length > 0 ? Math.max(...Object.keys(buckets).map(Number)) : 0;
+    const rows = [];
+    for (let i = 1; i <= maxAttempt; i++) {
+      const count = buckets[i] || 0;
+      rows.push({
+        attempt: i,
+        count,
+        rate: total > 0 ? Math.round((count / total) * 100) : 0,
+      });
+    }
+    return { rows, total };
+  }, [filteredOrders]);
+
   // Cancel reasons
   const cancelData = useMemo(() => {
     const cancelledOrders = filteredOrders.filter(o => o.confirmation_status === "cancelled");
