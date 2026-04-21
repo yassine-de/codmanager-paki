@@ -176,8 +176,17 @@ export function DailyConfirmationReport({ orders, profileNameMap, agentIds, agen
       </div>
 
       {/* Global Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <KPICard title="Orders Handled" value={summary.total} icon={ShoppingCart} iconBg="bg-primary/10" iconColor="text-primary" />
+        {treatedOrders !== undefined && (
+          <KPICard title="Treated Orders" value={treatedOrders} icon={ClipboardCheck} iconBg="bg-accent/10" iconColor="text-accent-foreground" />
+        )}
+        {firstCallAvg !== undefined && (
+          <KPICard title="First Call Avg" value={firstCallAvg} icon={Timer} iconBg="bg-accent/10" iconColor="text-accent-foreground" />
+        )}
+        {handlingTime !== undefined && (
+          <KPICard title="Handling Time" value={handlingTime} icon={Hourglass} iconBg="bg-accent/10" iconColor="text-accent-foreground" />
+        )}
         <KPICard title="Confirmed" value={summary.confirmed} subtitle={`${summary.confirmRate}%`} icon={CheckCircle2} iconBg="bg-success/10" iconColor="text-success" />
         <KPICard title="No Answer" value={summary.noAnswer} subtitle={`${summary.noAnswerRate}%`} icon={PhoneOff} iconBg="bg-warning/10" iconColor="text-warning" />
         <KPICard title="Postponed" value={summary.postponed} subtitle={`${summary.postponedRate}%`} icon={Clock} iconBg="bg-primary/10" iconColor="text-primary" />
