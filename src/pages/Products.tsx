@@ -150,7 +150,8 @@ export default function Products() {
         weight: (p as any).weight || undefined,
         weightKg: (p as any).weight_kg ?? null,
         active: (p as any).active ?? false,
-      };
+        whatsappEnabled: (p as any).whatsapp_confirmation_enabled ?? false,
+      } as Product & { whatsappEnabled: boolean };
     });
     return dbMapped;
   }, [dbProducts, dbSellerNameMap, localProducts, isAdmin, authUser, productOrderStatsMap]);
@@ -185,6 +186,8 @@ export default function Products() {
   const [appliedSeller, setAppliedSeller] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [appliedStatus, setAppliedStatus] = useState("all");
+  const [filterWhatsapp, setFilterWhatsapp] = useState("all");
+  const [appliedWhatsapp, setAppliedWhatsapp] = useState("all");
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -200,14 +203,17 @@ export default function Products() {
   const applyFilters = useCallback(() => {
     setAppliedSeller(filterSeller);
     setAppliedStatus(filterStatus);
+    setAppliedWhatsapp(filterWhatsapp);
     setCurrentPage(1);
-  }, [filterSeller, filterStatus]);
+  }, [filterSeller, filterStatus, filterWhatsapp]);
 
   const clearFilters = useCallback(() => {
     setFilterSeller("all");
     setAppliedSeller("all");
     setFilterStatus("all");
     setAppliedStatus("all");
+    setFilterWhatsapp("all");
+    setAppliedWhatsapp("all");
     setSearch("");
     setCurrentPage(1);
   }, []);
@@ -216,8 +222,9 @@ export default function Products() {
     let c = 0;
     if (appliedSeller !== "all") c++;
     if (appliedStatus !== "all") c++;
+    if (appliedWhatsapp !== "all") c++;
     return c;
-  }, [appliedSeller, appliedStatus]);
+  }, [appliedSeller, appliedStatus, appliedWhatsapp]);
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -226,6 +233,11 @@ export default function Products() {
         const isActive = !!(p as any).active;
         if (appliedStatus === "active" && !isActive) return false;
         if (appliedStatus === "inactive" && isActive) return false;
+      }
+      if (appliedWhatsapp !== "all") {
+        const wa = !!(p as any).whatsappEnabled;
+        if (appliedWhatsapp === "enabled" && !wa) return false;
+        if (appliedWhatsapp === "disabled" && wa) return false;
       }
       if (search) {
         const s = search.toLowerCase();
@@ -248,7 +260,7 @@ export default function Products() {
 
   useMemo(() => {
     setCurrentPage(1);
-  }, [search, appliedSeller, appliedStatus, pageSize]);
+  }, [search, appliedSeller, appliedStatus, appliedWhatsapp, pageSize]);
 
   const handleCreate = (product: Product) => {
     setLocalProducts((prev) => [product, ...prev]);
@@ -330,6 +342,21 @@ export default function Products() {
                   </SelectContent>
                 </Select>
               </div>
+              {isAdmin && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">WhatsApp</label>
+                  <Select value={filterWhatsapp} onValueChange={setFilterWhatsapp}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="enabled">Enabled</SelectItem>
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="flex items-end gap-2">
                 <Button size="sm" className="h-9 px-4" onClick={applyFilters}>
                   Apply
@@ -401,6 +428,7 @@ export default function Products() {
                       <th className="text-left py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">SKU</th>
                       <th className="text-left py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Name</th>
                       <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Status</th>
+                      <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">WhatsApp</th>
                       <th className="text-right py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Buying Price</th>
                       <th className="text-right py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Selling Price</th>
                       <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Total Qty</th>
@@ -450,6 +478,15 @@ export default function Products() {
                               : "bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20"
                           }`}>
                             {(product as any).active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                            (product as any).whatsappEnabled
+                              ? "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20"
+                              : "bg-muted text-muted-foreground border-border"
+                          }`}>
+                            {(product as any).whatsappEnabled ? "Enabled" : "Disabled"}
                           </span>
                         </td>
                         <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">
