@@ -247,11 +247,10 @@ export default function WhatsappAI() {
                 <Select value={s.model} onValueChange={(v) => setS({ ...s, model: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite — fastest, cheapest</SelectItem>
-                    <SelectItem value="google/gemini-2.5-flash">Gemini 2.5 Flash — balanced (recommended)</SelectItem>
-                    <SelectItem value="google/gemini-2.5-pro">Gemini 2.5 Pro — best reasoning</SelectItem>
-                    <SelectItem value="openai/gpt-5-mini">GPT-5 Mini</SelectItem>
-                    <SelectItem value="openai/gpt-5">GPT-5</SelectItem>
+                    <SelectItem value="gpt-4o-mini">GPT-4o Mini — fastest, cheapest (recommended)</SelectItem>
+                    <SelectItem value="gpt-4o">GPT-4o — best quality</SelectItem>
+                    <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
+                    <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo — legacy, very cheap</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
