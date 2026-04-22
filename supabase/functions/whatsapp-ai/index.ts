@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
       const result = await callAI(settings.model, [
         { role: "system", content: sys + "\n\nProvide 2-3 alternative reply suggestions, varied in approach." },
         ...history,
-      ], { tools, tool_choice: { type: "function", function: { name: "suggest_replies" } }, temperature: settings.temperature, max_tokens: settings.max_tokens });
+      ], { tools, tool_choice: { type: "function", function: { name: "suggest_replies" } }, temperature: settings.temperature, max_tokens: settings.max_tokens, apiKey });
       const args = JSON.parse(result.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
 
       if (body.conversation_id) {
