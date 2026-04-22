@@ -521,7 +521,11 @@ export default function WhatsappTemplates() {
             <div className="text-sm text-muted-foreground py-8 text-center">No templates yet.</div>
           )}
           {templates.map((t: any) => (
-            <div key={t.id} className="border rounded-lg p-3 space-y-2 hover:bg-muted/30 transition-colors">
+            <div
+              key={t.id}
+              className="border rounded-lg p-3 space-y-2 hover:bg-muted/30 transition-colors cursor-pointer"
+              onClick={() => setPreviewTpl(t)}
+            >
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -536,7 +540,7 @@ export default function WhatsappTemplates() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                   <Switch checked={t.active} onCheckedChange={(v) => toggleActive(t.id, v)} />
                   {(t.sync_status === "LOCAL" || t.sync_status === "REJECTED") && (
                     <Button size="sm" variant="outline" onClick={() => submitToMeta(t.id)}>
@@ -559,6 +563,99 @@ export default function WhatsappTemplates() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Preview Modal */}
+      <Dialog open={!!previewTpl} onOpenChange={(o) => !o && setPreviewTpl(null)}>
+        <DialogContent className="max-w-md p-0 overflow-hidden bg-transparent border-0 shadow-2xl">
+          {previewTpl && (
+            <div className="bg-[#0b141a] rounded-2xl overflow-hidden">
+              {/* WhatsApp Header */}
+              <div className="bg-[#1f2c33] px-4 py-3 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold text-sm">
+                  {(previewTpl.name || "B").charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-white font-medium text-sm truncate">{previewTpl.name}</div>
+                  <div className="text-[10px] text-white/60">online</div>
+                </div>
+                <Badge variant="outline" className="text-[10px] border-white/20 text-white/80">
+                  {previewTpl.language}
+                </Badge>
+              </div>
+
+              {/* Chat background */}
+              <div
+                className="px-4 py-6 min-h-[320px] space-y-2"
+                style={{
+                  backgroundImage:
+                    "radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
+                  backgroundSize: "20px 20px",
+                  backgroundColor: "#0b141a",
+                }}
+              >
+                <div className="max-w-[85%] rounded-lg bg-[#202c33] text-white p-2 shadow-md text-xs space-y-2">
+                  {previewTpl.header_type === "TEXT" && previewTpl.header_text && (
+                    <div className="font-semibold text-sm">{renderPreview(previewTpl.header_text)}</div>
+                  )}
+                  {previewTpl.header_type === "IMAGE" && (
+                    <div className="bg-black/40 rounded h-32 flex items-center justify-center text-white/40">
+                      {previewTpl.header_media_url ? (
+                        <img src={previewTpl.header_media_url} alt="" className="h-full w-full object-cover rounded" />
+                      ) : (
+                        <ImageIcon className="h-8 w-8" />
+                      )}
+                    </div>
+                  )}
+                  {previewTpl.header_type === "VIDEO" && (
+                    <div className="bg-black/40 rounded h-32 flex items-center justify-center text-white/40">
+                      <VideoIcon className="h-8 w-8" />
+                    </div>
+                  )}
+                  {previewTpl.header_type === "DOCUMENT" && (
+                    <div className="bg-black/40 rounded p-2 flex items-center gap-2 text-white/70">
+                      <FileText className="h-4 w-4" /> document.pdf
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap leading-relaxed">{renderPreview(previewTpl.body)}</div>
+                  {previewTpl.footer && (
+                    <div className="text-[10px] text-white/50 pt-1">{previewTpl.footer}</div>
+                  )}
+                  <div className="text-[9px] text-white/40 text-right">12:00</div>
+                </div>
+
+                {Array.isArray(previewTpl.buttons) && previewTpl.buttons.length > 0 && (
+                  <div className="max-w-[85%] space-y-0.5">
+                    {previewTpl.buttons.map((b: any, i: number) => (
+                      <div
+                        key={i}
+                        className="rounded-lg bg-[#202c33] text-center text-[12px] py-2 text-[#53bdeb] font-medium border-t border-white/5 first:border-t-0"
+                      >
+                        {b.text || "Button"}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer info */}
+              <div className="bg-[#1f2c33] px-4 py-3 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 text-[10px] text-white/60">
+                  <StatusBadge status={previewTpl.sync_status} />
+                  <span>{previewTpl.category}</span>
+                </div>
+                <div className="flex gap-1.5">
+                  <Button size="sm" variant="outline" onClick={() => { openEdit(previewTpl); setPreviewTpl(null); }}>
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setPreviewTpl(null)}>
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
