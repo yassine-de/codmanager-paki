@@ -157,9 +157,39 @@ export default function WhatsappSettings() {
               <Save className="h-4 w-4 mr-2" /> Save
             </Button>
             <Button variant="outline" onClick={testConnection} disabled={busy} size="sm">
-              <Activity className="h-4 w-4 mr-2" /> Test connection
+              {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+              Test connection
             </Button>
           </div>
+
+          {testResult && (
+            <div className="mt-3 rounded-lg border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className={`text-sm font-medium flex items-center gap-1.5 ${testResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
+                  {testResult.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                  {testResult.ok ? "All checks passed" : "Some checks failed"}
+                </div>
+                {testResult.duration_ms != null && (
+                  <span className="text-[11px] text-muted-foreground">{testResult.duration_ms}ms</span>
+                )}
+              </div>
+              <ul className="space-y-1.5">
+                {testResult.checks.map((c, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs">
+                    {c.ok ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 mt-0.5 text-destructive shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-medium">{c.name}</div>
+                      {c.detail && <div className="text-muted-foreground">{c.detail}</div>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
 
