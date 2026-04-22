@@ -143,7 +143,6 @@ Deno.serve(async (req) => {
         [mode]: mediaObj,
       };
       if (!bodyText) bodyText = body.media_filename || `[${mode}]`;
-    }
     } else {
       // order: legacy interactive confirmation buttons
       if (!order) throw new Error("Order required for order mode");
