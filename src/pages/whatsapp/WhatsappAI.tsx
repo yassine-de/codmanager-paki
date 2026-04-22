@@ -10,7 +10,7 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Sparkles, Brain, MessageSquare, Bot, Target, Smile, BarChart3, Package, AlertCircle, Globe, Image as ImageIcon, Mic, Volume2, Save, RefreshCw, Trash2, Search, Loader2 } from "lucide-react";
+import { Sparkles, Brain, MessageSquare, Bot, Target, Smile, BarChart3, Package, AlertCircle, Globe, Image as ImageIcon, Mic, Volume2, Save, RefreshCw, Trash2, Search, Loader2, KeyRound, CheckCircle2, XCircle, ExternalLink, Plug } from "lucide-react";
 import { toast } from "sonner";
 
 type Settings = {
