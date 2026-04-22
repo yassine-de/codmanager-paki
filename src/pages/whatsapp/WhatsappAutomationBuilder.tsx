@@ -51,7 +51,23 @@ interface FlowEdge {
 
 /* ---------- Confirmation/Delivery status options ---------- */
 const CONFIRMATION_STATUSES = ["new", "confirmed", "no_answer", "postponed", "cancelled", "new_wts"];
-const DELIVERY_STATUSES = ["none", "shipped", "delivered", "returned", "with_courier", "in_transit"];
+// Real shipping statuses returned by ORIO (system_of_truth) — shown to users in the trigger picker.
+const DELIVERY_STATUSES = [
+  "New",
+  "Arrived at Courier Facility",
+  "Out For Delivery",
+  "In Transit",
+  "Delivered",
+  "Customer Not Answering",
+  "Customer not available",
+  "Hold on Customer`s Request",
+  "Address Closed",
+  "Incomplete Address",
+  "Refused to accept",
+  "Ready for Return",
+  "Return To Shipper",
+  "Cancelled",
+];
 const FOLLOW_UP_STATUSES = ["pending", "in_progress", "resolved", "escalated"];
 
 export default function WhatsappAutomationBuilder() {
