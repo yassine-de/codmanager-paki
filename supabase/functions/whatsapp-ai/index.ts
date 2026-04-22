@@ -237,7 +237,7 @@ Deno.serve(async (req) => {
       const result = await callAI(settings.model, [
         { role: "system", content: "Summarize this conversation into a structured memory entry. Return ONLY via the tool." },
         { role: "user", content: convoText || userText },
-      ], { tools, tool_choice: { type: "function", function: { name: "update_memory" } }, temperature: 0.3, max_tokens: 400 });
+      ], { tools, tool_choice: { type: "function", function: { name: "update_memory" } }, temperature: 0.3, max_tokens: 400, apiKey });
       const args = JSON.parse(result.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
 
       await admin.from("whatsapp_ai_memory").upsert({
