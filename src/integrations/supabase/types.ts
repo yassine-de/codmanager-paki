@@ -1351,6 +1351,203 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_ai_memory: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          customer_phone: string
+          facts: Json
+          id: string
+          intent: string | null
+          language: string | null
+          last_interaction_at: string
+          lead_score: number | null
+          preferences: Json
+          sentiment: string | null
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          customer_phone: string
+          facts?: Json
+          id?: string
+          intent?: string | null
+          language?: string | null
+          last_interaction_at?: string
+          lead_score?: number | null
+          preferences?: Json
+          sentiment?: string | null
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          customer_phone?: string
+          facts?: Json
+          id?: string
+          intent?: string | null
+          language?: string | null
+          last_interaction_at?: string
+          lead_score?: number | null
+          preferences?: Json
+          sentiment?: string | null
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_ai_memory_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_ai_settings: {
+        Row: {
+          ai_image_analysis_enabled: boolean
+          ai_memory_enabled: boolean
+          ai_voice_response_enabled: boolean
+          brand_tone: string
+          confidence_threshold: number
+          full_auto_reply_enabled: boolean
+          id: string
+          intent_detection_enabled: boolean
+          language_detection_enabled: boolean
+          language_rules: string
+          lead_qualification_enabled: boolean
+          max_tokens: number
+          model: string
+          order_tracking_enabled: boolean
+          product_context: string
+          response_lines: number
+          sentiment_analysis_enabled: boolean
+          singleton: boolean
+          smart_follow_up_enabled: boolean
+          smart_follow_up_idle_hours: number
+          suggested_replies_enabled: boolean
+          system_prompt: string
+          temperature: number
+          updated_at: string
+          updated_by: string | null
+          voice_transcription_enabled: boolean
+        }
+        Insert: {
+          ai_image_analysis_enabled?: boolean
+          ai_memory_enabled?: boolean
+          ai_voice_response_enabled?: boolean
+          brand_tone?: string
+          confidence_threshold?: number
+          full_auto_reply_enabled?: boolean
+          id?: string
+          intent_detection_enabled?: boolean
+          language_detection_enabled?: boolean
+          language_rules?: string
+          lead_qualification_enabled?: boolean
+          max_tokens?: number
+          model?: string
+          order_tracking_enabled?: boolean
+          product_context?: string
+          response_lines?: number
+          sentiment_analysis_enabled?: boolean
+          singleton?: boolean
+          smart_follow_up_enabled?: boolean
+          smart_follow_up_idle_hours?: number
+          suggested_replies_enabled?: boolean
+          system_prompt?: string
+          temperature?: number
+          updated_at?: string
+          updated_by?: string | null
+          voice_transcription_enabled?: boolean
+        }
+        Update: {
+          ai_image_analysis_enabled?: boolean
+          ai_memory_enabled?: boolean
+          ai_voice_response_enabled?: boolean
+          brand_tone?: string
+          confidence_threshold?: number
+          full_auto_reply_enabled?: boolean
+          id?: string
+          intent_detection_enabled?: boolean
+          language_detection_enabled?: boolean
+          language_rules?: string
+          lead_qualification_enabled?: boolean
+          max_tokens?: number
+          model?: string
+          order_tracking_enabled?: boolean
+          product_context?: string
+          response_lines?: number
+          sentiment_analysis_enabled?: boolean
+          singleton?: boolean
+          smart_follow_up_enabled?: boolean
+          smart_follow_up_idle_hours?: number
+          suggested_replies_enabled?: boolean
+          system_prompt?: string
+          temperature?: number
+          updated_at?: string
+          updated_by?: string | null
+          voice_transcription_enabled?: boolean
+        }
+        Relationships: []
+      }
+      whatsapp_ai_suggestions: {
+        Row: {
+          confidence: number | null
+          conversation_id: string
+          created_at: string
+          id: string
+          intent: string | null
+          language: string | null
+          message_id: string | null
+          sentiment: string | null
+          suggestions: Json
+          used: boolean
+        }
+        Insert: {
+          confidence?: number | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          intent?: string | null
+          language?: string | null
+          message_id?: string | null
+          sentiment?: string | null
+          suggestions?: Json
+          used?: boolean
+        }
+        Update: {
+          confidence?: number | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          intent?: string | null
+          language?: string | null
+          message_id?: string | null
+          sentiment?: string | null
+          suggestions?: Json
+          used?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_ai_suggestions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_ai_suggestions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_conversations: {
         Row: {
           created_at: string

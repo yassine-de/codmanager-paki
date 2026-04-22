@@ -42,6 +42,7 @@ import WhatsappOverview from "./pages/whatsapp/WhatsappOverview";
 import WhatsappInbox from "./pages/whatsapp/WhatsappInbox";
 import WhatsappConfirmations from "./pages/whatsapp/WhatsappConfirmations";
 import WhatsappTemplates from "./pages/whatsapp/WhatsappTemplates";
+import WhatsappAI from "./pages/whatsapp/WhatsappAI";
 import WhatsappSettings from "./pages/whatsapp/WhatsappSettings";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -171,6 +172,7 @@ function AppRoutes() {
           <Route path="inbox" element={<WhatsappInbox />} />
           <Route path="confirmations" element={<WhatsappConfirmations />} />
           <Route path="templates" element={<WhatsappTemplates />} />
+          <Route path="ai" element={<WhatsappAI />} />
           <Route path="settings" element={<WhatsappSettings />} />
         </Route>
         <Route path="/login" element={<Navigate to="/" replace />} />
