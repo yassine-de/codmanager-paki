@@ -165,7 +165,7 @@ export default function WhatsappSettings() {
           {testResult && (
             <div className="mt-3 rounded-lg border bg-muted/30 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <div className={`text-sm font-medium flex items-center gap-1.5 ${testResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
+                <div className={`text-sm font-medium flex items-center gap-1.5 ${testResult.ok ? "text-primary" : "text-destructive"}`}>
                   {testResult.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                   {testResult.ok ? "All checks passed" : "Some checks failed"}
                 </div>
@@ -177,7 +177,7 @@ export default function WhatsappSettings() {
                 {testResult.checks.map((c, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs">
                     {c.ok ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
                     ) : (
                       <XCircle className="h-3.5 w-3.5 mt-0.5 text-destructive shrink-0" />
                     )}
