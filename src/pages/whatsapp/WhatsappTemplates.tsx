@@ -640,55 +640,116 @@ export default function WhatsappTemplates() {
 
       {/* Templates list */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">All templates</CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm">All templates</CardTitle>
+            {!isLoading && templates.length > 0 && (
+              <span className="text-[11px] text-muted-foreground">{templates.length} total</span>
+            )}
+          </div>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent>
           {isLoading && <div className="text-sm text-muted-foreground">Loading…</div>}
           {!isLoading && templates.length === 0 && (
-            <div className="text-sm text-muted-foreground py-8 text-center">No templates yet.</div>
-          )}
-          {templates.map((t: any) => (
-            <div
-              key={t.id}
-              className="border rounded-lg p-3 space-y-2 hover:bg-muted/30 transition-colors cursor-pointer"
-              onClick={() => setPreviewTpl(t)}
-            >
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm">{t.name}</span>
-                    <StatusBadge status={t.sync_status} />
-                    <Badge variant="outline" className="text-[10px]">{t.category || "UTILITY"}</Badge>
-                    <Badge variant="outline" className="text-[10px]">{t.language}</Badge>
-                  </div>
-                  {t.meta_template_name && (
-                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                      Meta name: <code>{t.meta_template_name}</code>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                  <Switch checked={t.active} onCheckedChange={(v) => toggleActive(t.id, v)} />
-                  {(t.sync_status === "LOCAL" || t.sync_status === "REJECTED") && (
-                    <Button size="sm" variant="outline" onClick={() => submitToMeta(t.id)}>
-                      <Send className="h-3.5 w-3.5 mr-1" /> Submit
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(t)}>Edit</Button>
-                  <Button size="icon" variant="ghost" onClick={() => remove(t.id)}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </div>
-              {t.rejection_reason && (
-                <div className="text-[11px] text-destructive bg-destructive/10 rounded p-2">
-                  <strong>Rejected:</strong> {t.rejection_reason}
-                </div>
-              )}
-              <pre className="text-xs whitespace-pre-wrap text-muted-foreground bg-muted/40 p-2 rounded">{t.body}</pre>
+            <div className="text-sm text-muted-foreground py-12 text-center border border-dashed rounded-lg">
+              No templates yet.
             </div>
-          ))}
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {templates.map((t: any) => {
+              const headerIcon = t.header_type === "IMAGE" ? ImageIcon
+                : t.header_type === "VIDEO" ? VideoIcon
+                : t.header_type === "DOCUMENT" ? FileText
+                : null;
+              const HIcon = headerIcon;
+              const buttonsCount = Array.isArray(t.buttons) ? t.buttons.length : 0;
+              return (
+                <div
+                  key={t.id}
+                  className="group relative border rounded-xl bg-card hover:border-primary/40 hover:shadow-elevated transition-all cursor-pointer overflow-hidden flex flex-col"
+                  onClick={() => setPreviewTpl(t)}
+                >
+                  {/* Top accent strip by status */}
+                  <div className={`h-1 w-full ${
+                    t.sync_status === "APPROVED" ? "bg-emerald-500" :
+                    t.sync_status === "PENDING" ? "bg-amber-500" :
+                    t.sync_status === "REJECTED" ? "bg-destructive" :
+                    "bg-muted-foreground/30"
+                  }`} />
+
+                  <div className="p-3 space-y-2 flex-1 flex flex-col">
+                    {/* Header: name + active toggle */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-sm truncate" title={t.name}>{t.name}</div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <StatusBadge status={t.sync_status} />
+                        </div>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Switch checked={t.active} onCheckedChange={(v) => toggleActive(t.id, v)} />
+                      </div>
+                    </div>
+
+                    {/* Meta info chips */}
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal">
+                        {t.category || "UTILITY"}
+                      </Badge>
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal uppercase">
+                        {t.language}
+                      </Badge>
+                      {HIcon && (
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal gap-0.5">
+                          <HIcon className="h-2.5 w-2.5" />
+                        </Badge>
+                      )}
+                      {buttonsCount > 0 && (
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal">
+                          {buttonsCount} btn
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Body preview - 2 lines clamped */}
+                    <div className="text-[11px] text-muted-foreground bg-muted/40 rounded-md p-2 leading-relaxed line-clamp-2 flex-1">
+                      {t.body || <span className="italic">No content</span>}
+                    </div>
+
+                    {/* Rejection reason */}
+                    {t.rejection_reason && (
+                      <div className="text-[10px] text-destructive bg-destructive/10 rounded px-2 py-1 line-clamp-1">
+                        {t.rejection_reason}
+                      </div>
+                    )}
+
+                    {/* Actions footer */}
+                    <div
+                      className="flex items-center justify-between gap-1 pt-1 border-t"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-[9px] text-muted-foreground truncate font-mono">
+                        {t.meta_template_name || "—"}
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        {(t.sync_status === "LOCAL" || t.sync_status === "REJECTED") && (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" title="Submit to Meta" onClick={() => submitToMeta(t.id)}>
+                            <Send className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Edit" onClick={() => openEdit(t)}>
+                          <Type className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" title="Delete" onClick={() => remove(t.id)}>
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 
