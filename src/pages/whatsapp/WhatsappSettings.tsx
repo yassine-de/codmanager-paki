@@ -108,6 +108,43 @@ export default function WhatsappSettings() {
     }
   };
 
+  const testWebhook = async () => {
+    if (!form.webhook_secret?.trim()) {
+      toast.error("Enter a Verify Token first");
+      return;
+    }
+    setBusyWebhook(true);
+    // Auto-save webhook_secret first so the edge function sees fresh value
+    const { id, ...payload } = form;
+    const { error: saveErr } = await supabase
+      .from("whatsapp_settings")
+      .update(payload)
+      .eq("id", id);
+    if (saveErr) {
+      setBusyWebhook(false);
+      toast.error(saveErr.message);
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["wts-settings"] });
+
+    const { data, error } = await supabase.functions.invoke("whatsapp-test", {
+      body: { mode: "webhook" },
+    });
+    setBusyWebhook(false);
+    if (error) {
+      toast.error(error.message);
+      setWebhookResult(null);
+      return;
+    }
+    if (data?.checks) {
+      setWebhookResult({ ok: !!data.ok, checks: data.checks, duration_ms: data.duration_ms });
+      if (data.ok) toast.success("Webhook OK");
+      else toast.error("Webhook check failed");
+    } else {
+      toast.error(data?.error ?? "Failed");
+    }
+  };
+
   const sendTest = async () => {
     if (!testPhone) {
       toast.error("Enter a phone number");
