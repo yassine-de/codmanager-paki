@@ -75,8 +75,26 @@ export default function WhatsappAI() {
   const [testResult, setTestResult] = useState<any>(null);
   const [memory, setMemory] = useState<Memory[]>([]);
   const [memSearch, setMemSearch] = useState("");
+  const [connTesting, setConnTesting] = useState(false);
+  const [connStatus, setConnStatus] = useState<{ ok: boolean; configured?: boolean; key_masked?: string; model_count?: number; error?: string } | null>(null);
 
-  useEffect(() => { load(); loadMemory(); }, []);
+  useEffect(() => { load(); loadMemory(); testConnection(); }, []);
+
+  async function testConnection() {
+    setConnTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("openai-test", { body: {} });
+      if (error) throw error;
+      setConnStatus(data);
+      if (data?.ok) toast.success(`Connected to OpenAI (${data.model_count} models available)`);
+      else toast.error(data?.error || "Connection failed");
+    } catch (e: any) {
+      setConnStatus({ ok: false, error: e.message });
+      toast.error(e.message);
+    } finally {
+      setConnTesting(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
