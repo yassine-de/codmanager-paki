@@ -1,0 +1,1 @@
+UPDATE public.whatsapp_settings SET sending_enabled = true WHERE singleton = true;
