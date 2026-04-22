@@ -126,40 +126,27 @@ export default function WhatsappSettings() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Behaviour</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Webhook</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Default country code</Label>
-              <Input value={form.default_country_code} onChange={(e) => set("default_country_code", e.target.value)} />
-            </div>
-            <div>
-              <Label>Max retries</Label>
-              <Input type="number" value={form.max_retries} onChange={(e) => set("max_retries", parseInt(e.target.value || "0"))} />
-            </div>
+          <div>
+            <Label>Callback URL</Label>
+            <Input readOnly value={webhookUrl} />
           </div>
           <div>
-            <Label>Webhook verify token</Label>
+            <Label>Verify Token</Label>
             <Input value={form.webhook_secret ?? ""} onChange={(e) => set("webhook_secret", e.target.value)} placeholder="any random string" />
             <div className="text-[11px] text-muted-foreground mt-1">
               Configure this same value in Meta as the verify token.
             </div>
           </div>
-          <div>
-            <Label>Webhook URL</Label>
-            <Input readOnly value={webhookUrl} />
+          <div className="flex gap-2 pt-2">
+            <Button onClick={save} disabled={busy} size="sm">
+              <Save className="h-4 w-4 mr-2" /> Save
+            </Button>
+            <Button variant="outline" onClick={testConnection} disabled={busy} size="sm">
+              <Activity className="h-4 w-4 mr-2" /> Test connection
+            </Button>
           </div>
-          {[
-            ["integration_enabled", "Integration enabled"],
-            ["sending_enabled", "Sending enabled"],
-            ["receiving_enabled", "Receiving enabled"],
-            ["auto_book_shipping", "Auto-book shipping on confirm (push to ORIO)"],
-          ].map(([k, label]) => (
-            <div key={k} className="flex items-center justify-between border rounded-lg px-3 py-2">
-              <Label className="text-sm font-normal">{label}</Label>
-              <Switch checked={!!form[k]} onCheckedChange={(v) => set(k, v)} />
-            </div>
-          ))}
         </CardContent>
       </Card>
 
