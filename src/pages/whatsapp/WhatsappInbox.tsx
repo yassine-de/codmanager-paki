@@ -79,6 +79,32 @@ const statusBadge = (s: string) => {
   return map[s] ?? { label: s || "—", cls: "bg-muted text-muted-foreground border-border" };
 };
 
+const confirmationStatusCls = (s: string) => {
+  const map: Record<string, string> = {
+    new: "bg-sky-500/15 text-sky-500 border-sky-500/25",
+    confirmed: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25",
+    no_answer: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25",
+    postponed: "bg-violet-500/15 text-violet-500 border-violet-500/25",
+    cancelled: "bg-rose-500/15 text-rose-500 border-rose-500/25",
+    new_wts: "bg-cyan-500/15 text-cyan-500 border-cyan-500/25",
+  };
+  return map[s] ?? "bg-muted text-muted-foreground border-border";
+};
+
+const deliveryStatusCls = (s: string) => {
+  const map: Record<string, string> = {
+    pending: "bg-muted text-muted-foreground border-border",
+    booked: "bg-sky-500/15 text-sky-500 border-sky-500/25",
+    shipped: "bg-blue-500/15 text-blue-500 border-blue-500/25",
+    failed_attempt: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25",
+    delivered: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25",
+    ready_for_return: "bg-orange-500/15 text-orange-500 border-orange-500/25",
+    return: "bg-rose-500/15 text-rose-500 border-rose-500/25",
+    cancelled: "bg-rose-500/15 text-rose-500 border-rose-500/25",
+  };
+  return map[s] ?? "bg-muted text-muted-foreground border-border";
+};
+
 function initials(name?: string | null, phone?: string) {
   const src = (name || phone || "?").trim();
   const parts = src.split(/\s+/);
@@ -594,11 +620,51 @@ export default function WhatsappInbox() {
                       </Badge>
                     )}
                   </div>
-                  <div className="text-[11px] text-muted-foreground truncate">
-                    {conv.customer_phone}
+                  <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5 flex-wrap">
+                    <span>{conv.customer_phone}</span>
                     {order && (
                       <>
-                        {" • "}#{order.order_id} • {order.product_name}
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(order.order_id);
+                            toast.success(`Copied #${order.order_id}`);
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            window.open(`/orders/${order.order_id}`, "_blank");
+                          }}
+                          title="Click to copy • Double-click to open"
+                          className="font-mono text-foreground hover:text-primary transition-colors"
+                        >
+                          #{order.order_id}
+                        </button>
+                        <span>•</span>
+                        <span className="truncate">{order.product_name}</span>
+                        {order.confirmation_status && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] h-4 px-1.5",
+                              confirmationStatusCls(order.confirmation_status),
+                            )}
+                          >
+                            {order.confirmation_status.replace(/_/g, " ")}
+                          </Badge>
+                        )}
+                        {order.delivery_status && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] h-4 px-1.5",
+                              deliveryStatusCls(order.delivery_status),
+                            )}
+                          >
+                            {order.delivery_status.replace(/_/g, " ")}
+                          </Badge>
+                        )}
                       </>
                     )}
                   </div>
