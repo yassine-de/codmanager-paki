@@ -10,7 +10,7 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Sparkles, Brain, MessageSquare, Bot, Target, Smile, BarChart3, Package, AlertCircle, Globe, Image as ImageIcon, Mic, Volume2, Save, RefreshCw, Trash2, Search, Loader2 } from "lucide-react";
+import { Sparkles, Brain, MessageSquare, Bot, Target, Smile, BarChart3, Package, AlertCircle, Globe, Image as ImageIcon, Mic, Volume2, Save, RefreshCw, Trash2, Search, Loader2, KeyRound, CheckCircle2, XCircle, ExternalLink, Plug } from "lucide-react";
 import { toast } from "sonner";
 
 type Settings = {
@@ -75,8 +75,26 @@ export default function WhatsappAI() {
   const [testResult, setTestResult] = useState<any>(null);
   const [memory, setMemory] = useState<Memory[]>([]);
   const [memSearch, setMemSearch] = useState("");
+  const [connTesting, setConnTesting] = useState(false);
+  const [connStatus, setConnStatus] = useState<{ ok: boolean; configured?: boolean; key_masked?: string; model_count?: number; error?: string } | null>(null);
 
-  useEffect(() => { load(); loadMemory(); }, []);
+  useEffect(() => { load(); loadMemory(); testConnection(); }, []);
+
+  async function testConnection() {
+    setConnTesting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("openai-test", { body: {} });
+      if (error) throw error;
+      setConnStatus(data);
+      if (data?.ok) toast.success(`Connected to OpenAI (${data.model_count} models available)`);
+      else toast.error(data?.error || "Connection failed");
+    } catch (e: any) {
+      setConnStatus({ ok: false, error: e.message });
+      toast.error(e.message);
+    } finally {
+      setConnTesting(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -135,13 +153,94 @@ export default function WhatsappAI() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="features">
+      <Tabs defaultValue="connection">
         <TabsList>
+          <TabsTrigger value="connection"><Plug className="h-4 w-4 mr-1.5" />Connection</TabsTrigger>
           <TabsTrigger value="features"><Sparkles className="h-4 w-4 mr-1.5" />AI Features</TabsTrigger>
           <TabsTrigger value="behavior"><Brain className="h-4 w-4 mr-1.5" />Behavior</TabsTrigger>
           <TabsTrigger value="test"><Bot className="h-4 w-4 mr-1.5" />Test Playground</TabsTrigger>
           <TabsTrigger value="memory"><MessageSquare className="h-4 w-4 mr-1.5" />Memory</TabsTrigger>
         </TabsList>
+
+        {/* CONNECTION TAB */}
+        <TabsContent value="connection" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" />OpenAI API Connection</CardTitle>
+              <Button onClick={testConnection} disabled={connTesting} size="sm" variant="outline">
+                {connTesting ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1.5" />}
+                Test Connection
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Status */}
+              <div className={`rounded-lg border p-4 ${connStatus?.ok ? "bg-primary/5 border-primary/30" : connStatus ? "bg-destructive/5 border-destructive/30" : "bg-muted/30"}`}>
+                <div className="flex items-start gap-3">
+                  {connTesting ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mt-0.5" />
+                  ) : connStatus?.ok ? (
+                    <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
+                  ) : (
+                    <XCircle className="h-5 w-5 text-destructive mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium">
+                      {connTesting ? "Testing connection..." : connStatus?.ok ? "Connected" : "Not connected"}
+                    </div>
+                    {connStatus?.ok && (
+                      <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                        <div>API Key: <span className="font-mono">{connStatus.key_masked}</span></div>
+                        <div>{connStatus.model_count} models available</div>
+                      </div>
+                    )}
+                    {!connStatus?.ok && connStatus?.error && (
+                      <div className="text-xs text-destructive mt-1">{connStatus.error}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* API Key management */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div>
+                  <Label className="text-sm font-medium">API Key Management</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Your OpenAI API key is stored as an encrypted secret on the backend (<code className="text-[11px] bg-muted px-1 py-0.5 rounded">OPENAI_API_KEY</code>).
+                    It is never exposed to the browser.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open("https://platform.openai.com/api-keys", "_blank")}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                    Get API Key from OpenAI
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toast.info("To update the key, ask the assistant: 'Update my OPENAI_API_KEY'")}
+                  >
+                    <KeyRound className="h-3.5 w-3.5 mr-1.5" />
+                    How to update key
+                  </Button>
+                </div>
+              </div>
+
+              {/* Gateway info */}
+              <div className="rounded-lg border p-4 space-y-2">
+                <Label className="text-sm font-medium">Gateway Configuration</Label>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <div>Endpoint: <code className="font-mono bg-muted px-1 py-0.5 rounded">https://api.openai.com/v1/chat/completions</code></div>
+                  <div>Default model: <code className="font-mono bg-muted px-1 py-0.5 rounded">{s.model}</code></div>
+                  <div>Edge function: <code className="font-mono bg-muted px-1 py-0.5 rounded">whatsapp-ai</code></div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* FEATURES TAB */}
         <TabsContent value="features" className="space-y-4 mt-4">
