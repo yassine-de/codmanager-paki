@@ -1,4 +1,4 @@
-import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Headphones, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Headphones, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -55,6 +55,14 @@ const settingsSubItems = [
   { title: "Rates", url: "/rates", icon: BadgeDollarSign, permission: "access_to_settings" },
   { title: "integrations", url: "/integrations", icon: Link2, permission: "access_to_settings" },
   { title: "System Health", url: "/system-health", icon: Activity, permission: "access_to_settings" },
+];
+
+const whatsappSubItems = [
+  { title: "Overview", url: "/whatsapp", icon: LayoutDashboard, end: true },
+  { title: "Inbox", url: "/whatsapp/inbox", icon: Inbox },
+  { title: "Confirmations", url: "/whatsapp/confirmations", icon: CheckCircle2 },
+  { title: "Templates", url: "/whatsapp/templates", icon: FileText },
+  { title: "Settings", url: "/whatsapp/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
