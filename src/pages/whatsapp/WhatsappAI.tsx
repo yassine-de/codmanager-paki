@@ -174,12 +174,12 @@ export default function WhatsappAI() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Status */}
-              <div className={`rounded-lg border p-4 ${connStatus?.ok ? "bg-emerald-500/5 border-emerald-500/30" : connStatus ? "bg-destructive/5 border-destructive/30" : "bg-muted/30"}`}>
+              <div className={`rounded-lg border p-4 ${connStatus?.ok ? "bg-primary/5 border-primary/30" : connStatus ? "bg-destructive/5 border-destructive/30" : "bg-muted/30"}`}>
                 <div className="flex items-start gap-3">
                   {connTesting ? (
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mt-0.5" />
                   ) : connStatus?.ok ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5" />
+                    <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
                   ) : (
                     <XCircle className="h-5 w-5 text-destructive mt-0.5" />
                   )}
