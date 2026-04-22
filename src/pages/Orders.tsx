@@ -838,6 +838,7 @@ export default function Orders() {
                 {isCol('product') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Product</th>}
                 {isCol('amount') && <th className="text-right py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Amount</th>}
                 {isCol('confirmationStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
+                {isCol('channel') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Channel</th>}
                 
                 {isCol('deliveryStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
                 {isAdmin && isCol('subStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Sub Status</th>}
@@ -888,6 +889,7 @@ export default function Orders() {
                   {isCol('product') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.products.map(p => p.qty > 1 ? `${p.qty}x ${p.name}` : p.name).join(', ')}</td>}
                   {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} PKR</td>}
 {isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} /></td>}
+                  {isCol('channel') && <td className="py-2.5 px-4">{(() => { const ch = order.confirmationChannel || 'agent'; const cfg = channelConfig[ch] || { label: ch, cls: 'bg-muted text-muted-foreground border-border' }; return <StatusBadge label={cfg.label} cls={cfg.cls} />; })()}</td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
                   {isAdmin && isCol('subStatus') && (
                     <td className="py-2.5 px-4">
