@@ -233,11 +233,44 @@ export default function WhatsappSettings() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Webhook</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base">Webhook</CardTitle>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                form.receiving_enabled
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-destructive/30 bg-destructive/10 text-destructive"
+              }`}
+              title="Whether this webhook accepts incoming WhatsApp messages"
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  form.receiving_enabled ? "bg-primary animate-pulse" : "bg-destructive"
+                }`}
+              />
+              Receiving: {form.receiving_enabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+        </CardHeader>
         <CardContent className="space-y-3">
           <div>
             <Label>Callback URL</Label>
             <Input readOnly value={webhookUrl} />
+          </div>
+          <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-sm font-medium">Receive incoming messages</div>
+              <div className="text-[11px] text-muted-foreground">
+                {form.receiving_enabled
+                  ? "Webhook is active — incoming WhatsApp messages will appear in the Inbox."
+                  : "Webhook is ignoring incoming messages. Customer replies will NOT reach the Inbox."}
+              </div>
+            </div>
+            <Switch
+              checked={!!form.receiving_enabled}
+              onCheckedChange={(v) => set("receiving_enabled", v)}
+            />
           </div>
           <div>
             <Label>Verify Token</Label>
