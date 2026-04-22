@@ -508,13 +508,24 @@ export default function Products() {
                           </span>
                         </td>
                         <td className="py-2 px-3 text-center">
-                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                            (product as any).whatsappEnabled
-                              ? "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20"
-                              : "bg-muted text-muted-foreground border-border"
-                          }`}>
-                            {(product as any).whatsappEnabled ? "Enabled" : "Disabled"}
-                          </span>
+                          {isAdmin ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <Switch
+                                checked={!!(product as any).whatsappEnabled}
+                                onCheckedChange={(checked) =>
+                                  setWaConfirm({ id: product.id, name: product.name, nextValue: checked })
+                                }
+                                aria-label="Toggle WhatsApp confirmation"
+                              />
+                              <span className={`text-[10px] font-medium ${
+                                (product as any).whatsappEnabled ? "text-[hsl(155,50%,42%)]" : "text-muted-foreground"
+                              }`}>
+                                {(product as any).whatsappEnabled ? "ON" : "OFF"}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">
                           <div>{product.price.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} $</div>
