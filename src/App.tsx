@@ -173,10 +173,12 @@ function AppRoutes() {
           <Route index element={<WhatsappOverview />} />
           <Route path="inbox" element={<WhatsappInbox />} />
           <Route path="confirmations" element={<WhatsappConfirmations />} />
+          <Route path="automations" element={<WhatsappAutomations />} />
           <Route path="templates" element={<WhatsappTemplates />} />
           <Route path="ai" element={<WhatsappAI />} />
           <Route path="settings" element={<WhatsappSettings />} />
         </Route>
+        <Route path="/whatsapp/automations/:id" element={<ProtectedRoute permission="access_to_settings"><WhatsappAutomationBuilder /></ProtectedRoute>} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
