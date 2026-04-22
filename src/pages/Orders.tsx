@@ -413,6 +413,7 @@ export default function Orders() {
       confirmation: conf || 'all',
       delivery: del || 'all',
       subStatus: 'all',
+      channel: 'all',
       upsell: 'all',
     };
   });
