@@ -684,6 +684,18 @@ export default function Orders() {
               />
             </div>
             )}
+            {/* Channel */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Channel</label>
+              <SearchableSelect
+                value={filterChannel}
+                onValueChange={setFilterChannel}
+                options={[{ value: "agent", label: "Agent" }, { value: "whatsapp", label: "WhatsApp" }]}
+                placeholder="Channel"
+                allLabel="All"
+                className="w-full"
+              />
+            </div>
             {/* Upsell */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Upsell</label>
