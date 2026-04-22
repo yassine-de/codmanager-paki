@@ -90,7 +90,7 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'subStatus' | 'attempts';
+type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'channel' | 'deliveryStatus' | 'subStatus' | 'attempts';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
@@ -104,10 +104,16 @@ const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; admi
   { key: 'product', label: 'Product', defaultVisible: true },
   { key: 'amount', label: 'Amount', defaultVisible: true },
   { key: 'confirmationStatus', label: 'Confirmation', defaultVisible: true },
+  { key: 'channel', label: 'Channel', defaultVisible: true },
   { key: 'attempts', label: 'Attempts', defaultVisible: true },
   { key: 'deliveryStatus', label: 'Delivery', defaultVisible: true },
   { key: 'subStatus', label: 'Sub Status', defaultVisible: true, adminOnly: true },
 ];
+
+const channelConfig: Record<string, { label: string; cls: string }> = {
+  agent: { label: 'Agent', cls: 'bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20' },
+  whatsapp: { label: 'WhatsApp', cls: 'bg-[hsl(142,71%,45%)]/12 text-[hsl(142,71%,45%)] border-[hsl(142,71%,45%)]/20' },
+};
 
 /* ── Sparkline KPI Cards ── */
 function OrderSparklineCards({ orders }: { orders: Order[] }) {
