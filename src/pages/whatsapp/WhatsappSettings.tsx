@@ -109,7 +109,9 @@ export default function WhatsappSettings() {
               placeholder="EAAG... (paste new token to update)"
             />
             <div className="text-[11px] text-muted-foreground mt-1">
-              Stored securely as <code>WHATSAPP_META_ACCESS_TOKEN</code>. Leave empty to keep current token.
+              {form.access_token
+                ? "✓ Token saved. Leave empty to keep it, or paste a new one to replace."
+                : "No token saved yet. Paste your Meta WhatsApp Cloud API access token."}
             </div>
           </div>
           <div className="flex gap-2 pt-2">
