@@ -37,6 +37,12 @@ import Alerts from "./pages/Alerts";
 import Adjustments from "./pages/Adjustments";
 import SystemHealth from "./pages/SystemHealth";
 import FollowUps from "./pages/FollowUps";
+import WhatsappLayout from "./pages/whatsapp/WhatsappLayout";
+import WhatsappOverview from "./pages/whatsapp/WhatsappOverview";
+import WhatsappInbox from "./pages/whatsapp/WhatsappInbox";
+import WhatsappConfirmations from "./pages/whatsapp/WhatsappConfirmations";
+import WhatsappTemplates from "./pages/whatsapp/WhatsappTemplates";
+import WhatsappSettings from "./pages/whatsapp/WhatsappSettings";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -160,6 +166,13 @@ function AppRoutes() {
         <Route path="/adjustments" element={<ProtectedRoute permission="access_to_settings"><Adjustments /></ProtectedRoute>} />
         <Route path="/system-health" element={<ProtectedRoute permission="access_to_settings"><SystemHealth /></ProtectedRoute>} />
         <Route path="/follow-ups" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />
+        <Route path="/whatsapp" element={<ProtectedRoute permission="access_to_settings"><WhatsappLayout /></ProtectedRoute>}>
+          <Route index element={<WhatsappOverview />} />
+          <Route path="inbox" element={<WhatsappInbox />} />
+          <Route path="confirmations" element={<WhatsappConfirmations />} />
+          <Route path="templates" element={<WhatsappTemplates />} />
+          <Route path="settings" element={<WhatsappSettings />} />
+        </Route>
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
