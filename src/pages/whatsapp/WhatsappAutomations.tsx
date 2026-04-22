@@ -214,7 +214,7 @@ export default function WhatsappAutomations() {
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {filtered.map((a: any) => {
             const trig = TRIGGERS.find((t) => t.value === a.trigger_type);
             const Icon = trig?.icon ?? Zap;
@@ -223,80 +223,117 @@ export default function WhatsappAutomations() {
               ? Math.round((a.success_count / a.runs_count) * 100)
               : 0;
             return (
-              <Card key={a.id} className="p-4 group hover:border-emerald-500/40 transition-colors">
-                <div className="flex items-center justify-between mb-3">
-                  <Badge
-                    variant="outline"
-                    className={`uppercase text-[10px] tracking-wider font-semibold ${STATUS_STYLES[a.status]}`}
+              <div
+                key={a.id}
+                className="group relative border rounded-xl bg-card hover:border-primary/40 hover:shadow-elevated transition-all cursor-pointer overflow-hidden flex flex-col"
+                onClick={() => navigate(`/whatsapp/automations/${a.id}`)}
+              >
+                {/* Top accent strip by status */}
+                <div className={`h-1 w-full ${
+                  a.status === "active" ? "bg-emerald-500" :
+                  a.status === "paused" ? "bg-amber-500" :
+                  "bg-muted-foreground/30"
+                }`} />
+
+                <div className="p-3 space-y-2 flex-1 flex flex-col">
+                  {/* Header: name + active toggle */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-sm truncate" title={a.name}>{a.name}</div>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <Badge
+                          variant="outline"
+                          className={`uppercase text-[9px] px-1.5 py-0 h-4 tracking-wider font-semibold ${STATUS_STYLES[a.status]}`}
+                        >
+                          {a.status}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7"
+                        title={a.status === "active" ? "Pause" : "Activate"}
+                        onClick={() => toggleStatus(a)}
+                      >
+                        {a.status === "active"
+                          ? <Pause className="h-3.5 w-3.5" />
+                          : <Play className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Meta info chips */}
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal gap-0.5">
+                      <Icon className="h-2.5 w-2.5" />
+                      {trig?.label ?? a.trigger_type}
+                    </Badge>
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal">
+                      {nodes.length} {nodes.length === 1 ? "node" : "nodes"}
+                    </Badge>
+                  </div>
+
+                  {/* Stats preview */}
+                  <div className="text-[11px] text-muted-foreground bg-muted/40 rounded-md p-2 leading-relaxed flex-1 flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-[9px] uppercase tracking-wider">Runs</span>
+                      <span className="font-semibold text-foreground">{a.runs_count}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] uppercase tracking-wider">Success</span>
+                      <span className="font-semibold text-emerald-500">{successRate}%</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] uppercase tracking-wider">OK</span>
+                      <span className="font-semibold text-foreground">{a.success_count ?? 0}</span>
+                    </div>
+                  </div>
+
+                  {/* Actions footer */}
+                  <div
+                    className="flex items-center justify-between gap-1 pt-1 border-t"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    {a.status}
-                  </Badge>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      variant="ghost" size="icon" className="h-7 w-7"
-                      title={a.status === "active" ? "Pause" : "Activate"}
-                      onClick={() => toggleStatus(a)}
-                    >
-                      {a.status === "active"
-                        ? <Pause className="h-3.5 w-3.5" />
-                        : <Play className="h-3.5 w-3.5" />}
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon" className="h-7 w-7" title="History"
-                      onClick={() => navigate(`/whatsapp/automations/${a.id}?tab=runs`)}
-                    >
-                      <History className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon" className="h-7 w-7" title="Duplicate"
-                      onClick={() => duplicate(a)}
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon" className="h-7 w-7 hover:text-destructive"
-                      title="Delete" onClick={() => remove(a)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    <span className="text-[9px] text-muted-foreground truncate font-mono">
+                      {a.last_run_at ? new Date(a.last_run_at).toLocaleDateString() : "Never run"}
+                    </span>
+                    <div className="flex items-center gap-0.5">
+                      <Button
+                        size="icon" variant="ghost" className="h-7 w-7" title="History"
+                        onClick={() => navigate(`/whatsapp/automations/${a.id}?tab=runs`)}
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon" variant="ghost" className="h-7 w-7" title="Rename"
+                        onClick={() => {
+                          const newName = prompt("Rename automation:", a.name);
+                          if (!newName || newName === a.name) return;
+                          supabase.from("whatsapp_automations").update({ name: newName }).eq("id", a.id)
+                            .then(({ error }) => {
+                              if (error) toast.error(error.message);
+                              else qc.invalidateQueries({ queryKey: ["whatsapp-automations"] });
+                            });
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon" variant="ghost" className="h-7 w-7" title="Duplicate"
+                        onClick={() => duplicate(a)}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon" variant="ghost" className="h-7 w-7" title="Delete"
+                        onClick={() => remove(a)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
-
-                <h3 className="font-semibold text-base mb-1 truncate">{a.name}</h3>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-                  <Icon className="h-3.5 w-3.5" />
-                  Trigger: {trig?.label ?? a.trigger_type}
-                </div>
-
-                <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
-                  <span>{a.runs_count} runs</span>
-                  <span className="text-emerald-500 font-medium">{successRate}%</span>
-                  <span>{nodes.length} nodes</span>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline" size="sm" className="flex-1"
-                    onClick={() => navigate(`/whatsapp/automations/${a.id}`)}
-                  >
-                    Edit Flow
-                  </Button>
-                  <Button
-                    variant="outline" size="sm" className="px-3"
-                    onClick={() => {
-                      const newName = prompt("Rename automation:", a.name);
-                      if (!newName || newName === a.name) return;
-                      supabase.from("whatsapp_automations").update({ name: newName }).eq("id", a.id)
-                        .then(({ error }) => {
-                          if (error) toast.error(error.message);
-                          else qc.invalidateQueries({ queryKey: ["whatsapp-automations"] });
-                        });
-                    }}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </Card>
+              </div>
             );
           })}
         </div>
