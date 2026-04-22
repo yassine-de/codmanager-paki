@@ -95,6 +95,61 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (mode === "webhook") {
+      const checks: Array<{ name: string; ok: boolean; detail?: string }> = [];
+      const projectRef = Deno.env.get("SUPABASE_URL")?.replace("https://", "").split(".")[0];
+      const webhookUrl = `https://${projectRef}.supabase.co/functions/v1/whatsapp-webhook`;
+
+      // 1. Verify token configured
+      const hasSecret = !!s.webhook_secret?.trim();
+      checks.push({
+        name: "Verify Token",
+        ok: hasSecret,
+        detail: hasSecret ? "Verify token is set" : "Missing — enter a verify token and Save",
+      });
+      if (!hasSecret) {
+        return new Response(JSON.stringify({ ok: false, checks, duration_ms: Date.now() - startedAt }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // 2. Webhook reachability — Meta-style GET handshake
+      const challenge = `lov_${Date.now()}`;
+      const url = `${webhookUrl}?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(s.webhook_secret)}&hub.challenge=${challenge}`;
+      try {
+        const r = await fetch(url);
+        const text = await r.text();
+        const reachable = r.status === 200 || r.status === 401 || r.status === 403;
+        checks.push({
+          name: "Webhook Reachability",
+          ok: reachable,
+          detail: reachable ? `Endpoint responded (${r.status})` : `Unreachable (status ${r.status})`,
+        });
+
+        // 3. Verify token handshake
+        const handshakeOk = r.status === 200 && text.trim() === challenge;
+        checks.push({
+          name: "Verify Token Handshake",
+          ok: handshakeOk,
+          detail: handshakeOk
+            ? "Meta-style verification succeeded"
+            : r.status === 200
+            ? `Unexpected response body: ${text.slice(0, 80)}`
+            : `Token rejected (status ${r.status})`,
+        });
+
+        const allOk = checks.every((c) => c.ok);
+        return new Response(JSON.stringify({ ok: allOk, checks, duration_ms: Date.now() - startedAt }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        checks.push({ name: "Webhook Reachability", ok: false, detail: (e as Error).message });
+        return new Response(JSON.stringify({ ok: false, checks, duration_ms: Date.now() - startedAt }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (mode === "message") {
       if (!accessToken) throw new Error("Access token missing. Add it in WhatsApp Settings.");
       if (!phone) throw new Error("phone required");
