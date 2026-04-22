@@ -342,6 +342,21 @@ export default function Products() {
                   </SelectContent>
                 </Select>
               </div>
+              {isAdmin && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">WhatsApp</label>
+                  <Select value={filterWhatsapp} onValueChange={setFilterWhatsapp}>
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="enabled">Enabled</SelectItem>
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="flex items-end gap-2">
                 <Button size="sm" className="h-9 px-4" onClick={applyFilters}>
                   Apply
