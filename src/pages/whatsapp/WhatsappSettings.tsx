@@ -58,7 +58,30 @@ export default function WhatsappSettings() {
   };
 
   const testConnection = async () => {
+    if (!form.phone_number_id?.trim()) {
+      toast.error("Enter Phone Number ID first");
+      return;
+    }
+    if (!form.access_token?.trim() && !accessToken.trim()) {
+      toast.error("Enter Access Token first");
+      return;
+    }
     setBusy(true);
+    // Auto-save current form (incl. token) so the function can read fresh values from DB
+    const { id, ...payload } = form;
+    if (accessToken.trim()) (payload as any).access_token = accessToken.trim();
+    const { error: saveErr } = await supabase
+      .from("whatsapp_settings")
+      .update(payload)
+      .eq("id", id);
+    if (saveErr) {
+      setBusy(false);
+      toast.error(saveErr.message);
+      return;
+    }
+    if (accessToken.trim()) setAccessToken("");
+    qc.invalidateQueries({ queryKey: ["wts-settings"] });
+
     const { data, error } = await supabase.functions.invoke("whatsapp-test", {
       body: { mode: "connection" },
     });
