@@ -26,6 +26,7 @@ export default function WhatsappSettings() {
 
   const [form, setForm] = useState<any>(null);
   const [testPhone, setTestPhone] = useState("");
+  const [accessToken, setAccessToken] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
