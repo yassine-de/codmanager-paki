@@ -90,7 +90,7 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'deliveryStatus' | 'subStatus' | 'attempts';
+type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'channel' | 'deliveryStatus' | 'subStatus' | 'attempts';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
@@ -104,10 +104,16 @@ const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; admi
   { key: 'product', label: 'Product', defaultVisible: true },
   { key: 'amount', label: 'Amount', defaultVisible: true },
   { key: 'confirmationStatus', label: 'Confirmation', defaultVisible: true },
+  { key: 'channel', label: 'Channel', defaultVisible: true },
   { key: 'attempts', label: 'Attempts', defaultVisible: true },
   { key: 'deliveryStatus', label: 'Delivery', defaultVisible: true },
   { key: 'subStatus', label: 'Sub Status', defaultVisible: true, adminOnly: true },
 ];
+
+const channelConfig: Record<string, { label: string; cls: string }> = {
+  agent: { label: 'Agent', cls: 'bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20' },
+  whatsapp: { label: 'WhatsApp', cls: 'bg-[hsl(142,71%,45%)]/12 text-[hsl(142,71%,45%)] border-[hsl(142,71%,45%)]/20' },
+};
 
 /* ── Sparkline KPI Cards ── */
 function OrderSparklineCards({ orders }: { orders: Order[] }) {
@@ -347,6 +353,7 @@ export default function Orders() {
         attemptCount: o.attempt_count || 0,
         orioOrderId: o.orio_order_id || null,
         orioShippingStatus: o.orio_shipping_status || null,
+        confirmationChannel: o.confirmation_channel || 'agent',
       }));
 
       setOrders(mapped);
@@ -367,6 +374,7 @@ export default function Orders() {
   const [filterConfirmation, setFilterConfirmation] = useState('all');
   const [filterDelivery, setFilterDelivery] = useState('all');
   const [filterSubStatus, setFilterSubStatus] = useState('all');
+  const [filterChannel, setFilterChannel] = useState('all');
   const [filterUpsell, setFilterUpsell] = useState('all');
   
   
@@ -405,6 +413,7 @@ export default function Orders() {
       confirmation: conf || 'all',
       delivery: del || 'all',
       subStatus: 'all',
+      channel: 'all',
       upsell: 'all',
     };
   });
@@ -440,19 +449,21 @@ export default function Orders() {
       dateRange, product: filterProduct, seller: filterSeller, agent: filterAgent,
       confirmation: filterConfirmation, delivery: filterDelivery,
       subStatus: filterSubStatus,
+      channel: filterChannel,
       upsell: filterUpsell,
     });
-  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterUpsell]);
+  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
     setFilterProduct('all'); setFilterSeller('all'); setFilterAgent('all');
     setFilterConfirmation('all'); setFilterDelivery('all');
     setFilterSubStatus('all');
+    setFilterChannel('all');
     setFilterUpsell('all');
     setAppliedFilters({
       dateRange: undefined, product: 'all', seller: 'all', agent: 'all',
-      confirmation: 'all', delivery: 'all', subStatus: 'all', upsell: 'all',
+      confirmation: 'all', delivery: 'all', subStatus: 'all', channel: 'all', upsell: 'all',
     });
   }, []);
 
@@ -465,6 +476,7 @@ export default function Orders() {
     if (appliedFilters.confirmation !== 'all') count++;
     if (appliedFilters.delivery !== 'all') count++;
     if (appliedFilters.subStatus !== 'all') count++;
+    if (appliedFilters.channel !== 'all') count++;
     if (appliedFilters.upsell !== 'all') count++;
     return count;
   }, [appliedFilters]);
@@ -484,6 +496,7 @@ export default function Orders() {
         if (f.confirmation !== 'all' && o.confirmationStatus !== f.confirmation) return false;
         if (f.delivery !== 'all' && o.deliveryStatus !== f.delivery) return false;
         if (f.subStatus !== 'all' && (o.orioShippingStatus || '') !== f.subStatus) return false;
+        if (f.channel !== 'all' && (o.confirmationChannel || 'agent') !== f.channel) return false;
         if (f.upsell !== 'all') {
           if (f.upsell === 'yes' && !o.upsell) return false;
           if (f.upsell === 'no' && o.upsell) return false;
@@ -671,6 +684,18 @@ export default function Orders() {
               />
             </div>
             )}
+            {/* Channel */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Channel</label>
+              <SearchableSelect
+                value={filterChannel}
+                onValueChange={setFilterChannel}
+                options={[{ value: "agent", label: "Agent" }, { value: "whatsapp", label: "WhatsApp" }]}
+                placeholder="Channel"
+                allLabel="All"
+                className="w-full"
+              />
+            </div>
             {/* Upsell */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Upsell</label>
@@ -813,6 +838,7 @@ export default function Orders() {
                 {isCol('product') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Product</th>}
                 {isCol('amount') && <th className="text-right py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Amount</th>}
                 {isCol('confirmationStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
+                {isCol('channel') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Channel</th>}
                 
                 {isCol('deliveryStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
                 {isAdmin && isCol('subStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Sub Status</th>}
@@ -863,6 +889,7 @@ export default function Orders() {
                   {isCol('product') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.products.map(p => p.qty > 1 ? `${p.qty}x ${p.name}` : p.name).join(', ')}</td>}
                   {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} PKR</td>}
 {isCol('confirmationStatus') && <td className="py-2.5 px-4"><StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} /></td>}
+                  {isCol('channel') && <td className="py-2.5 px-4">{(() => { const ch = order.confirmationChannel || 'agent'; const cfg = channelConfig[ch] || { label: ch, cls: 'bg-muted text-muted-foreground border-border' }; return <StatusBadge label={cfg.label} cls={cfg.cls} />; })()}</td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
                   {isAdmin && isCol('subStatus') && (
                     <td className="py-2.5 px-4">
