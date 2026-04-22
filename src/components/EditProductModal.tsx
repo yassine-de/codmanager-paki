@@ -605,5 +605,32 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={pendingWhatsappValue !== null} onOpenChange={(o) => { if (!o) setPendingWhatsappValue(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {pendingWhatsappValue ? "Enable WhatsApp Confirmation?" : "Disable WhatsApp Confirmation?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription className="whitespace-pre-line">
+            {pendingWhatsappValue
+              ? "Are you sure you want to enable WhatsApp confirmation for this product?\n\nAll new orders will be handled by the WhatsApp automation first and will not appear in the agent queue unless needed."
+              : "Are you sure you want to disable WhatsApp confirmation for this product?\n\nNew orders will go directly to agents for manual confirmation."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={whatsappSaving}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => { e.preventDefault(); void confirmWhatsappChange(); }}
+            disabled={whatsappSaving}
+            className={pendingWhatsappValue === false ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+          >
+            {whatsappSaving && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+            Confirm
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
