@@ -79,6 +79,32 @@ const statusBadge = (s: string) => {
   return map[s] ?? { label: s || "—", cls: "bg-muted text-muted-foreground border-border" };
 };
 
+const confirmationStatusCls = (s: string) => {
+  const map: Record<string, string> = {
+    new: "bg-sky-500/15 text-sky-500 border-sky-500/25",
+    confirmed: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25",
+    no_answer: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25",
+    postponed: "bg-violet-500/15 text-violet-500 border-violet-500/25",
+    cancelled: "bg-rose-500/15 text-rose-500 border-rose-500/25",
+    new_wts: "bg-cyan-500/15 text-cyan-500 border-cyan-500/25",
+  };
+  return map[s] ?? "bg-muted text-muted-foreground border-border";
+};
+
+const deliveryStatusCls = (s: string) => {
+  const map: Record<string, string> = {
+    pending: "bg-muted text-muted-foreground border-border",
+    booked: "bg-sky-500/15 text-sky-500 border-sky-500/25",
+    shipped: "bg-blue-500/15 text-blue-500 border-blue-500/25",
+    failed_attempt: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25",
+    delivered: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25",
+    ready_for_return: "bg-orange-500/15 text-orange-500 border-orange-500/25",
+    return: "bg-rose-500/15 text-rose-500 border-rose-500/25",
+    cancelled: "bg-rose-500/15 text-rose-500 border-rose-500/25",
+  };
+  return map[s] ?? "bg-muted text-muted-foreground border-border";
+};
+
 function initials(name?: string | null, phone?: string) {
   const src = (name || phone || "?").trim();
   const parts = src.split(/\s+/);
