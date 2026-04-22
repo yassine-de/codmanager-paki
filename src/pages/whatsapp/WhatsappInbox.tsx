@@ -322,6 +322,104 @@ export default function WhatsappInbox() {
     toast.success("Note saved");
   };
 
+  // Quick reply snippets
+  const quickReplies = [
+    "Salam, comment puis-je vous aider ?",
+    "Merci pour votre commande ! 🙏",
+    "Pouvez-vous confirmer votre adresse ?",
+    "Votre commande sera livrée bientôt.",
+    "Je vous remercie pour votre patience.",
+  ];
+
+  const insertAtCursor = (text: string) => {
+    setDraft((d) => (d ? d + text : text));
+  };
+
+  const uploadAndSend = async (file: File, mode: "image" | "document" | "audio") => {
+    if (!selected || !conv) return;
+    if (windowExpired) {
+      toast.error("24h window expired — use a template");
+      return;
+    }
+    setUploadingMedia(true);
+    try {
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${conv.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("whatsapp-media")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
+      const mediaUrl = pub.publicUrl;
+      const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+        body: {
+          mode,
+          conversation_id: selected,
+          order_id: conv.order_id ?? undefined,
+          media_url: mediaUrl,
+          media_filename: file.name,
+          body: draft.trim() || undefined,
+        },
+      });
+      if (error || !data?.ok) throw new Error(error?.message || data?.error || "Send failed");
+      setDraft("");
+      toast.success(`${mode} sent`);
+    } catch (e: any) {
+      toast.error(e?.message || "Upload failed");
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      recordedChunksRef.current = [];
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(recordedChunksRef.current, { type: "audio/ogg" });
+        const file = new File([blob], `voice-${Date.now()}.ogg`, { type: "audio/ogg" });
+        await uploadAndSend(file, "audio");
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch (e: any) {
+      toast.error("Microphone access denied");
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  };
+
+  const fetchAiSuggestions = async () => {
+    if (!selected) return;
+    setAiLoading(true);
+    setAiSuggestions([]);
+    try {
+      const { data, error } = await supabase.functions.invoke("whatsapp-ai", {
+        body: { mode: "suggest", conversation_id: selected },
+      });
+      if (error) throw error;
+      const sugg = (data?.suggestions as string[]) || [];
+      if (sugg.length === 0) {
+        toast.error("No AI suggestions available");
+        return;
+      }
+      setAiSuggestions(sugg);
+    } catch (e: any) {
+      toast.error(e?.message || "AI suggestion failed");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   if (!isAdmin) return <Navigate to="/" replace />;
 
   // Group messages by day
