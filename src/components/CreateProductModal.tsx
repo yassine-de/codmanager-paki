@@ -1,10 +1,16 @@
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 import { type Product } from "@/lib/products-data";
+import { cn } from "@/lib/utils";
 
 interface CreateProductModalProps {
   open: boolean;
@@ -13,16 +19,21 @@ interface CreateProductModalProps {
 }
 
 export function CreateProductModal({ open, onOpenChange, onCreate }: CreateProductModalProps) {
+  const { authUser } = useAuth();
+  const isAdmin = authUser?.role === "admin";
   const [seller, setSeller] = useState("");
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
   const [image, setImage] = useState("");
   const [price, setPrice] = useState<number | "">("");
   const [totalQty, setTotalQty] = useState<number | "">("");
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
+  const [pendingWhatsappValue, setPendingWhatsappValue] = useState<boolean | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const resetForm = () => {
     setSeller(""); setName(""); setSku(""); setImage(""); setPrice(""); setTotalQty("");
+    setWhatsappEnabled(false); setPendingWhatsappValue(null);
     setErrors({});
   };
 
@@ -66,7 +77,18 @@ export function CreateProductModal({ open, onOpenChange, onCreate }: CreateProdu
     toast.success("Product created");
   };
 
+  const confirmWhatsappChange = () => {
+    if (pendingWhatsappValue === null) return;
+    const newValue = pendingWhatsappValue;
+    setWhatsappEnabled(newValue);
+    setPendingWhatsappValue(null);
+    toast.success(newValue
+      ? "WhatsApp confirmation enabled for this product"
+      : "WhatsApp confirmation disabled for this product");
+  };
+
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
@@ -106,6 +128,36 @@ export function CreateProductModal({ open, onOpenChange, onCreate }: CreateProdu
               <Input value={image} onChange={(e) => setImage(e.target.value)} placeholder="https://..." className="h-9 text-sm" />
             </div>
           </div>
+
+          {/* WhatsApp Confirmation toggle (Admin only) */}
+          {isAdmin && (
+            <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="w-3.5 h-3.5 text-muted-foreground" />
+                  <Label className="text-sm font-medium">Enable WhatsApp Confirmation</Label>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] h-5",
+                      whatsappEnabled
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "border-muted-foreground/30 bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {whatsappEnabled ? "WhatsApp Enabled" : "Agent Confirmation"}
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  If enabled, all new orders for this product will go through WhatsApp confirmation before reaching agents.
+                </p>
+              </div>
+              <Switch
+                checked={whatsappEnabled}
+                onCheckedChange={(v) => setPendingWhatsappValue(v)}
+              />
+            </div>
+          )}
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" size="sm" onClick={() => { resetForm(); onOpenChange(false); }}>Cancel</Button>
@@ -113,5 +165,30 @@ export function CreateProductModal({ open, onOpenChange, onCreate }: CreateProdu
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={pendingWhatsappValue !== null} onOpenChange={(o) => { if (!o) setPendingWhatsappValue(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {pendingWhatsappValue ? "Enable WhatsApp Confirmation?" : "Disable WhatsApp Confirmation?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription className="whitespace-pre-line">
+            {pendingWhatsappValue
+              ? "Are you sure you want to enable WhatsApp confirmation for this product?\n\nAll new orders will be handled by the WhatsApp automation first and will not appear in the agent queue unless needed."
+              : "Are you sure you want to disable WhatsApp confirmation for this product?\n\nNew orders will go directly to agents for manual confirmation."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => { e.preventDefault(); confirmWhatsappChange(); }}
+            className={pendingWhatsappValue === false ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+          >
+            Confirm
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
