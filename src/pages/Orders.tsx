@@ -353,6 +353,7 @@ export default function Orders() {
         attemptCount: o.attempt_count || 0,
         orioOrderId: o.orio_order_id || null,
         orioShippingStatus: o.orio_shipping_status || null,
+        confirmationChannel: o.confirmation_channel || 'agent',
       }));
 
       setOrders(mapped);
@@ -373,6 +374,7 @@ export default function Orders() {
   const [filterConfirmation, setFilterConfirmation] = useState('all');
   const [filterDelivery, setFilterDelivery] = useState('all');
   const [filterSubStatus, setFilterSubStatus] = useState('all');
+  const [filterChannel, setFilterChannel] = useState('all');
   const [filterUpsell, setFilterUpsell] = useState('all');
   
   
@@ -446,19 +448,21 @@ export default function Orders() {
       dateRange, product: filterProduct, seller: filterSeller, agent: filterAgent,
       confirmation: filterConfirmation, delivery: filterDelivery,
       subStatus: filterSubStatus,
+      channel: filterChannel,
       upsell: filterUpsell,
     });
-  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterUpsell]);
+  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
     setFilterProduct('all'); setFilterSeller('all'); setFilterAgent('all');
     setFilterConfirmation('all'); setFilterDelivery('all');
     setFilterSubStatus('all');
+    setFilterChannel('all');
     setFilterUpsell('all');
     setAppliedFilters({
       dateRange: undefined, product: 'all', seller: 'all', agent: 'all',
-      confirmation: 'all', delivery: 'all', subStatus: 'all', upsell: 'all',
+      confirmation: 'all', delivery: 'all', subStatus: 'all', channel: 'all', upsell: 'all',
     });
   }, []);
 
@@ -471,6 +475,7 @@ export default function Orders() {
     if (appliedFilters.confirmation !== 'all') count++;
     if (appliedFilters.delivery !== 'all') count++;
     if (appliedFilters.subStatus !== 'all') count++;
+    if (appliedFilters.channel !== 'all') count++;
     if (appliedFilters.upsell !== 'all') count++;
     return count;
   }, [appliedFilters]);
@@ -490,6 +495,7 @@ export default function Orders() {
         if (f.confirmation !== 'all' && o.confirmationStatus !== f.confirmation) return false;
         if (f.delivery !== 'all' && o.deliveryStatus !== f.delivery) return false;
         if (f.subStatus !== 'all' && (o.orioShippingStatus || '') !== f.subStatus) return false;
+        if (f.channel !== 'all' && (o.confirmationChannel || 'agent') !== f.channel) return false;
         if (f.upsell !== 'all') {
           if (f.upsell === 'yes' && !o.upsell) return false;
           if (f.upsell === 'no' && o.upsell) return false;
