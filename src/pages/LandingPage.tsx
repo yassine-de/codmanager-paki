@@ -140,10 +140,11 @@ export default function LandingPage() {
               <LogIn className="w-4 h-4" /> Sign in
             </button>
             <a
-              href="#cta"
-              className="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-[0_0_30px_rgba(56,128,255,0.5)] hover:shadow-[0_0_40px_rgba(56,128,255,0.8)] transition"
+              onClick={(e) => { e.preventDefault(); navigate("/login"); }}
+              href="/login"
+              className="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-[0_0_30px_rgba(56,128,255,0.5)] hover:shadow-[0_0_40px_rgba(56,128,255,0.8)] transition cursor-pointer"
             >
-              Book a Call <ArrowRight className="w-4 h-4" />
+              <LogIn className="w-4 h-4" /> Login
             </a>
           </div>
         </div>
