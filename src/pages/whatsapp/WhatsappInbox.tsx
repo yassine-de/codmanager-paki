@@ -338,7 +338,10 @@ export default function WhatsappInbox() {
             return (
               <button
                 key={c.id}
-                onClick={() => {
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   setSelected(c.id);
                   setTab("reply");
                 }}
