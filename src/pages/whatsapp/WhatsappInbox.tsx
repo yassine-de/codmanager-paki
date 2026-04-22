@@ -119,6 +119,15 @@ export default function WhatsappInbox() {
   const [sortDesc, setSortDesc] = useState(true);
   const [sending, setSending] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [recording, setRecording] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   const { data: convos = [], isLoading } = useQuery<Conv[]>({
