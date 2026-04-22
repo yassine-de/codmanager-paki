@@ -85,30 +85,29 @@ export default function WhatsappSettings() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <Card>
-        <CardHeader><CardTitle className="text-base">Provider</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">WhatsApp Cloud API</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <Label>Provider</Label>
-            <Input value={form.provider_name} onChange={(e) => set("provider_name", e.target.value)} />
-          </div>
-          <div>
-            <Label>API base URL</Label>
-            <Input value={form.api_base_url} onChange={(e) => set("api_base_url", e.target.value)} />
-          </div>
-          <div>
             <Label>Phone Number ID</Label>
-            <Input value={form.phone_number_id ?? ""} onChange={(e) => set("phone_number_id", e.target.value)} />
+            <Input value={form.phone_number_id ?? ""} onChange={(e) => set("phone_number_id", e.target.value)} placeholder="e.g. 1234567890" />
           </div>
           <div>
-            <Label>WABA ID</Label>
-            <Input value={form.waba_id ?? ""} onChange={(e) => set("waba_id", e.target.value)} />
+            <Label>Business Account ID (WABA ID)</Label>
+            <Input value={form.waba_id ?? ""} onChange={(e) => set("waba_id", e.target.value)} placeholder="e.g. 9876543210" />
           </div>
           <div>
-            <Label>Sender number (display)</Label>
-            <Input value={form.sender_number ?? ""} onChange={(e) => set("sender_number", e.target.value)} placeholder="+92..." />
+            <Label>Access Token</Label>
+            <div className="text-[11px] text-muted-foreground mt-1">
+              Stored securely as the secret <code>WHATSAPP_META_ACCESS_TOKEN</code>.
+            </div>
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            Access token is stored as the secret <code>WHATSAPP_META_ACCESS_TOKEN</code>.
+          <div className="flex gap-2 pt-2">
+            <Button onClick={save} disabled={busy} size="sm">
+              <Save className="h-4 w-4 mr-2" /> Save
+            </Button>
+            <Button variant="outline" onClick={testConnection} disabled={busy} size="sm">
+              <Activity className="h-4 w-4 mr-2" /> Test connection
+            </Button>
           </div>
         </CardContent>
       </Card>
