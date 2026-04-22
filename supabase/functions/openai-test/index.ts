@@ -23,9 +23,12 @@ Deno.serve(async (req) => {
     const { data: isAdmin } = await supabase.rpc("is_admin", { _user_id: claims.claims.sub });
     if (!isAdmin) return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const apiKey = Deno.env.get("OPENAI_API_KEY");
+    // Prefer key stored in app_settings (UI-managed), fallback to env
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: row } = await admin.from("app_settings").select("value").eq("key", "openai_api_key").maybeSingle();
+    const apiKey = (row?.value as string) || Deno.env.get("OPENAI_API_KEY");
     if (!apiKey) {
-      return new Response(JSON.stringify({ ok: false, configured: false, error: "OPENAI_API_KEY not configured" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ ok: false, configured: false, error: "No API key configured. Add one in the Connection tab." }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Test with a tiny call to /models which is cheap and fast
