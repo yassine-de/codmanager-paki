@@ -1,4 +1,4 @@
-// WhatsApp AI Engine — uses Lovable AI Gateway
+// WhatsApp AI Engine — uses OpenAI API directly
 // Modes:
 //  - suggest: generate reply suggestions for a conversation/message
 //  - analyze: detect intent, sentiment, language for a message
@@ -19,24 +19,41 @@ interface Body {
   text?: string;
 }
 
-const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+
+// Map any non-OpenAI model names to OpenAI equivalents
+function normalizeModel(model: string): string {
+  if (!model) return "gpt-4o-mini";
+  if (model.startsWith("openai/")) return model.replace("openai/", "");
+  // Map Gemini models to OpenAI equivalents
+  if (model.includes("gemini-2.5-pro") || model.includes("gemini-3.1-pro")) return "gpt-4o";
+  if (model.includes("gemini-2.5-flash-lite")) return "gpt-4o-mini";
+  if (model.includes("gemini")) return "gpt-4o-mini";
+  return model;
+}
 
 async function callAI(model: string, messages: any[], opts: { temperature?: number; max_tokens?: number; tools?: any[]; tool_choice?: any } = {}) {
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) throw new Error("LOVABLE_API_KEY not set");
-  const body: any = { model, messages, temperature: opts.temperature ?? 0.7, max_tokens: opts.max_tokens ?? 512 };
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("OPENAI_API_KEY not set");
+  const body: any = {
+    model: normalizeModel(model),
+    messages,
+    temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.max_tokens ?? 512,
+  };
   if (opts.tools) body.tools = opts.tools;
   if (opts.tool_choice) body.tool_choice = opts.tool_choice;
-  const r = await fetch(LOVABLE_AI_URL, {
+  const r = await fetch(OPENAI_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!r.ok) {
     const t = await r.text();
-    if (r.status === 429) throw new Error("AI rate limited (429). Try again later.");
-    if (r.status === 402) throw new Error("AI credits exhausted (402). Add credits in Settings > Workspace > Usage.");
-    throw new Error(`AI gateway error ${r.status}: ${t}`);
+    if (r.status === 429) throw new Error("OpenAI rate limited (429). Try again later.");
+    if (r.status === 401) throw new Error("Invalid OpenAI API key (401). Check OPENAI_API_KEY.");
+    if (r.status === 402 || /insufficient_quota|billing/i.test(t)) throw new Error("OpenAI quota exhausted. Add credits to your OpenAI account.");
+    throw new Error(`OpenAI error ${r.status}: ${t}`);
   }
   return r.json();
 }
