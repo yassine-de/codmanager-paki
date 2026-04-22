@@ -133,9 +133,37 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify(payload),
       });
-      const data = await r.json();
+      let data = await r.json();
       if (!r.ok) {
         const reason = data?.error?.error_user_msg || data?.error?.message || JSON.stringify(data);
+        const isDuplicate =
+          /déjà du contenu|already exists|already has content|duplicate/i.test(reason);
+
+        if (isDuplicate) {
+          // Fetch existing template from Meta and link/sync it locally
+          const lookup = await fetch(
+            `${base}/${s.waba_id}/message_templates?limit=200&fields=name,language,status,category,id,rejected_reason`,
+            { headers: { Authorization: `Bearer ${s.access_token}` } },
+          );
+          const lookupData = await lookup.json();
+          const existing = (lookupData?.data ?? []).find(
+            (it: any) => it.name === metaName && it.language === (t.language || "en"),
+          );
+          if (existing) {
+            await supabase
+              .from("whatsapp_templates")
+              .update({
+                sync_status: String(existing.status || "PENDING").toUpperCase(),
+                meta_template_id: existing.id ? String(existing.id) : null,
+                meta_template_name: metaName,
+                rejection_reason: existing.rejected_reason || null,
+                last_synced_at: new Date().toISOString(),
+              })
+              .eq("id", id);
+            return json(200, { ok: true, linked: true, meta: existing });
+          }
+        }
+
         await supabase
           .from("whatsapp_templates")
           .update({
