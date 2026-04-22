@@ -1442,6 +1442,7 @@ export type Database = {
       }
       whatsapp_settings: {
         Row: {
+          access_token: string | null
           api_base_url: string
           auto_book_shipping: boolean
           default_country_code: string
@@ -1459,6 +1460,7 @@ export type Database = {
           webhook_secret: string | null
         }
         Insert: {
+          access_token?: string | null
           api_base_url?: string
           auto_book_shipping?: boolean
           default_country_code?: string
@@ -1476,6 +1478,7 @@ export type Database = {
           webhook_secret?: string | null
         }
         Update: {
+          access_token?: string | null
           api_base_url?: string
           auto_book_shipping?: boolean
           default_country_code?: string

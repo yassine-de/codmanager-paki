@@ -26,6 +26,7 @@ export default function WhatsappSettings() {
 
   const [form, setForm] = useState<any>(null);
   const [testPhone, setTestPhone] = useState("");
+  const [accessToken, setAccessToken] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -39,6 +40,9 @@ export default function WhatsappSettings() {
   const save = async () => {
     setBusy(true);
     const { id, ...payload } = form;
+    if (accessToken.trim()) {
+      (payload as any).access_token = accessToken.trim();
+    }
     const { error } = await supabase
       .from("whatsapp_settings")
       .update(payload)
@@ -48,6 +52,7 @@ export default function WhatsappSettings() {
       toast.error(error.message);
       return;
     }
+    setAccessToken("");
     toast.success("Saved");
     qc.invalidateQueries({ queryKey: ["wts-settings"] });
   };
@@ -97,8 +102,16 @@ export default function WhatsappSettings() {
           </div>
           <div>
             <Label>Access Token</Label>
+            <Input
+              type="password"
+              value={accessToken}
+              onChange={(e) => setAccessToken(e.target.value)}
+              placeholder="EAAG... (paste new token to update)"
+            />
             <div className="text-[11px] text-muted-foreground mt-1">
-              Stored securely as the secret <code>WHATSAPP_META_ACCESS_TOKEN</code>.
+              {form.access_token
+                ? "✓ Token saved. Leave empty to keep it, or paste a new one to replace."
+                : "No token saved yet. Paste your Meta WhatsApp Cloud API access token."}
             </div>
           </div>
           <div className="flex gap-2 pt-2">

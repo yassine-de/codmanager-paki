@@ -32,8 +32,8 @@ Deno.serve(async (req) => {
     const { data: s } = await admin.from("whatsapp_settings").select("*").eq("singleton", true).maybeSingle();
     if (!s) throw new Error("Settings missing");
 
-    const accessToken = Deno.env.get("WHATSAPP_META_ACCESS_TOKEN");
-    if (!accessToken) throw new Error("WHATSAPP_META_ACCESS_TOKEN missing");
+    const accessToken = (s as any).access_token || Deno.env.get("WHATSAPP_META_ACCESS_TOKEN");
+    if (!accessToken) throw new Error("Access token missing. Add it in WhatsApp Settings.");
 
     const { mode, phone } = await req.json();
 

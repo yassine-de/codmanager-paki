@@ -84,8 +84,8 @@ Deno.serve(async (req) => {
     }
     if (!settings.phone_number_id) throw new Error("phone_number_id missing");
 
-    const accessToken = Deno.env.get("WHATSAPP_META_ACCESS_TOKEN");
-    if (!accessToken) throw new Error("WHATSAPP_META_ACCESS_TOKEN secret missing");
+    const accessToken = (settings as any).access_token || Deno.env.get("WHATSAPP_META_ACCESS_TOKEN");
+    if (!accessToken) throw new Error("Access token missing. Add it in WhatsApp Settings.");
 
     const { data: order } = await admin.from("orders").select("*").eq("order_id", body.order_id).maybeSingle();
     if (!order) throw new Error("Order not found");
