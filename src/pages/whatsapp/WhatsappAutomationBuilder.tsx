@@ -51,22 +51,16 @@ interface FlowEdge {
 
 /* ---------- Confirmation/Delivery status options ---------- */
 const CONFIRMATION_STATUSES = ["new", "confirmed", "no_answer", "postponed", "cancelled", "new_wts"];
-// Real shipping statuses returned by ORIO (system_of_truth) — shown to users in the trigger picker.
+// Real delivery statuses used in the orders.delivery_status column.
 const DELIVERY_STATUSES = [
-  "New",
-  "Arrived at Courier Facility",
-  "Out For Delivery",
-  "In Transit",
-  "Delivered",
-  "Customer Not Answering",
-  "Customer not available",
-  "Hold on Customer`s Request",
-  "Address Closed",
-  "Incomplete Address",
-  "Refused to accept",
-  "Ready for Return",
-  "Return To Shipper",
-  "Cancelled",
+  "pending",
+  "booked",
+  "shipped",
+  "failed_attempt",
+  "delivered",
+  "ready_for_return",
+  "return",
+  "cancelled",
 ];
 const FOLLOW_UP_STATUSES = ["pending", "in_progress", "resolved", "escalated"];
 
