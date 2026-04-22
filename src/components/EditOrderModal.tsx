@@ -208,9 +208,13 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                   <div key={idx} className="flex items-center gap-2 bg-muted/30 rounded-lg p-2.5">
                     <div className="flex-1">
                       <Select value={p.name} onValueChange={v => updateProduct(idx, 'name', v)}>
-                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select product">{p.name}</SelectValue>
+                        </SelectTrigger>
                         <SelectContent>
-                          {availableProductNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                          {(availableProductNames.includes(p.name) ? availableProductNames : [p.name, ...availableProductNames].filter(Boolean)).map(n => (
+                            <SelectItem key={n} value={n}>{n}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
