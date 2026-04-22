@@ -44,11 +44,23 @@ export default function WhatsappSettings() {
       .from("whatsapp_settings")
       .update(payload)
       .eq("id", id);
-    setBusy(false);
     if (error) {
+      setBusy(false);
       toast.error(error.message);
       return;
     }
+    if (accessToken.trim()) {
+      const { error: secretError } = await supabase.functions.invoke("whatsapp-test", {
+        body: { mode: "save_token", token: accessToken.trim() },
+      });
+      if (secretError) {
+        setBusy(false);
+        toast.error("Settings saved but token failed: " + secretError.message);
+        return;
+      }
+      setAccessToken("");
+    }
+    setBusy(false);
     toast.success("Saved");
     qc.invalidateQueries({ queryKey: ["wts-settings"] });
   };
