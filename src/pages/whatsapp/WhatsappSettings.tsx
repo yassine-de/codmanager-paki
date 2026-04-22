@@ -247,13 +247,43 @@ export default function WhatsappSettings() {
             </div>
           </div>
           <div className="flex gap-2 pt-2">
-            <Button onClick={save} disabled={busy} size="sm">
+            <Button onClick={save} disabled={busy || busyWebhook} size="sm">
               <Save className="h-4 w-4 mr-2" /> Save
             </Button>
-            <Button variant="outline" onClick={testConnection} disabled={busy} size="sm">
-              <Activity className="h-4 w-4 mr-2" /> Test connection
+            <Button variant="outline" onClick={testWebhook} disabled={busy || busyWebhook} size="sm">
+              {busyWebhook ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+              Test connection
             </Button>
           </div>
+
+          {webhookResult && (
+            <div className="mt-3 rounded-lg border bg-muted/30 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className={`text-sm font-medium flex items-center gap-1.5 ${webhookResult.ok ? "text-primary" : "text-destructive"}`}>
+                  {webhookResult.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                  {webhookResult.ok ? "Webhook reachable & token valid" : "Webhook check failed"}
+                </div>
+                {webhookResult.duration_ms != null && (
+                  <span className="text-[11px] text-muted-foreground">{webhookResult.duration_ms}ms</span>
+                )}
+              </div>
+              <ul className="space-y-1.5">
+                {webhookResult.checks.map((c, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs">
+                    {c.ok ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5 mt-0.5 text-destructive shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-medium">{c.name}</div>
+                      {c.detail && <div className="text-muted-foreground">{c.detail}</div>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
 
