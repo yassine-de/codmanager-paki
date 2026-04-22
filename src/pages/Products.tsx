@@ -183,6 +183,30 @@ export default function Products() {
   const [showFilters, setShowFilters] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [waConfirm, setWaConfirm] = useState<{ id: string; name: string; nextValue: boolean } | null>(null);
+  const [waSaving, setWaSaving] = useState(false);
+
+  const handleWhatsappToggle = useCallback(async () => {
+    if (!waConfirm) return;
+    setWaSaving(true);
+    const { error } = await supabase
+      .from("products")
+      .update({ whatsapp_confirmation_enabled: waConfirm.nextValue, updated_at: new Date().toISOString() })
+      .eq("id", waConfirm.id);
+    setWaSaving(false);
+    if (error) {
+      toast.error("Failed to update WhatsApp setting");
+      setWaConfirm(null);
+      return;
+    }
+    toast.success(
+      waConfirm.nextValue
+        ? "WhatsApp confirmation enabled for this product"
+        : "WhatsApp confirmation disabled for this product"
+    );
+    setWaConfirm(null);
+    queryClient.invalidateQueries({ queryKey: ["db-products"] });
+  }, [waConfirm, queryClient]);
 
   // Filters
   const [filterSeller, setFilterSeller] = useState("all");
