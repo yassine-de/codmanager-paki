@@ -490,14 +490,44 @@ function TriggerConfigInline({
 }: { type: string; config: any; onChange: (c: any) => void }) {
   if (type === "confirmation_status_changed") {
     return (
-      <div className="mt-3 space-y-1.5">
-        <Label className="text-[10px] text-muted-foreground">Becomes</Label>
-        <Select value={config.to ?? ""} onValueChange={(v) => onChange({ ...config, to: v })}>
-          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Any status" /></SelectTrigger>
-          <SelectContent>
-            {CONFIRMATION_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div className="mt-3 space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-[10px] text-muted-foreground">Becomes</Label>
+          <Select
+            value={config.to ?? ""}
+            onValueChange={(v) =>
+              onChange({ ...config, to: v, ...(v === "no_answer" ? {} : { attempt: undefined }) })
+            }
+          >
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Any status" /></SelectTrigger>
+            <SelectContent>
+              {CONFIRMATION_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        {config.to === "no_answer" && (
+          <div className="space-y-1.5">
+            <Label className="text-[10px] text-muted-foreground">After attempt</Label>
+            <Select
+              value={config.attempt != null ? String(config.attempt) : "any"}
+              onValueChange={(v) =>
+                onChange({ ...config, attempt: v === "any" ? undefined : Number(v) })
+              }
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Any attempt" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any attempt</SelectItem>
+                {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    Attempt #{n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
     );
   }
