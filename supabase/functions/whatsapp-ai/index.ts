@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
       const result = await callAI(settings.model, [
         { role: "system", content: sys },
         ...history,
-      ], { temperature: settings.temperature, max_tokens: settings.max_tokens });
+      ], { temperature: settings.temperature, max_tokens: settings.max_tokens, apiKey });
       const reply = result.choices?.[0]?.message?.content?.trim() || "";
       return new Response(JSON.stringify({ ok: true, reply }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
