@@ -1501,11 +1501,21 @@ export type Database = {
         Row: {
           active: boolean
           body: string
+          buttons: Json
+          category: string
           created_at: string
+          footer: string | null
+          header_media_url: string | null
+          header_text: string | null
+          header_type: string | null
           id: string
           language: string
+          last_synced_at: string | null
+          meta_template_id: string | null
           meta_template_name: string | null
           name: string
+          rejection_reason: string | null
+          sync_status: string
           type: string
           updated_at: string
           variables: Json
@@ -1513,11 +1523,21 @@ export type Database = {
         Insert: {
           active?: boolean
           body?: string
+          buttons?: Json
+          category?: string
           created_at?: string
+          footer?: string | null
+          header_media_url?: string | null
+          header_text?: string | null
+          header_type?: string | null
           id?: string
           language?: string
+          last_synced_at?: string | null
+          meta_template_id?: string | null
           meta_template_name?: string | null
           name: string
+          rejection_reason?: string | null
+          sync_status?: string
           type?: string
           updated_at?: string
           variables?: Json
@@ -1525,11 +1545,21 @@ export type Database = {
         Update: {
           active?: boolean
           body?: string
+          buttons?: Json
+          category?: string
           created_at?: string
+          footer?: string | null
+          header_media_url?: string | null
+          header_text?: string | null
+          header_type?: string | null
           id?: string
           language?: string
+          last_synced_at?: string | null
+          meta_template_id?: string | null
           meta_template_name?: string | null
           name?: string
+          rejection_reason?: string | null
+          sync_status?: string
           type?: string
           updated_at?: string
           variables?: Json
