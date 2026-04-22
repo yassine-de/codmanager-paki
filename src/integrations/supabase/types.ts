@@ -517,6 +517,7 @@ export type Database = {
           attempt_count: number
           attempts_today: number
           cancel_reason: string | null
+          confirmation_channel: string
           confirmation_status: string
           confirmed_at: string | null
           created_at: string
@@ -560,6 +561,11 @@ export type Database = {
           updated_at: string
           video_url: string | null
           weight: number | null
+          whatsapp_last_reply_at: string | null
+          whatsapp_last_sent_at: string | null
+          whatsapp_note: string | null
+          whatsapp_retry_count: number
+          whatsapp_status: string | null
         }
         Insert: {
           agent_id?: string | null
@@ -567,6 +573,7 @@ export type Database = {
           attempt_count?: number
           attempts_today?: number
           cancel_reason?: string | null
+          confirmation_channel?: string
           confirmation_status?: string
           confirmed_at?: string | null
           created_at?: string
@@ -610,6 +617,11 @@ export type Database = {
           updated_at?: string
           video_url?: string | null
           weight?: number | null
+          whatsapp_last_reply_at?: string | null
+          whatsapp_last_sent_at?: string | null
+          whatsapp_note?: string | null
+          whatsapp_retry_count?: number
+          whatsapp_status?: string | null
         }
         Update: {
           agent_id?: string | null
@@ -617,6 +629,7 @@ export type Database = {
           attempt_count?: number
           attempts_today?: number
           cancel_reason?: string | null
+          confirmation_channel?: string
           confirmation_status?: string
           confirmed_at?: string | null
           created_at?: string
@@ -660,6 +673,11 @@ export type Database = {
           updated_at?: string
           video_url?: string | null
           weight?: number | null
+          whatsapp_last_reply_at?: string | null
+          whatsapp_last_sent_at?: string | null
+          whatsapp_note?: string | null
+          whatsapp_retry_count?: number
+          whatsapp_status?: string | null
         }
         Relationships: [
           {
@@ -760,6 +778,7 @@ export type Database = {
           video_url: string | null
           weight: string | null
           weight_kg: number | null
+          whatsapp_confirmation_enabled: boolean
         }
         Insert: {
           active?: boolean
@@ -783,6 +802,7 @@ export type Database = {
           video_url?: string | null
           weight?: string | null
           weight_kg?: number | null
+          whatsapp_confirmation_enabled?: boolean
         }
         Update: {
           active?: boolean
@@ -806,6 +826,7 @@ export type Database = {
           video_url?: string | null
           weight?: string | null
           weight_kg?: number | null
+          whatsapp_confirmation_enabled?: boolean
         }
         Relationships: [
           {
@@ -1330,6 +1351,188 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_conversations: {
+        Row: {
+          created_at: string
+          customer_name: string | null
+          customer_phone: string
+          id: string
+          last_message_at: string | null
+          last_reply_at: string | null
+          order_id: string
+          outcome: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_name?: string | null
+          customer_phone: string
+          id?: string
+          last_message_at?: string | null
+          last_reply_at?: string | null
+          order_id: string
+          outcome?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string
+          id?: string
+          last_message_at?: string | null
+          last_reply_at?: string | null
+          order_id?: string
+          outcome?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      whatsapp_messages: {
+        Row: {
+          body: string | null
+          conversation_id: string
+          created_at: string
+          direction: string
+          error_message: string | null
+          id: string
+          message_type: string
+          meta_message_id: string | null
+          order_id: string | null
+          payload: Json
+          status: string | null
+        }
+        Insert: {
+          body?: string | null
+          conversation_id: string
+          created_at?: string
+          direction: string
+          error_message?: string | null
+          id?: string
+          message_type?: string
+          meta_message_id?: string | null
+          order_id?: string | null
+          payload?: Json
+          status?: string | null
+        }
+        Update: {
+          body?: string | null
+          conversation_id?: string
+          created_at?: string
+          direction?: string
+          error_message?: string | null
+          id?: string
+          message_type?: string
+          meta_message_id?: string | null
+          order_id?: string | null
+          payload?: Json
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_settings: {
+        Row: {
+          api_base_url: string
+          auto_book_shipping: boolean
+          default_country_code: string
+          id: string
+          integration_enabled: boolean
+          max_retries: number
+          phone_number_id: string | null
+          provider_name: string
+          receiving_enabled: boolean
+          sender_number: string | null
+          sending_enabled: boolean
+          singleton: boolean
+          updated_at: string
+          waba_id: string | null
+          webhook_secret: string | null
+        }
+        Insert: {
+          api_base_url?: string
+          auto_book_shipping?: boolean
+          default_country_code?: string
+          id?: string
+          integration_enabled?: boolean
+          max_retries?: number
+          phone_number_id?: string | null
+          provider_name?: string
+          receiving_enabled?: boolean
+          sender_number?: string | null
+          sending_enabled?: boolean
+          singleton?: boolean
+          updated_at?: string
+          waba_id?: string | null
+          webhook_secret?: string | null
+        }
+        Update: {
+          api_base_url?: string
+          auto_book_shipping?: boolean
+          default_country_code?: string
+          id?: string
+          integration_enabled?: boolean
+          max_retries?: number
+          phone_number_id?: string | null
+          provider_name?: string
+          receiving_enabled?: boolean
+          sender_number?: string | null
+          sending_enabled?: boolean
+          singleton?: boolean
+          updated_at?: string
+          waba_id?: string | null
+          webhook_secret?: string | null
+        }
+        Relationships: []
+      }
+      whatsapp_templates: {
+        Row: {
+          active: boolean
+          body: string
+          created_at: string
+          id: string
+          language: string
+          meta_template_name: string | null
+          name: string
+          type: string
+          updated_at: string
+          variables: Json
+        }
+        Insert: {
+          active?: boolean
+          body?: string
+          created_at?: string
+          id?: string
+          language?: string
+          meta_template_name?: string | null
+          name: string
+          type?: string
+          updated_at?: string
+          variables?: Json
+        }
+        Update: {
+          active?: boolean
+          body?: string
+          created_at?: string
+          id?: string
+          language?: string
+          meta_template_name?: string | null
+          name?: string
+          type?: string
+          updated_at?: string
+          variables?: Json
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1361,6 +1564,7 @@ export type Database = {
           attempt_count: number
           attempts_today: number
           cancel_reason: string | null
+          confirmation_channel: string
           confirmation_status: string
           confirmed_at: string | null
           created_at: string
@@ -1404,6 +1608,11 @@ export type Database = {
           updated_at: string
           video_url: string | null
           weight: number | null
+          whatsapp_last_reply_at: string | null
+          whatsapp_last_sent_at: string | null
+          whatsapp_note: string | null
+          whatsapp_retry_count: number
+          whatsapp_status: string | null
         }[]
         SetofOptions: {
           from: "*"
