@@ -44,6 +44,8 @@ import WhatsappConfirmations from "./pages/whatsapp/WhatsappConfirmations";
 import WhatsappTemplates from "./pages/whatsapp/WhatsappTemplates";
 import WhatsappAI from "./pages/whatsapp/WhatsappAI";
 import WhatsappSettings from "./pages/whatsapp/WhatsappSettings";
+import WhatsappAutomations from "./pages/whatsapp/WhatsappAutomations";
+import WhatsappAutomationBuilder from "./pages/whatsapp/WhatsappAutomationBuilder";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
