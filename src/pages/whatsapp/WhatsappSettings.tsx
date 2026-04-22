@@ -218,24 +218,6 @@ export default function WhatsappSettings() {
         </CardContent>
       </Card>
 
-      <Card className="lg:col-span-2">
-        <CardHeader><CardTitle className="text-base">Actions</CardTitle></CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <Button onClick={save} disabled={busy}><Save className="h-4 w-4 mr-2" /> Save</Button>
-          <Button variant="outline" onClick={testConnection} disabled={busy}>
-            <Activity className="h-4 w-4 mr-2" /> Test connection
-          </Button>
-          <div className="flex items-end gap-2">
-            <div>
-              <Label>Test phone</Label>
-              <Input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="+92300..." />
-            </div>
-            <Button variant="outline" onClick={sendTest} disabled={busy}>
-              <Send className="h-4 w-4 mr-2" /> Send test
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
