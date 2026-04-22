@@ -260,7 +260,7 @@ export default function Products() {
 
   useMemo(() => {
     setCurrentPage(1);
-  }, [search, appliedSeller, appliedStatus, pageSize]);
+  }, [search, appliedSeller, appliedStatus, appliedWhatsapp, pageSize]);
 
   const handleCreate = (product: Product) => {
     setLocalProducts((prev) => [product, ...prev]);
