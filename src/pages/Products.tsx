@@ -705,6 +705,31 @@ export default function Products() {
         {/* Modals */}
         <CreateProductModal open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreate} />
         <EditProductModal product={editProduct} open={!!editProduct} onOpenChange={(v) => { if (!v) setEditProduct(null); }} onSave={handleEdit} />
+
+        <AlertDialog open={!!waConfirm} onOpenChange={(v) => { if (!v && !waSaving) setWaConfirm(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {waConfirm?.nextValue ? "Enable WhatsApp Confirmation?" : "Disable WhatsApp Confirmation?"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {waConfirm?.nextValue
+                  ? "Are you sure you want to enable WhatsApp confirmation for this product? All new orders for this product will go through WhatsApp automation first."
+                  : "Are you sure you want to disable WhatsApp confirmation for this product? New orders for this product will go directly to agents."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={waSaving}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); handleWhatsappToggle(); }}
+                disabled={waSaving}
+                className={waConfirm?.nextValue ? "" : "bg-destructive text-destructive-foreground hover:bg-destructive/90"}
+              >
+                {waSaving ? "Saving..." : "Confirm"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </TooltipProvider>
   );
