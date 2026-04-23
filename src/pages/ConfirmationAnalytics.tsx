@@ -253,14 +253,14 @@ export default function ConfirmationAnalytics() {
     const confirmedByAgent: Record<string, string> = {};
     orderHistory.forEach(h => {
       if (h.field_changed === "confirmation_status" && h.new_value === "confirmed" && !confirmedByAgent[h.order_id]) {
-        const order = orders.find(o => o.order_id === h.order_id);
+        const order = filteredOrders.find(o => o.order_id === h.order_id);
         const agentId = order?.agent_id || order?.original_agent_id;
         if (agentId) confirmedByAgent[h.order_id] = agentId;
       }
     });
 
     const map: Record<string, { total: number; answered: number; confirmed: number; delivered: number }> = {};
-    orders.forEach(o => {
+    filteredOrders.forEach(o => {
       // Use original_agent_id as fallback for released orders
       const agentId = o.agent_id || o.original_agent_id;
       if (!agentId || o.confirmation_status === "new") return;
@@ -271,7 +271,7 @@ export default function ConfirmationAnalytics() {
     });
 
     // Count delivered orders per confirming agent
-    orders.forEach(o => {
+    filteredOrders.forEach(o => {
       if (o.delivery_status === "delivered" || o.delivery_status === "paid") {
         const confirmingAgent = confirmedByAgent[o.order_id] || o.agent_id || o.original_agent_id;
         if (confirmingAgent && map[confirmingAgent]) {
@@ -291,7 +291,7 @@ export default function ConfirmationAnalytics() {
         deliveryRate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
       }))
       .sort((a, b) => b.confirmationRate - a.confirmationRate);
-  }, [orders, orderHistory, profileNameMap]);
+  }, [filteredOrders, orderHistory, profileNameMap]);
 
   // No Answer attempts breakdown
   const noAnswerAttempts = useMemo(() => {
