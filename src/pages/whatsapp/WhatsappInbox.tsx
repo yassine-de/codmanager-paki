@@ -818,24 +818,49 @@ export default function WhatsappInbox() {
                               const btns = tplId ? templateButtonsById.get(tplId) : null;
                               if (!btns || btns.length === 0) return null;
                               return (
-                                <div
-                                  className={cn(
-                                    "mt-2 -mx-3 -mb-2 border-t flex flex-col",
-                                    isOut ? "border-white/20" : "border-border",
-                                  )}
-                                >
-                                  {btns.map((b: any, i: number) => (
-                                    <div
-                                      key={i}
-                                      className={cn(
-                                        "px-3 py-1.5 text-center text-xs font-medium",
-                                        i > 0 && (isOut ? "border-t border-white/20" : "border-t border-border"),
-                                        isOut ? "text-white" : "text-sky-600 dark:text-sky-400",
-                                      )}
-                                    >
-                                      {(b.text || b.label || `Button ${i + 1}`).trim()}
-                                    </div>
-                                  ))}
+                                <div className="mt-2 -mx-3 -mb-2 flex flex-col gap-1 pt-2">
+                                  {btns.map((b: any, i: number) => {
+                                    const label = (b.text || b.label || `Button ${i + 1}`).trim();
+                                    const type = (b.type || b.button_type || "QUICK_REPLY").toString().toUpperCase();
+                                    const isUrl = type.includes("URL");
+                                    const isPhone = type.includes("PHONE");
+                                    const Icon = isUrl ? ExternalLink : isPhone ? Phone : Reply;
+                                    const href = isUrl
+                                      ? (b.url || b.value || "#")
+                                      : isPhone
+                                        ? `tel:${b.phone_number || b.value || ""}`
+                                        : undefined;
+                                    const content = (
+                                      <>
+                                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                                        <span className="truncate">{label}</span>
+                                      </>
+                                    );
+                                    const baseClasses = cn(
+                                      "flex items-center justify-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-lg transition-colors duration-150 cursor-default select-none",
+                                      isOut
+                                        ? "bg-white/15 text-white hover:bg-white/25"
+                                        : "bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-500/10 dark:text-sky-400 dark:hover:bg-sky-500/20",
+                                    );
+                                    if (href) {
+                                      return (
+                                        <a
+                                          key={i}
+                                          href={href}
+                                          target={isUrl ? "_blank" : undefined}
+                                          rel={isUrl ? "noreferrer" : undefined}
+                                          className={cn(baseClasses, "cursor-pointer")}
+                                        >
+                                          {content}
+                                        </a>
+                                      );
+                                    }
+                                    return (
+                                      <div key={i} className={baseClasses}>
+                                        {content}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               );
                             })()}
