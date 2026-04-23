@@ -906,31 +906,33 @@ export default function WhatsappInbox() {
 
               {/* Tabs + input */}
               <div className="border-t border-border p-3 bg-card">
-                <div className="flex items-center gap-1 mb-2">
+                <div className="flex items-center gap-2 mb-3">
                   <button
                     onClick={() => setTab("reply")}
                     className={cn(
-                      "text-sm px-3 py-1.5 rounded-md font-medium border-b-2 transition-colors",
+                      "flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg font-semibold transition-all",
                       tab === "reply"
-                        ? "border-primary text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground",
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
+                    <Reply className="h-4 w-4" />
                     Reply
                   </button>
                   <button
                     onClick={() => setTab("note")}
                     className={cn(
-                      "text-sm px-3 py-1.5 rounded-md font-medium border-b-2 transition-colors",
+                      "flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg font-semibold transition-all",
                       tab === "note"
-                        ? "border-primary text-foreground"
-                        : "border-transparent text-muted-foreground hover:text-foreground",
+                        ? "bg-amber-500 text-white shadow-sm"
+                        : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
+                    <StickyNote className="h-4 w-4" />
                     Note
                   </button>
                   {lastInboundAt && (
-                    <span className="ml-auto text-[10px] text-muted-foreground">
+                    <span className="ml-auto text-[11px] text-muted-foreground">
                       Last reply {formatDistanceToNowStrict(lastInboundAt, { addSuffix: true })}
                     </span>
                   )}
