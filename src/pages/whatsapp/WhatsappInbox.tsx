@@ -486,7 +486,7 @@ export default function WhatsappInbox() {
 
   return (
     <>
-      <div className="grid grid-cols-12 gap-0 h-[calc(100vh-220px)] min-h-[560px] rounded-xl border border-border overflow-hidden bg-card">
+      <div className="grid grid-cols-12 gap-0 h-[calc(100vh-220px)] min-h-[480px] rounded-xl border border-border overflow-hidden bg-card">
         {/* LEFT PANEL */}
         <aside className="col-span-12 md:col-span-4 lg:col-span-3 border-r border-border flex flex-col bg-background/40">
           <div className="px-4 h-12 border-b border-border flex items-center justify-between gap-2">
