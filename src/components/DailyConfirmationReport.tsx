@@ -96,6 +96,8 @@ export function DailyConfirmationReport({ orders, profileNameMap, agentIds, agen
       confirmRate: total > 0 ? Math.round((confirmed / total) * 100) : 0,
       noAnswerRate: total > 0 ? Math.round((noAnswer / total) * 100) : 0,
       postponedRate: total > 0 ? Math.round((postponed / total) * 100) : 0,
+      cancelledRate: total > 0 ? Math.round((cancelled / total) * 100) : 0,
+      wrongNumberRate: total > 0 ? Math.round((wrongNumber / total) * 100) : 0,
     };
   }, [handledOrders]);
 
