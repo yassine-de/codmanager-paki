@@ -33,6 +33,14 @@ async function getSettings() {
 //  2. latest order with confirmation_status = 'new_wts'
 //  3. any recent order from this phone (with leading-zero variant)
 async function findOrCreateConversation(phone: string, orderId?: string | null) {
+  // Normalize phone variants so we match conversations created by outbound
+  // (no `+` e.g. "923233320960") AND inbound (with `+` e.g. "+923233320960")
+  // AND legacy local format (e.g. "03233320960").
+  const digits = phone.replace(/\D/g, "");           // 923233320960
+  const withPlus = `+${digits}`;                      // +923233320960
+  const localZero = digits.startsWith("92") ? `0${digits.slice(2)}` : digits; // 03233320960
+  const phoneVariants = Array.from(new Set([phone, digits, withPlus, localZero]));
+
   let order: any = null;
 
   if (orderId) {
@@ -48,7 +56,7 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
     const { data } = await admin
       .from("orders")
       .select("*")
-      .eq("customer_phone", phone)
+      .in("customer_phone", phoneVariants)
       .eq("confirmation_status", "new_wts")
       .order("created_at", { ascending: false })
       .limit(1)
@@ -60,14 +68,14 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
     const { data } = await admin
       .from("orders")
       .select("*")
-      .or(`customer_phone.eq.${phone},customer_phone.eq.0${phone.slice(2)}`)
+      .in("customer_phone", phoneVariants)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     order = data;
   }
 
-  // Conversation lookup: prefer order link, fallback to phone.
+  // Conversation lookup: prefer order link, fallback to ANY phone variant.
   let conv: any = null;
   if (order) {
     const { data } = await admin
@@ -81,7 +89,7 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
     const { data } = await admin
       .from("whatsapp_conversations")
       .select("*")
-      .eq("customer_phone", phone)
+      .in("customer_phone", phoneVariants)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -89,12 +97,12 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
   }
 
   if (!conv) {
-    // Create new conversation. order_id may be null when we can't safely match.
+    // Create new conversation. Store digits-only (matches outbound normalization).
     const { data: inserted, error } = await admin
       .from("whatsapp_conversations")
       .insert({
         order_id: order?.order_id ?? null,
-        customer_phone: phone,
+        customer_phone: digits,
         customer_name: order?.customer_name ?? null,
         status: "pending",
       })
