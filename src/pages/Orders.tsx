@@ -32,6 +32,7 @@ import OrioTrackingModal from "@/components/OrioTrackingModal";
 /* ── Status badge configs ── */
 const confirmationConfig: Record<ConfirmationStatus, { label: string; cls: string }> = {
   new: { label: 'New', cls: 'bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20' },
+  new_wts: { label: 'New WTS', cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
   confirmed: { label: 'Confirmed', cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
   no_answer: { label: 'No Answer', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
   postponed: { label: 'Postponed', cls: 'bg-[hsl(25,85%,55%)]/12 text-[hsl(25,85%,55%)] border-[hsl(25,85%,55%)]/20' },
@@ -40,16 +41,16 @@ const confirmationConfig: Record<ConfirmationStatus, { label: string; cls: strin
   double: { label: 'Double', cls: 'bg-[hsl(270,50%,55%)]/12 text-[hsl(270,50%,55%)] border-[hsl(270,50%,55%)]/20' },
 };
 
-/* WhatsApp confirmation sub-status (shown when channel === 'whatsapp') */
+/* WhatsApp confirmation sub-status (shown when confirmation_status = 'new_wts') */
 const whatsappStatusConfig: Record<string, { label: string; cls: string }> = {
-  pending:                { label: 'WTS · Open',          cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
-  sent:                   { label: 'WTS · Awaiting Reply', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
-  awaiting_reply:         { label: 'WTS · Awaiting Reply', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
-  confirmed:              { label: 'WTS · Confirmed',     cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
-  canceled:               { label: 'WTS · Canceled',      cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
-  cancelled:              { label: 'WTS · Canceled',      cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
-  more_info:              { label: 'WTS · Sent to Agent', cls: 'bg-[hsl(270,50%,55%)]/12 text-[hsl(270,50%,55%)] border-[hsl(270,50%,55%)]/20' },
-  manual_review_needed:   { label: 'WTS · Needs Review',  cls: 'bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)] border-[hsl(200,65%,50%)]/20' },
+  pending:                { label: 'New WTS · Open',           cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
+  sent:                   { label: 'New WTS · Awaiting Reply', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
+  awaiting_reply:         { label: 'New WTS · Awaiting Reply', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
+  confirmed:              { label: 'New WTS · Confirmed',      cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
+  canceled:               { label: 'New WTS · Canceled',       cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
+  cancelled:              { label: 'New WTS · Canceled',       cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
+  more_info:              { label: 'New WTS · Sent to Agent',  cls: 'bg-[hsl(270,50%,55%)]/12 text-[hsl(270,50%,55%)] border-[hsl(270,50%,55%)]/20' },
+  manual_review_needed:   { label: 'New WTS · Needs Review',   cls: 'bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)] border-[hsl(200,65%,50%)]/20' },
 };
 
 const deliveryConfig: Record<DeliveryStatus, { label: string; cls: string }> = {
@@ -906,9 +907,9 @@ export default function Orders() {
 {isCol('confirmationStatus') && <td className="py-2.5 px-4">{(() => {
                     const isWhatsapp = (order.confirmationChannel || 'agent') === 'whatsapp';
                     const wts = order.whatsappStatus;
-                    // Show WTS sub-status while order is still 'new' on the WhatsApp channel
-                    if (isWhatsapp && order.confirmationStatus === 'new' && wts) {
-                      const cfg = whatsappStatusConfig[wts] || { label: `WTS · ${wts}`, cls: 'bg-muted text-muted-foreground border-border' };
+                    // Show WTS sub-status while order is in WhatsApp pipeline (new_wts)
+                    if (isWhatsapp && order.confirmationStatus === 'new_wts' && wts) {
+                      const cfg = whatsappStatusConfig[wts] || { label: `New WTS · ${wts}`, cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' };
                       return <StatusBadge label={cfg.label} cls={cfg.cls} />;
                     }
                     return <StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} />;
