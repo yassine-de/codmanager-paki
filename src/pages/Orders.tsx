@@ -250,7 +250,7 @@ export default function Orders() {
       o.phone,
       o.products.map(p => p.name).join(" | "),
       String(o.total),
-      o.confirmationStatus,
+      (!isAdmin && o.confirmationStatus === 'new_wts') ? 'new' : o.confirmationStatus,
       o.deliveryStatus,
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -666,7 +666,9 @@ export default function Orders() {
               <SearchableSelect
                 value={filterConfirmation}
                 onValueChange={setFilterConfirmation}
-                options={Object.entries(confirmationConfig).map(([k, v]) => ({ value: k, label: v.label }))}
+                options={Object.entries(confirmationConfig)
+                  .filter(([k]) => isAdmin || k !== 'new_wts')
+                  .map(([k, v]) => ({ value: k, label: v.label }))}
                 placeholder="Confirmation"
                 allLabel="All"
                 className="w-full"
@@ -907,12 +909,16 @@ export default function Orders() {
 {isCol('confirmationStatus') && <td className="py-2.5 px-4">{(() => {
                     const isWhatsapp = (order.confirmationChannel || 'agent') === 'whatsapp';
                     const wts = order.whatsappStatus;
-                    // Show WTS sub-status while order is in WhatsApp pipeline (new_wts)
-                    if (isWhatsapp && order.confirmationStatus === 'new_wts' && wts) {
+                    // Show WTS sub-status only to admins; sellers see plain "New"
+                    if (isAdmin && isWhatsapp && order.confirmationStatus === 'new_wts' && wts) {
                       const cfg = whatsappStatusConfig[wts] || { label: `New WTS · ${wts}`, cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' };
                       return <StatusBadge label={cfg.label} cls={cfg.cls} />;
                     }
-                    return <StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} />;
+                    // For sellers, normalize new_wts -> new
+                    const effectiveStatus = (!isAdmin && order.confirmationStatus === 'new_wts')
+                      ? 'new' as ConfirmationStatus
+                      : order.confirmationStatus;
+                    return <StatusBadge {...confirmationConfig[effectiveStatus]} attemptCount={effectiveStatus === 'no_answer' ? order.attemptCount : undefined} />;
                   })()}</td>}
                   {isAdmin && isCol('channel') && <td className="py-2.5 px-4">{(() => { const ch = order.confirmationChannel || 'agent'; const cfg = channelConfig[ch] || { label: ch, cls: 'bg-muted text-muted-foreground border-border' }; return <StatusBadge label={cfg.label} cls={cfg.cls} />; })()}</td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
