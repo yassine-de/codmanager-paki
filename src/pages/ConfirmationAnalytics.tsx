@@ -286,7 +286,7 @@ export default function ConfirmationAnalytics() {
         name: profileNameMap[id] || id.slice(0, 8),
         total: d.total,
         confirmed: d.confirmed,
-        confirmationRate: d.answered > 0 ? Math.round((d.confirmed / d.answered) * 100) : 0,
+        confirmationRate: d.total > 0 ? Math.round((d.confirmed / d.total) * 100) : 0,
         delivered: d.delivered,
         deliveryRate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
       }))
