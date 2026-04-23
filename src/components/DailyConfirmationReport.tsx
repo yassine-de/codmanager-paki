@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { KPICard } from "@/components/KPICard";
 import { cn } from "@/lib/utils";
 import {
-  ShoppingCart, CheckCircle2, PhoneOff, Clock, XCircle, Users, TrendingUp, BarChart3, ClipboardCheck, Timer, Hourglass,
+  ShoppingCart, CheckCircle2, PhoneOff, Clock, XCircle, Users, TrendingUp, BarChart3, ClipboardCheck, Timer, Hourglass, PhoneMissed,
 } from "lucide-react";
 
 interface Order {
@@ -90,8 +90,9 @@ export function DailyConfirmationReport({ orders, profileNameMap, agentIds, agen
     const noAnswer = handledOrders.filter(o => o.confirmation_status === "no_answer").length;
     const postponed = handledOrders.filter(o => o.postpone_date !== null || o.confirmation_status === "postponed").length;
     const cancelled = handledOrders.filter(o => o.confirmation_status === "cancelled").length;
+    const wrongNumber = handledOrders.filter(o => o.confirmation_status === "wrong_number").length;
     return {
-      total, confirmed, noAnswer, postponed, cancelled,
+      total, confirmed, noAnswer, postponed, cancelled, wrongNumber,
       confirmRate: total > 0 ? Math.round((confirmed / total) * 100) : 0,
       noAnswerRate: total > 0 ? Math.round((noAnswer / total) * 100) : 0,
       postponedRate: total > 0 ? Math.round((postponed / total) * 100) : 0,
@@ -191,6 +192,7 @@ export function DailyConfirmationReport({ orders, profileNameMap, agentIds, agen
         <KPICard title="No Answer" value={summary.noAnswer} subtitle={`${summary.noAnswerRate}%`} icon={PhoneOff} iconBg="bg-warning/10" iconColor="text-warning" />
         <KPICard title="Postponed" value={summary.postponed} subtitle={`${summary.postponedRate}%`} icon={Clock} iconBg="bg-primary/10" iconColor="text-primary" />
         <KPICard title="Cancelled" value={summary.cancelled} icon={XCircle} iconBg="bg-destructive/10" iconColor="text-destructive" />
+        <KPICard title="Wrong Number" value={summary.wrongNumber} icon={PhoneMissed} iconBg="bg-muted" iconColor="text-muted-foreground" />
       </div>
 
       {/* Per Agent Table — merged Agent Scores + Breakdown */}
