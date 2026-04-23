@@ -757,7 +757,11 @@ function NodeInspector({
               value={node.data.template_id ?? ""}
               onValueChange={(v) => {
                 const tpl = templates.find((t: any) => t.id === v);
-                onChange({ template_id: v, template_name: tpl?.name });
+                onChange({
+                  template_id: v,
+                  template_name: tpl?.name,
+                  template_buttons: Array.isArray(tpl?.buttons) ? tpl.buttons : [],
+                });
               }}
             >
               <SelectTrigger><SelectValue placeholder="Pick a template" /></SelectTrigger>
