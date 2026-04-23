@@ -335,11 +335,18 @@ async function handleIncoming(value: any) {
   const statuses: any[] = value?.statuses ?? [];
   for (const s of statuses) {
     if (!s.id) continue;
+    // Capture Meta's error reason when delivery fails so we can debug (e.g. unsupported audio codec).
+    const errMsg = Array.isArray(s.errors) && s.errors.length > 0
+      ? (s.errors[0]?.error_data?.details || s.errors[0]?.message || s.errors[0]?.title || JSON.stringify(s.errors))
+      : null;
+    const update: Record<string, unknown> = { status: s.status };
+    if (errMsg) update.error_message = errMsg;
     const { error } = await admin
       .from("whatsapp_messages")
-      .update({ status: s.status })
+      .update(update)
       .eq("meta_message_id", s.id);
     if (error) errLog("status update failed", s.id, error);
+    if (s.status === "failed") log("delivery failed", s.id, errMsg);
   }
 }
 
