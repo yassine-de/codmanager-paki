@@ -41,16 +41,16 @@ const confirmationConfig: Record<ConfirmationStatus, { label: string; cls: strin
   double: { label: 'Double', cls: 'bg-[hsl(270,50%,55%)]/12 text-[hsl(270,50%,55%)] border-[hsl(270,50%,55%)]/20' },
 };
 
-/* WhatsApp confirmation sub-status (shown when channel === 'whatsapp') */
+/* WhatsApp confirmation sub-status (shown when confirmation_status = 'new_wts') */
 const whatsappStatusConfig: Record<string, { label: string; cls: string }> = {
-  pending:                { label: 'WTS · Open',          cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
-  sent:                   { label: 'WTS · Awaiting Reply', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
-  awaiting_reply:         { label: 'WTS · Awaiting Reply', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
-  confirmed:              { label: 'WTS · Confirmed',     cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
-  canceled:               { label: 'WTS · Canceled',      cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
-  cancelled:              { label: 'WTS · Canceled',      cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
-  more_info:              { label: 'WTS · Sent to Agent', cls: 'bg-[hsl(270,50%,55%)]/12 text-[hsl(270,50%,55%)] border-[hsl(270,50%,55%)]/20' },
-  manual_review_needed:   { label: 'WTS · Needs Review',  cls: 'bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)] border-[hsl(200,65%,50%)]/20' },
+  pending:                { label: 'New WTS · Open',           cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
+  sent:                   { label: 'New WTS · Awaiting Reply', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
+  awaiting_reply:         { label: 'New WTS · Awaiting Reply', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
+  confirmed:              { label: 'New WTS · Confirmed',      cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
+  canceled:               { label: 'New WTS · Canceled',       cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
+  cancelled:              { label: 'New WTS · Canceled',       cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
+  more_info:              { label: 'New WTS · Sent to Agent',  cls: 'bg-[hsl(270,50%,55%)]/12 text-[hsl(270,50%,55%)] border-[hsl(270,50%,55%)]/20' },
+  manual_review_needed:   { label: 'New WTS · Needs Review',   cls: 'bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)] border-[hsl(200,65%,50%)]/20' },
 };
 
 const deliveryConfig: Record<DeliveryStatus, { label: string; cls: string }> = {
