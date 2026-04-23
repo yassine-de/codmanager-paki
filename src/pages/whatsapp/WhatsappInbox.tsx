@@ -607,7 +607,7 @@ export default function WhatsappInbox() {
           ) : (
             <>
               {/* Chat header */}
-              <div className="border-b border-border px-4 h-14 flex items-center gap-3">
+              <div className="border-b border-border px-3 sm:px-4 py-2 flex items-center gap-2.5 shrink-0 bg-card">
                 <div
                   className={cn(
                     "h-9 w-9 rounded-full grid place-items-center text-sm font-semibold shrink-0",
@@ -617,37 +617,31 @@ export default function WhatsappInbox() {
                   {initials(conv.customer_name, conv.customer_phone)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className="font-semibold truncate">
+                  {/* Row 1: Name + status badge */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="font-semibold text-sm truncate">
                       {conv.customer_name || conv.customer_phone}
                     </div>
                     <Badge
                       variant="outline"
-                      className={cn("text-[10px] h-5", statusBadge(conv.status).cls)}
+                      className={cn("text-[10px] h-4 px-1.5 shrink-0", statusBadge(conv.status).cls)}
                     >
                       {statusBadge(conv.status).label}
                     </Badge>
-                    {windowExpired ? (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] h-5 bg-rose-500/10 text-rose-500 border-rose-500/30"
-                      >
-                        🔒 24h Expired
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] h-5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                      >
-                        Window Open
-                      </Badge>
-                    )}
+                    <span
+                      className={cn(
+                        "shrink-0 h-1.5 w-1.5 rounded-full",
+                        windowExpired ? "bg-rose-500" : "bg-emerald-500",
+                      )}
+                      title={windowExpired ? "24h window expired" : "Window open"}
+                    />
                   </div>
-                  <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5 flex-wrap">
-                    <span>{conv.customer_phone}</span>
+                  {/* Row 2: phone + order */}
+                  <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5">
+                    <span className="shrink-0">{conv.customer_phone}</span>
                     {order && (
                       <>
-                        <span>•</span>
+                        <span className="shrink-0">•</span>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -660,50 +654,49 @@ export default function WhatsappInbox() {
                             window.open(`/orders/${order.order_id}`, "_blank");
                           }}
                           title="Click to copy • Double-click to open"
-                          className="font-mono text-foreground hover:text-primary transition-colors"
+                          className="font-mono text-foreground hover:text-primary transition-colors shrink-0"
                         >
                           #{order.order_id}
                         </button>
-                        <span>•</span>
-                        <span className="truncate">{order.product_name}</span>
-                        {order.confirmation_status && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] h-4 px-1.5",
-                              confirmationStatusCls(order.confirmation_status),
-                            )}
-                          >
-                            {order.confirmation_status.replace(/_/g, " ")}
-                          </Badge>
-                        )}
-                        {order.delivery_status && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-[10px] h-4 px-1.5",
-                              deliveryStatusCls(order.delivery_status),
-                            )}
-                          >
-                            {order.delivery_status.replace(/_/g, " ")}
-                          </Badge>
-                        )}
+                        <span className="shrink-0 hidden sm:inline">•</span>
+                        <span className="truncate hidden sm:inline">{order.product_name}</span>
                       </>
                     )}
                   </div>
                 </div>
 
-                {/* Quick actions */}
+                {/* Quick actions — icon-only on small, full on lg */}
                 {order && (
-                  <div className="hidden md:flex items-center gap-1.5">
-                    <Button size="sm" variant="outline" onClick={() => action("confirm")}>
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Confirm
+                  <div className="hidden sm:flex items-center gap-1 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => action("confirm")}
+                      className="h-8 px-2 lg:px-3"
+                      title="Confirm"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 lg:mr-1" />
+                      <span className="hidden lg:inline">Confirm</span>
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => action("to_agent")}>
-                      <UserPlus className="h-3.5 w-3.5 mr-1" /> Agent
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => action("to_agent")}
+                      className="h-8 px-2 lg:px-3"
+                      title="Send to Agent"
+                    >
+                      <UserPlus className="h-3.5 w-3.5 lg:mr-1" />
+                      <span className="hidden lg:inline">Agent</span>
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => action("cancel")}>
-                      <XCircle className="h-3.5 w-3.5 mr-1" /> Cancel
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => action("cancel")}
+                      className="h-8 px-2 lg:px-3"
+                      title="Cancel"
+                    >
+                      <XCircle className="h-3.5 w-3.5 lg:mr-1" />
+                      <span className="hidden lg:inline">Cancel</span>
                     </Button>
                   </div>
                 )}
