@@ -610,15 +610,21 @@ export default function WhatsappInbox() {
             <>
               {/* Chat header */}
               <div className="border-b border-border px-3 sm:px-4 py-2 flex items-center gap-2.5 shrink-0 bg-card">
-                <div
-                  className={cn(
-                    "h-9 w-9 rounded-full grid place-items-center text-sm font-semibold shrink-0",
-                    colorFor(conv.customer_phone),
-                  )}
+                <button
+                  type="button"
+                  onClick={() => setOrderInfoOpen(true)}
+                  className="flex items-center gap-2.5 min-w-0 flex-1 text-left rounded-md hover:bg-muted/50 transition-colors py-1 px-1 -mx-1"
+                  title="View customer & order info"
                 >
-                  {initials(conv.customer_name, conv.customer_phone)}
-                </div>
-                <div className="min-w-0 flex-1">
+                  <div
+                    className={cn(
+                      "h-9 w-9 rounded-full grid place-items-center text-sm font-semibold shrink-0",
+                      colorFor(conv.customer_phone),
+                    )}
+                  >
+                    {initials(conv.customer_name, conv.customer_phone)}
+                  </div>
+                  <div className="min-w-0 flex-1">
                   {/* Row 1: Name + status badge */}
                   <div className="flex items-center gap-1.5 min-w-0">
                     <div className="font-semibold text-sm truncate">
