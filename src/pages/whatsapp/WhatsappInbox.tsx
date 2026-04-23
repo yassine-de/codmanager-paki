@@ -1212,6 +1212,143 @@ export default function WhatsappInbox() {
         conversationId={selected}
         orderId={conv?.order_id ?? null}
       />
+
+      {/* Customer & Order Info Dialog */}
+      <Dialog open={orderInfoOpen} onOpenChange={setOrderInfoOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              {conv && (
+                <div
+                  className={cn(
+                    "h-10 w-10 rounded-full grid place-items-center text-sm font-semibold shrink-0",
+                    colorFor(conv.customer_phone),
+                  )}
+                >
+                  {initials(conv.customer_name, conv.customer_phone)}
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="truncate text-base">
+                  {conv?.customer_name || conv?.customer_phone}
+                </div>
+                <div className="text-xs text-muted-foreground font-normal font-mono">
+                  {conv?.customer_phone}
+                </div>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            {/* Conversation status */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge
+                variant="outline"
+                className={cn("text-[11px]", statusBadge(conv?.status || "").cls)}
+              >
+                {statusBadge(conv?.status || "").label}
+              </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[11px]",
+                  windowExpired
+                    ? "bg-rose-500/10 text-rose-500 border-rose-500/30"
+                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+                )}
+              >
+                {windowExpired ? "🔒 24h Expired" : "Window Open"}
+              </Badge>
+            </div>
+
+            {/* Order section */}
+            {order ? (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+                    Order
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => window.open(`/orders/${order.order_id}`, "_blank")}
+                  >
+                    <ExternalLink className="h-3 w-3 mr-1" /> Open
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="col-span-2">
+                    <div className="text-[11px] text-muted-foreground">Order ID</div>
+                    <div className="font-mono font-semibold">#{order.order_id}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-[11px] text-muted-foreground">Product</div>
+                    <div className="font-medium">{order.product_name}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-muted-foreground">Quantity</div>
+                    <div>{order.quantity}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-muted-foreground">Total</div>
+                    <div className="font-semibold">Rs {Number(order.total_amount || 0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-muted-foreground">City</div>
+                    <div>{order.customer_city || "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-muted-foreground">Created</div>
+                    <div>{order.created_at ? format(new Date(order.created_at), "dd/MM/yyyy HH:mm") : "—"}</div>
+                  </div>
+                  {order.customer_address && (
+                    <div className="col-span-2">
+                      <div className="text-[11px] text-muted-foreground">Address</div>
+                      <div className="text-sm">{order.customer_address}</div>
+                    </div>
+                  )}
+                  {order.note && (
+                    <div className="col-span-2">
+                      <div className="text-[11px] text-muted-foreground">Note</div>
+                      <div className="text-sm whitespace-pre-wrap">{order.note}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-border">
+                  {order.confirmation_status && (
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[11px]", confirmationStatusCls(order.confirmation_status))}
+                    >
+                      Conf: {order.confirmation_status.replace(/_/g, " ")}
+                    </Badge>
+                  )}
+                  {order.delivery_status && (
+                    <Badge
+                      variant="outline"
+                      className={cn("text-[11px]", deliveryStatusCls(order.delivery_status))}
+                    >
+                      Del: {order.delivery_status.replace(/_/g, " ")}
+                    </Badge>
+                  )}
+                  {order.shipping_status && (
+                    <Badge variant="outline" className="text-[11px]">
+                      Ship: {order.shipping_status.replace(/_/g, " ")}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                No order linked to this conversation
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
