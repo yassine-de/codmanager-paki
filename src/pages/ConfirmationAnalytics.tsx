@@ -102,9 +102,12 @@ export default function ConfirmationAnalytics() {
   }, [orders, profileNameMap]);
 
   const productOptions = useMemo(() => {
-    const names = new Set(orders.map(o => o.product_name).filter(Boolean));
+    const source = sellerFilter !== "all"
+      ? orders.filter(o => o.seller_id === sellerFilter)
+      : orders;
+    const names = new Set(source.map(o => o.product_name).filter(Boolean));
     return [...names].map(n => ({ value: n, label: n })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [orders]);
+  }, [orders, sellerFilter]);
 
   // Filter orders — use original_agent_id as fallback for released orders
   // Treatment date: the most relevant action timestamp for an order
@@ -414,7 +417,7 @@ export default function ConfirmationAnalytics() {
         />
         <SearchableSelect
           value={sellerFilter}
-          onValueChange={setSellerFilter}
+          onValueChange={(v) => { setSellerFilter(v); setProductFilter("all"); }}
           options={sellerOptions}
           placeholder="Seller"
           allLabel="All Sellers"
