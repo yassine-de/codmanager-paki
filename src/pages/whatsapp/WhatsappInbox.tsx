@@ -610,10 +610,17 @@ export default function WhatsappInbox() {
             <>
               {/* Chat header */}
               <div className="border-b border-border px-3 sm:px-4 py-2 flex items-center gap-2.5 shrink-0 bg-card">
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setOrderInfoOpen(true)}
-                  className="flex items-center gap-2.5 min-w-0 flex-1 text-left rounded-md hover:bg-muted/50 transition-colors py-1 px-1 -mx-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setOrderInfoOpen(true);
+                    }
+                  }}
+                  className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer rounded-md hover:bg-muted/50 transition-colors py-1 px-1 -mx-1"
                   title="View customer & order info"
                 >
                   <div
