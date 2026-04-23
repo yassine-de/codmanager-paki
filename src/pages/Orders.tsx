@@ -354,6 +354,7 @@ export default function Orders() {
         orioOrderId: o.orio_order_id || null,
         orioShippingStatus: o.orio_shipping_status || null,
         confirmationChannel: o.confirmation_channel || 'agent',
+        whatsappStatus: o.whatsapp_status || null,
       }));
 
       setOrders(mapped);
