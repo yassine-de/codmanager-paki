@@ -266,7 +266,7 @@ export default function ConfirmationAnalytics() {
       if (!agentId || o.confirmation_status === "new") return;
       if (!map[agentId]) map[agentId] = { total: 0, answered: 0, confirmed: 0, delivered: 0 };
       map[agentId].total++;
-      if (["confirmed", "cancelled", "wrong_number", "reported"].includes(o.confirmation_status) || o.confirmation_status === "postponed" || o.postpone_date !== null) map[agentId].answered++;
+      if (["confirmed", "cancelled", "wrong_number", "reported"].includes(o.confirmation_status)) map[agentId].answered++;
       if (o.confirmation_status === "confirmed") map[agentId].confirmed++;
     });
 
