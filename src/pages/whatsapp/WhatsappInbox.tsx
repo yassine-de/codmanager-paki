@@ -809,6 +809,33 @@ export default function WhatsappInbox() {
                                 </div>
                               );
                             })()}
+                            {/* Template buttons preview (quick replies / URL / phone) */}
+                            {isTemplate && (() => {
+                              const tplId = m.payload?._template_id as string | undefined;
+                              const btns = tplId ? templateButtonsById.get(tplId) : null;
+                              if (!btns || btns.length === 0) return null;
+                              return (
+                                <div
+                                  className={cn(
+                                    "mt-2 -mx-3 -mb-2 border-t flex flex-col",
+                                    isOut ? "border-white/20" : "border-border",
+                                  )}
+                                >
+                                  {btns.map((b: any, i: number) => (
+                                    <div
+                                      key={i}
+                                      className={cn(
+                                        "px-3 py-1.5 text-center text-xs font-medium",
+                                        i > 0 && (isOut ? "border-t border-white/20" : "border-t border-border"),
+                                        isOut ? "text-white" : "text-sky-600 dark:text-sky-400",
+                                      )}
+                                    >
+                                      {(b.text || b.label || `Button ${i + 1}`).trim()}
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                             <div
                               className={cn(
                                 "text-[10px] mt-1 flex items-center gap-1",
