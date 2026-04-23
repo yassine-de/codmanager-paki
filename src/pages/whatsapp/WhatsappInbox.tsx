@@ -714,50 +714,48 @@ export default function WhatsappInbox() {
                   </div>
                 </div>
 
-                {/* Quick actions — modern segmented pill, fully clickable */}
+                {/* Status indicators — display-only, not actionable */}
                 {order && (
                   <div
-                    className="hidden sm:flex items-center gap-1 shrink-0 rounded-full border border-border bg-background/60 backdrop-blur p-0.5 shadow-sm"
+                    className="hidden sm:flex items-center gap-1 shrink-0 rounded-full border border-border bg-background/60 backdrop-blur p-0.5 shadow-sm select-none"
                     onClick={(e) => e.stopPropagation()}
+                    title="Order status (read-only)"
                   >
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        action("confirm");
-                      }}
-                      title="Confirm order"
-                      className="group inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 active:scale-95 transition-all"
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium",
+                        order.confirmation_status === "confirmed"
+                          ? "text-emerald-600 bg-emerald-500/10"
+                          : "text-muted-foreground",
+                      )}
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline">Confirm</span>
-                    </button>
+                    </span>
                     <span className="h-4 w-px bg-border" aria-hidden />
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        action("to_agent");
-                      }}
-                      title="Send to agent"
-                      className="group inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium text-muted-foreground hover:text-violet-600 hover:bg-violet-500/10 active:scale-95 transition-all"
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium",
+                        order.agent_id
+                          ? "text-violet-600 bg-violet-500/10"
+                          : "text-muted-foreground",
+                      )}
                     >
                       <UserPlus className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline">Agent</span>
-                    </button>
+                    </span>
                     <span className="h-4 w-px bg-border" aria-hidden />
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        action("cancel");
-                      }}
-                      title="Cancel order"
-                      className="group inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 active:scale-95 transition-all"
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium",
+                        order.confirmation_status === "cancelled"
+                          ? "text-rose-600 bg-rose-500/10"
+                          : "text-muted-foreground",
+                      )}
                     >
                       <XCircle className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline">Cancel</span>
-                    </button>
+                    </span>
                   </div>
                 )}
               </div>
