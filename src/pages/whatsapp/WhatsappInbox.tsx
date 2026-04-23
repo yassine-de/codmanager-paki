@@ -140,6 +140,7 @@ export default function WhatsappInbox() {
   const isAdmin = authUser?.role === "admin";
 
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread">("all");
