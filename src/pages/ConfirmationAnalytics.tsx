@@ -417,7 +417,7 @@ export default function ConfirmationAnalytics() {
         />
         <SearchableSelect
           value={sellerFilter}
-          onValueChange={setSellerFilter}
+          onValueChange={(v) => { setSellerFilter(v); setProductFilter("all"); }}
           options={sellerOptions}
           placeholder="Seller"
           allLabel="All Sellers"
