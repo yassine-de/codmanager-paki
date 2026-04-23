@@ -31,7 +31,7 @@ const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUn
   { title: "Alerts", url: "/alerts", icon: Megaphone, permission: "access_to_settings" },
   { title: "invoices", url: "/invoices", icon: FileText, permission: "access_to_settings", sellerVisible: true },
   { title: "Adjustments", url: "/adjustments", icon: ArrowUpDown, permission: "access_to_settings", badge: pendingAdjustments > 0 ? pendingAdjustments : undefined },
-  { title: "Follow Ups", url: "/follow-ups", icon: ClipboardCheck, adminAgentOnly: true },
+  { title: "Follow Ups", url: "/follow-ups", icon: ClipboardCheck, adminOnly: true },
   { title: "sourcing", url: "/seller-sourcing", icon: Package2, sellerOnly: true, badge: sourcingUnseen > 0 ? sourcingUnseen : undefined },
   { title: "sheets", url: "/sheets", icon: FileSpreadsheet, sellerOnly: true },
   { title: "simulation", url: "/simulation", icon: Calculator, sellerOnly: true },
@@ -180,6 +180,7 @@ export function AppSidebar() {
   const visibleItems = navItems.filter((item: any) => {
     if (item.agentOnly) return isAgent;
     if (item.sellerOnly) return isSeller;
+    if (item.adminOnly) return isAdmin;
     if (item.adminAgentOnly) return isAdmin || isAgent;
     if (isAgent) return false;
     if (isSeller) return !item.permission || item.sellerVisible;
