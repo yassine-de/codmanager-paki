@@ -714,39 +714,50 @@ export default function WhatsappInbox() {
                   </div>
                 </div>
 
-                {/* Quick actions — icon-only on small, full on lg */}
+                {/* Quick actions — modern segmented pill, fully clickable */}
                 {order && (
-                  <div className="hidden sm:flex items-center gap-1 shrink-0">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => action("confirm")}
-                      className="h-8 px-2 lg:px-3"
-                      title="Confirm"
+                  <div
+                    className="hidden sm:flex items-center gap-1 shrink-0 rounded-full border border-border bg-background/60 backdrop-blur p-0.5 shadow-sm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        action("confirm");
+                      }}
+                      title="Confirm order"
+                      className="group inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium text-muted-foreground hover:text-emerald-600 hover:bg-emerald-500/10 active:scale-95 transition-all"
                     >
-                      <CheckCircle2 className="h-3.5 w-3.5 lg:mr-1" />
+                      <CheckCircle2 className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline">Confirm</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => action("to_agent")}
-                      className="h-8 px-2 lg:px-3"
-                      title="Send to Agent"
+                    </button>
+                    <span className="h-4 w-px bg-border" aria-hidden />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        action("to_agent");
+                      }}
+                      title="Send to agent"
+                      className="group inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium text-muted-foreground hover:text-violet-600 hover:bg-violet-500/10 active:scale-95 transition-all"
                     >
-                      <UserPlus className="h-3.5 w-3.5 lg:mr-1" />
+                      <UserPlus className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline">Agent</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => action("cancel")}
-                      className="h-8 px-2 lg:px-3"
-                      title="Cancel"
+                    </button>
+                    <span className="h-4 w-px bg-border" aria-hidden />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        action("cancel");
+                      }}
+                      title="Cancel order"
+                      className="group inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 active:scale-95 transition-all"
                     >
-                      <XCircle className="h-3.5 w-3.5 lg:mr-1" />
+                      <XCircle className="h-3.5 w-3.5" />
                       <span className="hidden lg:inline">Cancel</span>
-                    </Button>
+                    </button>
                   </div>
                 )}
               </div>
