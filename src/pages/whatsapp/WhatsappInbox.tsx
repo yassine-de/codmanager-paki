@@ -413,7 +413,10 @@ export default function WhatsappInbox() {
           body: draft.trim() || undefined,
         },
       });
-      if (error || !data?.ok) throw new Error(error?.message || data?.error || "Send failed");
+      if (error || !data?.ok) {
+        const metaErr = data?.response?.error?.message || data?.error || error?.message;
+        throw new Error(metaErr || "Send failed");
+      }
       setDraft("");
       toast.success(`${mode} sent`);
     } catch (e: any) {
