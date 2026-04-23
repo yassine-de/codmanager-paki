@@ -43,6 +43,7 @@ export interface Order {
   orioOrderId?: number | null;
   orioShippingStatus?: string | null;
   confirmationChannel?: string | null;
+  whatsappStatus?: string | null;
 }
 
 const cities = ['Casablanca', 'Rabat', 'Marrakech', 'Fes', 'Tangier', 'Agadir', 'Oujda', 'Kenitra', 'Tetouan', 'Meknes'];
