@@ -201,8 +201,70 @@ Deno.serve(async (req) => {
         [mode]: mediaObj,
       };
       if (!bodyText) bodyText = body.media_filename || `[${mode}]`;
+    } else if (mode === "template") {
+      // Send approved Meta template (carries its own buttons; works outside 24h window).
+      if (!body.template_id) throw new Error("template_id required for template mode");
+      const { data: tpl } = await admin
+        .from("whatsapp_templates")
+        .select("*")
+        .eq("id", body.template_id)
+        .maybeSingle();
+      if (!tpl) throw new Error("Template not found");
+
+      const templateName = tpl.meta_template_name || tpl.name;
+      const language = tpl.language || "en_US";
+      const vars: Record<string, any> = order
+        ? {
+            customer_name: order.customer_name,
+            product_name: order.product_name,
+            price: order.total_amount,
+            city: order.customer_city,
+            address: order.customer_address,
+            order_id: order.order_id,
+          }
+        : {};
+
+      const components: any[] = [];
+
+      if (tpl.header_type && tpl.header_media_url) {
+        const t = String(tpl.header_type).toLowerCase();
+        if (t === "image" || t === "video" || t === "document") {
+          components.push({
+            type: "header",
+            parameters: [{ type: t, [t]: { link: tpl.header_media_url } }],
+          });
+        }
+      }
+
+      const tplBody = String(tpl.body || "");
+      const placeholders: string[] = [];
+      const re = /\{\{\s*([\w]+)\s*\}\}/g;
+      let mm: RegExpExecArray | null;
+      while ((mm = re.exec(tplBody)) !== null) placeholders.push(mm[1]);
+      if (placeholders.length > 0) {
+        components.push({
+          type: "body",
+          parameters: placeholders.map((name) => ({
+            type: "text",
+            text: String(vars[name] ?? ""),
+          })),
+        });
+      }
+
+      payload = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: language },
+          ...(components.length ? { components } : {}),
+        },
+      };
+      bodyText = render(tplBody, vars);
     } else {
-      // order: legacy interactive confirmation buttons
+      // order: legacy interactive confirmation buttons (free-form, requires 24h window)
       if (!order) throw new Error("Order required for order mode");
       let text = bodyText;
       if (!text && body.template_id) {
