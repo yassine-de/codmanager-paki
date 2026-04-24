@@ -438,7 +438,20 @@ async function executeFlow(args: {
         const addressRule = order && (!order.customer_address || String(order.customer_address).trim().length < 10)
           ? `\n\nIMPORTANT: The customer's delivery address is missing or incomplete. Do NOT close the conversation. Politely ask for the full address (house/flat number, street, area/landmark, and city) in the customer's language. Keep asking in follow-ups until you receive a complete, deliverable address.`
           : "";
-        const baseSys = customPrompt || aiSettings.system_prompt || "You are a helpful WhatsApp sales assistant.";
+        // Resolve effective system prompt based on node-level mode:
+        //  - instructions_mode = "general" → always use global AI Settings prompt
+        //  - instructions_mode = "custom"  → use node prompt; mode "override" replaces, "append" extends global
+        const instructionsMode = node.data?.instructions_mode === "custom" ? "custom" : "general";
+        const promptMode = node.data?.prompt_mode === "append" ? "append" : "override";
+        const globalPrompt = aiSettings.system_prompt || "You are a helpful WhatsApp sales assistant.";
+        let baseSys: string;
+        if (instructionsMode === "custom" && customPrompt) {
+          baseSys = promptMode === "append"
+            ? `${globalPrompt}\n\n--- Step-specific instructions ---\n${customPrompt}`
+            : customPrompt;
+        } else {
+          baseSys = globalPrompt;
+        }
         const sysPrompt =
           `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${addressRule}`;
 

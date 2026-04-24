@@ -821,24 +821,7 @@ function NodeInspector({
         )}
 
         {node.type === "ai_step" && (
-          <>
-            <div className="space-y-2">
-              <Label className="text-xs">AI Instructions</Label>
-              <Textarea
-                rows={5}
-                value={node.data.prompt ?? ""}
-                onChange={(e) => onChange({ prompt: e.target.value })}
-                placeholder="What should the AI do here?"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Max tokens</Label>
-              <Input
-                type="number" value={node.data.max_tokens ?? 200}
-                onChange={(e) => onChange({ max_tokens: Number(e.target.value) })}
-              />
-            </div>
-          </>
+          <AiStepInspector node={node} onChange={onChange} />
         )}
 
         {node.type === "condition" && (
@@ -964,5 +947,210 @@ function RunsHistory({ automationId }: { automationId: string }) {
         </Card>
       ))}
     </div>
+  );
+}
+
+/* ---------- AI Step Inspector ---------- */
+function AiStepInspector({
+  node,
+  onChange,
+}: {
+  node: FlowNode;
+  onChange: (d: Record<string, any>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<string>(node.data.prompt ?? "");
+  const [draftMode, setDraftMode] = useState<"override" | "append">(
+    node.data.prompt_mode === "append" ? "append" : "override"
+  );
+
+  // Load global AI system prompt for preview
+  const { data: aiSettings } = useQuery({
+    queryKey: ["whatsapp-ai-settings-singleton"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("whatsapp_ai_settings")
+        .select("system_prompt, model, max_tokens")
+        .eq("singleton", true)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const mode: "general" | "custom" = node.data.instructions_mode === "custom" ? "custom" : "general";
+  const hasCustom = !!(node.data.prompt && node.data.prompt.trim().length > 0);
+
+  const openModal = () => {
+    setDraft(node.data.prompt ?? "");
+    setDraftMode(node.data.prompt_mode === "append" ? "append" : "override");
+    setOpen(true);
+  };
+
+  const saveModal = () => {
+    onChange({
+      prompt: draft,
+      prompt_mode: draftMode,
+      instructions_mode: draft.trim().length > 0 ? "custom" : "general",
+    });
+    setOpen(false);
+  };
+
+  const clearCustom = () => {
+    onChange({ prompt: "", prompt_mode: "override", instructions_mode: "general" });
+  };
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label className="text-xs">AI Mode</Label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => onChange({ instructions_mode: "general" })}
+            className={`text-left rounded-md border p-2 transition ${
+              mode === "general"
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-primary/40"
+            }`}
+          >
+            <div className="text-xs font-semibold">General Prompt</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">
+              Use the global AI Settings prompt
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange({ instructions_mode: "custom" })}
+            className={`text-left rounded-md border p-2 transition ${
+              mode === "custom"
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-primary/40"
+            }`}
+          >
+            <div className="text-xs font-semibold">Custom Instructions</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">
+              Override or extend for this step
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {mode === "general" && (
+        <div className="rounded-md border bg-muted/30 p-2 space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Active prompt (from AI Settings)
+          </div>
+          <div className="text-xs whitespace-pre-wrap line-clamp-4 text-muted-foreground">
+            {aiSettings?.system_prompt || "—"}
+          </div>
+        </div>
+      )}
+
+      {mode === "custom" && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Custom Instructions</Label>
+            {hasCustom && (
+              <Badge variant="outline" className="text-[10px]">
+                {node.data.prompt_mode === "append" ? "Append to general" : "Override general"}
+              </Badge>
+            )}
+          </div>
+          <div className="rounded-md border p-2 bg-muted/20 min-h-[60px]">
+            {hasCustom ? (
+              <div className="text-xs whitespace-pre-wrap line-clamp-4">{node.data.prompt}</div>
+            ) : (
+              <div className="text-xs text-muted-foreground italic">
+                No custom instructions yet. Click Edit to add.
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={openModal} className="flex-1">
+              <Pencil className="h-3.5 w-3.5 mr-1.5" />
+              {hasCustom ? "Edit Instructions" : "Add Instructions"}
+            </Button>
+            {hasCustom && (
+              <Button size="sm" variant="ghost" onClick={clearCustom}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label className="text-xs">Max tokens</Label>
+        <Input
+          type="number"
+          value={node.data.max_tokens ?? 200}
+          onChange={(e) => onChange({ max_tokens: Number(e.target.value) })}
+        />
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>AI Instructions for this step</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Mode</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDraftMode("override")}
+                  className={`text-left rounded-md border p-3 transition ${
+                    draftMode === "override"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40"
+                  }`}
+                >
+                  <div className="text-sm font-semibold">Override</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Replace the global AI prompt entirely for this step
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftMode("append")}
+                  className={`text-left rounded-md border p-3 transition ${
+                    draftMode === "append"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40"
+                  }`}
+                >
+                  <div className="text-sm font-semibold">Append</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Add these instructions on top of the global prompt
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">Instructions</Label>
+              <Textarea
+                rows={14}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={`Example:\n\nYou must reply only in Urdu.\nIf the customer asks about delivery time, say "2-3 working days".\nNever discount more than 10%.`}
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Variables: {`{{name}}, {{order_id}}, {{product_name}}, {{customer_city}}`}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={saveModal}>
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              Save Instructions
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
