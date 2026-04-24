@@ -500,7 +500,7 @@ async function handleIncoming(value: any) {
           ) || (
             messageType === "button_reply" &&
             outcome === "confirmed" &&
-            addressIncomplete
+            !resumedRun
           )
         );
 
