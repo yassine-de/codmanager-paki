@@ -195,8 +195,9 @@ export default function WhatsappInbox() {
   });
 
   // Per-conversation unread counts (WhatsApp-style green badge).
-  // Counts inbound messages newer than the conversation's `last_message_at`,
-  // which we bump to "now" each time the user opens the thread.
+  // Counts inbound messages newer than `last_read_at` (the moment the user
+  // opened the thread). We deliberately don't use `last_message_at` because
+  // outbound sends bump it too, which would silently clear the badge.
   const convoIdsKey = convos.map((c) => c.id).join(",");
   const { data: unreadMap = {} } = useQuery<Record<string, number>>({
     queryKey: ["wts-unread-counts", convoIdsKey],
@@ -211,12 +212,12 @@ export default function WhatsappInbox() {
         .order("created_at", { ascending: false })
         .limit(2000);
       if (error) throw error;
-      const lastSeen = new Map<string, number>(
-        convos.map((c) => [c.id, c.last_message_at ? new Date(c.last_message_at).getTime() : 0]),
+      const lastRead = new Map<string, number>(
+        convos.map((c) => [c.id, c.last_read_at ? new Date(c.last_read_at).getTime() : 0]),
       );
       const map: Record<string, number> = {};
       for (const row of (data ?? []) as { conversation_id: string; created_at: string }[]) {
-        const seen = lastSeen.get(row.conversation_id) ?? 0;
+        const seen = lastRead.get(row.conversation_id) ?? 0;
         if (new Date(row.created_at).getTime() > seen) {
           map[row.conversation_id] = (map[row.conversation_id] ?? 0) + 1;
         }
