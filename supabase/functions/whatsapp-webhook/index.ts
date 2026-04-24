@@ -278,6 +278,7 @@ async function handleIncoming(value: any) {
       }
 
       // Resume any paused automation run waiting for this conversation's reply.
+      let resumedRun = false;
       try {
         const { data: pausedRun } = await admin
           .from("whatsapp_automation_runs")
@@ -289,6 +290,7 @@ async function handleIncoming(value: any) {
           .maybeSingle();
 
         if (pausedRun) {
+          resumedRun = true;
           // Determine the button index by matching the clicked button text against
           // the template_buttons stored on the current node.
           let buttonIndex: number | undefined;
@@ -324,6 +326,17 @@ async function handleIncoming(value: any) {
         }
       } catch (e) {
         errLog("automation resume lookup failed", (e as Error).message);
+      }
+
+      // AI fallback: if no paused run exists and this is a text message,
+      // generate a continuation reply so the AI keeps the conversation alive
+      // (e.g. to collect missing address, answer questions, etc.).
+      if (!resumedRun && m.type === "text" && !outcome) {
+        try {
+          await aiContinueReply({ conv, order, customerText: bodyText });
+        } catch (e) {
+          errLog("ai continuation failed", (e as Error).message);
+        }
       }
     } catch (e) {
       errLog("message handling error", (e as Error).message);
