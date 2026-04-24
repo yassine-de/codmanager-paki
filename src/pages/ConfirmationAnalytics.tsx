@@ -137,10 +137,15 @@ export default function ConfirmationAnalytics() {
     if (agentTouchedOrderIds) filtered = filtered.filter(o => agentTouchedOrderIds.has(o.order_id));
     if (sellerFilter !== "all") filtered = filtered.filter(o => o.seller_id === sellerFilter);
     if (productFilter !== "all") filtered = filtered.filter(o => o.product_name === productFilter);
-    if (dateRange?.from) filtered = filtered.filter(o => getTreatmentDate(o) >= dateRange.from!);
-    if (dateRange?.to) filtered = filtered.filter(o => getTreatmentDate(o) <= dateRange.to!);
+    // When an agent filter is active, do NOT filter orders by treatment date — actions in the
+    // period are matched via order_history (changed_by + created_at). Filtering here would
+    // hide orders the agent acted on today whose original treatment date is older.
+    if (agentFilter === "all") {
+      if (dateRange?.from) filtered = filtered.filter(o => getTreatmentDate(o) >= dateRange.from!);
+      if (dateRange?.to) filtered = filtered.filter(o => getTreatmentDate(o) <= dateRange.to!);
+    }
     return filtered;
-  }, [orders, agentTouchedOrderIds, sellerFilter, productFilter, dateRange]);
+  }, [orders, agentTouchedOrderIds, agentFilter, sellerFilter, productFilter, dateRange]);
 
   // Stats
   const stats = useMemo(() => {
