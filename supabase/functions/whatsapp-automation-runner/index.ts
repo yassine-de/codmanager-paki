@@ -367,6 +367,39 @@ async function executeFlow(args: {
         });
         await appendLog(runId, { type: "send_template", node_id: node.id, template_id: tplId });
 
+        // ── Switch-to-agent timer ─────────────────────────────────────────
+        // Only for new_order trigger when the automation has it enabled.
+        // We schedule the deadline once (don't reschedule on subsequent templates).
+        try {
+          const triggerType = automation?.trigger_type;
+          const sw = (automation?.trigger_config as any)?.switch_to_agent;
+          if (
+            triggerType === "new_order" &&
+            sw?.enabled &&
+            order?.order_id &&
+            order?.confirmation_status === "new_wts" &&
+            !order?.agent_switch_scheduled_at
+          ) {
+            const value = Math.max(1, Number(sw.value) || 30);
+            const unit = sw.unit === "hours" ? "hours" : "minutes";
+            const ms = unit === "hours" ? value * 3600_000 : value * 60_000;
+            const deadline = new Date(Date.now() + ms).toISOString();
+            await admin
+              .from("orders")
+              .update({ agent_switch_scheduled_at: deadline })
+              .eq("order_id", order.order_id);
+            order.agent_switch_scheduled_at = deadline;
+            await appendLog(runId, {
+              type: "switch_to_agent_scheduled",
+              deadline,
+              value,
+              unit,
+            });
+          }
+        } catch (e) {
+          errLog("schedule switch-to-agent failed", e);
+        }
+
         const buttons = Array.isArray(node.data?.template_buttons) ? node.data.template_buttons : [];
         if (buttons.length > 0) {
           await admin

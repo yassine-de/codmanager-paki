@@ -488,6 +488,65 @@ export default function WhatsappAutomationBuilder() {
 function TriggerConfigInline({
   type, config, onChange,
 }: { type: string; config: any; onChange: (c: any) => void }) {
+  if (type === "new_order") {
+    const sw = config.switch_to_agent ?? {};
+    const enabled = !!sw.enabled;
+    return (
+      <div className="mt-3 space-y-2 rounded-md border border-dashed border-emerald-500/30 bg-emerald-500/5 p-2.5">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 accent-emerald-500"
+            checked={enabled}
+            onChange={(e) =>
+              onChange({
+                ...config,
+                switch_to_agent: {
+                  ...sw,
+                  enabled: e.target.checked,
+                  value: sw.value ?? 30,
+                  unit: sw.unit ?? "minutes",
+                },
+              })
+            }
+          />
+          <span className="text-[11px] font-medium">Switch to agent if no reply</span>
+        </label>
+        {enabled && (
+          <div className="flex items-center gap-2 pl-5">
+            <Input
+              type="number"
+              min={1}
+              className="h-7 w-16 text-xs"
+              value={sw.value ?? 30}
+              onChange={(e) =>
+                onChange({
+                  ...config,
+                  switch_to_agent: { ...sw, enabled: true, value: Math.max(1, Number(e.target.value) || 1), unit: sw.unit ?? "minutes" },
+                })
+              }
+            />
+            <Select
+              value={sw.unit ?? "minutes"}
+              onValueChange={(v) =>
+                onChange({
+                  ...config,
+                  switch_to_agent: { ...sw, enabled: true, value: sw.value ?? 30, unit: v },
+                })
+              }
+            >
+              <SelectTrigger className="h-7 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="minutes">Minutes</SelectItem>
+                <SelectItem value="hours">Hours</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-[10px] text-muted-foreground">after template sent</span>
+          </div>
+        )}
+      </div>
+    );
+  }
   if (type === "confirmation_status_changed") {
     return (
       <div className="mt-3 space-y-3">
