@@ -448,6 +448,54 @@ async function handleIncoming(value: any) {
 }
 
 // ---------------------------------------------------------------------------
+// Send a WhatsApp image message (used by the AI when the customer asks for a
+// product photo). Logs the outbound message and returns whether it succeeded.
+// ---------------------------------------------------------------------------
+async function sendWhatsappImage(args: {
+  to: string;
+  imageUrl: string;
+  caption?: string;
+  conversationId: string;
+  orderId: string | null;
+  settings: any;
+  accessToken: string;
+}): Promise<boolean> {
+  const { to, imageUrl, caption, conversationId, orderId, settings, accessToken } = args;
+  const mediaObj: any = { link: imageUrl };
+  if (caption) mediaObj.caption = caption;
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "image",
+    image: mediaObj,
+  };
+  const url = `${settings.api_base_url}/${settings.phone_number_id}/messages`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const respJson = await resp.json().catch(() => ({}));
+  const ok = resp.ok;
+  const metaMsgId = ok ? respJson?.messages?.[0]?.id : null;
+  await admin.from("whatsapp_messages").insert({
+    conversation_id: conversationId,
+    order_id: orderId,
+    direction: "out",
+    message_type: "image",
+    body: caption || "[image]",
+    payload: { ...payload, _ai_continuation: true, _ai_tool: "send_product_image" },
+    meta_message_id: metaMsgId,
+    status: ok ? "sent" : "failed",
+    error_message: ok ? null : JSON.stringify(respJson).slice(0, 500),
+  });
+  if (!ok) errLog("ai send_product_image failed", respJson);
+  else log("ai send_product_image sent", { conv: conversationId });
+  return ok;
+}
+
+// ---------------------------------------------------------------------------
 // AI continuation: when a customer replies in free text and no automation run
 // is paused, generate an AI follow-up reply using the same logic as the
 // automation runner's `ai_step` so the conversation keeps flowing
@@ -493,15 +541,30 @@ async function aiContinueReply(args: {
     content: m.body || `[${m.message_type}]`,
   }));
 
+  // Look up the product (for image_url) linked to this order's product_name
+  let product: any = null;
+  if (order?.product_name) {
+    const { data: p } = await admin
+      .from("products")
+      .select("id,name,image_url,price")
+      .ilike("name", order.product_name.trim())
+      .maybeSingle();
+    product = p;
+  }
+  const hasProductImage = !!(product?.image_url && /^https?:\/\//i.test(product.image_url));
+
   const orderCtx = order
     ? `\n\nOrder context:\n- Order ID: ${order.order_id}\n- Customer: ${order.customer_name}\n- Product: ${order.product_name}\n- Quantity: ${order.quantity}\n- Total: ${order.total_amount} PKR\n- City: ${order.customer_city}\n- Address: ${order.customer_address ?? "(not provided)"}`
     : "";
   const addressRule = order && (!order.customer_address || String(order.customer_address).trim().length < 10)
     ? `\n\nIMPORTANT: The customer's delivery address is missing or incomplete. Do NOT close the conversation. Politely ask for the full address (house/flat number, street, area/landmark, and city) in the customer's language. Keep asking in follow-ups until you receive a complete, deliverable address.\n\nWhen the customer provides a complete address (with house/flat, street, area, AND city), thank them briefly and confirm the order will be delivered. The system will auto-confirm in the background.`
     : "";
+  const imageRule = hasProductImage
+    ? `\n\nProduct image: an official image of "${order.product_name}" is available. If the customer asks for a photo / picture / image of the product (in any language: "تصويرة", "صورة", "tswira", "photo", "image", "pic", "send me the picture", "بعتلي صورة", etc.), CALL the tool \`send_product_image\` to send it as a real WhatsApp image. After calling the tool, write a short natural reply confirming you sent the photo. Never paste the image URL as text.`
+    : `\n\nProduct image: no official product image is available. If the customer asks for a photo, politely apologize and offer more details instead. Do NOT call \`send_product_image\`.`;
   const baseSys = aiSettings.system_prompt || "You are a helpful WhatsApp sales assistant.";
   const sysPrompt =
-    `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${addressRule}`;
+    `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${addressRule}${imageRule}`;
 
   const rawModel = aiSettings.model || "gpt-4o-mini";
   // Always OpenAI: strip provider prefix; map gemini → gpt-4o-mini.
@@ -513,27 +576,17 @@ async function aiContinueReply(args: {
 
   const aiUrl = "https://api.openai.com/v1/chat/completions";
 
-  const aiResp = await fetch(aiUrl, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "system", content: sysPrompt }, ...history],
-      temperature: aiSettings.temperature ?? 0.7,
-      max_tokens: aiSettings.max_tokens ?? 400,
-    }),
-  });
-  if (!aiResp.ok) {
-    const t = await aiResp.text();
-    errLog("ai-continue openai err", aiResp.status, t.slice(0, 200));
-    return;
-  }
-  const aiJson = await aiResp.json();
-  const reply: string = aiJson.choices?.[0]?.message?.content?.trim() || "";
-  if (!reply) {
-    log("ai-continue: empty reply");
-    return;
-  }
+  // Build tools list — only expose send_product_image when an image is available.
+  const tools = hasProductImage
+    ? [{
+        type: "function",
+        function: {
+          name: "send_product_image",
+          description: "Send the official product image to the customer via WhatsApp. Call this whenever the customer asks for a photo/picture/image of the product, in any language.",
+          parameters: { type: "object", properties: {}, additionalProperties: false },
+        },
+      }]
+    : undefined;
 
   const settings = await getSettings();
   if (!settings) return;
@@ -542,6 +595,81 @@ async function aiContinueReply(args: {
     errLog("ai-continue: no whatsapp access token");
     return;
   }
+
+  const aiBody: any = {
+    model,
+    messages: [{ role: "system", content: sysPrompt }, ...history],
+    temperature: aiSettings.temperature ?? 0.7,
+    max_tokens: aiSettings.max_tokens ?? 400,
+  };
+  if (tools) aiBody.tools = tools;
+
+  const aiResp = await fetch(aiUrl, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify(aiBody),
+  });
+  if (!aiResp.ok) {
+    const t = await aiResp.text();
+    errLog("ai-continue openai err", aiResp.status, t.slice(0, 200));
+    return;
+  }
+  const aiJson = await aiResp.json();
+  const aiMsg = aiJson.choices?.[0]?.message;
+  const toolCalls = aiMsg?.tool_calls ?? [];
+  let reply: string = aiMsg?.content?.trim() || "";
+
+  // If the AI asked to send the product image, send it first via WhatsApp media,
+  // then ask the AI for a short follow-up text.
+  let imageSent = false;
+  if (hasProductImage && toolCalls.some((c: any) => c?.function?.name === "send_product_image")) {
+    imageSent = await sendWhatsappImage({
+      to: conv.customer_phone,
+      imageUrl: product.image_url,
+      caption: order?.product_name ? `${order.product_name}` : undefined,
+      conversationId: conv.id,
+      orderId: order?.order_id ?? null,
+      settings,
+      accessToken,
+    });
+
+    if (imageSent && !reply) {
+      // Ask the model for a short natural follow-up confirming the image was sent.
+      const followResp = await fetch(aiUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: sysPrompt },
+            ...history,
+            { role: "assistant", content: "(I just sent the product photo to the customer.)" },
+            { role: "system", content: "Now write a short natural follow-up message confirming the photo was sent and inviting the customer to continue (e.g. asking if they want to confirm the order or need more info). Reply in the customer's language. 1-2 short lines max." },
+          ],
+          temperature: aiSettings.temperature ?? 0.7,
+          max_tokens: 120,
+        }),
+      });
+      if (followResp.ok) {
+        const fj = await followResp.json();
+        reply = fj.choices?.[0]?.message?.content?.trim() || "";
+      }
+    }
+  }
+
+  if (!reply && !imageSent) {
+    log("ai-continue: empty reply");
+    return;
+  }
+  if (!reply && imageSent) {
+    // Nothing more to send; image already delivered.
+    await admin
+      .from("whatsapp_conversations")
+      .update({ status: "ai_active", updated_at: new Date().toISOString() })
+      .eq("id", conv.id);
+    return;
+  }
+
   const to = conv.customer_phone;
   const payload = {
     messaging_product: "whatsapp",
