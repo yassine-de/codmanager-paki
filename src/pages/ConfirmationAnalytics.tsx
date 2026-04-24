@@ -52,17 +52,29 @@ export default function ConfirmationAnalytics() {
     },
   });
 
-  // Fetch order history for time calculations
+  // Fetch order history for time calculations.
+  // Supabase caps queries at 1000 rows by default — we paginate to get the full dataset,
+  // otherwise recent events (today's actions) get cut off when history grows large.
   const { data: orderHistory = [] } = useQuery({
     queryKey: ["order-history-for-analytics"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("order_history")
-        .select("order_id, field_changed, old_value, new_value, created_at, changed_by")
-        .in("field_changed", ["confirmation_status", "agent_id"])
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data;
+      const pageSize = 1000;
+      let from = 0;
+      const all: Array<{ order_id: string; field_changed: string; old_value: string | null; new_value: string | null; created_at: string; changed_by: string }> = [];
+      while (true) {
+        const { data, error } = await supabase
+          .from("order_history")
+          .select("order_id, field_changed, old_value, new_value, created_at, changed_by")
+          .in("field_changed", ["confirmation_status", "agent_id"])
+          .order("created_at", { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return all;
     },
   });
 
