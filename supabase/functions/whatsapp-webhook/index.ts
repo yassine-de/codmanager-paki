@@ -317,10 +317,16 @@ async function handleIncoming(value: any) {
       } else if (m.type === "button" && m.button) {
         bodyText = m.button.text ?? "";
         messageType = "button_reply";
-        const payload = m.button.payload ?? "";
-        if (payload === "confirm_order") outcome = "confirmed";
-        else if (payload === "cancel_order") outcome = "canceled";
-        else if (payload === "more_info") outcome = "more_info";
+        const payload = (m.button.payload ?? "").toString();
+        const text = (m.button.text ?? "").toString();
+        const norm = `${payload} ${text}`.toLowerCase();
+        if (payload === "confirm_order" || /\b(yes|confirm|أكد|نعم|oui)\b/.test(norm)) {
+          outcome = "confirmed";
+        } else if (payload === "cancel_order" || /\b(cancel|no|إلغاء|الغاء|annuler|non)\b/.test(norm)) {
+          outcome = "canceled";
+        } else if (payload === "more_info" || /\b(more|info|change|modify|تعديل|معلومات)\b/.test(norm)) {
+          outcome = "more_info";
+        }
       } else if (m.type === "text") {
         bodyText = m.text?.body ?? "";
       } else {
