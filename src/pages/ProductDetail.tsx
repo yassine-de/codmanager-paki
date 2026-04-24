@@ -358,6 +358,61 @@ export default function ProductDetail() {
         </div>
       </div>
 
+      {/* AI Context Card (admin only) */}
+      {isAdmin && isDbId && (
+        <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: "120ms" }}>
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles className="h-4 w-4 text-primary shrink-0" />
+              <h3 className="text-sm font-semibold">AI Product Context</h3>
+              {dbProduct?.ai_context_scraped_at && (
+                <span className="text-[11px] text-muted-foreground truncate">
+                  · updated {formatDistanceToNow(new Date(dbProduct.ai_context_scraped_at), { addSuffix: true })}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {dbProduct?.product_url && (
+                <a
+                  href={dbProduct.product_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Store <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRefreshAiContext}
+                disabled={refreshingCtx || !dbProduct?.product_url}
+                className="h-8"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshingCtx ? "animate-spin" : ""}`} />
+                {refreshingCtx ? "Scraping..." : dbProduct?.ai_context ? "Refresh" : "Scrape Store Page"}
+              </Button>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground mb-3">
+            The WhatsApp AI assistant uses this content (scraped from the Store URL) to answer customer questions about the product. Cached for 7 days.
+          </p>
+          {!dbProduct?.product_url ? (
+            <div className="text-xs text-muted-foreground bg-muted/40 border border-dashed rounded-md p-4 text-center">
+              No Store URL set on this product. Add one in product settings to enable AI context.
+            </div>
+          ) : dbProduct?.ai_context ? (
+            <div className="text-xs whitespace-pre-wrap font-mono bg-muted/40 border rounded-md p-3 max-h-72 overflow-auto leading-relaxed">
+              {dbProduct.ai_context}
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground bg-muted/40 border border-dashed rounded-md p-4 text-center">
+              No AI context yet. Click "Scrape Store Page" to fetch product details.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Daily Activity Chart */}
       <div className="bg-card rounded-lg border p-5 animate-slide-up" style={{ animationDelay: "150ms" }}>
         <div className="flex items-center justify-between mb-1">
