@@ -87,6 +87,7 @@ function AudioMessagePlayer({ message }: { message: Msg }) {
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const { rawUrl, mediaId } = getAudioPayload(message);
 
   useEffect(() => {
     const { rawUrl, mediaId, mimeType, isTemporaryMetaUrl } = getAudioPayload(message);
@@ -162,7 +163,18 @@ function AudioMessagePlayer({ message }: { message: Msg }) {
   }
 
   if (!src && failed) {
-    return <div className="text-xs text-destructive">Audio unavailable</div>;
+    return (
+      <div className="space-y-1">
+        <div className="text-xs text-destructive">Audio unavailable</div>
+        {rawUrl && !rawUrl.includes("lookaside.fbsbx.com") ? (
+          <a href={rawUrl} target="_blank" rel="noreferrer" className="text-xs underline underline-offset-2">
+            Open audio
+          </a>
+        ) : mediaId ? (
+          <div className="text-[10px] text-muted-foreground">Media ID: {mediaId}</div>
+        ) : null}
+      </div>
+    );
   }
 
   if (!src) return null;
