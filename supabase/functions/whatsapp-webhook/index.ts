@@ -405,13 +405,9 @@ async function aiContinueReply(args: {
     .select("value")
     .eq("key", "openai_api_key")
     .maybeSingle();
-  const openaiKey = (keyRow?.value as string)?.trim() || Deno.env.get("OPENAI_API_KEY") || "";
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
-  // Prefer OpenAI when configured (faster + already wired for tools); fall back to Lovable AI Gateway.
-  const useGateway = !openaiKey && !!lovableKey;
-  const apiKey = openaiKey || lovableKey;
+  const apiKey = (keyRow?.value as string)?.trim() || Deno.env.get("OPENAI_API_KEY") || "";
   if (!apiKey) {
-    errLog("ai-continue: no AI key configured (set openai_api_key in app_settings or LOVABLE_API_KEY)");
+    errLog("ai-continue: no OpenAI API key configured (set openai_api_key in AI Settings → Connection)");
     return;
   }
 
