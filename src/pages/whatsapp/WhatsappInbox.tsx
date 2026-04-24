@@ -332,7 +332,21 @@ export default function WhatsappInbox() {
     );
   };
 
-  const sendReply = async () => {
+  const aiEnabled = conv?.ai_enabled !== false;
+  const toggleAi = async () => {
+    if (!selected || !conv) return;
+    const next = !aiEnabled;
+    const { error } = await supabase
+      .from("whatsapp_conversations")
+      .update({ ai_enabled: next })
+      .eq("id", selected);
+    if (error) {
+      toast.error(error.message || "Failed to update AI status");
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["wts-convos"] });
+    toast.success(next ? "AI auto-reply enabled" : "AI stopped for this conversation");
+  };
     if (!selected || !conv || !draft.trim()) return;
     if (windowExpired) {
       toast.error("24h window expired — use a template");
