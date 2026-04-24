@@ -1424,6 +1424,8 @@ export type Database = {
       }
       whatsapp_ai_settings: {
         Row: {
+          ai_batch_wait_seconds: number
+          ai_dedup_window_seconds: number
           ai_image_analysis_enabled: boolean
           ai_memory_enabled: boolean
           ai_voice_response_enabled: boolean
@@ -1452,6 +1454,8 @@ export type Database = {
           voice_transcription_enabled: boolean
         }
         Insert: {
+          ai_batch_wait_seconds?: number
+          ai_dedup_window_seconds?: number
           ai_image_analysis_enabled?: boolean
           ai_memory_enabled?: boolean
           ai_voice_response_enabled?: boolean
@@ -1480,6 +1484,8 @@ export type Database = {
           voice_transcription_enabled?: boolean
         }
         Update: {
+          ai_batch_wait_seconds?: number
+          ai_dedup_window_seconds?: number
           ai_image_analysis_enabled?: boolean
           ai_memory_enabled?: boolean
           ai_voice_response_enabled?: boolean
