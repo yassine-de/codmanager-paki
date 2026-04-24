@@ -529,6 +529,7 @@ async function aiContinueReply(args: {
           history,
           apiKey,
           model,
+          useGateway,
         });
       } catch (e) {
         errLog("address extraction failed", (e as Error).message);
