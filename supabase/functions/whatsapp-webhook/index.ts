@@ -402,10 +402,16 @@ async function handleIncoming(value: any) {
       //    automation node will reply, so the AI must take over.
       const addressIncomplete =
         !!order && (!order.customer_address || String(order.customer_address).trim().length < 10);
+      const aiDisabledForConv = conv?.ai_enabled === false;
       const shouldContinueWithAI =
         m.type === "text" &&
         !outcome &&
+        !aiDisabledForConv &&
         (!resumedRun || addressIncomplete);
+
+      if (aiDisabledForConv) {
+        log("ai-continue: disabled for conversation", conv?.id);
+      }
 
       if (shouldContinueWithAI) {
         try {
