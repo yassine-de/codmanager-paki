@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, ArrowRightLeft, UserCheck, PlusCircle, PhoneOff, CalendarClock, XCircle, DollarSign, RotateCcw, Pencil, ChevronDown } from "lucide-react";
+import { Loader2, ArrowRightLeft, UserCheck, PlusCircle, PhoneOff, CalendarClock, XCircle, DollarSign, RotateCcw, Pencil, ChevronDown, MessageCircle, Sparkles } from "lucide-react";
 
 interface HistoryEntry {
   id: string;
