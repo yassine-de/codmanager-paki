@@ -844,50 +844,7 @@ export default function WhatsappInbox() {
                   <span className="hidden md:inline">{aiEnabled ? "AI On" : "AI Off"}</span>
                 </Button>
 
-                {/* Status indicators — display-only, not actionable */}
-                {order && (
-                  <div
-                    className="hidden sm:flex items-center gap-1 shrink-0 rounded-full border border-border bg-background/60 backdrop-blur p-0.5 shadow-sm select-none"
-                    onClick={(e) => e.stopPropagation()}
-                    title="Order status (read-only)"
-                  >
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium",
-                        order.confirmation_status === "confirmed"
-                          ? "text-emerald-600 bg-emerald-500/10"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span className="hidden lg:inline">Confirm</span>
-                    </span>
-                    <span className="h-4 w-px bg-border" aria-hidden />
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium",
-                        order.agent_id
-                          ? "text-violet-600 bg-violet-500/10"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      <UserPlus className="h-3.5 w-3.5" />
-                      <span className="hidden lg:inline">Agent</span>
-                    </span>
-                    <span className="h-4 w-px bg-border" aria-hidden />
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 h-7 px-2.5 lg:px-3 rounded-full text-xs font-medium",
-                        order.confirmation_status === "cancelled"
-                          ? "text-rose-600 bg-rose-500/10"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      <XCircle className="h-3.5 w-3.5" />
-                      <span className="hidden lg:inline">Cancel</span>
-                    </span>
-                  </div>
-                )}
+                {/* Status indicators removed per request */}
               </div>
 
               {/* Messages */}
