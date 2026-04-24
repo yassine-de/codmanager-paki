@@ -73,6 +73,115 @@ type Msg = {
   payload?: any;
 };
 
+function getAudioPayload(msg: Msg) {
+  const audio = msg.payload?.audio ?? null;
+  const rawUrl = audio?.link || audio?.url || null;
+  const mediaId = audio?.id || null;
+  const mimeType = audio?.mime_type || "audio/ogg";
+  const isTemporaryMetaUrl = typeof rawUrl === "string" && rawUrl.includes("lookaside.fbsbx.com");
+
+  return { rawUrl, mediaId, mimeType, isTemporaryMetaUrl };
+}
+
+function AudioMessagePlayer({ message }: { message: Msg }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const { rawUrl, mediaId } = getAudioPayload(message);
+
+  useEffect(() => {
+    const { rawUrl, mediaId, mimeType, isTemporaryMetaUrl } = getAudioPayload(message);
+    if (rawUrl && !isTemporaryMetaUrl) {
+      setSrc(rawUrl);
+      setLoading(false);
+      setFailed(false);
+      return;
+    }
+
+    if (!mediaId) {
+      setSrc(null);
+      setLoading(false);
+      setFailed(true);
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    const loadAudio = async () => {
+      setLoading(true);
+      setFailed(false);
+      setSrc(null);
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) throw new Error("Missing session");
+
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-media-proxy?messageId=${message.id}`;
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Audio proxy failed (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        const effectiveMime = response.headers.get("x-media-type") || blob.type || mimeType;
+        const typedBlob = blob.type === effectiveMime
+          ? blob
+          : new Blob([await blob.arrayBuffer()], { type: effectiveMime });
+
+        objectUrl = URL.createObjectURL(typedBlob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+
+        setSrc(objectUrl);
+      } catch (error) {
+        console.error("Failed to load WhatsApp audio", error);
+        if (!cancelled) {
+          setFailed(true);
+          setSrc(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void loadAudio();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [message.id, message.payload?.audio?.id, message.payload?.audio?.link, message.payload?.audio?.url, message.payload?.audio?.mime_type]);
+
+  if (!src && loading) {
+    return <div className="text-xs text-muted-foreground">Loading audio…</div>;
+  }
+
+  if (!src && failed) {
+    return (
+      <div className="space-y-1">
+        <div className="text-xs text-destructive">Audio unavailable</div>
+        {rawUrl && !rawUrl.includes("lookaside.fbsbx.com") ? (
+          <a href={rawUrl} target="_blank" rel="noreferrer" className="text-xs underline underline-offset-2">
+            Open audio
+          </a>
+        ) : mediaId ? (
+          <div className="text-[10px] text-muted-foreground">Media ID: {mediaId}</div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (!src) return null;
+
+  return <audio controls preload="metadata" src={src} className="max-w-full" />;
+}
+
 const statusBadge = (s: string) => {
   const map: Record<string, { label: string; cls: string }> = {
     pending: { label: "open", cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25" },
@@ -924,8 +1033,8 @@ export default function WhatsappInbox() {
                                   </a>
                                 );
                               }
-                              if (m.message_type === "audio" && mediaUrl) {
-                                return <audio controls src={mediaUrl} className="max-w-full" />;
+                              if (m.message_type === "audio") {
+                                return <AudioMessagePlayer message={m} />;
                               }
                               if (m.message_type === "document" && mediaUrl) {
                                 return (
