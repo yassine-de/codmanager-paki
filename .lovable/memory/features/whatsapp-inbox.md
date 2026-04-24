@@ -8,7 +8,7 @@ WhatsApp Inbox (`/whatsapp/inbox`, `src/pages/whatsapp/WhatsappInbox.tsx`):
 
 - **Layout**: 3-col left panel (Inbox header, search, All/Unread filter, conversation list) + main chat panel (header with avatar/badges/quick actions, messages with day separators, 24h banner, Reply/Note tabs).
 - **Realtime**: Supabase channel subscribes to `whatsapp_conversations` and `whatsapp_messages` (`postgres_changes` event `*`). Both tables have `REPLICA IDENTITY FULL` and are in the `supabase_realtime` publication.
-- **Read state**: Opening a conversation updates `last_message_at` so the unread emerald dot clears.
+- **Sort & read state**: Conversation list is sorted by `last_message_at` DESC (WhatsApp-style — newest activity on top). Opening a thread updates `last_read_at` only (NOT `last_message_at`), because a DB trigger bumps `updated_at` on every row change which would otherwise re-sort the opened conv to the top. Unread badge counts inbound messages newer than `last_read_at`.
 - **24h window**: If `differenceInHours(now, last_reply_at) >= 24` OR no inbound reply yet, free-form text is blocked. Reply textarea is disabled and replaced by a Template button. Banner appears above input.
 - **Send Template**: `src/components/whatsapp/SendTemplateModal.tsx` lists active templates and calls `whatsapp-send` with `mode: "template"`. Uses `meta_template_name` if set (Meta-approved template), otherwise falls back to plain text.
 - **Free text**: Inside 24h window, Reply uses `whatsapp-send` with `mode: "text"` (no longer direct insert) so the message is actually delivered through Meta API.
