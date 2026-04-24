@@ -413,7 +413,7 @@ async function aiContinueReply(args: {
     ? `\n\nOrder context:\n- Order ID: ${order.order_id}\n- Customer: ${order.customer_name}\n- Product: ${order.product_name}\n- Quantity: ${order.quantity}\n- Total: ${order.total_amount} PKR\n- City: ${order.customer_city}\n- Address: ${order.customer_address ?? "(not provided)"}`
     : "";
   const addressRule = order && (!order.customer_address || String(order.customer_address).trim().length < 10)
-    ? `\n\nIMPORTANT: The customer's delivery address is missing or incomplete. Do NOT close the conversation. Politely ask for the full address (house/flat number, street, area/landmark, and city) in the customer's language. Keep asking in follow-ups until you receive a complete, deliverable address.`
+    ? `\n\nIMPORTANT: The customer's delivery address is missing or incomplete. Do NOT close the conversation. Politely ask for the full address (house/flat number, street, area/landmark, and city) in the customer's language. Keep asking in follow-ups until you receive a complete, deliverable address.\n\nWhen the customer provides a complete address (with house/flat, street, area, AND city), thank them briefly and confirm the order will be delivered. The system will auto-confirm in the background.`
     : "";
   const baseSys = aiSettings.system_prompt || "You are a helpful WhatsApp sales assistant.";
   const sysPrompt =
@@ -491,9 +491,160 @@ async function aiContinueReply(args: {
       .update({ status: "ai_active", updated_at: new Date().toISOString() })
       .eq("id", conv.id);
     log("ai-continue: replied", { conv: conv.id, len: reply.length });
+
+    // After replying, attempt to extract a complete address from the customer's
+    // latest message + history. If we get a deliverable address, update the
+    // order (mapping city to ORIO cache) and auto-confirm.
+    if (order) {
+      try {
+        await tryExtractAndConfirmAddress({
+          order,
+          conv,
+          customerText: args.customerText,
+          history,
+          apiKey,
+          model,
+        });
+      } catch (e) {
+        errLog("address extraction failed", (e as Error).message);
+      }
+    }
   } else {
     errLog("ai-continue: send failed", sendJson);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Extract a complete delivery address via OpenAI (JSON mode), match the city
+// to ORIO cities cache, then update + auto-confirm the order.
+// ---------------------------------------------------------------------------
+async function tryExtractAndConfirmAddress(args: {
+  order: any;
+  conv: any;
+  customerText: string;
+  history: { role: string; content: string }[];
+  apiKey: string;
+  model: string;
+}) {
+  const { order, conv, customerText, history, apiKey, model } = args;
+
+  // Skip if order already has a long address & is already confirmed
+  if (order.confirmation_status === "confirmed") return;
+
+  // Load ORIO cities for matching
+  const { data: cities } = await admin
+    .from("orio_cities_cache")
+    .select("city_name");
+  const cityNames = (cities ?? []).map((c: any) => c.city_name);
+  if (cityNames.length === 0) {
+    log("address-extract: no orio cities cached, skipping");
+    return;
+  }
+
+  const extractPrompt = `You are an address-extraction assistant. Given a WhatsApp conversation between a customer and a sales agent in Pakistan, extract the customer's complete delivery address ONLY if all required parts are present.
+
+Required parts:
+- house_or_flat (house/flat/shop number)
+- street (street name or block)
+- area (neighborhood / sector / landmark)
+- city (must be a real Pakistan city)
+
+Return JSON ONLY in this exact schema:
+{ "complete": boolean, "full_address": string, "city": string }
+
+Rules:
+- "complete" = true only if house/flat, street, AND area are all present (city is mandatory too).
+- "full_address" must be a single line combining house/flat + street + area (DO NOT include the city).
+- "city" must be the city name in English/Latin script (e.g. "Karachi", "Lahore").
+- If anything is missing or vague, return { "complete": false, "full_address": "", "city": "" }.
+- DO NOT invent details. Only use what the customer explicitly said.`;
+
+  const extractMessages = [
+    { role: "system", content: extractPrompt },
+    ...history.slice(-10),
+    { role: "user", content: customerText },
+  ];
+
+  const exResp = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: extractMessages,
+      temperature: 0,
+      max_tokens: 300,
+      response_format: { type: "json_object" },
+    }),
+  });
+  if (!exResp.ok) {
+    errLog("address-extract openai err", exResp.status);
+    return;
+  }
+  const exJson = await exResp.json();
+  const raw = exJson.choices?.[0]?.message?.content?.trim() || "{}";
+  let parsed: { complete?: boolean; full_address?: string; city?: string } = {};
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    log("address-extract: invalid JSON", raw.slice(0, 200));
+    return;
+  }
+
+  if (!parsed.complete || !parsed.full_address || !parsed.city) {
+    log("address-extract: incomplete", parsed);
+    return;
+  }
+
+  // Match city to ORIO cache (case-insensitive, trimmed)
+  const wanted = parsed.city.trim().toLowerCase();
+  let matchedCity = cityNames.find((c: string) => c.toLowerCase() === wanted);
+  if (!matchedCity) {
+    // Try partial match (city name contains or is contained in)
+    matchedCity = cityNames.find((c: string) => {
+      const lc = c.toLowerCase();
+      return lc.includes(wanted) || wanted.includes(lc);
+    });
+  }
+  if (!matchedCity) {
+    log("address-extract: city not in ORIO cache", parsed.city);
+    return;
+  }
+
+  // Update the order: address + matched city + auto-confirm
+  const settings = await getSettings();
+  const updates: Record<string, any> = {
+    customer_address: parsed.full_address.trim(),
+    customer_city: matchedCity,
+    confirmation_status: "confirmed",
+    confirmation_channel: "whatsapp",
+    confirmed_at: new Date().toISOString(),
+    whatsapp_status: "confirmed",
+    whatsapp_last_reply_at: new Date().toISOString(),
+  };
+  if (settings?.auto_book_shipping) {
+    updates.delivery_status = "booked";
+    updates.shipping_status = "Booked";
+  }
+
+  const { error: updErr } = await admin
+    .from("orders")
+    .update(updates)
+    .eq("order_id", order.order_id);
+  if (updErr) {
+    errLog("address-extract: order update failed", updErr);
+    return;
+  }
+
+  await admin
+    .from("whatsapp_conversations")
+    .update({ status: "confirmed", outcome: "confirmed", updated_at: new Date().toISOString() })
+    .eq("id", conv.id);
+
+  log("address-extract: auto-confirmed", {
+    order: order.order_id,
+    city: matchedCity,
+    addr_len: parsed.full_address.length,
+  });
 }
 
 Deno.serve(async (req) => {
