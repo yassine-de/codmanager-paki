@@ -162,6 +162,37 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
   return { conv, order };
 }
 
+async function resolveReplyTarget(replyToMetaMessageId?: string | null) {
+  if (!replyToMetaMessageId) return { conv: null, order: null };
+
+  const { data: repliedMsg } = await admin
+    .from("whatsapp_messages")
+    .select("conversation_id, order_id, direction")
+    .eq("meta_message_id", replyToMetaMessageId)
+    .eq("direction", "out")
+    .maybeSingle();
+
+  if (!repliedMsg) return { conv: null, order: null };
+
+  const { data: conv } = repliedMsg.conversation_id
+    ? await admin
+        .from("whatsapp_conversations")
+        .select("*")
+        .eq("id", repliedMsg.conversation_id)
+        .maybeSingle()
+    : { data: null };
+
+  const { data: order } = repliedMsg.order_id
+    ? await admin
+        .from("orders")
+        .select("*")
+        .eq("order_id", repliedMsg.order_id)
+        .maybeSingle()
+    : { data: null };
+
+  return { conv, order };
+}
+
 // Apply CRM updates for a button action. Mirrors whatsapp-action logic so
 // behavior stays consistent between manual Inbox actions and automated webhook.
 async function applyOutcome(
@@ -289,6 +320,11 @@ async function handleIncoming(value: any) {
       }
 
       let parsedOrderId: string | null = null;
+      let replyToMetaMessageId: string | null =
+        m.context?.id ??
+        m.button?.context?.id ??
+        m.interactive?.button_reply?.context?.id ??
+        null;
       let outcome: "confirmed" | "more_info" | "canceled" | null = null;
       let bodyText = "";
       let messageType: string = m.type ?? "text";
@@ -333,7 +369,10 @@ async function handleIncoming(value: any) {
         bodyText = JSON.stringify(m).slice(0, 500);
       }
 
-      const { conv, order } = await findOrCreateConversation(phone, parsedOrderId);
+      const replyTarget = await resolveReplyTarget(replyToMetaMessageId);
+      const { conv, order } = replyTarget.conv
+        ? replyTarget
+        : await findOrCreateConversation(phone, parsedOrderId);
       if (!conv) {
         errLog("no conversation for", phone);
         continue;
@@ -452,10 +491,18 @@ async function handleIncoming(value: any) {
         !!order && order.confirmation_status !== "confirmed" && order.confirmation_status !== "canceled";
       const aiDisabledForConv = conv?.ai_enabled === false;
       const shouldContinueWithAI =
-        m.type === "text" &&
-        !outcome &&
         !aiDisabledForConv &&
-        (!resumedRun || addressIncomplete || orderNotConfirmed);
+        (
+          (
+            m.type === "text" &&
+            !outcome &&
+            (!resumedRun || addressIncomplete || orderNotConfirmed)
+          ) || (
+            messageType === "button_reply" &&
+            outcome === "confirmed" &&
+            addressIncomplete
+          )
+        );
 
       if (aiDisabledForConv) {
         log("ai-continue: disabled for conversation", conv?.id);
