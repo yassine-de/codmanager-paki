@@ -684,7 +684,9 @@ export default function Orders() {
               <SearchableSelect
                 value={filterDelivery}
                 onValueChange={setFilterDelivery}
-                options={Object.entries(deliveryConfig).map(([k, v]) => ({ value: k, label: v.label }))}
+                options={Object.entries(deliveryConfig)
+                  .filter(([k]) => !['failed', 'failed_attempt', 'returned'].includes(k))
+                  .map(([k, v]) => ({ value: k, label: v.label }))}
                 placeholder="Delivery"
                 allLabel="All"
                 className="w-full"
