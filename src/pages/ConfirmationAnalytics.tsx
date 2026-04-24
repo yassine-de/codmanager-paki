@@ -118,15 +118,29 @@ export default function ConfirmationAnalytics() {
     return new Date(o.updated_at);
   };
 
+  // When filtering by agent, include any order the agent ever touched
+  // (current agent_id, original_agent_id, OR an action in order_history by them).
+  const agentTouchedOrderIds = useMemo(() => {
+    if (agentFilter === "all") return null;
+    const ids = new Set<string>();
+    orders.forEach(o => {
+      if (o.agent_id === agentFilter || o.original_agent_id === agentFilter) ids.add(o.order_id);
+    });
+    orderHistory.forEach(h => {
+      if (h.changed_by === agentFilter && h.field_changed === "confirmation_status") ids.add(h.order_id);
+    });
+    return ids;
+  }, [orders, orderHistory, agentFilter]);
+
   const filteredOrders = useMemo(() => {
     let filtered = [...orders];
-    if (agentFilter !== "all") filtered = filtered.filter(o => o.agent_id === agentFilter || o.original_agent_id === agentFilter);
+    if (agentTouchedOrderIds) filtered = filtered.filter(o => agentTouchedOrderIds.has(o.order_id));
     if (sellerFilter !== "all") filtered = filtered.filter(o => o.seller_id === sellerFilter);
     if (productFilter !== "all") filtered = filtered.filter(o => o.product_name === productFilter);
     if (dateRange?.from) filtered = filtered.filter(o => getTreatmentDate(o) >= dateRange.from!);
     if (dateRange?.to) filtered = filtered.filter(o => getTreatmentDate(o) <= dateRange.to!);
     return filtered;
-  }, [orders, agentFilter, sellerFilter, productFilter, dateRange]);
+  }, [orders, agentTouchedOrderIds, sellerFilter, productFilter, dateRange]);
 
   // Stats
   const stats = useMemo(() => {
