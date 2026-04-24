@@ -509,13 +509,85 @@ async function handleIncoming(value: any) {
       }
 
       if (shouldContinueWithAI) {
-        try {
-          // Small delay so the resumed runner (if any) finishes its DB writes first.
-          if (resumedRun) await new Promise((r) => setTimeout(r, 1500));
-          await aiContinueReply({ conv, order, customerText: bodyText });
-        } catch (e) {
-          errLog("ai continuation failed", (e as Error).message);
-        }
+        // Debounce / batch: wait N seconds for additional messages, dedup outbound replies.
+        const triggerAt = Date.now();
+        const convId = conv.id;
+        const orderId = order?.id ?? null;
+        const task = (async () => {
+          try {
+            const { data: aiCfg } = await admin
+              .from("whatsapp_ai_settings")
+              .select("ai_batch_wait_seconds, ai_dedup_window_seconds")
+              .eq("singleton", true)
+              .maybeSingle();
+            const batchWaitMs = Math.max(0, (aiCfg?.ai_batch_wait_seconds ?? 20)) * 1000;
+            const dedupWindowMs = Math.max(0, (aiCfg?.ai_dedup_window_seconds ?? 30)) * 1000;
+
+            if (resumedRun) await new Promise((r) => setTimeout(r, 1500));
+            if (batchWaitMs > 0) await new Promise((r) => setTimeout(r, batchWaitMs));
+
+            // Abort if a NEWER inbound arrived after this one — that newer
+            // invocation will own the reply (it will batch in everything since).
+            const { data: latestIn } = await admin
+              .from("whatsapp_messages")
+              .select("created_at")
+              .eq("conversation_id", convId)
+              .eq("direction", "in")
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (latestIn?.created_at && new Date(latestIn.created_at).getTime() > triggerAt + 500) {
+              log("ai-continue: superseded by newer inbound, skipping", convId);
+              return;
+            }
+
+            // Dedup: skip if AI already sent an outbound within the dedup window.
+            if (dedupWindowMs > 0) {
+              const since = new Date(Date.now() - dedupWindowMs).toISOString();
+              const { data: recentOut } = await admin
+                .from("whatsapp_messages")
+                .select("id, created_at")
+                .eq("conversation_id", convId)
+                .eq("direction", "out")
+                .gt("created_at", since)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+              if (recentOut) {
+                log("ai-continue: dedup window hit, skipping", convId, recentOut.created_at);
+                return;
+              }
+            }
+
+            // Aggregate all inbound messages received during the batch window so
+            // the AI sees them as a single combined customerText.
+            const sinceBatch = new Date(triggerAt - batchWaitMs - 1000).toISOString();
+            const { data: batched } = await admin
+              .from("whatsapp_messages")
+              .select("body, message_type, created_at")
+              .eq("conversation_id", convId)
+              .eq("direction", "in")
+              .gte("created_at", sinceBatch)
+              .order("created_at", { ascending: true });
+            const combinedText = (batched ?? [])
+              .map((m: any) => m.body || `[${m.message_type}]`)
+              .filter(Boolean)
+              .join("\n");
+
+            // Re-fetch order (status may have changed during the wait).
+            let freshOrder = order;
+            if (orderId) {
+              const { data: o } = await admin.from("orders").select("*").eq("id", orderId).maybeSingle();
+              if (o) freshOrder = o;
+            }
+
+            await aiContinueReply({ conv, order: freshOrder, customerText: combinedText || bodyText });
+          } catch (e) {
+            errLog("ai continuation failed", (e as Error).message);
+          }
+        })();
+        // Run after webhook returns, without blocking Meta's response.
+        try { (globalThis as any).EdgeRuntime?.waitUntil?.(task); } catch { /* ignore */ }
       }
     } catch (e) {
       errLog("message handling error", (e as Error).message);
