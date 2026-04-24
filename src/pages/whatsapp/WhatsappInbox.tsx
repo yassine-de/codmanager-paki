@@ -193,6 +193,39 @@ export default function WhatsappInbox() {
     enabled: !!selected,
   });
 
+  // Per-conversation unread counts (WhatsApp-style green badge).
+  // Counts inbound messages newer than the conversation's `last_message_at`,
+  // which we bump to "now" each time the user opens the thread.
+  const convoIdsKey = convos.map((c) => c.id).join(",");
+  const { data: unreadMap = {} } = useQuery<Record<string, number>>({
+    queryKey: ["wts-unread-counts", convoIdsKey],
+    queryFn: async () => {
+      if (!convos.length) return {};
+      const ids = convos.map((c) => c.id);
+      const { data, error } = await supabase
+        .from("whatsapp_messages")
+        .select("conversation_id, created_at")
+        .eq("direction", "in")
+        .in("conversation_id", ids)
+        .order("created_at", { ascending: false })
+        .limit(2000);
+      if (error) throw error;
+      const lastSeen = new Map<string, number>(
+        convos.map((c) => [c.id, c.last_message_at ? new Date(c.last_message_at).getTime() : 0]),
+      );
+      const map: Record<string, number> = {};
+      for (const row of (data ?? []) as { conversation_id: string; created_at: string }[]) {
+        const seen = lastSeen.get(row.conversation_id) ?? 0;
+        if (new Date(row.created_at).getTime() > seen) {
+          map[row.conversation_id] = (map[row.conversation_id] ?? 0) + 1;
+        }
+      }
+      return map;
+    },
+    enabled: convos.length > 0,
+    staleTime: 10_000,
+  });
+
   // Load templates so we can render the buttons (quick replies / URL / phone) below template messages
   const { data: templates = [] } = useQuery<any[]>({
     queryKey: ["wts-templates-buttons"],
@@ -238,6 +271,7 @@ export default function WhatsappInbox() {
         { event: "*", schema: "public", table: "whatsapp_conversations" },
         () => {
           qc.invalidateQueries({ queryKey: ["wts-convos"] });
+          qc.invalidateQueries({ queryKey: ["wts-unread-counts"] });
         },
       )
       .on(
@@ -246,6 +280,7 @@ export default function WhatsappInbox() {
         (payload) => {
           const row: any = payload.new ?? payload.old;
           qc.invalidateQueries({ queryKey: ["wts-convos"] });
+          qc.invalidateQueries({ queryKey: ["wts-unread-counts"] });
           if (row?.conversation_id) {
             qc.invalidateQueries({ queryKey: ["wts-messages", row.conversation_id] });
           }
@@ -264,14 +299,17 @@ export default function WhatsappInbox() {
     }
   }, [messages.length, selected]);
 
-  // Mark conversation read on open (clears the unread dot by setting last_message_at)
+  // Mark conversation read on open (clears the unread badge by setting last_message_at)
   useEffect(() => {
     if (!selected) return;
     void supabase
       .from("whatsapp_conversations")
       .update({ last_message_at: new Date().toISOString() })
-      .eq("id", selected);
-  }, [selected]);
+      .eq("id", selected)
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ["wts-unread-counts"] });
+      });
+  }, [selected, qc]);
 
   const filteredConvos = useMemo(() => {
     let list = convos.slice();
@@ -285,11 +323,7 @@ export default function WhatsappInbox() {
       );
     }
     if (filter === "unread") {
-      list = list.filter(
-        (c) =>
-          c.last_reply_at &&
-          (!c.last_message_at || new Date(c.last_reply_at) > new Date(c.last_message_at)),
-      );
+      list = list.filter((c) => (unreadMap[c.id] ?? 0) > 0);
     }
     list.sort((a, b) => {
       const ta = new Date(a.updated_at).getTime();
@@ -297,7 +331,7 @@ export default function WhatsappInbox() {
       return sortDesc ? tb - ta : ta - tb;
     });
     return list;
-  }, [convos, search, filter, sortDesc]);
+  }, [convos, search, filter, sortDesc, unreadMap]);
 
   const lastInboundAt = useMemo(() => {
     if (!conv?.last_reply_at) return null;
@@ -593,14 +627,23 @@ export default function WhatsappInbox() {
               </div>
             )}
             {filteredConvos.map((c) => {
-              const unread =
-                c.last_reply_at &&
-                (!c.last_message_at || new Date(c.last_reply_at) > new Date(c.last_message_at));
+              const unreadCount = unreadMap[c.id] ?? 0;
+              const unread = unreadCount > 0;
               const ts = c.last_reply_at || c.last_message_at || c.updated_at;
+              const tooltip = unread
+                ? `${unreadCount} unread message${unreadCount > 1 ? "s" : ""}${
+                    c.last_reply_at
+                      ? ` • last reply ${formatDistanceToNowStrict(new Date(c.last_reply_at), { addSuffix: true })}`
+                      : ""
+                  }`
+                : ts
+                ? `Last activity ${formatDistanceToNowStrict(new Date(ts), { addSuffix: true })}`
+                : "";
               return (
                 <button
                   key={c.id}
                   type="button"
+                  title={tooltip}
                   onClick={() => {
                     setSelected(c.id);
                     setTab("reply");
@@ -620,19 +663,39 @@ export default function WhatsappInbox() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold truncate">
+                      <div
+                        className={cn(
+                          "text-sm truncate",
+                          unread ? "font-bold text-foreground" : "font-semibold",
+                        )}
+                      >
                         {c.customer_name || c.customer_phone}
                       </div>
-                      <div className="text-[10px] text-muted-foreground shrink-0">
-                        {ts ? format(new Date(ts), "dd/MM/yyyy") : ""}
+                      <div
+                        className={cn(
+                          "text-[10px] shrink-0",
+                          unread ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-muted-foreground",
+                        )}
+                      >
+                        {ts ? format(new Date(ts), "HH:mm") : ""}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <div className="text-[11px] text-muted-foreground truncate flex-1">
+                      <div
+                        className={cn(
+                          "text-[11px] truncate flex-1",
+                          unread ? "text-foreground/80 font-medium" : "text-muted-foreground",
+                        )}
+                      >
                         {c.order_id ? `#${c.order_id}` : c.customer_phone}
                       </div>
                       {unread && (
-                        <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                        <span
+                          className="min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[11px] font-bold grid place-items-center shrink-0"
+                          aria-label={`${unreadCount} unread messages`}
+                        >
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
                       )}
                     </div>
                   </div>
