@@ -118,37 +118,82 @@ export default function ConfirmationAnalytics() {
     return new Date(o.updated_at);
   };
 
+  // When filtering by agent, include any order the agent ever touched
+  // (current agent_id, original_agent_id, OR an action in order_history by them).
+  const agentTouchedOrderIds = useMemo(() => {
+    if (agentFilter === "all") return null;
+    const ids = new Set<string>();
+    orders.forEach(o => {
+      if (o.agent_id === agentFilter || o.original_agent_id === agentFilter) ids.add(o.order_id);
+    });
+    orderHistory.forEach(h => {
+      if (h.changed_by === agentFilter && h.field_changed === "confirmation_status") ids.add(h.order_id);
+    });
+    return ids;
+  }, [orders, orderHistory, agentFilter]);
+
   const filteredOrders = useMemo(() => {
     let filtered = [...orders];
-    if (agentFilter !== "all") filtered = filtered.filter(o => o.agent_id === agentFilter || o.original_agent_id === agentFilter);
+    if (agentTouchedOrderIds) filtered = filtered.filter(o => agentTouchedOrderIds.has(o.order_id));
     if (sellerFilter !== "all") filtered = filtered.filter(o => o.seller_id === sellerFilter);
     if (productFilter !== "all") filtered = filtered.filter(o => o.product_name === productFilter);
-    if (dateRange?.from) filtered = filtered.filter(o => getTreatmentDate(o) >= dateRange.from!);
-    if (dateRange?.to) filtered = filtered.filter(o => getTreatmentDate(o) <= dateRange.to!);
+    // When an agent filter is active, do NOT filter orders by treatment date — actions in the
+    // period are matched via order_history (changed_by + created_at). Filtering here would
+    // hide orders the agent acted on today whose original treatment date is older.
+    if (agentFilter === "all") {
+      if (dateRange?.from) filtered = filtered.filter(o => getTreatmentDate(o) >= dateRange.from!);
+      if (dateRange?.to) filtered = filtered.filter(o => getTreatmentDate(o) <= dateRange.to!);
+    }
     return filtered;
-  }, [orders, agentFilter, sellerFilter, productFilter, dateRange]);
+  }, [orders, agentTouchedOrderIds, agentFilter, sellerFilter, productFilter, dateRange]);
 
   // Stats
   const stats = useMemo(() => {
     const total = filteredOrders.length;
-    const confirmed = filteredOrders.filter(o => o.confirmation_status === "confirmed").length;
-    const cancelled = filteredOrders.filter(o => o.confirmation_status === "cancelled").length;
-    const postponed = filteredOrders.filter(o => o.confirmation_status === "postponed").length;
     const delivered = filteredOrders.filter(o => o.delivery_status === "delivered" || o.delivery_status === "paid").length;
 
     // Build set of filtered order_ids for cross-referencing
     const filteredOrderIds = new Set(filteredOrders.map(o => o.order_id));
 
-    // Treated = each status change action from order_history (not unique orders)
-    const treatedActions = orderHistory.filter(h => {
+    // Action-based counts from order_history.
+    // When an agent filter is active, count actions performed by that agent (changed_by).
+    // This reflects "what the agent actually did" instead of the order's current status,
+    // because orders can be reassigned/changed by other agents afterwards.
+    const actionMatchesFilters = (h: typeof orderHistory[0]) => {
       if (h.field_changed !== "confirmation_status") return false;
       if (!filteredOrderIds.has(h.order_id)) return false;
       if (agentFilter !== "all" && h.changed_by !== agentFilter) return false;
       if (dateRange?.from && new Date(h.created_at) < dateRange.from) return false;
       if (dateRange?.to && new Date(h.created_at) > dateRange.to) return false;
       return true;
-    });
+    };
+
+    const treatedActions = orderHistory.filter(actionMatchesFilters);
     const treated = treatedActions.length;
+
+    // Distinct orders that the agent moved to a given status during the period.
+    // Using a Set on order_id avoids double-counting if status was toggled multiple times.
+    const distinctOrdersByNewValue = (status: string) => {
+      const ids = new Set<string>();
+      treatedActions.forEach(h => { if (h.new_value === status) ids.add(h.order_id); });
+      return ids.size;
+    };
+
+    let confirmed: number;
+    let cancelled: number;
+    let postponed: number;
+
+    if (agentFilter !== "all") {
+      // Per-agent view: count agent's actions in the period (true workload).
+      confirmed = distinctOrdersByNewValue("confirmed");
+      cancelled = distinctOrdersByNewValue("cancelled");
+      postponed = distinctOrdersByNewValue("postponed");
+    } else {
+      // Global view: keep current state of orders (overall pipeline snapshot).
+      confirmed = filteredOrders.filter(o => o.confirmation_status === "confirmed").length;
+      cancelled = filteredOrders.filter(o => o.confirmation_status === "cancelled").length;
+      postponed = filteredOrders.filter(o => o.confirmation_status === "postponed").length;
+    }
 
     // Claimed = unique orders that were claimed (assigned to agent) AND status was changed
     const claimed = filteredOrders.filter(o => (o.agent_id || o.original_agent_id) && o.confirmation_status !== "new").length;
