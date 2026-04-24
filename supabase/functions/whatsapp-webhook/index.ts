@@ -694,23 +694,7 @@ Rules:
     log("address-extract: city not in ORIO cache, using raw", parsed.city);
   }
 
-  // Update the order: address + city + auto-confirm
-  const settings = await getSettings();
-  const updates: Record<string, any> = {
-    customer_address: parsed.full_address.trim(),
-    customer_city: finalCity,
-    confirmation_status: "confirmed",
-    confirmation_channel: "whatsapp",
-    confirmed_at: new Date().toISOString(),
-    whatsapp_status: "confirmed",
-    whatsapp_last_reply_at: new Date().toISOString(),
-  };
-  if (settings?.auto_book_shipping) {
-    updates.delivery_status = "booked";
-    updates.shipping_status = "Booked";
-  }
-
-  // Snapshot before update for history
+  // Snapshot before for history (capture original values BEFORE any update)
   const trackedFields = [
     "confirmation_status",
     "customer_address",
@@ -721,12 +705,60 @@ Rules:
   const before: Record<string, any> = {};
   for (const f of trackedFields) before[f] = order[f] ?? null;
 
+  // STEP 1: Update address + city FIRST and wait for it to commit.
+  // This guarantees that any downstream consumer (ORIO sync, triggers, etc.)
+  // that reads the order after confirmation will see the new address — never
+  // the stale one.
+  const newAddress = parsed.full_address.trim();
+  const addressUpdate: Record<string, any> = {
+    customer_address: newAddress,
+    customer_city: finalCity,
+  };
+  const { error: addrErr } = await admin
+    .from("orders")
+    .update(addressUpdate)
+    .eq("order_id", order.order_id);
+  if (addrErr) {
+    errLog("address-extract: address update failed", addrErr);
+    return;
+  }
+
+  // STEP 2: Re-fetch to confirm the address is persisted, then confirm the
+  // order (and optionally trigger auto-book to ORIO). Doing this as a separate
+  // statement means the row's address column is already committed when the
+  // booked status is set.
+  const { data: refreshed } = await admin
+    .from("orders")
+    .select("customer_address, customer_city")
+    .eq("order_id", order.order_id)
+    .maybeSingle();
+  if (!refreshed || refreshed.customer_address !== newAddress) {
+    errLog("address-extract: address not persisted, aborting confirmation", {
+      expected: newAddress,
+      got: refreshed?.customer_address,
+    });
+    return;
+  }
+
+  // STEP 3: Confirm + (optionally) book for shipping
+  const settings = await getSettings();
+  const confirmUpdate: Record<string, any> = {
+    confirmation_status: "confirmed",
+    confirmation_channel: "whatsapp",
+    confirmed_at: new Date().toISOString(),
+    whatsapp_status: "confirmed",
+    whatsapp_last_reply_at: new Date().toISOString(),
+  };
+  if (settings?.auto_book_shipping) {
+    confirmUpdate.delivery_status = "booked";
+    confirmUpdate.shipping_status = "Booked";
+  }
   const { error: updErr } = await admin
     .from("orders")
-    .update(updates)
+    .update(confirmUpdate)
     .eq("order_id", order.order_id);
   if (updErr) {
-    errLog("address-extract: order update failed", updErr);
+    errLog("address-extract: confirmation update failed", updErr);
     return;
   }
 
@@ -735,12 +767,14 @@ Rules:
     .update({ status: "confirmed", outcome: "confirmed", updated_at: new Date().toISOString() })
     .eq("id", conv.id);
 
+  // Combined "after" for history logging
+  const after = { ...addressUpdate, ...confirmUpdate };
   await logOrderHistory({
     orderId: order.order_id,
     actionType: "ai_confirm",
     role: "ai",
     before,
-    after: updates,
+    after,
     fields: trackedFields,
   });
 
