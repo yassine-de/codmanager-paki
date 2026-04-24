@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
 
     const { data: product, error: prodErr } = await admin
       .from("products")
-      .select("id,name,product_url,ai_context,ai_context_scraped_at")
+      .select("id,name,product_url,ai_context,ai_context_scraped_at,scraped_image_url")
       .eq("id", productId)
       .maybeSingle();
 
@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
           cached: true,
           ai_context: product.ai_context,
           ai_context_scraped_at: product.ai_context_scraped_at,
+          scraped_image_url: product.scraped_image_url ?? null,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -153,10 +154,44 @@ Deno.serve(async (req) => {
       : markdown;
     const aiContext = `${header}\n\n${trimmed}`;
 
+    // Extract product image from metadata (og:image / twitter:image / first markdown img).
+    let scrapedImage: string | null = null;
+    const candidates: unknown[] = [
+      metadata?.ogImage,
+      metadata?.["og:image"],
+      metadata?.twitterImage,
+      metadata?.["twitter:image"],
+      metadata?.image,
+    ];
+    for (const c of candidates) {
+      if (typeof c === "string" && /^https?:\/\//i.test(c)) {
+        scrapedImage = c;
+        break;
+      }
+      if (Array.isArray(c)) {
+        const first = c.find((v) => typeof v === "string" && /^https?:\/\//i.test(v));
+        if (first) {
+          scrapedImage = first as string;
+          break;
+        }
+      }
+    }
+    if (!scrapedImage) {
+      // Fallback: first ![](url) image in markdown
+      const m = markdown.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/);
+      if (m) scrapedImage = m[1];
+    }
+
     const nowIso = new Date().toISOString();
+    const updatePayload: Record<string, unknown> = {
+      ai_context: aiContext,
+      ai_context_scraped_at: nowIso,
+    };
+    if (scrapedImage) updatePayload.scraped_image_url = scrapedImage;
+
     const { error: updErr } = await admin
       .from("products")
-      .update({ ai_context: aiContext, ai_context_scraped_at: nowIso })
+      .update(updatePayload)
       .eq("id", productId);
     if (updErr) {
       errLog("update failed", updErr);
@@ -166,12 +201,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    log("scraped", { productId, chars: aiContext.length });
+    log("scraped", { productId, chars: aiContext.length, image: scrapedImage ? "yes" : "no" });
     return new Response(
       JSON.stringify({
         cached: false,
         ai_context: aiContext,
         ai_context_scraped_at: nowIso,
+        scraped_image_url: scrapedImage,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
