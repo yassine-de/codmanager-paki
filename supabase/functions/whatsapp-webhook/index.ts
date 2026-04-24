@@ -76,7 +76,7 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
     order = data;
   }
 
-  // Conversation lookup: prefer order link, fallback to ANY phone variant.
+  // Conversation lookup: prefer the conversation already linked to this exact order.
   let conv: any = null;
   if (order) {
     const { data } = await admin
@@ -86,15 +86,58 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
       .maybeSingle();
     conv = data;
   }
+
+  // Otherwise look for a prior conversation from this phone — but ONLY reuse it
+  // when its linked order is for the SAME product (or it's unlinked). Different
+  // product on the same phone → keep threads separate so the AI / context don't
+  // mix products across orders.
   if (!conv) {
-    const { data } = await admin
+    const { data: candidates } = await admin
       .from("whatsapp_conversations")
       .select("*")
       .in("customer_phone", phoneVariants)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    conv = data;
+      .limit(10);
+
+    const list = candidates ?? [];
+    for (const cand of list) {
+      let reuse = false;
+      if (!cand.order_id) {
+        // Unlinked thread — safe to claim if we have an order.
+        reuse = !!order;
+      } else if (order?.product_name) {
+        const { data: prevOrder } = await admin
+          .from("orders")
+          .select("product_name")
+          .eq("order_id", cand.order_id)
+          .maybeSingle();
+        if (
+          prevOrder?.product_name &&
+          prevOrder.product_name.trim().toLowerCase() === order.product_name.trim().toLowerCase()
+        ) {
+          reuse = true;
+        }
+      } else if (!order) {
+        // No order resolved at all — fall back to most recent thread for this phone.
+        reuse = true;
+      }
+      if (reuse) {
+        if (order && !cand.order_id) {
+          await admin
+            .from("whatsapp_conversations")
+            .update({
+              order_id: order.order_id,
+              customer_name: order.customer_name ?? cand.customer_name,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", cand.id);
+          conv = { ...cand, order_id: order.order_id };
+        } else {
+          conv = cand;
+        }
+        break;
+      }
+    }
   }
 
   if (!conv) {
@@ -114,13 +157,6 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
       return { conv: null, order };
     }
     conv = inserted;
-  } else if (order && !conv.order_id) {
-    // Backfill order link if we just discovered it
-    await admin
-      .from("whatsapp_conversations")
-      .update({ order_id: order.order_id, customer_name: order.customer_name })
-      .eq("id", conv.id);
-    conv.order_id = order.order_id;
   }
 
   return { conv, order };
