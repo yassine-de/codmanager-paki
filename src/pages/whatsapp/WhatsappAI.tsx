@@ -25,6 +25,8 @@ type Settings = {
   max_tokens: number;
   response_lines: number;
   smart_follow_up_idle_hours: number;
+  ai_batch_wait_seconds: number;
+  ai_dedup_window_seconds: number;
   suggested_replies_enabled: boolean;
   full_auto_reply_enabled: boolean;
   intent_detection_enabled: boolean;
