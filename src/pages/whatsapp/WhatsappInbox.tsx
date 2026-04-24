@@ -301,12 +301,14 @@ export default function WhatsappInbox() {
     }
   }, [messages.length, selected]);
 
-  // Mark conversation read on open (clears the unread badge by setting last_message_at)
+  // Mark conversation read on open. We update `last_read_at` only — touching
+  // `last_message_at` would re-sort the list and jump this thread to the top
+  // (because of the `update_updated_at_column` trigger).
   useEffect(() => {
     if (!selected) return;
     void supabase
       .from("whatsapp_conversations")
-      .update({ last_message_at: new Date().toISOString() })
+      .update({ last_read_at: new Date().toISOString() })
       .eq("id", selected)
       .then(() => {
         qc.invalidateQueries({ queryKey: ["wts-unread-counts"] });
