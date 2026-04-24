@@ -173,6 +173,8 @@ Deno.serve(async (req) => {
     // Build payload depending on mode
     let payload: any;
     let bodyText = body.body ?? "";
+    let sentTemplateId: string | null = null;
+    let sentTemplateName: string | null = null;
 
     if (mode === "text") {
       if (!bodyText.trim()) throw new Error("Empty message");
@@ -213,6 +215,8 @@ Deno.serve(async (req) => {
 
       const templateName = tpl.meta_template_name || tpl.name;
       const language = tpl.language || "en_US";
+      sentTemplateId = String(tpl.id);
+      sentTemplateName = String(templateName);
       const vars: Record<string, any> = order
         ? {
             customer_name: order.customer_name,
@@ -328,7 +332,9 @@ Deno.serve(async (req) => {
       direction: "out",
       message_type: ["template","text","image","document","audio"].includes(mode) ? mode : "interactive",
       body: bodyText,
-      payload,
+      payload: sentTemplateId
+        ? { ...payload, _template_id: sentTemplateId, _template_name: sentTemplateName }
+        : payload,
       meta_message_id: metaMsgId,
       status: ok ? "sent" : "failed",
       error_message: ok ? null : JSON.stringify(respJson),
