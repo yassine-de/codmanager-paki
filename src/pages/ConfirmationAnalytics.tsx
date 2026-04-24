@@ -118,34 +118,46 @@ export default function ConfirmationAnalytics() {
     return new Date(o.updated_at);
   };
 
-  // When filtering by agent, include any order the agent ever touched
-  // (current agent_id, original_agent_id, OR an action in order_history by them).
-  const agentTouchedOrderIds = useMemo(() => {
+  // When filtering by agent, include orders where the agent performed a confirmation_status
+  // action within the selected date range (this is the agent's actual workload for the period).
+  // We derive each order's "effective status" from the agent's LAST action on it in the period,
+  // so downstream sections (cancel reasons, top products, daily report) reflect what the agent did.
+  const agentActionsInPeriod = useMemo(() => {
     if (agentFilter === "all") return null;
-    const ids = new Set<string>();
-    orders.forEach(o => {
-      if (o.agent_id === agentFilter || o.original_agent_id === agentFilter) ids.add(o.order_id);
-    });
+    const map = new Map<string, { lastStatus: string; lastAt: string }>();
     orderHistory.forEach(h => {
-      if (h.changed_by === agentFilter && h.field_changed === "confirmation_status") ids.add(h.order_id);
+      if (h.field_changed !== "confirmation_status") return;
+      if (h.changed_by !== agentFilter) return;
+      if (dateRange?.from && new Date(h.created_at) < dateRange.from) return;
+      if (dateRange?.to && new Date(h.created_at) > dateRange.to) return;
+      const prev = map.get(h.order_id);
+      if (!prev || new Date(h.created_at) > new Date(prev.lastAt)) {
+        map.set(h.order_id, { lastStatus: h.new_value || "", lastAt: h.created_at });
+      }
     });
-    return ids;
-  }, [orders, orderHistory, agentFilter]);
+    return map;
+  }, [orderHistory, agentFilter, dateRange]);
 
   const filteredOrders = useMemo(() => {
     let filtered = [...orders];
-    if (agentTouchedOrderIds) filtered = filtered.filter(o => agentTouchedOrderIds.has(o.order_id));
+    if (agentActionsInPeriod) {
+      // Only orders the agent actually acted on in the period, with their "effective status"
+      // overridden to the status the agent set (so cancel/postpone breakdowns are accurate).
+      filtered = filtered
+        .filter(o => agentActionsInPeriod.has(o.order_id))
+        .map(o => {
+          const action = agentActionsInPeriod.get(o.order_id)!;
+          return { ...o, confirmation_status: action.lastStatus || o.confirmation_status };
+        });
+    }
     if (sellerFilter !== "all") filtered = filtered.filter(o => o.seller_id === sellerFilter);
     if (productFilter !== "all") filtered = filtered.filter(o => o.product_name === productFilter);
-    // When an agent filter is active, do NOT filter orders by treatment date — actions in the
-    // period are matched via order_history (changed_by + created_at). Filtering here would
-    // hide orders the agent acted on today whose original treatment date is older.
     if (agentFilter === "all") {
       if (dateRange?.from) filtered = filtered.filter(o => getTreatmentDate(o) >= dateRange.from!);
       if (dateRange?.to) filtered = filtered.filter(o => getTreatmentDate(o) <= dateRange.to!);
     }
     return filtered;
-  }, [orders, agentTouchedOrderIds, agentFilter, sellerFilter, productFilter, dateRange]);
+  }, [orders, agentActionsInPeriod, agentFilter, sellerFilter, productFilter, dateRange]);
 
   // Stats
   const stats = useMemo(() => {
