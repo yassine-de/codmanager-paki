@@ -583,9 +583,7 @@ Rules:
     { role: "user", content: customerText },
   ];
 
-  const exUrl = useGateway
-    ? "https://ai.gateway.lovable.dev/v1/chat/completions"
-    : "https://api.openai.com/v1/chat/completions";
+  const exUrl = "https://api.openai.com/v1/chat/completions";
 
   const exResp = await fetch(exUrl, {
     method: "POST",
