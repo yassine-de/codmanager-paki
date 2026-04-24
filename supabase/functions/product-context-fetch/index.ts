@@ -1,7 +1,7 @@
 // Scrapes the product's store URL via Firecrawl and caches the result in
 // `products.ai_context`. Returns cached value if scraped within last 7 days,
 // unless `force=true`. Requires admin auth (or service role internal call).
-import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

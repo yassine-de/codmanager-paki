@@ -3,7 +3,7 @@
 //   - submit: Create/submit a template to Meta for approval (POST /{waba_id}/message_templates)
 //   - refresh: Pull template statuses from Meta and update local rows
 //   - delete: Delete a template on Meta (DELETE /{waba_id}/message_templates?name=...)
-import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

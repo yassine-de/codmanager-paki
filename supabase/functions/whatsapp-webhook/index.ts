@@ -3,7 +3,7 @@
 // POST: incoming messages / button replies / status updates.
 // Foundation of the WhatsApp automation system: stores messages, links them to
 // conversations and orders, and triggers CRM logic for button actions.
-import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
