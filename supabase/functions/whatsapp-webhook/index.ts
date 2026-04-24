@@ -643,7 +643,8 @@ Rules:
 
   log("address-extract: auto-confirmed", {
     order: order.order_id,
-    city: matchedCity,
+    city: finalCity,
+    matched: !!matchedCity,
     addr_len: parsed.full_address.length,
   });
 }
