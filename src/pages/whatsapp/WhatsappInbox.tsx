@@ -193,6 +193,39 @@ export default function WhatsappInbox() {
     enabled: !!selected,
   });
 
+  // Per-conversation unread counts (WhatsApp-style green badge).
+  // Counts inbound messages newer than the conversation's `last_message_at`,
+  // which we bump to "now" each time the user opens the thread.
+  const convoIdsKey = convos.map((c) => c.id).join(",");
+  const { data: unreadMap = {} } = useQuery<Record<string, number>>({
+    queryKey: ["wts-unread-counts", convoIdsKey],
+    queryFn: async () => {
+      if (!convos.length) return {};
+      const ids = convos.map((c) => c.id);
+      const { data, error } = await supabase
+        .from("whatsapp_messages")
+        .select("conversation_id, created_at")
+        .eq("direction", "in")
+        .in("conversation_id", ids)
+        .order("created_at", { ascending: false })
+        .limit(2000);
+      if (error) throw error;
+      const lastSeen = new Map<string, number>(
+        convos.map((c) => [c.id, c.last_message_at ? new Date(c.last_message_at).getTime() : 0]),
+      );
+      const map: Record<string, number> = {};
+      for (const row of (data ?? []) as { conversation_id: string; created_at: string }[]) {
+        const seen = lastSeen.get(row.conversation_id) ?? 0;
+        if (new Date(row.created_at).getTime() > seen) {
+          map[row.conversation_id] = (map[row.conversation_id] ?? 0) + 1;
+        }
+      }
+      return map;
+    },
+    enabled: convos.length > 0,
+    staleTime: 10_000,
+  });
+
   // Load templates so we can render the buttons (quick replies / URL / phone) below template messages
   const { data: templates = [] } = useQuery<any[]>({
     queryKey: ["wts-templates-buttons"],
