@@ -448,6 +448,54 @@ async function handleIncoming(value: any) {
 }
 
 // ---------------------------------------------------------------------------
+// Send a WhatsApp image message (used by the AI when the customer asks for a
+// product photo). Logs the outbound message and returns whether it succeeded.
+// ---------------------------------------------------------------------------
+async function sendWhatsappImage(args: {
+  to: string;
+  imageUrl: string;
+  caption?: string;
+  conversationId: string;
+  orderId: string | null;
+  settings: any;
+  accessToken: string;
+}): Promise<boolean> {
+  const { to, imageUrl, caption, conversationId, orderId, settings, accessToken } = args;
+  const mediaObj: any = { link: imageUrl };
+  if (caption) mediaObj.caption = caption;
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "image",
+    image: mediaObj,
+  };
+  const url = `${settings.api_base_url}/${settings.phone_number_id}/messages`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const respJson = await resp.json().catch(() => ({}));
+  const ok = resp.ok;
+  const metaMsgId = ok ? respJson?.messages?.[0]?.id : null;
+  await admin.from("whatsapp_messages").insert({
+    conversation_id: conversationId,
+    order_id: orderId,
+    direction: "out",
+    message_type: "image",
+    body: caption || "[image]",
+    payload: { ...payload, _ai_continuation: true, _ai_tool: "send_product_image" },
+    meta_message_id: metaMsgId,
+    status: ok ? "sent" : "failed",
+    error_message: ok ? null : JSON.stringify(respJson).slice(0, 500),
+  });
+  if (!ok) errLog("ai send_product_image failed", respJson);
+  else log("ai send_product_image sent", { conv: conversationId });
+  return ok;
+}
+
+// ---------------------------------------------------------------------------
 // AI continuation: when a customer replies in free text and no automation run
 // is paused, generate an AI follow-up reply using the same logic as the
 // automation runner's `ai_step` so the conversation keeps flowing
