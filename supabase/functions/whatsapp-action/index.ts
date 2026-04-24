@@ -103,7 +103,19 @@ Deno.serve(async (req) => {
             .limit(1)
             .maybeSingle();
 
-      const templateId = templateLookup.data?.payload?._template_id;
+      let templateId = templateLookup.data?.payload?._template_id ?? null;
+      if (!templateId) {
+        const templateName = templateLookup.data?.payload?.template?.name ?? templateLookup.data?.payload?._template_name ?? null;
+        if (templateName) {
+          const { data: tpl } = await admin
+            .from("whatsapp_templates")
+            .select("id")
+            .or(`meta_template_name.eq.${templateName},name.eq.${templateName}`)
+            .limit(1)
+            .maybeSingle();
+          templateId = tpl?.id ?? null;
+        }
+      }
 
       // Re-trigger send via the send function path.
       // If this conversation previously used a template, resend the same template
