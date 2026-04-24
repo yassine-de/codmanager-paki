@@ -513,6 +513,8 @@ export type Database = {
       orders: {
         Row: {
           agent_id: string | null
+          agent_switch_scheduled_at: string | null
+          agent_switched_at: string | null
           assigned_at: string | null
           attempt_count: number
           attempts_today: number
@@ -569,6 +571,8 @@ export type Database = {
         }
         Insert: {
           agent_id?: string | null
+          agent_switch_scheduled_at?: string | null
+          agent_switched_at?: string | null
           assigned_at?: string | null
           attempt_count?: number
           attempts_today?: number
@@ -625,6 +629,8 @@ export type Database = {
         }
         Update: {
           agent_id?: string | null
+          agent_switch_scheduled_at?: string | null
+          agent_switched_at?: string | null
           assigned_at?: string | null
           attempt_count?: number
           attempts_today?: number
@@ -1912,6 +1918,8 @@ export type Database = {
         }
         Returns: {
           agent_id: string | null
+          agent_switch_scheduled_at: string | null
+          agent_switched_at: string | null
           assigned_at: string | null
           attempt_count: number
           attempts_today: number
@@ -2031,6 +2039,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      process_agent_switch_timeouts: { Args: never; Returns: number }
       reject_invoice_adjustment: {
         Args: { p_adjustment_id: string }
         Returns: Json
