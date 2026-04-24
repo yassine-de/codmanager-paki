@@ -772,11 +772,58 @@ async function tickDelays() {
     .eq("status", "waiting_delay")
     .lte("wait_until", new Date().toISOString())
     .limit(50);
-  if (!due?.length) return { processed: 0 };
-  for (const r of due) {
-    await resumeRun(r.id, {});
+  if (due?.length) {
+    for (const r of due) {
+      await resumeRun(r.id, {});
+    }
   }
-  return { processed: due.length };
+  const switched = await tickAgentSwitches();
+  return { processed: due?.length ?? 0, switched };
+}
+
+// Switch WhatsApp orders to the agent queue when the configured timeout
+// (trigger_config.switch_to_agent) elapses without a customer reply that
+// closed/confirmed the conversation.
+async function tickAgentSwitches() {
+  const nowIso = new Date().toISOString();
+  const { data: orders, error } = await admin
+    .from("orders")
+    .select("id, order_id, confirmation_status, agent_switch_scheduled_at, agent_switched_at")
+    .lte("agent_switch_scheduled_at", nowIso)
+    .is("agent_switched_at", null)
+    .eq("confirmation_status", "new_wts")
+    .limit(100);
+  if (error) {
+    errLog("tickAgentSwitches query", error.message);
+    return 0;
+  }
+  if (!orders?.length) return 0;
+  let count = 0;
+  for (const o of orders) {
+    const { error: updErr } = await admin
+      .from("orders")
+      .update({
+        confirmation_status: "new",
+        agent_switched_at: nowIso,
+        agent_id: null,
+      })
+      .eq("id", o.id)
+      .eq("confirmation_status", "new_wts")
+      .is("agent_switched_at", null);
+    if (updErr) {
+      errLog("tickAgentSwitches update", updErr.message);
+      continue;
+    }
+    // Cancel any in-flight automation runs for this order
+    await admin
+      .from("whatsapp_automation_runs")
+      .update({ status: "canceled", finished_at: nowIso })
+      .eq("order_id", o.order_id)
+      .in("status", ["waiting_reply", "waiting_delay", "running"]);
+    count++;
+    log("switched-to-agent", { order_id: o.order_id });
+  }
+  return count;
 }
 
 Deno.serve(async (req) => {
