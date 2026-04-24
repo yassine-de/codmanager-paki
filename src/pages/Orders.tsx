@@ -685,7 +685,7 @@ export default function Orders() {
                 value={filterDelivery}
                 onValueChange={setFilterDelivery}
                 options={Object.entries(deliveryConfig)
-                  .filter(([k]) => !['failed', 'failed_attempt', 'returned'].includes(k))
+                  .filter(([k]) => !['failed', 'returned'].includes(k))
                   .map(([k, v]) => ({ value: k, label: v.label }))}
                 placeholder="Delivery"
                 allLabel="All"
