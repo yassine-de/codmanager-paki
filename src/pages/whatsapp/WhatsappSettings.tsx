@@ -320,6 +320,31 @@ export default function WhatsappSettings() {
         </CardContent>
       </Card>
 
+      <Card className="lg:col-span-2">
+        <CardHeader><CardTitle className="text-base">Order Automation</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-sm font-medium">Auto-book ORIO shipping on confirmation</div>
+              <div className="text-[11px] text-muted-foreground">
+                {form.auto_book_shipping
+                  ? "When an order is confirmed via WhatsApp (button or AI auto-confirm), it is immediately marked Booked and sent to ORIO."
+                  : "Confirmed orders stay in the system without being pushed to ORIO. Admins/agents must book shipping manually."}
+              </div>
+            </div>
+            <Switch
+              checked={!!form.auto_book_shipping}
+              onCheckedChange={(v) => set("auto_book_shipping", v)}
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button onClick={save} disabled={busy} size="sm">
+              <Save className="h-4 w-4 mr-2" /> Save
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
     </div>
   );
 }

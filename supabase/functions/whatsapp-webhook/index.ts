@@ -595,26 +595,27 @@ Rules:
     return;
   }
 
-  // Match city to ORIO cache (case-insensitive, trimmed)
+  // Match city to ORIO cache (case-insensitive, trimmed). City matching is
+  // NON-BLOCKING: if no match, we still confirm the order using the raw city
+  // text the customer provided — admins can fix it later.
   const wanted = parsed.city.trim().toLowerCase();
   let matchedCity = cityNames.find((c: string) => c.toLowerCase() === wanted);
   if (!matchedCity) {
-    // Try partial match (city name contains or is contained in)
     matchedCity = cityNames.find((c: string) => {
       const lc = c.toLowerCase();
       return lc.includes(wanted) || wanted.includes(lc);
     });
   }
+  const finalCity = matchedCity || parsed.city.trim();
   if (!matchedCity) {
-    log("address-extract: city not in ORIO cache", parsed.city);
-    return;
+    log("address-extract: city not in ORIO cache, using raw", parsed.city);
   }
 
-  // Update the order: address + matched city + auto-confirm
+  // Update the order: address + city + auto-confirm
   const settings = await getSettings();
   const updates: Record<string, any> = {
     customer_address: parsed.full_address.trim(),
-    customer_city: matchedCity,
+    customer_city: finalCity,
     confirmation_status: "confirmed",
     confirmation_channel: "whatsapp",
     confirmed_at: new Date().toISOString(),
@@ -642,7 +643,8 @@ Rules:
 
   log("address-extract: auto-confirmed", {
     order: order.order_id,
-    city: matchedCity,
+    city: finalCity,
+    matched: !!matchedCity,
     addr_len: parsed.full_address.length,
   });
 }
