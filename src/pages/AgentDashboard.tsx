@@ -36,6 +36,37 @@ const AgentDashboard = () => {
   const [datePreset, setDatePreset] = useState<DatePresetValue>("7d");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(getDateRangeFromPreset("7d"));
 
+  const { data: orderHistory = [] } = useQuery({
+    queryKey: ["agent-dashboard-order-history", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+
+      const pageSize = 1000;
+      let from = 0;
+      const all: Array<{ order_id: string; new_value: string | null; created_at: string }> = [];
+
+      while (true) {
+        const { data, error } = await supabase
+          .from("order_history")
+          .select("order_id, new_value, created_at")
+          .eq("field_changed", "confirmation_status")
+          .eq("changed_by", userId)
+          .order("created_at", { ascending: true })
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+
+        all.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+
+      return all;
+    },
+    enabled: !!userId,
+  });
+
   // Fetch orders assigned to this agent that have been treated (status != 'new')
   const { data: agentOrders = [] } = useQuery({
     queryKey: ["agent-dashboard-orders", userId],
@@ -52,29 +83,47 @@ const AgentDashboard = () => {
     enabled: !!userId,
   });
 
-  // Filter by treatment date — use the most accurate timestamp per status
-  const filteredOrders = useMemo(() => {
-    return agentOrders.filter((o: any) => {
-      // Pick the best timestamp reflecting when the agent actually treated this order:
-      // - confirmed orders → confirmed_at
-      // - no_answer/retry orders → last_attempt_at (each retry updates this)
-      // - all others → last_activity_at or updated_at as fallback
-      let treatDate: Date;
-      if (o.confirmation_status === 'confirmed' && o.confirmed_at) {
-        treatDate = new Date(o.confirmed_at);
-      } else if (o.last_attempt_at) {
-        treatDate = new Date(o.last_attempt_at);
-      } else if (o.last_activity_at) {
-        treatDate = new Date(o.last_activity_at);
-      } else {
-        treatDate = new Date(o.updated_at);
+  const statusActionsInPeriod = useMemo(() => {
+    const map = new Map<string, { lastStatus: string; lastAt: string }>();
+    const from = dateRange?.from ? startOfDay(dateRange.from) : null;
+    const to = dateRange?.to
+      ? endOfDay(dateRange.to)
+      : dateRange?.from
+        ? endOfDay(dateRange.from)
+        : null;
+
+    orderHistory.forEach((entry) => {
+      const changedAt = new Date(entry.created_at);
+      if (from && changedAt < from) return;
+      if (to && changedAt > to) return;
+
+      const previous = map.get(entry.order_id);
+      if (!previous || changedAt > new Date(previous.lastAt)) {
+        map.set(entry.order_id, {
+          lastStatus: entry.new_value || "",
+          lastAt: entry.created_at,
+        });
       }
-      if (!dateRange?.from) return true;
-      const from = startOfDay(dateRange.from);
-      const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
-      return isWithinInterval(treatDate, { start: from, end: to });
     });
-  }, [agentOrders, dateRange]);
+
+    return map;
+  }, [orderHistory, dateRange]);
+
+  // Filter by status update date from order_history so Today/Cancelled matches the system logs
+  const filteredOrders = useMemo(() => {
+    if (!dateRange?.from) return agentOrders;
+
+    return agentOrders
+      .filter((o: any) => statusActionsInPeriod.has(o.order_id))
+      .map((o: any) => {
+        const action = statusActionsInPeriod.get(o.order_id)!;
+        return {
+          ...o,
+          confirmation_status: action.lastStatus || o.confirmation_status,
+          treated_at: action.lastAt,
+        };
+      });
+  }, [agentOrders, dateRange, statusActionsInPeriod]);
 
   const stats = useMemo(() => {
     const total = filteredOrders.length;
