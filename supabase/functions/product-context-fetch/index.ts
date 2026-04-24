@@ -43,11 +43,17 @@ Deno.serve(async (req) => {
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     if (!FIRECRAWL_API_KEY) {
+      errLog("missing FIRECRAWL_API_KEY");
       return new Response(JSON.stringify({ error: "FIRECRAWL_API_KEY not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    log("firecrawl key detected", {
+      length: FIRECRAWL_API_KEY.length,
+      fingerprint: redactSecret(FIRECRAWL_API_KEY),
+    });
 
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
