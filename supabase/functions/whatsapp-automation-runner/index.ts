@@ -7,7 +7,7 @@
 //  - { tick: true }                                       → wake delayed runs (cron)
 //
 // Node types supported: send_template, send_message, ai_step, condition, delay, add_tag, remove_tag.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

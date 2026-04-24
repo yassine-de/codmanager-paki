@@ -3,7 +3,7 @@
 //  - template: send approved template by template_id (always allowed; bypasses 24h)
 //  - text:     send free-form text (only valid inside 24h customer service window)
 //  - order:    send order-confirmation interactive buttons (default legacy behavior)
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
