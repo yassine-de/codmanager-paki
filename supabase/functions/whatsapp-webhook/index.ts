@@ -413,7 +413,7 @@ async function aiContinueReply(args: {
     ? `\n\nOrder context:\n- Order ID: ${order.order_id}\n- Customer: ${order.customer_name}\n- Product: ${order.product_name}\n- Quantity: ${order.quantity}\n- Total: ${order.total_amount} PKR\n- City: ${order.customer_city}\n- Address: ${order.customer_address ?? "(not provided)"}`
     : "";
   const addressRule = order && (!order.customer_address || String(order.customer_address).trim().length < 10)
-    ? `\n\nIMPORTANT: The customer's delivery address is missing or incomplete. Do NOT close the conversation. Politely ask for the full address (house/flat number, street, area/landmark, and city) in the customer's language. Keep asking in follow-ups until you receive a complete, deliverable address.`
+    ? `\n\nIMPORTANT: The customer's delivery address is missing or incomplete. Do NOT close the conversation. Politely ask for the full address (house/flat number, street, area/landmark, and city) in the customer's language. Keep asking in follow-ups until you receive a complete, deliverable address.\n\nWhen the customer provides a complete address (with house/flat, street, area, AND city), thank them briefly and confirm the order will be delivered. The system will auto-confirm in the background.`
     : "";
   const baseSys = aiSettings.system_prompt || "You are a helpful WhatsApp sales assistant.";
   const sysPrompt =
