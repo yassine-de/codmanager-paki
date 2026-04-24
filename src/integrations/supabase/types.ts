@@ -1681,6 +1681,7 @@ export type Database = {
           customer_phone: string
           id: string
           last_message_at: string | null
+          last_read_at: string | null
           last_reply_at: string | null
           order_id: string | null
           outcome: string | null
@@ -1694,6 +1695,7 @@ export type Database = {
           customer_phone: string
           id?: string
           last_message_at?: string | null
+          last_read_at?: string | null
           last_reply_at?: string | null
           order_id?: string | null
           outcome?: string | null
@@ -1707,6 +1709,7 @@ export type Database = {
           customer_phone?: string
           id?: string
           last_message_at?: string | null
+          last_read_at?: string | null
           last_reply_at?: string | null
           order_id?: string | null
           outcome?: string | null
