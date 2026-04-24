@@ -432,20 +432,15 @@ async function aiContinueReply(args: {
   const sysPrompt =
     `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${addressRule}`;
 
-  const rawModel = aiSettings.model || "google/gemini-3-flash-preview";
-  // When using OpenAI directly, strip provider prefix; map gemini → gpt-4o-mini.
-  // When using Lovable Gateway, keep the original "provider/model" identifier.
-  const model = useGateway
-    ? (rawModel.includes("/") ? rawModel : `openai/${rawModel}`)
-    : rawModel.startsWith("openai/")
+  const rawModel = aiSettings.model || "gpt-4o-mini";
+  // Always OpenAI: strip provider prefix; map gemini → gpt-4o-mini.
+  const model = rawModel.startsWith("openai/")
     ? rawModel.replace("openai/", "")
     : rawModel.includes("gemini")
     ? "gpt-4o-mini"
     : rawModel;
 
-  const aiUrl = useGateway
-    ? "https://ai.gateway.lovable.dev/v1/chat/completions"
-    : "https://api.openai.com/v1/chat/completions";
+  const aiUrl = "https://api.openai.com/v1/chat/completions";
 
   const aiResp = await fetch(aiUrl, {
     method: "POST",
