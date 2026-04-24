@@ -229,9 +229,9 @@ async function ensureConversation(order: any, normalizedPhone: string) {
     .maybeSingle();
   if (byOrder) return byOrder;
 
-  // 2) Otherwise reuse the latest conversation for this phone (any phone variant).
-  //    This prevents creating a duplicate row when the same customer places a
-  //    new order — we just relink the existing thread to the new order.
+  // 2) Otherwise look for a prior conversation from this phone — but ONLY reuse
+  //    it when its linked order is for the SAME product. Different product on
+  //    the same phone → keep threads separate so the AI doesn't mix products.
   const digits = (normalizedPhone || "").replace(/\D/g, "");
   const withPlus = digits ? `+${digits}` : "";
   const localZero = digits.startsWith("92") ? `0${digits.slice(2)}` : digits;
@@ -239,25 +239,45 @@ async function ensureConversation(order: any, normalizedPhone: string) {
     new Set([normalizedPhone, digits, withPlus, localZero].filter(Boolean)),
   );
   if (phoneVariants.length > 0) {
-    const { data: byPhone } = await admin
+    const { data: candidates } = await admin
       .from("whatsapp_conversations")
       .select("*")
       .in("customer_phone", phoneVariants)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (byPhone) {
-      // Relink to the new order so future messages/buttons resolve correctly.
-      await admin
-        .from("whatsapp_conversations")
-        .update({
-          order_id: order.order_id,
-          customer_name: order.customer_name ?? byPhone.customer_name,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", byPhone.id);
-      return { ...byPhone, order_id: order.order_id };
+      .limit(10);
+
+    for (const cand of candidates ?? []) {
+      let reuse = false;
+      if (!cand.order_id) {
+        // Unlinked thread — safe to claim for this order.
+        reuse = true;
+      } else {
+        const { data: prevOrder } = await admin
+          .from("orders")
+          .select("product_name")
+          .eq("order_id", cand.order_id)
+          .maybeSingle();
+        if (
+          prevOrder?.product_name &&
+          order.product_name &&
+          prevOrder.product_name.trim().toLowerCase() === order.product_name.trim().toLowerCase()
+        ) {
+          reuse = true;
+        }
+      }
+      if (reuse) {
+        await admin
+          .from("whatsapp_conversations")
+          .update({
+            order_id: order.order_id,
+            customer_name: order.customer_name ?? cand.customer_name,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", cand.id);
+        return { ...cand, order_id: order.order_id };
+      }
     }
+    // No same-product match → fall through and create a new conversation.
   }
 
   // 3) No existing conversation — create one.
