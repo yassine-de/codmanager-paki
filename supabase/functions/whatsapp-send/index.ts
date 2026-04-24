@@ -187,14 +187,47 @@ Deno.serve(async (req) => {
       };
     } else if (mode === "image" || mode === "document" || mode === "audio") {
       if (!body.media_url) throw new Error("media_url required");
-      const mediaObj: any = { link: body.media_url };
-      if (mode === "image" && bodyText) mediaObj.caption = bodyText;
-      if (mode === "document") {
-        if (bodyText) mediaObj.caption = bodyText;
-        if (body.media_filename) mediaObj.filename = body.media_filename;
+      const mediaObj: any = {};
+
+      // For audio (voice notes) we MUST upload the binary to Meta first and reference it
+      // by media `id`. When using a public `link`, Meta sniffs the file's magic bytes and
+      // rejects WebM/OGG voice files as application/octet-stream.
+      // For images/documents the `link` flow is fine.
+      if (mode === "audio") {
+        // Force the proper voice-note MIME so Meta accepts it.
+        const audioMime = "audio/ogg";
+        const fileResp = await fetch(body.media_url);
+        if (!fileResp.ok) throw new Error(`Failed to fetch media: ${fileResp.status}`);
+        const audioBlob = await fileResp.blob();
+        // Re-wrap with the correct MIME (the storage bucket may serve octet-stream).
+        const fixedBlob = new Blob([await audioBlob.arrayBuffer()], { type: audioMime });
+
+        const fd = new FormData();
+        fd.append("messaging_product", "whatsapp");
+        fd.append("type", audioMime);
+        fd.append("file", fixedBlob, body.media_filename || "voice.ogg");
+
+        const uploadUrl = `${settings.api_base_url}/${settings.phone_number_id}/media`;
+        const upResp = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}` },
+          body: fd,
+        });
+        const upJson = await upResp.json();
+        if (!upResp.ok || !upJson?.id) {
+          throw new Error(`Meta media upload failed: ${JSON.stringify(upJson)}`);
+        }
+        mediaObj.id = upJson.id;
+        mediaObj.voice = true;
+      } else {
+        mediaObj.link = body.media_url;
+        if (mode === "image" && bodyText) mediaObj.caption = bodyText;
+        if (mode === "document") {
+          if (bodyText) mediaObj.caption = bodyText;
+          if (body.media_filename) mediaObj.filename = body.media_filename;
+        }
       }
-      // Render audio as a true WhatsApp voice note (push-to-play bubble) instead of a file attachment.
-      if (mode === "audio") mediaObj.voice = true;
+
       payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
