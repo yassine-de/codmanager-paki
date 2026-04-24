@@ -771,6 +771,7 @@ export type Database = {
           price: number
           product_url: string | null
           quantity: number
+          scraped_image_url: string | null
           seller_id: string
           seller_seen: boolean | null
           sku: string
@@ -797,6 +798,7 @@ export type Database = {
           price?: number
           product_url?: string | null
           quantity?: number
+          scraped_image_url?: string | null
           seller_id: string
           seller_seen?: boolean | null
           sku: string
@@ -823,6 +825,7 @@ export type Database = {
           price?: number
           product_url?: string | null
           quantity?: number
+          scraped_image_url?: string | null
           seller_id?: string
           seller_seen?: boolean | null
           sku?: string

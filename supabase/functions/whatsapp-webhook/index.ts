@@ -546,32 +546,47 @@ async function aiContinueReply(args: {
   if (order?.product_name) {
     const { data: p } = await admin
       .from("products")
-      .select("id,name,image_url,price,product_url,ai_context,ai_context_scraped_at")
+      .select("id,name,image_url,scraped_image_url,price,product_url,ai_context,ai_context_scraped_at")
       .ilike("name", order.product_name.trim())
       .maybeSingle();
     product = p;
   }
-  const hasProductImage = !!(product?.image_url && /^https?:\/\//i.test(product.image_url));
 
   // Lazy-scrape the product page if we have a product_url but no fresh ai_context.
   // Cached for 7 days inside product-context-fetch. Non-blocking on failure.
+  // Also auto-triggers when ai_context is fresh BUT no image was ever scraped
+  // (e.g. ai_context predates the scraped_image_url feature) — uses force=true to refresh.
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   const ctxAge = product?.ai_context_scraped_at
     ? Date.now() - new Date(product.ai_context_scraped_at).getTime()
     : Infinity;
   const ctxStale = !product?.ai_context || ctxAge > SEVEN_DAYS_MS;
-  if (product?.id && product?.product_url && /^https?:\/\//i.test(product.product_url) && ctxStale) {
+  const hasManualImage = !!(product?.image_url && /^https?:\/\//i.test(product.image_url));
+  const hasScrapedImage = !!(product?.scraped_image_url && /^https?:\/\//i.test(product.scraped_image_url));
+  const needsImageBackfill = !hasManualImage && !hasScrapedImage;
+  const shouldScrape = product?.id && product?.product_url && /^https?:\/\//i.test(product.product_url) && (ctxStale || needsImageBackfill);
+  if (shouldScrape) {
     try {
       const { data: ctxRes } = await admin.functions.invoke("product-context-fetch", {
-        body: { product_id: product.id },
+        body: { product_id: product.id, force: needsImageBackfill && !ctxStale },
       });
       if (ctxRes?.ai_context) {
         product.ai_context = ctxRes.ai_context;
+      }
+      if (ctxRes?.scraped_image_url) {
+        product.scraped_image_url = ctxRes.scraped_image_url;
       }
     } catch (e) {
       errLog("product-context-fetch invoke failed", (e as Error).message);
     }
   }
+
+  // Effective image for AI tool: manual upload > scraped from store.
+  const effectiveImageUrl: string | null = hasManualImage
+    ? product.image_url
+    : (product?.scraped_image_url && /^https?:\/\//i.test(product.scraped_image_url) ? product.scraped_image_url : null);
+  const hasProductImage = !!effectiveImageUrl;
+
   const productContext: string = product?.ai_context
     ? `\n\nProduct details (from store page — use to answer customer questions about features, materials, sizes, colors, usage, etc. Stay accurate, do NOT invent facts not in this text):\n${product.ai_context}`
     : "";
@@ -648,7 +663,7 @@ async function aiContinueReply(args: {
   if (hasProductImage && toolCalls.some((c: any) => c?.function?.name === "send_product_image")) {
     imageSent = await sendWhatsappImage({
       to: conv.customer_phone,
-      imageUrl: product.image_url,
+      imageUrl: effectiveImageUrl!,
       caption: order?.product_name ? `${order.product_name}` : undefined,
       conversationId: conv.id,
       orderId: order?.order_id ?? null,
