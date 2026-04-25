@@ -67,18 +67,63 @@ const AgentDashboard = () => {
     enabled: !!userId,
   });
 
-  // Fetch orders assigned to this agent that have been treated (status != 'new')
+  // Fetch orders this agent treated — includes:
+  // 1) orders currently/originally assigned to this agent
+  // 2) orders this agent treated in history (even if later reclaimed by another agent from retries)
   const { data: agentOrders = [] } = useQuery({
-    queryKey: ["agent-dashboard-orders", userId],
+    queryKey: ["agent-dashboard-orders", userId, orderHistory.length],
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase
-        .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, product_name, price, quantity, total_amount, confirmed_at, created_at, updated_at, last_attempt_at, last_activity_at")
-        .or(`agent_id.eq.${userId},original_agent_id.eq.${userId}`)
-        .neq("confirmation_status", "new");
-      if (error) throw error;
-      return data || [];
+
+      // Collect all order_ids this agent ever treated (from history)
+      const historyOrderIds = Array.from(new Set(orderHistory.map((h) => h.order_id)));
+
+      // Fetch in two passes & merge
+      const fetchPage = async (filter: (q: any) => any) => {
+        const pageSize = 1000;
+        let from = 0;
+        const all: any[] = [];
+        while (true) {
+          const q = filter(
+            supabase
+              .from("orders")
+              .select("id, order_id, confirmation_status, delivery_status, product_name, price, quantity, total_amount, confirmed_at, created_at, updated_at, last_attempt_at, last_activity_at")
+          ).range(from, from + pageSize - 1);
+          const { data, error } = await q;
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+          all.push(...data);
+          if (data.length < pageSize) break;
+          from += pageSize;
+        }
+        return all;
+      };
+
+      const assigned = await fetchPage((q) =>
+        q.or(`agent_id.eq.${userId},original_agent_id.eq.${userId}`).neq("confirmation_status", "new")
+      );
+
+      // Fetch remaining ids touched in history but not in `assigned`
+      const assignedIds = new Set(assigned.map((o) => o.order_id));
+      const remainingIds = historyOrderIds.filter((id) => !assignedIds.has(id));
+
+      let extra: any[] = [];
+      if (remainingIds.length > 0) {
+        // Chunk to avoid URL length limits
+        const chunkSize = 200;
+        for (let i = 0; i < remainingIds.length; i += chunkSize) {
+          const chunk = remainingIds.slice(i, i + chunkSize);
+          const { data, error } = await supabase
+            .from("orders")
+            .select("id, order_id, confirmation_status, delivery_status, product_name, price, quantity, total_amount, confirmed_at, created_at, updated_at, last_attempt_at, last_activity_at")
+            .in("order_id", chunk)
+            .neq("confirmation_status", "new");
+          if (error) throw error;
+          extra.push(...(data || []));
+        }
+      }
+
+      return [...assigned, ...extra];
     },
     enabled: !!userId,
   });
