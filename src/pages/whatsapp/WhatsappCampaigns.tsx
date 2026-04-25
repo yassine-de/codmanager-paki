@@ -390,6 +390,9 @@ function CreateCampaignDialog({
   const [scheduledTime, setScheduledTime] = useState("10:00");
   const [throttle, setThrottle] = useState(30);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
+  const [previewBreakdown, setPreviewBreakdown] = useState<{
+    total_orders: number; invalid_phones: number; duplicates: number;
+  } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
