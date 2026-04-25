@@ -719,6 +719,10 @@ const AgentOrders = () => {
         style: { background: "hsl(155, 50%, 96%)", border: "1px solid hsl(155, 50%, 42%)", color: "hsl(155, 50%, 25%)", fontWeight: 600 },
       });
 
+      // Invalidate dashboard caches so Claimed Orders / stats reflect this action immediately
+      queryClient.invalidateQueries({ queryKey: ["agent-dashboard-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-dashboard-order-history"] });
+
       await loadNextOrder();
     } catch (error: any) {
       console.error("[AgentOrders] Submit error", error);
