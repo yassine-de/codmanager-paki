@@ -495,9 +495,15 @@ function CreateCampaignDialog({
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || "Preview failed");
       setPreviewCount(data.count);
+      setPreviewBreakdown({
+        total_orders: data.total_orders ?? 0,
+        invalid_phones: data.invalid_phones ?? 0,
+        duplicates: data.duplicates ?? 0,
+      });
     } catch (e: any) {
       toast.error(e.message);
       setPreviewCount(0);
+      setPreviewBreakdown(null);
     } finally {
       setPreviewLoading(false);
     }
