@@ -1915,6 +1915,10 @@ export type Database = {
         }
         Returns: Json
       }
+      agent_has_treated_order: {
+        Args: { _order_id: string; _user_id: string }
+        Returns: boolean
+      }
       approve_invoice_adjustment: {
         Args: { p_adjustment_id: string }
         Returns: Json
