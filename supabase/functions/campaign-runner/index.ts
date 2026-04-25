@@ -453,7 +453,7 @@ Deno.serve(async (req) => {
       if (!c) throw new Error("Campaign not found");
 
       // Build recipients.
-      const recipients = await buildRecipients(c);
+      const { recipients } = await buildRecipients(c);
       if (recipients.length === 0) {
         await admin.from("whatsapp_campaigns").update({
           status: "failed",
