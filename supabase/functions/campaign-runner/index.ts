@@ -401,7 +401,7 @@ Deno.serve(async (req) => {
           .select("*", { count: "exact", head: true })
           .eq("campaign_id", id);
         if ((recipCount ?? 0) === 0) {
-          const recipients = await buildRecipients(c);
+          const { recipients } = await buildRecipients(c);
           if (recipients.length) {
             // Insert in chunks to avoid PG row limit.
             const chunkSize = 500;
