@@ -70,11 +70,18 @@ const AgentDashboard = () => {
     refetchOnWindowFocus: true,
   });
 
+  // Build a stable signature of treated order IDs so the orders query refetches
+  // whenever the agent treats a new order (even if length collides).
+  const historyOrderIdsSignature = useMemo(() => {
+    const ids = Array.from(new Set(orderHistory.map((h) => h.order_id))).sort();
+    return ids.join(",");
+  }, [orderHistory]);
+
   // Fetch orders this agent treated — includes:
   // 1) orders currently/originally assigned to this agent
   // 2) orders this agent treated in history (even if later reclaimed by another agent from retries)
   const { data: agentOrders = [] } = useQuery({
-    queryKey: ["agent-dashboard-orders", userId, orderHistory.length],
+    queryKey: ["agent-dashboard-orders", userId, historyOrderIdsSignature],
     queryFn: async () => {
       if (!userId) return [];
 
