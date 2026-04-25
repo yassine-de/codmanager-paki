@@ -432,10 +432,18 @@ Deno.serve(async (req) => {
       // Just count recipients without persisting.
       const { campaign } = body;
       if (!campaign) throw new Error("campaign required");
-      const recipients = await buildRecipients({ ...campaign, id: "preview" });
-      return new Response(JSON.stringify({ ok: true, count: recipients.length, sample: recipients.slice(0, 5) }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const { recipients, totalOrders, invalidPhones, duplicates } = await buildRecipients({ ...campaign, id: "preview" });
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          count: recipients.length,
+          total_orders: totalOrders,
+          invalid_phones: invalidPhones,
+          duplicates,
+          sample: recipients.slice(0, 5),
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     if (action === "start") {
