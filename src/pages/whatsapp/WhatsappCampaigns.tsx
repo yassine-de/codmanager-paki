@@ -127,7 +127,7 @@ export default function WhatsappCampaigns() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this campaign? This cannot be undone.")) return;
-    const { error } = await supabase.from("whatsapp_campaigns" as any).delete().eq("id", id);
+    const { error } = await (supabase as any).from("whatsapp_campaigns").delete().eq("id", id);
     if (error) toast.error(error.message);
     else {
       toast.success("Campaign deleted");
@@ -525,8 +525,8 @@ function CreateCampaignDialog({
     try {
       const scheduled_at = buildScheduledAt();
       const status = sendMode === "scheduled" ? "scheduled" : "sending";
-      const { data: created, error } = await supabase
-        .from("whatsapp_campaigns" as any)
+      const { data: created, error } = await (supabase as any)
+        .from("whatsapp_campaigns")
         .insert({
           name: name.trim(),
           description: description.trim(),
@@ -550,7 +550,7 @@ function CreateCampaignDialog({
         if (!runRes?.ok) throw new Error(runRes?.error || "Failed to start");
         toast.success(`Campaign started — ${runRes.total} recipients`);
       } else {
-        await supabase.from("whatsapp_campaigns" as any).update({ status: "scheduled" }).eq("id", (created as any).id);
+        await (supabase as any).from("whatsapp_campaigns").update({ status: "scheduled" }).eq("id", (created as any).id);
         toast.success(`Campaign scheduled for ${format(new Date(scheduled_at!), "PPp")}`);
       }
       onCreated();
@@ -1022,8 +1022,8 @@ function CampaignDetailsDialog({ campaign, onClose }: { campaign: Campaign | nul
     queryKey: ["campaign-recipients", campaign?.id],
     queryFn: async () => {
       if (!campaign) return [];
-      const { data } = await supabase
-        .from("whatsapp_campaign_recipients" as any)
+      const { data } = await (supabase as any)
+        .from("whatsapp_campaign_recipients")
         .select("*")
         .eq("campaign_id", campaign.id)
         .order("created_at", { ascending: false })
