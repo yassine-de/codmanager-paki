@@ -379,7 +379,6 @@ function CreateCampaignDialog({
   const [templateId, setTemplateId] = useState<string>("");
   const [filters, setFilters] = useState<any>({
     seller_ids: [],
-    cities: [],
     confirmation_status: [],
     delivery_status: [],
     product_names: [],
@@ -402,7 +401,7 @@ function CreateCampaignDialog({
       setDescription("");
       setTemplateId("");
       setFilters({
-        seller_ids: [], cities: [], confirmation_status: [], delivery_status: [],
+        seller_ids: [], confirmation_status: [], delivery_status: [],
         product_names: [], date_from: null, date_to: null,
       });
       setSendMode("immediate");
@@ -431,36 +430,43 @@ function CreateCampaignDialog({
   const { data: sellers = [] } = useQuery({
     queryKey: ["sellers-for-campaign"],
     queryFn: async () => {
-      const { data } = await supabase
+      // Get all seller user_ids from user_roles
+      const { data: roles, error: rolesErr } = await supabase
         .from("user_roles")
-        .select("user_id, profiles:user_id(name, email)")
+        .select("user_id")
         .eq("role", "seller");
-      return (data ?? []).map((r: any) => ({
-        id: r.user_id,
-        name: r.profiles?.name || r.profiles?.email || r.user_id,
-      }));
+      if (rolesErr) {
+        console.error("[campaign] sellers roles error", rolesErr);
+        return [];
+      }
+      const ids = (roles ?? []).map((r: any) => r.user_id);
+      if (ids.length === 0) return [];
+
+      // Fetch corresponding profiles (admins can read all profiles via RLS)
+      const { data: profs, error: profErr } = await supabase
+        .from("profiles")
+        .select("user_id, name, email")
+        .in("user_id", ids);
+      if (profErr) {
+        console.error("[campaign] sellers profiles error", profErr);
+      }
+      const byId = new Map<string, any>();
+      for (const p of profs ?? []) byId.set((p as any).user_id, p);
+
+      return ids
+        .map((id) => {
+          const p = byId.get(id);
+          return {
+            id,
+            name: p?.name || p?.email || id.slice(0, 8),
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
     enabled: open,
   });
 
-  // Cities (distinct from orders).
-  const { data: cities = [] } = useQuery({
-    queryKey: ["cities-for-campaign"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("orders")
-        .select("customer_city")
-        .not("customer_city", "is", null)
-        .limit(5000);
-      const set = new Set<string>();
-      for (const r of data ?? []) {
-        const c = (r as any).customer_city?.trim();
-        if (c) set.add(c);
-      }
-      return Array.from(set).sort();
-    },
-    enabled: open,
-  });
+
 
   // Products (distinct names).
   const { data: products = [] } = useQuery({
@@ -650,13 +656,6 @@ function CreateCampaignDialog({
                 options={sellers.map((s) => ({ value: s.id, label: s.name }))}
                 selected={filters.seller_ids}
                 onChange={(v) => setFilters({ ...filters, seller_ids: v })}
-              />
-
-              <FilterMultiSelect
-                label="Cities"
-                options={cities.map((c) => ({ value: c, label: c }))}
-                selected={filters.cities}
-                onChange={(v) => setFilters({ ...filters, cities: v })}
               />
 
               <FilterMultiSelect
