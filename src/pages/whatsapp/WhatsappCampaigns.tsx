@@ -630,37 +630,14 @@ function CreateCampaignDialog({
                   rows={2}
                 />
               </div>
-              <div>
-                <Label>Template *</Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Only approved templates can be sent. Templates allow messaging customers outside the 24h window.
-                </p>
-                <Select value={templateId} onValueChange={setTemplateId}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select a template..." /></SelectTrigger>
-                  <SelectContent>
-                    {templates.length === 0 ? (
-                      <div className="px-2 py-3 text-xs text-muted-foreground">
-                        No active templates. Create one in the Templates tab.
-                      </div>
-                    ) : templates.map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{t.name}</span>
-                          <Badge variant="outline" className="text-[10px]">
-                            {t.sync_status === "APPROVED" ? "✓ Approved" : t.sync_status}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedTemplate && (
-                  <Card className="mt-3 p-3 bg-muted/30 border-emerald-500/20">
-                    <p className="text-xs text-muted-foreground mb-1">Preview:</p>
-                    <p className="text-sm whitespace-pre-wrap">{selectedTemplate.body}</p>
-                  </Card>
-                )}
-              </div>
+              <TemplatePicker
+                templates={templates}
+                templateId={templateId}
+                onSelect={setTemplateId}
+                search={templateSearch}
+                onSearchChange={setTemplateSearch}
+                selectedTemplate={selectedTemplate}
+              />
             </div>
           )}
 
