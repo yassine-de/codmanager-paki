@@ -455,7 +455,9 @@ export default function Products() {
                       <th className="text-left py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">SKU</th>
                       <th className="text-left py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Name</th>
                       <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Status</th>
-                      <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">WhatsApp</th>
+                      {isAdmin && (
+                        <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">WhatsApp</th>
+                      )}
                       <th className="text-right py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Buying Price</th>
                       <th className="text-right py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Selling Price</th>
                       <th className="text-center py-2.5 px-3 font-medium text-xs text-muted-foreground uppercase tracking-wider">Total Qty</th>
@@ -507,8 +509,8 @@ export default function Products() {
                             {(product as any).active ? "Active" : "Inactive"}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-center">
-                          {isAdmin ? (
+                        {isAdmin && (
+                          <td className="py-2 px-3 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <Switch
                                 checked={!!(product as any).whatsappEnabled}
@@ -523,10 +525,8 @@ export default function Products() {
                                 {(product as any).whatsappEnabled ? "ON" : "OFF"}
                               </span>
                             </div>
-                          ) : (
-                            <span className="text-[10px] text-muted-foreground">—</span>
-                          )}
-                        </td>
+                          </td>
+                        )}
                         <td className="py-2 px-3 text-right tabular-nums text-xs font-medium">
                           <div>{product.price.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} $</div>
                           <div className="text-[10px] text-muted-foreground">{(product.price * 290).toLocaleString()} Rs</div>
