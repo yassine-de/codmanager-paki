@@ -734,7 +734,7 @@ function CreateCampaignDialog({
                       <div className="text-sm font-semibold">{previewBreakdown.total_orders}</div>
                     </div>
                     <div className="rounded-md bg-background/60 border p-2">
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Duplicate phones</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Duplicate (same phone & product)</div>
                       <div className="text-sm font-semibold">−{previewBreakdown.duplicates}</div>
                     </div>
                     <div className="rounded-md bg-background/60 border p-2">
