@@ -1,41 +1,46 @@
+## L-mochkil
 
+Daba campaign-runner ka-y-dedupliki recipients b **phone bark**. Natija: ila customer 3ndo 2 orders b 2 products mokhtalfin (kollhom `no_answer`), kay-receivi message wahed 3la order wahed bark — l-order tani kay-tlefa3.
 
-## Update Failed Attempt Mapping in ORIO Status Sync
+## L-7el
 
-Currently only the ORIO sub-status `"failed attempt"` maps to internal `failed_attempt`. You want 4 sub-statuses to map to `failed_attempt`, and existing orders already in those sub-statuses to be retroactively updated.
+Bdel l-dedup mn `phone` l `phone + product_name` (lowercase, trimmed).
 
-### Changes
+| Cas | Daba | M3a l-7el |
+|---|---|---|
+| Customer A — 1 order Product X | 1 message | 1 message |
+| Customer A — 2 orders nafs Product X | 1 message (dedup) | 1 message (dedup nafs product) |
+| Customer A — 2 orders, Product X + Product Y | **1 message bark** ❌ | **2 messages** (wahed l X, wahed l Y) ✅ |
 
-**1. Update status mapping** in `supabase/functions/orio-status-sync/index.ts`
+## Tabdilat
 
-Re-map these ORIO sub-statuses from `"shipped"` → `"failed_attempt"`:
-- `failed attempt` (already mapped — keep)
-- `incomplete address`
-- `refused to accept` (currently mapped to `rejected` — will change to `failed_attempt`)
-- `customer not answering`
+### `supabase/functions/campaign-runner/index.ts` — `buildRecipients()`
 
-New mapping block:
+Bdel l-dedup key:
+
 ```ts
-"failed attempt": "failed_attempt",
-"incomplete address": "failed_attempt",
-"refused to accept": "failed_attempt",
-"customer not answering": "failed_attempt",
+// 9bel:
+if (seen.has(phone)) continue;
+seen.add(phone);
+
+// b3d:
+const product = (o.product_name || "").trim().toLowerCase();
+const key = `${phone}|${product}`;
+if (seen.has(key)) continue;
+seen.add(key);
 ```
 
-All other sub-statuses keep their current mapping.
+L-9adi (variables, recipient row, return shape) y-bqa kifkif.
 
-**2. Backfill existing orders** via a one-time SQL update
+### `src/pages/whatsapp/WhatsappCampaigns.tsx` — preview labels
 
-Update all orders where `orio_shipping_status` (case-insensitive) matches one of the 4 sub-statuses but `delivery_status` is not yet `failed_attempt`:
-- Set `delivery_status = 'failed_attempt'`
-- Insert a corresponding `order_history` row (`action_type = 'orio_sync_backfill'`) so billing/audit stays consistent
-- Insert a synthetic `shipped` history row first if none exists (matching the existing sync logic for post-shipped jumps)
+Bdel:
+- `"Unique recipients (1 message per phone)"` → `"Unique recipients (1 per phone + product)"`
+- `"Duplicate phones"` → `"Duplicate (same phone & product)"`
 
-**3. Redeploy** the `orio-status-sync` edge function so the next 5-min cron picks up new mappings.
+Bach l-user yfham wadeh ash kay-skipi l-system.
 
-### Notes
+## Notes
 
-- `refused to accept` previously mapped to `rejected` — confirming the change to `failed_attempt` per your spec.
-- The fetch query filter `not.in.("delivered","returned","cancelled","return","rejected")` still allows these orders to be re-evaluated on next sync.
-- No schema changes; only edge function code + data update.
-
+- Customer b nafs phone walakin product mkhtelf → ka-y-receivi 2 messages bel ordre (throttle dyal campaign ka-y3temed bach yt-spaceaw).
+- Hadshi muhim khsosan f cas dyal `no_answer`: kol order khass yt-followi 3la 7da bach customer y3ref ach 3ndo.

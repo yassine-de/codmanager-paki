@@ -65,7 +65,8 @@ async function buildRecipients(campaign: any) {
   const totalOrders = (data ?? []).length;
   let invalidPhones = 0;
 
-  // Dedup by phone (keep first / most recent occurrence).
+  // Dedup by (phone + product). Customer with multiple distinct products gets
+  // one message per product. Repeat orders of the same product are merged.
   const seen = new Set<string>();
   const recipients: any[] = [];
   for (const o of data ?? []) {
@@ -74,8 +75,10 @@ async function buildRecipients(campaign: any) {
       invalidPhones++;
       continue;
     }
-    if (seen.has(phone)) continue;
-    seen.add(phone);
+    const product = (o.product_name || "").trim().toLowerCase();
+    const key = `${phone}|${product}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     recipients.push({
       campaign_id: campaign.id,
       order_id: o.order_id,
