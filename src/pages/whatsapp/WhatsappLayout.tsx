@@ -1,6 +1,6 @@
 import { Outlet, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/NavLink";
-import { LayoutDashboard, Inbox, CheckCircle2, FileText, Settings as SettingsIcon, Sparkles, Zap } from "lucide-react";
+import { LayoutDashboard, Inbox, CheckCircle2, FileText, Settings as SettingsIcon, Sparkles, Zap, Megaphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
@@ -8,6 +8,7 @@ const tabs = [
   { to: "/whatsapp/inbox", label: "Inbox", icon: Inbox },
   { to: "/whatsapp/confirmations", label: "Confirmations", icon: CheckCircle2 },
   { to: "/whatsapp/automations", label: "Automations", icon: Zap },
+  { to: "/whatsapp/campaigns", label: "Campaigns", icon: Megaphone },
   { to: "/whatsapp/templates", label: "Templates", icon: FileText },
   { to: "/whatsapp/ai", label: "AI", icon: Sparkles },
   { to: "/whatsapp/settings", label: "Settings", icon: SettingsIcon },

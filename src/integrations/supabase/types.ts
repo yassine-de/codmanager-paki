@@ -1679,6 +1679,164 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_campaign_recipients: {
+        Row: {
+          campaign_id: string
+          conversation_id: string | null
+          created_at: string
+          customer_name: string | null
+          customer_phone: string
+          delivered_at: string | null
+          error_message: string | null
+          failed_at: string | null
+          id: string
+          message_id: string | null
+          meta_message_id: string | null
+          order_id: string | null
+          read_at: string | null
+          replied_at: string | null
+          sent_at: string | null
+          status: string
+          variables: Json
+        }
+        Insert: {
+          campaign_id: string
+          conversation_id?: string | null
+          created_at?: string
+          customer_name?: string | null
+          customer_phone: string
+          delivered_at?: string | null
+          error_message?: string | null
+          failed_at?: string | null
+          id?: string
+          message_id?: string | null
+          meta_message_id?: string | null
+          order_id?: string | null
+          read_at?: string | null
+          replied_at?: string | null
+          sent_at?: string | null
+          status?: string
+          variables?: Json
+        }
+        Update: {
+          campaign_id?: string
+          conversation_id?: string | null
+          created_at?: string
+          customer_name?: string | null
+          customer_phone?: string
+          delivered_at?: string | null
+          error_message?: string | null
+          failed_at?: string | null
+          id?: string
+          message_id?: string | null
+          meta_message_id?: string | null
+          order_id?: string | null
+          read_at?: string | null
+          replied_at?: string | null
+          sent_at?: string | null
+          status?: string
+          variables?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_campaign_recipients_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_campaigns: {
+        Row: {
+          audience_source: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          delivered_count: number
+          description: string | null
+          failed_count: number
+          filters: Json
+          id: string
+          name: string
+          read_count: number
+          replied_count: number
+          scheduled_at: string | null
+          send_mode: string
+          sent_count: number
+          started_at: string | null
+          status: string
+          template_id: string | null
+          template_name: string | null
+          throttle_per_minute: number
+          total_recipients: number
+          updated_at: string
+        }
+        Insert: {
+          audience_source?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivered_count?: number
+          description?: string | null
+          failed_count?: number
+          filters?: Json
+          id?: string
+          name: string
+          read_count?: number
+          replied_count?: number
+          scheduled_at?: string | null
+          send_mode?: string
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          template_id?: string | null
+          template_name?: string | null
+          throttle_per_minute?: number
+          total_recipients?: number
+          updated_at?: string
+        }
+        Update: {
+          audience_source?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivered_count?: number
+          description?: string | null
+          failed_count?: number
+          filters?: Json
+          id?: string
+          name?: string
+          read_count?: number
+          replied_count?: number
+          scheduled_at?: string | null
+          send_mode?: string
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          template_id?: string | null
+          template_name?: string | null
+          throttle_per_minute?: number
+          total_recipients?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_campaigns_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_conversations: {
         Row: {
           ai_enabled: boolean

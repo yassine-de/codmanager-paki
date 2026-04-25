@@ -46,6 +46,7 @@ import WhatsappAI from "./pages/whatsapp/WhatsappAI";
 import WhatsappSettings from "./pages/whatsapp/WhatsappSettings";
 import WhatsappAutomations from "./pages/whatsapp/WhatsappAutomations";
 import WhatsappAutomationBuilder from "./pages/whatsapp/WhatsappAutomationBuilder";
+import WhatsappCampaigns from "./pages/whatsapp/WhatsappCampaigns";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -174,6 +175,7 @@ function AppRoutes() {
           <Route path="inbox" element={<WhatsappInbox />} />
           <Route path="confirmations" element={<WhatsappConfirmations />} />
           <Route path="automations" element={<WhatsappAutomations />} />
+          <Route path="campaigns" element={<WhatsappCampaigns />} />
           <Route path="templates" element={<WhatsappTemplates />} />
           <Route path="ai" element={<WhatsappAI />} />
           <Route path="settings" element={<WhatsappSettings />} />
