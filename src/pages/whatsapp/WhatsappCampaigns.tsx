@@ -85,12 +85,12 @@ export default function WhatsappCampaigns() {
   const { data: campaigns = [], isLoading } = useQuery({
     queryKey: ["whatsapp-campaigns"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("whatsapp_campaigns" as any)
+      const { data, error } = await (supabase as any)
+        .from("whatsapp_campaigns")
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Campaign[];
+      return ((data ?? []) as unknown) as Campaign[];
     },
     refetchInterval: 5000,
   });
