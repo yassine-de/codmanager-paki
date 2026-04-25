@@ -532,7 +532,7 @@ export default function Dashboard() {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-bold tabular-nums text-success">{p.deliveryRate}%</p>
-                    <p className="text-[9px] text-muted-foreground">{p.delivered}/{p.total} units</p>
+                    <p className="text-[9px] text-muted-foreground">{p.delivered}/{p.shipped} shipped</p>
                   </div>
                 </div>
               ))}
