@@ -716,7 +716,7 @@ function CreateCampaignDialog({
                       <Users className="h-5 w-5" />
                     </div>
                     <div>
-                      <div className="text-xs text-muted-foreground">Unique recipients (1 message per phone)</div>
+                      <div className="text-xs text-muted-foreground">Unique recipients (1 per phone + product)</div>
                       <div className="text-2xl font-bold">
                         {previewLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : previewCount ?? "—"}
                       </div>
