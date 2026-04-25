@@ -393,7 +393,6 @@ function CreateCampaignDialog({
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [templateSearch, setTemplateSearch] = useState("");
 
   // Reset on open.
   useEffect(() => {
@@ -411,7 +410,6 @@ function CreateCampaignDialog({
       setScheduledTime("10:00");
       setThrottle(30);
       setPreviewCount(null);
-      setTemplateSearch("");
     }
   }, [open]);
 
@@ -634,8 +632,6 @@ function CreateCampaignDialog({
                 templates={templates}
                 templateId={templateId}
                 onSelect={setTemplateId}
-                search={templateSearch}
-                onSearchChange={setTemplateSearch}
                 selectedTemplate={selectedTemplate}
               />
             </div>
@@ -1132,28 +1128,13 @@ function TemplatePicker({
   templates,
   templateId,
   onSelect,
-  search,
-  onSearchChange,
   selectedTemplate,
 }: {
   templates: any[];
   templateId: string;
   onSelect: (id: string) => void;
-  search: string;
-  onSearchChange: (v: string) => void;
   selectedTemplate: any;
 }) {
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return templates;
-    return templates.filter(
-      (t) =>
-        (t.name ?? "").toLowerCase().includes(q) ||
-        (t.body ?? "").toLowerCase().includes(q) ||
-        (t.category ?? "").toLowerCase().includes(q),
-    );
-  }, [templates, search]);
-
   const approvedCount = templates.filter((t) => t.sync_status === "APPROVED").length;
 
   return (
@@ -1171,20 +1152,9 @@ function TemplatePicker({
         </Badge>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search templates by name, content, or category..."
-          className="pl-8 h-9"
-        />
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-        {/* List */}
-        <div className="lg:col-span-2">
+        {/* Dropdown selector */}
+        <div className="lg:col-span-2 space-y-3">
           {templates.length === 0 ? (
             <Card className="p-6 text-center border-dashed">
               <MessageSquare className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
@@ -1193,74 +1163,69 @@ function TemplatePicker({
                 Create one in the Templates tab first.
               </p>
             </Card>
-          ) : filtered.length === 0 ? (
-            <Card className="p-6 text-center border-dashed">
-              <p className="text-xs text-muted-foreground">
-                No templates match "{search}"
-              </p>
-            </Card>
           ) : (
-            <ScrollArea className="h-[340px] pr-2 -mr-2">
-              <div className="space-y-2">
-                {filtered.map((t: any) => {
-                  const isSelected = t.id === templateId;
-                  const approved = t.sync_status === "APPROVED";
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => approved && onSelect(t.id)}
-                      disabled={!approved}
-                      className={cn(
-                        "w-full text-left rounded-lg border p-3 transition-all",
-                        "hover:border-primary/40 hover:bg-accent/40",
-                        isSelected
-                          ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm"
-                          : "border-border bg-card",
-                        !approved && "opacity-60 cursor-not-allowed hover:bg-card hover:border-border",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-sm truncate">{t.name}</p>
-                            {isSelected && (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                            )}
-                          </div>
-                          <p className="text-[11px] text-muted-foreground line-clamp-2 mt-1">
-                            {t.body}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[9px] px-1.5 py-0 h-4",
-                            approved
-                              ? "border-emerald-500/40 text-emerald-600 bg-emerald-500/10"
-                              : "border-amber-500/40 text-amber-600 bg-amber-500/10",
-                          )}
-                        >
-                          {approved ? "✓ Approved" : t.sync_status ?? "pending"}
-                        </Badge>
-                        {t.category && (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 capitalize">
-                            {t.category.toLowerCase()}
-                          </Badge>
-                        )}
-                        {t.language && (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 uppercase">
-                            {t.language}
-                          </Badge>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Template</Label>
+                <Select value={templateId} onValueChange={onSelect}>
+                  <SelectTrigger className="h-11 bg-card">
+                    <SelectValue placeholder="Select approved template" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[320px]">
+                    {templates.map((t: any) => {
+                      const approved = t.sync_status === "APPROVED";
+                      return (
+                        <SelectItem key={t.id} value={t.id} disabled={!approved}>
+                          {t.name}{!approved ? ` — ${t.sync_status ?? "pending"}` : ""}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
-            </ScrollArea>
+
+              <Card className={cn(
+                "p-4 min-h-[238px] transition-colors",
+                selectedTemplate ? "border-primary/30 bg-primary/5" : "border-dashed",
+              )}>
+                {selectedTemplate ? (
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{selectedTemplate.name}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-5">
+                          {selectedTemplate.body}
+                        </p>
+                      </div>
+                      <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 bg-emerald-500/10">
+                        ✓ Approved
+                      </Badge>
+                      {selectedTemplate.category && (
+                        <Badge variant="outline" className="text-[10px] capitalize">
+                          {selectedTemplate.category.toLowerCase()}
+                        </Badge>
+                      )}
+                      {selectedTemplate.language && (
+                        <Badge variant="outline" className="text-[10px] uppercase">
+                          {selectedTemplate.language}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-full min-h-[206px] flex flex-col items-center justify-center text-center">
+                    <MessageSquare className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                    <p className="text-sm font-medium">No template selected</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Choose one from the dropdown to preview it.
+                    </p>
+                  </div>
+                )}
+              </Card>
+            </>
           )}
         </div>
 
