@@ -167,6 +167,22 @@ const AgentDashboard = () => {
     return map;
   }, [orderHistory, dateRange]);
 
+  const statusActionRowsInPeriod = useMemo(() => {
+    const from = dateRange?.from ? startOfDay(dateRange.from) : null;
+    const to = dateRange?.to
+      ? endOfDay(dateRange.to)
+      : dateRange?.from
+        ? endOfDay(dateRange.from)
+        : null;
+
+    return orderHistory.filter((entry) => {
+      const changedAt = new Date(entry.created_at);
+      if (from && changedAt < from) return false;
+      if (to && changedAt > to) return false;
+      return true;
+    });
+  }, [orderHistory, dateRange]);
+
   // Filter by status update date from order_history so Today/Cancelled matches the system logs
   const filteredOrders = useMemo(() => {
     if (!dateRange?.from) return agentOrders;
@@ -184,15 +200,15 @@ const AgentDashboard = () => {
   }, [agentOrders, dateRange, statusActionsInPeriod]);
 
   const stats = useMemo(() => {
-    const total = filteredOrders.length;
-    const confirmed = filteredOrders.filter((o) => o.confirmation_status === "confirmed").length;
-    const postponed = filteredOrders.filter((o) => o.confirmation_status === "postponed").length;
-    const noAnswer = filteredOrders.filter((o) => o.confirmation_status === "no_answer").length;
-    const cancelled = filteredOrders.filter((o) => o.confirmation_status === "cancelled").length;
-    const doubleOrders = filteredOrders.filter((o) => o.confirmation_status === "double").length;
-    const wrongNumber = filteredOrders.filter((o) => o.confirmation_status === "wrong_number").length;
+    const total = statusActionRowsInPeriod.length;
+    const confirmed = statusActionRowsInPeriod.filter((o) => o.new_value === "confirmed").length;
+    const postponed = statusActionRowsInPeriod.filter((o) => o.new_value === "postponed").length;
+    const noAnswer = statusActionRowsInPeriod.filter((o) => o.new_value === "no_answer").length;
+    const cancelled = statusActionRowsInPeriod.filter((o) => o.new_value === "cancelled").length;
+    const doubleOrders = statusActionRowsInPeriod.filter((o) => o.new_value === "double").length;
+    const wrongNumber = statusActionRowsInPeriod.filter((o) => o.new_value === "wrong_number").length;
     const other = doubleOrders + wrongNumber;
-    // Confirmation rate = confirmed / treated (all non-new orders)
+    // Claimed Orders counts every status action, including retry/no-answer attempts on the same order.
     return {
       total,
       confirmed,
@@ -205,7 +221,7 @@ const AgentDashboard = () => {
       cancelledPct: total ? Math.round((cancelled / total) * 100) : 0,
       other,
     };
-  }, [filteredOrders]);
+  }, [statusActionRowsInPeriod]);
 
   // Pie chart data
   const pieData = [
