@@ -86,6 +86,7 @@ interface DbOrder {
 
 const AgentOrders = () => {
   const { authUser } = useAuth();
+  const queryClient = useQueryClient();
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [claiming, setClaiming] = useState(false);
