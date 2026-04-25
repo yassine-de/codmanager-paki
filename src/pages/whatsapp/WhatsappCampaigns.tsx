@@ -393,6 +393,7 @@ function CreateCampaignDialog({
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
 
   // Reset on open.
   useEffect(() => {
@@ -410,6 +411,7 @@ function CreateCampaignDialog({
       setScheduledTime("10:00");
       setThrottle(30);
       setPreviewCount(null);
+      setTemplateSearch("");
     }
   }, [open]);
 
@@ -628,37 +630,14 @@ function CreateCampaignDialog({
                   rows={2}
                 />
               </div>
-              <div>
-                <Label>Template *</Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Only approved templates can be sent. Templates allow messaging customers outside the 24h window.
-                </p>
-                <Select value={templateId} onValueChange={setTemplateId}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select a template..." /></SelectTrigger>
-                  <SelectContent>
-                    {templates.length === 0 ? (
-                      <div className="px-2 py-3 text-xs text-muted-foreground">
-                        No active templates. Create one in the Templates tab.
-                      </div>
-                    ) : templates.map((t: any) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{t.name}</span>
-                          <Badge variant="outline" className="text-[10px]">
-                            {t.sync_status === "APPROVED" ? "✓ Approved" : t.sync_status}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedTemplate && (
-                  <Card className="mt-3 p-3 bg-muted/30 border-emerald-500/20">
-                    <p className="text-xs text-muted-foreground mb-1">Preview:</p>
-                    <p className="text-sm whitespace-pre-wrap">{selectedTemplate.body}</p>
-                  </Card>
-                )}
-              </div>
+              <TemplatePicker
+                templates={templates}
+                templateId={templateId}
+                onSelect={setTemplateId}
+                search={templateSearch}
+                onSearchChange={setTemplateSearch}
+                selectedTemplate={selectedTemplate}
+              />
             </div>
           )}
 
@@ -1143,5 +1122,269 @@ function RecipientStatusBadge({ status }: { status: string }) {
     <Badge variant="outline" className={cn("text-[10px] capitalize", map[status])}>
       {status}
     </Badge>
+  );
+}
+
+/* ============================================================
+ *  TemplatePicker — modern template selector for campaign wizard
+ * ============================================================ */
+function TemplatePicker({
+  templates,
+  templateId,
+  onSelect,
+  search,
+  onSearchChange,
+  selectedTemplate,
+}: {
+  templates: any[];
+  templateId: string;
+  onSelect: (id: string) => void;
+  search: string;
+  onSearchChange: (v: string) => void;
+  selectedTemplate: any;
+}) {
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return templates;
+    return templates.filter(
+      (t) =>
+        (t.name ?? "").toLowerCase().includes(q) ||
+        (t.body ?? "").toLowerCase().includes(q) ||
+        (t.category ?? "").toLowerCase().includes(q),
+    );
+  }, [templates, search]);
+
+  const approvedCount = templates.filter((t) => t.sync_status === "APPROVED").length;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-sm font-semibold">Choose a template</Label>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Only approved templates can be broadcasted to customers.
+          </p>
+        </div>
+        <Badge variant="outline" className="text-[10px] gap-1">
+          <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+          {approvedCount} approved
+        </Badge>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search templates by name, content, or category..."
+          className="pl-8 h-9"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+        {/* List */}
+        <div className="lg:col-span-2">
+          {templates.length === 0 ? (
+            <Card className="p-6 text-center border-dashed">
+              <MessageSquare className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-sm font-medium">No active templates</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Create one in the Templates tab first.
+              </p>
+            </Card>
+          ) : filtered.length === 0 ? (
+            <Card className="p-6 text-center border-dashed">
+              <p className="text-xs text-muted-foreground">
+                No templates match "{search}"
+              </p>
+            </Card>
+          ) : (
+            <ScrollArea className="h-[340px] pr-2 -mr-2">
+              <div className="space-y-2">
+                {filtered.map((t: any) => {
+                  const isSelected = t.id === templateId;
+                  const approved = t.sync_status === "APPROVED";
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => approved && onSelect(t.id)}
+                      disabled={!approved}
+                      className={cn(
+                        "w-full text-left rounded-lg border p-3 transition-all",
+                        "hover:border-primary/40 hover:bg-accent/40",
+                        isSelected
+                          ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm"
+                          : "border-border bg-card",
+                        !approved && "opacity-60 cursor-not-allowed hover:bg-card hover:border-border",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm truncate">{t.name}</p>
+                            {isSelected && (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground line-clamp-2 mt-1">
+                            {t.body}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[9px] px-1.5 py-0 h-4",
+                            approved
+                              ? "border-emerald-500/40 text-emerald-600 bg-emerald-500/10"
+                              : "border-amber-500/40 text-amber-600 bg-amber-500/10",
+                          )}
+                        >
+                          {approved ? "✓ Approved" : t.sync_status ?? "pending"}
+                        </Badge>
+                        {t.category && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 capitalize">
+                            {t.category.toLowerCase()}
+                          </Badge>
+                        )}
+                        {t.language && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 uppercase">
+                            {t.language}
+                          </Badge>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+
+        {/* Preview - WhatsApp chat bubble style */}
+        <div className="lg:col-span-3">
+          <div className="rounded-lg border bg-[#0b141a] dark:bg-[#0b141a] p-4 h-full min-h-[340px] relative overflow-hidden">
+            {/* WhatsApp chat-pattern background */}
+            <div
+              className="absolute inset-0 opacity-[0.04] pointer-events-none"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 25% 25%, white 1px, transparent 1px), radial-gradient(circle at 75% 75%, white 1px, transparent 1px)",
+                backgroundSize: "24px 24px",
+              }}
+            />
+            {!selectedTemplate ? (
+              <div className="relative h-full flex flex-col items-center justify-center text-center">
+                <Eye className="h-10 w-10 text-white/20 mb-3" />
+                <p className="text-sm text-white/60 font-medium">Live preview</p>
+                <p className="text-xs text-white/40 mt-1 max-w-[220px]">
+                  Select a template on the left to see how it will look on WhatsApp.
+                </p>
+              </div>
+            ) : (
+              <div className="relative space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">
+                    Preview
+                  </div>
+                  <div className="text-[10px] text-white/40">
+                    {selectedTemplate.language?.toUpperCase() ?? "EN"}
+                  </div>
+                </div>
+
+                {/* WhatsApp bubble */}
+                <div className="flex justify-start">
+                  <div className="max-w-[85%] rounded-lg rounded-tl-sm bg-[#202c33] text-white shadow-md overflow-hidden">
+                    {/* Header */}
+                    {selectedTemplate.header_type === "TEXT" && selectedTemplate.header_text && (
+                      <div className="px-3 pt-2 pb-1">
+                        <p className="font-bold text-sm">{selectedTemplate.header_text}</p>
+                      </div>
+                    )}
+                    {selectedTemplate.header_type === "IMAGE" && (
+                      <div className="aspect-video bg-[#111b21] flex items-center justify-center">
+                        {selectedTemplate.header_media_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={selectedTemplate.header_media_url}
+                            alt="header"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs text-white/40">[Image header]</span>
+                        )}
+                      </div>
+                    )}
+                    {selectedTemplate.header_type === "VIDEO" && (
+                      <div className="aspect-video bg-[#111b21] flex items-center justify-center">
+                        <span className="text-xs text-white/40">[Video header]</span>
+                      </div>
+                    )}
+
+                    {/* Body */}
+                    <div className="px-3 py-2">
+                      <p className="text-[13px] leading-relaxed whitespace-pre-wrap">
+                        {selectedTemplate.body}
+                      </p>
+                    </div>
+
+                    {/* Footer */}
+                    {selectedTemplate.footer && (
+                      <div className="px-3 pb-1">
+                        <p className="text-[11px] text-white/50">{selectedTemplate.footer}</p>
+                      </div>
+                    )}
+
+                    {/* Time */}
+                    <div className="flex justify-end px-3 pb-1.5">
+                      <span className="text-[10px] text-white/40">
+                        {format(new Date(), "HH:mm")}
+                      </span>
+                    </div>
+
+                    {/* Buttons */}
+                    {Array.isArray(selectedTemplate.buttons) && selectedTemplate.buttons.length > 0 && (
+                      <div className="border-t border-white/10 divide-y divide-white/10">
+                        {selectedTemplate.buttons.map((b: any, i: number) => (
+                          <div
+                            key={i}
+                            className="px-3 py-2 text-center text-[13px] font-medium text-[#53bdeb]"
+                          >
+                            {b.text ?? b.label ?? "Button"}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Variables hint */}
+                {Array.isArray(selectedTemplate.variables) && selectedTemplate.variables.length > 0 && (
+                  <div className="rounded-md bg-white/5 border border-white/10 p-2.5">
+                    <p className="text-[10px] uppercase tracking-wider text-white/50 font-semibold mb-1.5">
+                      Variables
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedTemplate.variables.map((v: any, i: number) => (
+                        <Badge
+                          key={i}
+                          variant="outline"
+                          className="text-[10px] border-white/20 bg-white/5 text-white/80"
+                        >
+                          {typeof v === "string" ? v : v.name ?? `var_${i + 1}`}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
