@@ -759,12 +759,21 @@ function renderCell(
     case "delivery": return <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />;
     case "days": return row.days_since_shipped ?? "—";
     case "segment":
-      return segMeta ? (
-        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap ${segMeta.pill}`}>
-          <segMeta.icon className="h-3 w-3" />
-          {segMeta.label}
-        </span>
-      ) : <span className="text-muted-foreground text-xs">—</span>;
+      return (
+        <div className="flex flex-col gap-1 items-start">
+          {segMeta ? (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap ${segMeta.pill}`}>
+              <segMeta.icon className="h-3 w-3" />
+              {segMeta.label}
+            </span>
+          ) : <span className="text-muted-foreground text-xs">—</span>}
+          {row.delivery_status && (
+            <span className="text-[10px] text-muted-foreground leading-none">
+              {formatStatus(row.delivery_status)}
+            </span>
+          )}
+        </div>
+      );
     case "follow_up":
       return (
         <Select
