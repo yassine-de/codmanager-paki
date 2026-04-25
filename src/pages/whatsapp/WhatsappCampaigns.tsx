@@ -393,6 +393,7 @@ function CreateCampaignDialog({
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
 
   // Reset on open.
   useEffect(() => {
