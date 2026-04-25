@@ -185,7 +185,8 @@ export function useDashboardData(dateRange?: DateRange) {
     delivered: last7.reduce((s, d) => s + d.delivered, 0),
   }), [last7]);
 
-  // Top products by delivery rate (same logic as delivery performance: delivered / total shipped)
+  // Top products by delivery rate — system-wide standard: delivered / confirmed
+  // Confirmed includes all orders that reached confirmed stage (confirmed, shipped, in_transit, with_courier, delivered, paid, returned)
   const topProducts = useMemo(() => {
     const map: Record<string, { total: number; delivered: number; shipped: number; confirmed: number }> = {};
     orders.forEach(o => {
@@ -193,7 +194,10 @@ export function useDashboardData(dateRange?: DateRange) {
       map[o.product_name].total += o.quantity;
       if (['delivered', 'paid'].includes(o.delivery_status || '')) map[o.product_name].delivered += o.quantity;
       if (['shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'].includes(o.delivery_status || '')) map[o.product_name].shipped += o.quantity;
-      if (o.confirmation_status === 'confirmed') map[o.product_name].confirmed += o.quantity;
+      // Confirmed = any order that was confirmed (regardless of current delivery status)
+      if (o.confirmation_status === 'confirmed' || ['shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'].includes(o.delivery_status || '')) {
+        map[o.product_name].confirmed += o.quantity;
+      }
     });
     return Object.entries(map)
       .map(([name, d]) => ({
@@ -202,12 +206,14 @@ export function useDashboardData(dateRange?: DateRange) {
         delivered: d.delivered,
         shipped: d.shipped,
         confirmed: d.confirmed,
-        deliveryRate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0,
+        deliveryRate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
         confirmationRate: d.total > 0 ? Math.round((d.confirmed / d.total) * 100) : 0,
       }))
+      .filter(p => p.confirmed >= 5) // require minimum sample size for meaningful rate
       .sort((a, b) => b.deliveryRate - a.deliveryRate)
       .slice(0, 5);
   }, [orders]);
+
 
   // Top sellers by delivered - need profiles for names
   const topSellers = useMemo(() => {
