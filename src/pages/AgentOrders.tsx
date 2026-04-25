@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,7 @@ interface DbOrder {
 
 const AgentOrders = () => {
   const { authUser } = useAuth();
+  const queryClient = useQueryClient();
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [claiming, setClaiming] = useState(false);
@@ -716,6 +718,10 @@ const AgentOrders = () => {
         duration: 3000,
         style: { background: "hsl(155, 50%, 96%)", border: "1px solid hsl(155, 50%, 42%)", color: "hsl(155, 50%, 25%)", fontWeight: 600 },
       });
+
+      // Invalidate dashboard caches so Claimed Orders / stats reflect this action immediately
+      queryClient.invalidateQueries({ queryKey: ["agent-dashboard-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-dashboard-order-history"] });
 
       await loadNextOrder();
     } catch (error: any) {

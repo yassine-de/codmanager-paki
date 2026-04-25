@@ -65,6 +65,9 @@ const AgentDashboard = () => {
       return all;
     },
     enabled: !!userId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   // Fetch orders this agent treated — includes:
@@ -126,6 +129,9 @@ const AgentDashboard = () => {
       return [...assigned, ...extra];
     },
     enabled: !!userId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const statusActionsInPeriod = useMemo(() => {
