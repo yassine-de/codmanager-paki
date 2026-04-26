@@ -32,6 +32,9 @@ import {
   Phone,
   Bot,
   BotOff,
+  Check,
+  CheckCheck,
+  AlertCircle,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1136,8 +1139,23 @@ export default function WhatsappInbox() {
                                 isOut ? "text-white/70 justify-end" : "text-muted-foreground",
                               )}
                             >
-                              {format(new Date(m.created_at), "HH:mm")}
-                              {m.status && isOut ? ` · ${m.status}` : ""}
+                              <span>{format(new Date(m.created_at), "HH:mm")}</span>
+                              {isOut && m.status && (
+                                <>
+                                  {m.status === "failed" ? (
+                                    <span className="inline-flex items-center gap-0.5 text-red-200 font-semibold">
+                                      <AlertCircle className="w-3 h-3" />
+                                      failed
+                                    </span>
+                                  ) : m.status === "read" ? (
+                                    <CheckCheck className="w-3.5 h-3.5 text-sky-300" />
+                                  ) : m.status === "delivered" ? (
+                                    <CheckCheck className="w-3.5 h-3.5 text-white/80" />
+                                  ) : m.status === "sent" ? (
+                                    <Check className="w-3.5 h-3.5 text-white/80" />
+                                  ) : null}
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
