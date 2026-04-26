@@ -98,12 +98,25 @@ Deno.serve(async (req) => {
       const metaResp = await fetch(metaUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const metaJson = await metaResp.json();
+      const metaJson = await metaResp.json().catch(() => ({}));
       if (!metaResp.ok || !metaJson?.url) {
-        return new Response(JSON.stringify({ ok: false, error: "Failed to resolve media URL", details: metaJson }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        // Meta only retains media ~30 days. Expired/missing media → return 404 (not 502)
+        // so the client treats it as "audio unavailable" without a runtime error.
+        const errCode = metaJson?.error?.code;
+        const errSubcode = metaJson?.error?.error_subcode;
+        const isExpired = errCode === 100 || errSubcode === 33 || metaResp.status === 404;
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: isExpired ? "Audio no longer available (expired on WhatsApp servers)" : "Failed to resolve media URL",
+            expired: isExpired,
+            details: metaJson,
+          }),
+          {
+            status: isExpired ? 404 : 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
       downloadUrl = metaJson.url;
     }
@@ -114,10 +127,19 @@ Deno.serve(async (req) => {
 
     if (!mediaResp.ok) {
       const details = await mediaResp.text();
-      return new Response(JSON.stringify({ ok: false, error: "Failed to download audio", details }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const isExpired = mediaResp.status === 404 || mediaResp.status === 410;
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: isExpired ? "Audio no longer available" : "Failed to download audio",
+          expired: isExpired,
+          details,
+        }),
+        {
+          status: isExpired ? 404 : 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const buffer = await mediaResp.arrayBuffer();
