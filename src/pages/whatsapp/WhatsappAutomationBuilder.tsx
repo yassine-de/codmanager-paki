@@ -1007,15 +1007,79 @@ function NodeBranch({
           {templateButtons.map((b: any, i: number) => {
             const handle = `btn:${i}`;
             const child = children.find((c) => c.handle === handle);
+            const actions = Array.isArray(node.data.button_actions)
+              ? node.data.button_actions
+              : [];
+            const action = actions[i] ?? {};
+            const updateAction = (patch: Record<string, any>) => {
+              const next = [...actions];
+              while (next.length <= i) next.push({});
+              next[i] = { ...next[i], ...patch };
+              onUpdateNodeData(nodeId, { button_actions: next });
+            };
+            const statusVal = action.status ?? "";
+            const statusInvalid = !statusVal;
             return (
-              <div key={handle} className="flex flex-col items-center min-w-[120px]">
+              <div key={handle} className="flex flex-col items-center min-w-[200px] max-w-[220px]">
                 <Badge
                   variant="outline"
-                  className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 max-w-[140px] truncate"
+                  className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 max-w-[180px] truncate"
                   title={b.text || `Button ${i + 1}`}
                 >
                   {b.text || `Button ${i + 1}`}
                 </Badge>
+                <Card className={`mt-2 w-full p-2 space-y-2 ${statusInvalid ? "border-amber-500/50" : ""}`}>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">
+                      Order status <span className="text-destructive">*</span>
+                    </Label>
+                    <Select
+                      value={statusVal}
+                      onValueChange={(v) => updateAction({ status: v })}
+                    >
+                      <SelectTrigger className="h-7 text-[11px]">
+                        <SelectValue placeholder="Pick…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="no_change" className="text-[11px]">No change (flag only)</SelectItem>
+                        {CONFIRMATION_STATUSES.map((s) => (
+                          <SelectItem key={s} value={s} className="text-[11px]">
+                            Set to: {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t">
+                    <Label className="text-[10px] text-muted-foreground cursor-pointer flex-1">
+                      AI validates before applying
+                    </Label>
+                    <Switch
+                      checked={action.ai_gate === "validate"}
+                      onCheckedChange={(v) =>
+                        updateAction({
+                          ai_gate: v ? "validate" : "off",
+                          ...(v ? { ai_takeover: true } : {}),
+                        })
+                      }
+                    />
+                  </div>
+                  {action.ai_gate === "validate" && (
+                    <p className="text-[9px] text-muted-foreground leading-tight">
+                      AI will talk to the customer first. Status only changes after AI validates address (confirm) or after the rescue attempt (cancel).
+                    </p>
+                  )}
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t">
+                    <Label className="text-[10px] text-muted-foreground cursor-pointer flex-1">
+                      AI takes over after click
+                    </Label>
+                    <Switch
+                      checked={!!action.ai_takeover || action.ai_gate === "validate"}
+                      disabled={action.ai_gate === "validate"}
+                      onCheckedChange={(v) => updateAction({ ai_takeover: v })}
+                    />
+                  </div>
+                </Card>
                 {child ? (
                   <NodeBranch
                     nodeId={child.target}
