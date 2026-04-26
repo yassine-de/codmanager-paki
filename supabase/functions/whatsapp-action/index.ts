@@ -74,9 +74,9 @@ Deno.serve(async (req) => {
       convStatus = "more_info";
     } else if (action === "cancel") {
       updates = {
-        confirmation_status: "new",
-        confirmation_channel: "agent",
-        agent_id: null,
+        confirmation_status: "cancelled",
+        confirmation_channel: "whatsapp",
+        cancelled_at: new Date().toISOString(),
         whatsapp_status: "canceled",
         whatsapp_note: "Canceled via WhatsApp Inbox",
         note: `${order.note ? order.note + "\n" : ""}Canceled in WhatsApp`,
