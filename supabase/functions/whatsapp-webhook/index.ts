@@ -1066,6 +1066,42 @@ async function aiContinueReply(args: {
     }
   }
 
+  // Handle flag_for_human_discount tool call: add a label on the conversation
+  // and capture a note on the order so an agent will pick it up.
+  const discountFlag = toolCalls.find(
+    (c: any) => c?.function?.name === "flag_for_human_discount",
+  );
+  if (discountFlag && order) {
+    let reason = "";
+    try {
+      const args = JSON.parse(discountFlag.function?.arguments || "{}");
+      reason = String(args?.reason || "").slice(0, 120);
+    } catch { /* ignore */ }
+    try {
+      const existing: string[] = Array.isArray((conv as any).labels)
+        ? (conv as any).labels
+        : [];
+      const nextLabels = Array.from(
+        new Set([...existing, "wants_human_agent_discount"]),
+      );
+      await admin
+        .from("whatsapp_conversations")
+        .update({ labels: nextLabels })
+        .eq("id", conv.id);
+      await admin
+        .from("orders")
+        .update({
+          whatsapp_note:
+            `Customer wants discount — needs human agent. ${reason ? `Reason: ${reason}` : ""}`.slice(0, 500),
+          whatsapp_last_reply_at: new Date().toISOString(),
+        })
+        .eq("order_id", order.order_id);
+      log("ai-continue: flagged for human discount", { conv: conv.id, reason });
+    } catch (e) {
+      errLog("flag_for_human_discount handler failed", (e as Error).message);
+    }
+  }
+
   if (!reply && !imageSent) {
     log("ai-continue: empty reply");
     return;
