@@ -244,8 +244,10 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
     for (const cand of list) {
       let reuse = false;
       if (!cand.order_id) {
-        // Unlinked thread — safe to claim if we have an order.
-        reuse = !!order;
+        // Unlinked thread — always safe to reuse for the same phone, whether
+        // or not we have a freshly resolved order. This prevents creating
+        // duplicate conversations when the customer has no matching order yet.
+        reuse = true;
       } else if (order?.product_name) {
         const { data: prevOrder } = await admin
           .from("orders")
@@ -294,10 +296,25 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
       .select()
       .single();
     if (error) {
-      errLog("conversation insert failed", error);
-      return { conv: null, order };
+      // Race condition: another webhook just inserted an unlinked conversation
+      // for this phone (blocked by whatsapp_conversations_phone_unlinked_unique).
+      // Fall back to fetching the existing one so we don't drop the message.
+      const { data: existing } = await admin
+        .from("whatsapp_conversations")
+        .select("*")
+        .in("customer_phone", phoneVariants)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (existing) {
+        conv = existing;
+      } else {
+        errLog("conversation insert failed", error);
+        return { conv: null, order };
+      }
+    } else {
+      conv = inserted;
     }
-    conv = inserted;
   }
 
   return { conv, order };
