@@ -1003,6 +1003,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (body.trigger_type === "from_template" && body.template_id && body.conversation_id) {
+      const r = await startNewRunsFromTemplate({
+        templateId: String(body.template_id),
+        conversationId: String(body.conversation_id),
+        orderId: body.order_id ? String(body.order_id) : null,
+        customerPhone: body.customer_phone ? String(body.customer_phone) : null,
+        buttonIndex: typeof body.button_index === "number" ? body.button_index : undefined,
+        replyText: body.reply_text ? String(body.reply_text) : undefined,
+      });
+      return new Response(JSON.stringify({ ok: true, ...r }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (body.trigger_type && body.order_id) {
       const r = await startNewRuns(String(body.trigger_type), String(body.order_id));
       return new Response(JSON.stringify({ ok: true, ...r }), {
