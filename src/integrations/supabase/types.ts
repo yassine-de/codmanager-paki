@@ -1851,6 +1851,9 @@ export type Database = {
           order_id: string | null
           outcome: string | null
           pending_button_intent: Json | null
+          resolved_at: string | null
+          resolved_by: string | null
+          review_note: string | null
           status: string
           updated_at: string
         }
@@ -1867,6 +1870,9 @@ export type Database = {
           order_id?: string | null
           outcome?: string | null
           pending_button_intent?: Json | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          review_note?: string | null
           status?: string
           updated_at?: string
         }
@@ -1883,6 +1889,9 @@ export type Database = {
           order_id?: string | null
           outcome?: string | null
           pending_button_intent?: Json | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          review_note?: string | null
           status?: string
           updated_at?: string
         }
