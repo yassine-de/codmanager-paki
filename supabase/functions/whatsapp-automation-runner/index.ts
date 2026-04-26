@@ -1022,8 +1022,44 @@ async function resumeRun(runId: string, opts: { buttonIndex?: number; replyText?
     : { data: null };
 
   const edges: FlowEdge[] = (automation.edges as any) ?? [];
+  const nodes: FlowNode[] = (automation.nodes as any) ?? [];
   let handle: string | undefined;
   if (typeof opts.buttonIndex === "number") handle = `btn:${opts.buttonIndex}`;
+
+  // Apply per-button action configured on the current send_template node
+  // (status mapping + AI gate / takeover) BEFORE moving to the next node.
+  if (typeof opts.buttonIndex === "number" && run.current_node_id) {
+    const currentNode = nodes.find((n) => n.id === run.current_node_id);
+    if (currentNode?.type === "send_template") {
+      const buttonActions = Array.isArray(currentNode.data?.button_actions)
+        ? currentNode.data.button_actions
+        : [];
+      const tplButtons = Array.isArray(currentNode.data?.template_buttons)
+        ? currentNode.data.template_buttons
+        : [];
+      const action = buttonActions[opts.buttonIndex];
+      const buttonText =
+        tplButtons[opts.buttonIndex]?.text ||
+        opts.replyText ||
+        `Button ${opts.buttonIndex + 1}`;
+      try {
+        await applyButtonAction({
+          action,
+          order,
+          conversationId: conv?.id ?? null,
+          buttonText,
+        });
+      } catch (e) {
+        errLog("send_template applyButtonAction failed", (e as Error).message);
+      }
+    }
+  }
+
+  // Re-fetch order so downstream steps see any status change.
+  const { data: refreshedOrder } = run.order_id
+    ? await admin.from("orders").select("*").eq("order_id", run.order_id).maybeSingle()
+    : { data: null };
+
   const next = run.current_node_id
     ? findNextNode(edges, run.current_node_id, handle) ??
       findNextNode(edges, run.current_node_id)
@@ -1049,7 +1085,7 @@ async function resumeRun(runId: string, opts: { buttonIndex?: number; replyText?
   await executeFlow({
     runId,
     automation,
-    order,
+    order: refreshedOrder ?? order,
     conversation: conv,
     startNodeId: next.target,
   });
