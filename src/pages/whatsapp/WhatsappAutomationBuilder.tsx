@@ -135,6 +135,8 @@ export default function WhatsappAutomationBuilder() {
       errors.push("Delivery trigger needs target status");
     if (automation?.trigger_type === "follow_up_status_changed" && !triggerConfig.to)
       errors.push("Follow-up trigger needs target status");
+    if (automation?.trigger_type === "from_template" && !triggerConfig.template_id)
+      errors.push("Pick the template that should trigger this automation");
     return { ok: errors.length === 0, errors };
   }, [nodes, triggerConfig, automation?.trigger_type]);
 
@@ -627,7 +629,58 @@ function TriggerConfigInline({
       </div>
     );
   }
+  if (type === "from_template") {
+    return <FromTemplateConfig config={config} onChange={onChange} />;
+  }
   return null;
+}
+
+function FromTemplateConfig({
+  config, onChange,
+}: { config: any; onChange: (c: any) => void }) {
+  const { data: templates = [], isLoading } = useQuery({
+    queryKey: ["wts-active-templates-trigger"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("whatsapp_templates")
+        .select("id, name, language, body, meta_template_name, active")
+        .eq("active", true)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  return (
+    <div className="mt-3 space-y-2">
+      <Label className="text-[10px] text-muted-foreground">
+        Run when client replies to this template
+      </Label>
+      <Select
+        value={config.template_id ?? ""}
+        onValueChange={(v) => onChange({ ...config, template_id: v })}
+      >
+        <SelectTrigger className="h-8 text-xs">
+          <SelectValue placeholder={isLoading ? "Loading…" : "Pick a template"} />
+        </SelectTrigger>
+        <SelectContent>
+          {templates.map((t: any) => (
+            <SelectItem key={t.id} value={t.id} className="text-xs">
+              {t.name} <span className="text-muted-foreground">({t.language})</span>
+            </SelectItem>
+          ))}
+          {!isLoading && templates.length === 0 && (
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">
+              No active templates yet
+            </div>
+          )}
+        </SelectContent>
+      </Select>
+      <p className="text-[10px] text-muted-foreground leading-snug">
+        Automation will start when the customer sends any reply to a message that used this template.
+      </p>
+    </div>
+  );
 }
 
 /* ---------- Render a node + its children recursively ---------- */
