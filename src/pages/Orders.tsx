@@ -890,7 +890,28 @@ export default function Orders() {
                     </td>
                   )}
                   {isAdmin && isCol('systemId') && <td className="py-2.5 px-4 font-mono text-xs text-muted-foreground">{order.systemId ?? '—'}</td>}
-                  {isCol('id') && <td className="py-2.5 px-4 font-medium text-xs">{order.id}</td>}
+                  {isCol('id') && (
+                    <td className="py-2.5 px-4 font-medium text-xs" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(order.id);
+                          setCopiedId(order.id);
+                          toast.success("Order ID copied");
+                          setTimeout(() => setCopiedId(prev => prev === order.id ? null : prev), 1500);
+                        }}
+                        className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
+                        title="Click to copy"
+                      >
+                        <span>{order.id}</span>
+                        {copiedId === order.id ? (
+                          <Check className="w-3 h-3 text-success" />
+                        ) : (
+                          <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60" />
+                        )}
+                      </button>
+                    </td>
+                  )}
                   {isAdmin && isCol('orioId') && (
                     <td className="py-2.5 px-4 text-xs" onClick={(e) => e.stopPropagation()}>
                       {order.orioOrderId ? (
