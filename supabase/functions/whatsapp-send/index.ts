@@ -279,21 +279,46 @@ Deno.serve(async (req) => {
       let mm: RegExpExecArray | null;
       while ((mm = re.exec(tplBody)) !== null) placeholders.push(mm[1]);
       if (placeholders.length > 0) {
-        // Default fallback chain: customer_name → product_name → order_id → "-"
-        const defaultFallback =
+        // Positional fallback for generic placeholders imported from Meta
+        // (var_1, var_2, var_3, ...). Maps to common order fields by position.
+        const positionalFallback = [
+          (order?.customer_name && String(order.customer_name).trim()) || "",
+          (order?.product_name && String(order.product_name).trim()) || "",
+          (order?.total_amount != null && String(order.total_amount)) || "",
+          (order?.customer_city && String(order.customer_city).trim()) || "",
+          (order?.order_id && String(order.order_id)) || "",
+        ];
+        const finalFallback =
           (order?.customer_name && String(order.customer_name).trim()) ||
           (order?.product_name && String(order.product_name).trim()) ||
           (order?.order_id && String(order.order_id)) ||
           "-";
+
         components.push({
           type: "body",
-          parameters: placeholders.map((name) => {
+          parameters: placeholders.map((name, idx) => {
             const raw = vars[name];
-            const val = raw == null ? "" : String(raw).trim();
+            let val = raw == null ? "" : String(raw).trim();
             // Meta rejects empty text parameters with error 131008.
-            // For unknown placeholders (e.g. var_1 imported from Meta),
-            // fall back to the customer name so the message is personalized.
-            return { type: "text", text: val.length > 0 ? val : defaultFallback };
+            if (!val) {
+              // Try named match (e.g. {{customer_name}}, {{product_name}})
+              const lower = String(name).toLowerCase();
+              if (lower.includes("customer") || lower.includes("name")) {
+                val = (order?.customer_name && String(order.customer_name).trim()) || "";
+              } else if (lower.includes("product")) {
+                val = (order?.product_name && String(order.product_name).trim()) || "";
+              } else if (lower.includes("city")) {
+                val = (order?.customer_city && String(order.customer_city).trim()) || "";
+              } else if (lower.includes("amount") || lower.includes("price") || lower.includes("total")) {
+                val = (order?.total_amount != null && String(order.total_amount)) || "";
+              } else if (lower.includes("order")) {
+                val = (order?.order_id && String(order.order_id)) || "";
+              }
+              // Fall back to positional mapping for var_1, var_2, etc.
+              if (!val) val = positionalFallback[idx] || "";
+              if (!val) val = finalFallback;
+            }
+            return { type: "text", text: val };
           }),
         });
       }
