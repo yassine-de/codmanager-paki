@@ -1130,15 +1130,23 @@ function CampaignDetailsDialog({ campaign, onClose }: { campaign: Campaign | nul
                     No recipients yet.
                   </div>
                 ) : recipients.map((r: any) => (
-                  <div key={r.id} className="p-3 flex items-center justify-between gap-3 text-sm">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">{r.customer_name || "—"}</div>
-                      <div className="text-xs text-muted-foreground">{r.customer_phone}</div>
+                  <div key={r.id} className="p-3 flex flex-col gap-1.5 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{r.customer_name || "—"}</div>
+                        <div className="text-xs text-muted-foreground">{r.customer_phone}</div>
+                      </div>
+                      {r.order_id && (
+                        <Badge variant="outline" className="text-xs">{r.order_id}</Badge>
+                      )}
+                      <RecipientStatusBadge status={r.status} />
                     </div>
-                    {r.order_id && (
-                      <Badge variant="outline" className="text-xs">{r.order_id}</Badge>
+                    {r.status === "failed" && (
+                      <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-1.5">
+                        <span className="font-medium">Reason: </span>
+                        {explainFailure(r.error_message)}
+                      </div>
                     )}
-                    <RecipientStatusBadge status={r.status} />
                   </div>
                 ))}
               </div>
