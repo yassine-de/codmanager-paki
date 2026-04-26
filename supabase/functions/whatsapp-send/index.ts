@@ -279,14 +279,21 @@ Deno.serve(async (req) => {
       let mm: RegExpExecArray | null;
       while ((mm = re.exec(tplBody)) !== null) placeholders.push(mm[1]);
       if (placeholders.length > 0) {
+        // Default fallback chain: customer_name → product_name → order_id → "-"
+        const defaultFallback =
+          (order?.customer_name && String(order.customer_name).trim()) ||
+          (order?.product_name && String(order.product_name).trim()) ||
+          (order?.order_id && String(order.order_id)) ||
+          "-";
         components.push({
           type: "body",
           parameters: placeholders.map((name) => {
             const raw = vars[name];
             const val = raw == null ? "" : String(raw).trim();
             // Meta rejects empty text parameters with error 131008.
-            // Fall back to a non-empty placeholder so the send succeeds.
-            return { type: "text", text: val.length > 0 ? val : "-" };
+            // For unknown placeholders (e.g. var_1 imported from Meta),
+            // fall back to the customer name so the message is personalized.
+            return { type: "text", text: val.length > 0 ? val : defaultFallback };
           }),
         });
       }
