@@ -15,6 +15,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import {
   ChevronLeft, Save, Play, Pause, CheckCircle2, Eye, Pencil, Plus,
   MessageSquare, FileText, Sparkles, GitBranch, Clock, Tag, Trash2,
@@ -138,6 +139,22 @@ export default function WhatsappAutomationBuilder() {
       errors.push("Follow-up trigger needs target status");
     if (automation?.trigger_type === "from_template" && !triggerConfig.template_id)
       errors.push("Pick the template that should trigger this automation");
+    // Per-button action mapping is required when the template has buttons.
+    if (
+      automation?.trigger_type === "from_template" &&
+      Array.isArray(triggerConfig.template_buttons) &&
+      triggerConfig.template_buttons.length > 0
+    ) {
+      const actions = Array.isArray(triggerConfig.button_actions)
+        ? triggerConfig.button_actions
+        : [];
+      triggerConfig.template_buttons.forEach((b: any, i: number) => {
+        const a = actions[i];
+        if (!a || typeof a.status === "undefined" || a.status === "") {
+          errors.push(`Pick a status action for button "${b?.text || `#${i + 1}`}"`);
+        }
+      });
+    }
     return { ok: errors.length === 0, errors };
   }, [nodes, triggerConfig, automation?.trigger_type]);
 
@@ -414,15 +431,59 @@ export default function WhatsappAutomationBuilder() {
                           {triggerButtons.map((b: any, i: number) => {
                             const handle = `btn:${i}`;
                             const child = triggerChildren.find((c) => c.handle === handle);
+                            const actions = Array.isArray(triggerConfig.button_actions)
+                              ? triggerConfig.button_actions
+                              : [];
+                            const action = actions[i] ?? {};
+                            const updateAction = (patch: Record<string, any>) => {
+                              const next = [...actions];
+                              while (next.length <= i) next.push({});
+                              next[i] = { ...next[i], ...patch };
+                              setTriggerConfig({ ...triggerConfig, button_actions: next });
+                            };
+                            const statusVal = action.status ?? "";
+                            const statusInvalid = !statusVal;
                             return (
-                              <div key={handle} className="flex flex-col items-center min-w-[120px]">
+                              <div key={handle} className="flex flex-col items-center min-w-[200px] max-w-[220px]">
                                 <Badge
                                   variant="outline"
-                                  className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 max-w-[160px] truncate"
+                                  className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 max-w-[180px] truncate"
                                   title={b.text || `Button ${i + 1}`}
                                 >
                                   {b.text || `Button ${i + 1}`}
                                 </Badge>
+                                <Card className={`mt-2 w-full p-2 space-y-2 ${statusInvalid ? "border-amber-500/50" : ""}`}>
+                                  <div className="space-y-1">
+                                    <Label className="text-[10px] text-muted-foreground">
+                                      Order status <span className="text-destructive">*</span>
+                                    </Label>
+                                    <Select
+                                      value={statusVal}
+                                      onValueChange={(v) => updateAction({ status: v })}
+                                    >
+                                      <SelectTrigger className="h-7 text-[11px]">
+                                        <SelectValue placeholder="Pick…" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="no_change" className="text-[11px]">No change (flag only)</SelectItem>
+                                        {CONFIRMATION_STATUSES.map((s) => (
+                                          <SelectItem key={s} value={s} className="text-[11px]">
+                                            Set to: {s}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2 pt-1 border-t">
+                                    <Label className="text-[10px] text-muted-foreground cursor-pointer flex-1">
+                                      AI takes over after click
+                                    </Label>
+                                    <Switch
+                                      checked={!!action.ai_takeover}
+                                      onCheckedChange={(v) => updateAction({ ai_takeover: v })}
+                                    />
+                                  </div>
+                                </Card>
                                 {child ? (
                                   <NodeBranch
                                     nodeId={child.target}

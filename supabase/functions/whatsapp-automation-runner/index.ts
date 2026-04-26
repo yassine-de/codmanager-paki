@@ -739,6 +739,66 @@ async function startNewRuns(triggerType: string, orderId: string) {
 }
 
 /**
+ * Apply the per-button "action" configured on the from_template trigger.
+ * - status === "no_change" → only flag the conversation/order (whatsapp_note).
+ * - status === <confirmation_status> → update orders.confirmation_status accordingly.
+ * - ai_takeover → enable AI replies on the conversation (sets ai_enabled=true).
+ *                 (When false, we leave ai_enabled untouched so existing settings stay.)
+ * Logs to order_history when the order status actually changes.
+ */
+async function applyButtonAction(opts: {
+  action: { status?: string; ai_takeover?: boolean } | undefined;
+  order: any | null;
+  conversationId: string | null;
+  buttonText: string;
+}) {
+  const { action, order, conversationId, buttonText } = opts;
+  if (!action) return;
+
+  // 1) AI takeover toggle on the conversation
+  if (conversationId && action.ai_takeover === true) {
+    await admin
+      .from("whatsapp_conversations")
+      .update({ ai_enabled: true })
+      .eq("id", conversationId);
+  }
+
+  // 2) Order status / flag
+  if (!order) return;
+  const noteFlag = `Customer clicked "${buttonText}" on WhatsApp`;
+  const updates: Record<string, any> = {
+    whatsapp_note: noteFlag,
+    whatsapp_last_reply_at: new Date().toISOString(),
+  };
+
+  const status = action.status;
+  if (status && status !== "no_change") {
+    const before = order.confirmation_status;
+    updates.confirmation_status = status;
+    updates.confirmation_channel = "whatsapp";
+    if (status === "confirmed") updates.confirmed_at = new Date().toISOString();
+    if (status === "cancelled") updates.cancel_reason = `Cancelled via WhatsApp button "${buttonText}"`;
+
+    await admin.from("orders").update(updates).eq("order_id", order.order_id);
+
+    if (before !== status) {
+      await admin.from("order_history").insert({
+        order_id: order.order_id,
+        action_type: "whatsapp_button",
+        changed_by: order.seller_id,
+        changed_by_role: "whatsapp",
+        field_changed: "confirmation_status",
+        old_value: before ?? null,
+        new_value: status,
+      });
+    }
+  } else {
+    // No status change — only persist the flag/note timestamp.
+    await admin.from("orders").update(updates).eq("order_id", order.order_id);
+  }
+}
+
+/**
  * Start runs for the `from_template` trigger.
  * Triggered by the webhook when a customer replies to one of our outbound
  * template messages. Picks the entry node from edges where `source = "__trigger__"`
@@ -841,10 +901,36 @@ async function startNewRunsFromTemplate(args: {
       })
       .eq("id", a.id);
 
+    // Apply per-button action (status change + AI takeover) BEFORE running the flow,
+    // so downstream steps see the updated order state.
+    if (typeof args.buttonIndex === "number") {
+      const cfg = (a.trigger_config as any) ?? {};
+      const buttonActions = Array.isArray(cfg.button_actions) ? cfg.button_actions : [];
+      const tplButtons = Array.isArray(cfg.template_buttons) ? cfg.template_buttons : [];
+      const action = buttonActions[args.buttonIndex];
+      const buttonText =
+        tplButtons[args.buttonIndex]?.text || args.replyText || `Button ${args.buttonIndex + 1}`;
+      try {
+        await applyButtonAction({
+          action,
+          order,
+          conversationId: conv.id,
+          buttonText,
+        });
+      } catch (e) {
+        errLog("applyButtonAction failed", (e as Error).message);
+      }
+    }
+
+    // Re-fetch the order so executeFlow sees the new status (if changed).
+    const { data: refreshedOrder } = order
+      ? await admin.from("orders").select("*").eq("order_id", order.order_id).maybeSingle()
+      : { data: null };
+
     await executeFlow({
       runId: run.id,
       automation: a,
-      order,
+      order: refreshedOrder ?? order,
       conversation: conv,
       startNodeId: entryNode.id,
     });
