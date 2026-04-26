@@ -727,6 +727,7 @@ async function handleIncoming(value: any) {
       const orderNotConfirmed =
         !!order && order.confirmation_status !== "confirmed" && order.confirmation_status !== "canceled";
       const aiDisabledForConv = conv?.ai_enabled === false;
+      const imageAnalysisOn = aiSettings?.ai_image_analysis_enabled !== false;
       const shouldContinueWithAI =
         !aiDisabledForConv &&
         (
@@ -734,6 +735,10 @@ async function handleIncoming(value: any) {
             (m.type === "text" || messageType === "audio_transcribed") &&
             !outcome &&
             (!resumedRun || addressIncomplete || orderNotConfirmed)
+          ) || (
+            // Customer sent an image — let the AI look at it and reply
+            // (e.g. screenshot of address, photo of CNIC, picture of issue).
+            m.type === "image" && imageAnalysisOn && !outcome
           ) || (
             messageType === "button_reply" &&
             !resumedRun
