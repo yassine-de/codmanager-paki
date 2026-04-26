@@ -1113,31 +1113,41 @@ export default function WhatsappInbox() {
                                 m.payload?.image?.link ||
                                 m.payload?.document?.link ||
                                 m.payload?.audio?.link ||
+                                m.payload?.video?.link ||
                                 m.payload?.image?.url ||
                                 m.payload?.document?.url ||
                                 m.payload?.audio?.url ||
+                                m.payload?.video?.url ||
                                 null;
                               const mediaName =
                                 m.payload?.document?.filename || "file";
-                              if (m.message_type === "image" && mediaUrl) {
+                              // Some inbound messages have body = JSON.stringify(payload). Hide it for media.
+                              const bodyLooksLikeJson =
+                                typeof m.body === "string" && m.body.trim().startsWith("{") && m.body.includes("\"id\"");
+                              const caption = bodyLooksLikeJson ? null : m.body;
+
+                              if (m.message_type === "image") {
                                 return (
-                                  <a href={mediaUrl} target="_blank" rel="noreferrer">
-                                    <img
-                                      src={mediaUrl}
-                                      alt="attachment"
+                                  <div>
+                                    <MediaImage
+                                      message={m}
+                                      directUrl={mediaUrl}
                                       className="rounded-lg max-w-full max-h-64 object-cover mb-1"
                                     />
-                                    {m.body && <div className="whitespace-pre-wrap break-words">{m.body}</div>}
-                                  </a>
+                                    {caption && <div className="whitespace-pre-wrap break-words">{caption}</div>}
+                                  </div>
                                 );
                               }
                               if (m.message_type === "audio") {
                                 return <AudioMessagePlayer message={m} />;
                               }
-                              if (m.message_type === "document" && mediaUrl) {
+                              if (m.message_type === "document") {
+                                // For documents, link to the proxy so it works after the lookaside URL expires
+                                const proxyHref = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-media-proxy?messageId=${m.id}`;
+                                const href = mediaUrl && !mediaUrl.includes("lookaside.fbsbx.com") ? mediaUrl : proxyHref;
                                 return (
                                   <a
-                                    href={mediaUrl}
+                                    href={href}
                                     target="_blank"
                                     rel="noreferrer"
                                     className={cn(
@@ -1153,7 +1163,7 @@ export default function WhatsappInbox() {
                               }
                               return (
                                 <div className="whitespace-pre-wrap break-words">
-                                  {m.body || <em className="opacity-70">[{m.message_type}]</em>}
+                                  {caption || <em className="opacity-70">[{m.message_type}]</em>}
                                 </div>
                               );
                             })()}
