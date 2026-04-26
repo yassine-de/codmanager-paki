@@ -1142,10 +1142,12 @@ Return JSON ONLY in this exact schema:
 { "complete": boolean, "full_address": string, "city": string }
 
 Rules:
-- "complete" = true only if house/flat, street, AND area are all present (city is mandatory too).
+- "complete" = true ONLY if house/flat number, street, AND area are ALL explicitly present (city is mandatory too).
 - "full_address" must be a single line combining house/flat + street + area (DO NOT include the city).
 - "city" must be the city name in English/Latin script (e.g. "Karachi", "Lahore").
-- If anything is missing or vague, return { "complete": false, "full_address": "", "city": "" }.
+- REJECT obvious fake / test / placeholder addresses such as "test address", "fake", "dummy", "sample", "abc", "xyz", "n/a", "asdf", random keyboard mashing, or a single word. For these, return complete=false.
+- REJECT vague answers like just "my home", "same as before", "near masjid" without a real street/area, or only a city name.
+- If ANY required part is missing, vague, fake, or test data, return { "complete": false, "full_address": "", "city": "" }.
 - DO NOT invent details. Only use what the customer explicitly said.`;
 
   const extractMessages = [
