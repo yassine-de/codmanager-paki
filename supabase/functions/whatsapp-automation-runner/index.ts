@@ -901,10 +901,36 @@ async function startNewRunsFromTemplate(args: {
       })
       .eq("id", a.id);
 
+    // Apply per-button action (status change + AI takeover) BEFORE running the flow,
+    // so downstream steps see the updated order state.
+    if (typeof args.buttonIndex === "number") {
+      const cfg = (a.trigger_config as any) ?? {};
+      const buttonActions = Array.isArray(cfg.button_actions) ? cfg.button_actions : [];
+      const tplButtons = Array.isArray(cfg.template_buttons) ? cfg.template_buttons : [];
+      const action = buttonActions[args.buttonIndex];
+      const buttonText =
+        tplButtons[args.buttonIndex]?.text || args.replyText || `Button ${args.buttonIndex + 1}`;
+      try {
+        await applyButtonAction({
+          action,
+          order,
+          conversationId: conv.id,
+          buttonText,
+        });
+      } catch (e) {
+        errLog("applyButtonAction failed", (e as Error).message);
+      }
+    }
+
+    // Re-fetch the order so executeFlow sees the new status (if changed).
+    const { data: refreshedOrder } = order
+      ? await admin.from("orders").select("*").eq("order_id", order.order_id).maybeSingle()
+      : { data: null };
+
     await executeFlow({
       runId: run.id,
       automation: a,
-      order,
+      order: refreshedOrder ?? order,
       conversation: conv,
       startNodeId: entryNode.id,
     });
