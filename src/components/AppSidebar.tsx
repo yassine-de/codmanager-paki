@@ -177,21 +177,37 @@ export function AppSidebar() {
   });
 
   const { data: whatsappInboxUnread = 0 } = useQuery({
-    queryKey: ["whatsapp-inbox-unread"],
+    queryKey: ["whatsapp-inbox-unread-msgs"],
     queryFn: async () => {
-      // Count conversations where there are inbound messages newer than last_read_at
-      const { data, error } = await supabase
+      // Get all conversations with their last_read_at
+      const { data: convs, error: convErr } = await supabase
         .from("whatsapp_conversations")
-        .select("id, last_message_at, last_read_at")
-        .order("last_message_at", { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      const unread = (data || []).filter((c: any) => {
-        if (!c.last_message_at) return false;
-        if (!c.last_read_at) return true;
-        return new Date(c.last_message_at) > new Date(c.last_read_at);
+        .select("id, last_read_at")
+        .limit(1000);
+      if (convErr) throw convErr;
+      if (!convs || convs.length === 0) return 0;
+
+      // Fetch recent inbound messages (cap to last 1000 to keep light)
+      const { data: msgs, error: msgErr } = await supabase
+        .from("whatsapp_messages")
+        .select("conversation_id, created_at, direction")
+        .eq("direction", "inbound")
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      if (msgErr) throw msgErr;
+
+      const readMap = new Map<string, string | null>();
+      convs.forEach((c: any) => readMap.set(c.id, c.last_read_at));
+
+      let count = 0;
+      (msgs || []).forEach((m: any) => {
+        if (!readMap.has(m.conversation_id)) return;
+        const lastRead = readMap.get(m.conversation_id);
+        if (!lastRead || new Date(m.created_at) > new Date(lastRead)) {
+          count++;
+        }
       });
-      return unread.length;
+      return count;
     },
     enabled: isAdmin && !!authUser,
     refetchInterval: 10000,
