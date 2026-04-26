@@ -6,6 +6,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const jsonHeaders = {
+  ...corsHeaders,
+  "Content-Type": "application/json",
+  "Cache-Control": "no-store",
+};
+
+const unavailableAudioResponse = (error = "Audio unavailable", details: unknown = null) =>
+  new Response(JSON.stringify({ ok: false, expired: true, error, details }), {
+    status: 200,
+    headers: jsonHeaders,
+  });
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -60,10 +72,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!message || message.message_type !== "audio") {
-      return new Response(JSON.stringify({ ok: false, error: "Audio message not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return unavailableAudioResponse("Audio message not found");
     }
 
     const audio = message.payload?.audio;
@@ -72,10 +81,7 @@ Deno.serve(async (req) => {
     const mimeType = audio?.mime_type || "audio/ogg";
 
     if (!mediaId && !directUrl) {
-      return new Response(JSON.stringify({ ok: false, error: "Audio source missing" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return unavailableAudioResponse("Audio source missing");
     }
 
     const { data: settings } = await admin
@@ -114,7 +120,7 @@ Deno.serve(async (req) => {
           }),
           {
             status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: jsonHeaders,
           },
         );
       }
@@ -137,7 +143,7 @@ Deno.serve(async (req) => {
         }),
         {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: jsonHeaders,
         },
       );
     }
@@ -154,8 +160,8 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     return new Response(JSON.stringify({ ok: false, error: error?.message || "Unexpected error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+      headers: jsonHeaders,
     });
   }
 });
