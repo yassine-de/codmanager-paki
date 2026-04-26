@@ -1424,8 +1424,29 @@ async function tryExtractAndConfirmAddress(args: {
 }) {
   const { order, conv, customerText, history, apiKey, model } = args;
 
-  // Skip if order already has a long address & is already confirmed
-  if (order.confirmation_status === "confirmed") return;
+  // Helper: re-evaluate if the stored address is courier-deliverable.
+  // Mirrors `isAddressDeliverable` in aiContinueReply.
+  const isDeliverable = (addr?: string | null, city?: string | null): boolean => {
+    if (!addr || !city) return false;
+    const raw = String(addr).trim();
+    if (raw.length < 10) return false;
+    const lower = raw.toLowerCase();
+    const fakePattern = /\b(test|testing|tester|fake|dummy|sample|example|n\/?a|none|null|xxx+|asdf+|qwerty|aaaa+|placeholder|abc+|address here|adress|same|here)\b/i;
+    if (fakePattern.test(lower)) return false;
+    const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
+    if (tokens.length < 2) return false;
+    const hasNumber = /\d/.test(raw);
+    const streetKeyword = /\b(house|flat|plot|street|road|st\.?|rd\.?|lane|block|sector|phase|town|colony|mohalla|near|opposite|main|gali|chowk|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر)\b/i;
+    if (!hasNumber && !streetKeyword.test(lower)) return false;
+    return true;
+  };
+
+  // If the order is already confirmed AND already has a deliverable address,
+  // there's nothing to do. BUT if the order was confirmed via a button click
+  // BEFORE the customer provided a real address, we still need to capture the
+  // address now and patch the order — otherwise the rider gets no address.
+  const alreadyDeliverable = isDeliverable(order.customer_address, order.customer_city);
+  if (order.confirmation_status === "confirmed" && alreadyDeliverable) return;
 
   // Load ORIO cities for matching
   const { data: cities } = await admin
