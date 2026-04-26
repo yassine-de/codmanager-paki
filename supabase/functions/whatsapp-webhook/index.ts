@@ -727,7 +727,16 @@ async function handleIncoming(value: any) {
       const orderNotConfirmed =
         !!order && order.confirmation_status !== "confirmed" && order.confirmation_status !== "canceled";
       const aiDisabledForConv = conv?.ai_enabled === false;
-      const imageAnalysisOn = aiSettings?.ai_image_analysis_enabled !== false;
+      // Image analysis flag — default ON unless admin disabled it in AI settings
+      let imageAnalysisOn = true;
+      if (m.type === "image") {
+        const { data: aiCfgRow } = await admin
+          .from("whatsapp_ai_settings")
+          .select("ai_image_analysis_enabled")
+          .eq("singleton", true)
+          .maybeSingle();
+        imageAnalysisOn = aiCfgRow?.ai_image_analysis_enabled !== false;
+      }
       const shouldContinueWithAI =
         !aiDisabledForConv &&
         (
