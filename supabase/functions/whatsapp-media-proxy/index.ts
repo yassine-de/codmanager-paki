@@ -71,17 +71,37 @@ Deno.serve(async (req) => {
       .eq("id", messageId)
       .maybeSingle();
 
-    if (!message || message.message_type !== "audio") {
-      return unavailableAudioResponse("Audio message not found");
+    if (!message) {
+      return unavailableAudioResponse("Message not found");
     }
 
-    const audio = message.payload?.audio;
-    const mediaId = audio?.id;
-    const directUrl = audio?.link || audio?.url;
-    const mimeType = audio?.mime_type || "audio/ogg";
+    // Resolve media payload by message type (audio | image | video | document | sticker)
+    const mt = message.message_type;
+    const payloadMedia =
+      message.payload?.[mt] ||
+      message.payload?.audio ||
+      message.payload?.image ||
+      message.payload?.video ||
+      message.payload?.document ||
+      message.payload?.sticker ||
+      null;
+
+    if (!payloadMedia) {
+      return unavailableAudioResponse("Media source missing");
+    }
+
+    const mediaId = payloadMedia.id;
+    const directUrl = payloadMedia.link || payloadMedia.url;
+    const defaultMime =
+      mt === "image" ? "image/jpeg" :
+      mt === "video" ? "video/mp4" :
+      mt === "document" ? "application/octet-stream" :
+      mt === "sticker" ? "image/webp" :
+      "audio/ogg";
+    const mimeType = payloadMedia.mime_type || defaultMime;
 
     if (!mediaId && !directUrl) {
-      return unavailableAudioResponse("Audio source missing");
+      return unavailableAudioResponse("Media source missing");
     }
 
     const { data: settings } = await admin
