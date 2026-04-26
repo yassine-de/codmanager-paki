@@ -57,9 +57,9 @@ const settingsSubItems = [
   { title: "System Health", url: "/system-health", icon: Activity, permission: "access_to_settings" },
 ];
 
-const whatsappSubItems = [
+const getWhatsappSubItems = (inboxUnread: number) => [
   { title: "Overview", url: "/whatsapp", icon: LayoutDashboard, end: true },
-  { title: "Inbox", url: "/whatsapp/inbox", icon: Inbox },
+  { title: "Inbox", url: "/whatsapp/inbox", icon: Inbox, badge: inboxUnread > 0 ? inboxUnread : undefined },
   { title: "Confirmations", url: "/whatsapp/confirmations", icon: CheckCircle2 },
   { title: "Automations", url: "/whatsapp/automations", icon: Zap },
   { title: "Templates", url: "/whatsapp/templates", icon: FileText },
