@@ -134,11 +134,33 @@ async function sendTemplate(args: {
     placeholders.push(m[1]);
   }
   if (placeholders.length > 0) {
+    const positionalFallback = [
+      String(vars.customer_name ?? "").trim(),
+      String(vars.product_name ?? "").trim(),
+      String(vars.price ?? "").trim(),
+      String(vars.city ?? "").trim(),
+      String(vars.order_id ?? "").trim(),
+    ];
+    const finalFallback = positionalFallback.find(Boolean) || "-";
+    const resolvePlaceholder = (name: string, idx: number) => {
+      const raw = vars[name];
+      let val = raw == null ? "" : String(raw).trim();
+      const lower = String(name).toLowerCase();
+      if (!val && (lower.includes("customer") || lower === "name")) val = String(vars.customer_name ?? "").trim();
+      else if (!val && lower.includes("product")) val = String(vars.product_name ?? "").trim();
+      else if (!val && (lower.includes("amount") || lower.includes("price") || lower.includes("total"))) val = String(vars.price ?? "").trim();
+      else if (!val && lower.includes("city")) val = String(vars.city ?? "").trim();
+      else if (!val && lower.includes("order")) val = String(vars.order_id ?? "").trim();
+      const varMatch = /^var_(\d+)$/i.exec(name);
+      if (!val && varMatch) val = positionalFallback[Math.max(0, Number(varMatch[1]) - 1)] || "";
+      if (!val) val = positionalFallback[idx] || finalFallback;
+      return val;
+    };
     components.push({
       type: "body",
-      parameters: placeholders.map((name) => ({
+      parameters: placeholders.map((name, idx) => ({
         type: "text",
-        text: String(vars[name] ?? ""),
+        text: resolvePlaceholder(name, idx),
       })),
     });
   }
@@ -165,7 +187,20 @@ async function sendTemplate(args: {
   const ok = resp.ok;
   const metaMsgId = ok ? respJson?.messages?.[0]?.id : null;
 
-  const previewBody = render(tpl.body || `[template: ${templateName}]`, vars);
+  const previewVars = {
+    ...vars,
+    ...Object.fromEntries(placeholders.map((name, idx) => {
+      const values = [
+        String(vars.customer_name ?? "").trim(),
+        String(vars.product_name ?? "").trim(),
+        String(vars.price ?? "").trim(),
+        String(vars.city ?? "").trim(),
+        String(vars.order_id ?? "").trim(),
+      ];
+      return [name, vars[name] ?? values[Math.max(0, (/^var_(\d+)$/i.exec(name)?.[1] ? Number(/^var_(\d+)$/i.exec(name)?.[1]) - 1 : idx))] ?? values[idx] ?? "-"];
+    })),
+  };
+  const previewBody = render(tpl.body || `[template: ${templateName}]`, previewVars);
 
   if (conversationId) {
     await admin.from("whatsapp_messages").insert({
