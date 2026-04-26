@@ -57,9 +57,9 @@ const settingsSubItems = [
   { title: "System Health", url: "/system-health", icon: Activity, permission: "access_to_settings" },
 ];
 
-const whatsappSubItems = [
+const getWhatsappSubItems = (inboxUnread: number) => [
   { title: "Overview", url: "/whatsapp", icon: LayoutDashboard, end: true },
-  { title: "Inbox", url: "/whatsapp/inbox", icon: Inbox },
+  { title: "Inbox", url: "/whatsapp/inbox", icon: Inbox, badge: inboxUnread > 0 ? inboxUnread : undefined },
   { title: "Confirmations", url: "/whatsapp/confirmations", icon: CheckCircle2 },
   { title: "Automations", url: "/whatsapp/automations", icon: Zap },
   { title: "Templates", url: "/whatsapp/templates", icon: FileText },
@@ -175,7 +175,29 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
+  const { data: whatsappInboxUnread = 0 } = useQuery({
+    queryKey: ["whatsapp-inbox-unread"],
+    queryFn: async () => {
+      // Count conversations where there are inbound messages newer than last_read_at
+      const { data, error } = await supabase
+        .from("whatsapp_conversations")
+        .select("id, last_message_at, last_read_at")
+        .order("last_message_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      const unread = (data || []).filter((c: any) => {
+        if (!c.last_message_at) return false;
+        if (!c.last_read_at) return true;
+        return new Date(c.last_message_at) > new Date(c.last_read_at);
+      });
+      return unread.length;
+    },
+    enabled: isAdmin && !!authUser,
+    refetchInterval: 10000,
+  });
+
   const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments);
+  const whatsappSubItems = getWhatsappSubItems(whatsappInboxUnread);
 
   const visibleItems = navItems.filter((item: any) => {
     if (item.agentOnly) return isAgent;
@@ -390,7 +412,12 @@ export function AppSidebar() {
                                   activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                                 >
                                   <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
-                                  <span>{sub.title}</span>
+                                  <span className="flex-1">{sub.title}</span>
+                                  {(sub as any).badge != null && (
+                                    <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
+                                      {(sub as any).badge > 999 ? '999+' : (sub as any).badge}
+                                    </span>
+                                  )}
                                 </NavLink>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
