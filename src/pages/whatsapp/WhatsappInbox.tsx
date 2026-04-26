@@ -1890,6 +1890,44 @@ export default function WhatsappInbox() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Mark as resolved dialog */}
+      <Dialog open={resolveOpen} onOpenChange={(o) => { setResolveOpen(o); if (!o) setResolveNote(""); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-sky-500" />
+              Mark as Resolved
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Confirm this conversation has been handled. Add an optional note to record what was done.
+            </p>
+            <Textarea
+              value={resolveNote}
+              onChange={(e) => setResolveNote(e.target.value)}
+              placeholder="Reviewer note (optional)…"
+              rows={4}
+              className="resize-none"
+            />
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button variant="ghost" size="sm" onClick={() => setResolveOpen(false)} disabled={resolving}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={markAsResolved}
+                disabled={resolving}
+                className="gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white"
+              >
+                {resolving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                Mark Resolved
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
