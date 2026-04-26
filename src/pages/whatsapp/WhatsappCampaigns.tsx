@@ -1141,12 +1141,32 @@ function CampaignDetailsDialog({ campaign, onClose }: { campaign: Campaign | nul
                       )}
                       <RecipientStatusBadge status={r.status} />
                     </div>
-                    {r.status === "failed" && (
-                      <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-1.5">
-                        <span className="font-medium">Reason: </span>
-                        {explainFailure(r.error_message)}
-                      </div>
-                    )}
+                    {r.status === "failed" && (() => {
+                      const f = parseFailure(r.error_message);
+                      return (
+                        <div className="text-xs bg-destructive/10 border border-destructive/20 rounded px-2 py-1.5 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-destructive">{f.title}</span>
+                            {f.code && (
+                              <Badge variant="outline" className="text-[10px] h-4 border-destructive/40 text-destructive">
+                                #{f.code}
+                              </Badge>
+                            )}
+                            {f.isPhoneIssue && (
+                              <Badge variant="outline" className="text-[10px] h-4 border-amber-500/40 text-amber-600">
+                                Phone issue
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-muted-foreground">{f.explanation}</div>
+                          {f.details && (
+                            <div className="text-[11px] text-muted-foreground/80 font-mono break-all">
+                              {f.details}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
