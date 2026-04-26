@@ -237,11 +237,17 @@ export default function WhatsappAutomationBuilder() {
     return m;
   }, [edges]);
 
-  // Roots = nodes with no incoming edges
+  // Roots = nodes with no incoming edges (incoming from any source, including __trigger__)
   const rootNodeIds = useMemo(() => {
     const targets = new Set(edges.map((e) => e.target));
     return nodes.filter((n) => !targets.has(n.id)).map((n) => n.id);
   }, [nodes, edges]);
+
+  // Children of the virtual trigger node (used by from_template w/ buttons)
+  const triggerChildren = useMemo(
+    () => (childrenMap.get(TRIGGER_VIRTUAL_ID) ?? []),
+    [childrenMap],
+  );
 
   if (isLoading) {
     return (
