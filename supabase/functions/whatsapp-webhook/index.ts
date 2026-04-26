@@ -28,6 +28,89 @@ async function getSettings() {
   return data;
 }
 
+/**
+ * Download a WhatsApp audio note from Meta and transcribe it with OpenAI Whisper.
+ * Returns the transcribed text, or null on any failure (caller falls back to
+ * the legacy "[audio]" placeholder so the AI can still reply gracefully).
+ */
+async function transcribeWhatsappAudio(audio: any): Promise<string | null> {
+  try {
+    const mediaId: string | undefined = audio?.id;
+    const directUrl: string | undefined = audio?.link || audio?.url;
+    const mimeType: string = audio?.mime_type || "audio/ogg";
+    if (!mediaId && !directUrl) return null;
+
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openaiKey) {
+      log("transcribe: OPENAI_API_KEY missing");
+      return null;
+    }
+
+    const settings = await getSettings();
+    const accessToken =
+      settings?.access_token || Deno.env.get("WHATSAPP_META_ACCESS_TOKEN");
+    if (!accessToken) {
+      log("transcribe: WhatsApp access token missing");
+      return null;
+    }
+
+    // 1) Resolve Meta's one-shot signed URL.
+    let downloadUrl = directUrl;
+    if (mediaId) {
+      const base = (settings?.api_base_url || "https://graph.facebook.com/v21.0").replace(/\/$/, "");
+      const metaResp = await fetch(`${base}/${mediaId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const metaJson = await metaResp.json().catch(() => ({}));
+      if (!metaResp.ok || !metaJson?.url) {
+        log("transcribe: meta resolve failed", metaResp.status, metaJson?.error);
+        return null;
+      }
+      downloadUrl = metaJson.url;
+    }
+
+    // 2) Download the audio bytes.
+    const mediaResp = await fetch(downloadUrl!, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!mediaResp.ok) {
+      log("transcribe: media download failed", mediaResp.status);
+      return null;
+    }
+    const audioBuffer = await mediaResp.arrayBuffer();
+
+    // 3) Send to OpenAI Whisper. WhatsApp's .ogg/opus is natively supported.
+    const ext = mimeType.includes("mp4") ? "m4a"
+      : mimeType.includes("mpeg") ? "mp3"
+      : mimeType.includes("wav") ? "wav"
+      : mimeType.includes("webm") ? "webm"
+      : "ogg";
+    const form = new FormData();
+    form.append("file", new Blob([audioBuffer], { type: mimeType }), `voice.${ext}`);
+    form.append("model", "whisper-1");
+    // No language hint — Whisper auto-detects (Urdu, English, Arabic, French, …).
+
+    const whisperResp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${openaiKey}` },
+      body: form,
+    });
+    if (!whisperResp.ok) {
+      const errText = await whisperResp.text().catch(() => "");
+      errLog("transcribe: whisper failed", whisperResp.status, errText.slice(0, 200));
+      return null;
+    }
+    const whisperJson = await whisperResp.json().catch(() => ({}));
+    const text = (whisperJson?.text || "").toString().trim();
+    if (!text) return null;
+    log("transcribe: ok", { chars: text.length });
+    return text;
+  } catch (e) {
+    errLog("transcribe: exception", (e as Error).message);
+    return null;
+  }
+}
+
 // Try to find an order linked to this phone number.
 // Priority:
 //  1. explicit orderId from button payload
