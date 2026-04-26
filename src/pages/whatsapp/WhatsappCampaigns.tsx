@@ -1141,12 +1141,32 @@ function CampaignDetailsDialog({ campaign, onClose }: { campaign: Campaign | nul
                       )}
                       <RecipientStatusBadge status={r.status} />
                     </div>
-                    {r.status === "failed" && (
-                      <div className="text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-2 py-1.5">
-                        <span className="font-medium">Reason: </span>
-                        {explainFailure(r.error_message)}
-                      </div>
-                    )}
+                    {r.status === "failed" && (() => {
+                      const f = parseFailure(r.error_message);
+                      return (
+                        <div className="text-xs bg-destructive/10 border border-destructive/20 rounded px-2 py-1.5 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-destructive">{f.title}</span>
+                            {f.code && (
+                              <Badge variant="outline" className="text-[10px] h-4 border-destructive/40 text-destructive">
+                                #{f.code}
+                              </Badge>
+                            )}
+                            {f.isPhoneIssue && (
+                              <Badge variant="outline" className="text-[10px] h-4 border-amber-500/40 text-amber-600">
+                                Phone issue
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="text-muted-foreground">{f.explanation}</div>
+                          {f.details && (
+                            <div className="text-[11px] text-muted-foreground/80 font-mono break-all">
+                              {f.details}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -1167,30 +1187,86 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function explainFailure(raw?: string | null): string {
-  if (!raw) return "No reason reported by WhatsApp.";
+type FailureInfo = {
+  code?: number | string;
+  title: string;
+  explanation: string;
+  details?: string;
+  isPhoneIssue: boolean;
+};
+
+function friendlyForCode(code: number | string | undefined, raw: string): { title: string; explanation: string; isPhoneIssue: boolean } {
+  const c = String(code ?? "");
+  if (c === "131026" || /Message Undeliverable/i.test(raw)) return {
+    title: "Number not reachable on WhatsApp",
+    explanation: "Had ra9m ma-3andouch WhatsApp wla blocked l-business wla device offline. Verifie l-numéro wash kayn 3la WhatsApp.",
+    isPhoneIssue: true,
+  };
+  if (c === "131030") return {
+    title: "Recipient not in allowed list",
+    explanation: "L-ra9m mch f l-allowed list dyl business (3adatan f development mode).",
+    isPhoneIssue: true,
+  };
+  if (c === "133010" || c === "133000") return {
+    title: "Phone not registered on WhatsApp",
+    explanation: "Ra9m ma-msajjelch f WhatsApp wla deregistered.",
+    isPhoneIssue: true,
+  };
+  if (c === "131047" || /24 hours have passed/i.test(raw)) return {
+    title: "24h window expired",
+    explanation: "Customer ma-jaweb-ch men ktar mn 24 sa3a — ghir templates approved li ymken t-sift.",
+    isPhoneIssue: false,
+  };
+  if (c === "131051") return { title: "Unsupported message type", explanation: "Type dyl message ma-supported-ch l had recipient.", isPhoneIssue: false };
+  if (c === "131008") return {
+    title: "Missing template parameter",
+    explanation: "Wahed mn template variables (customer name, product…) kan empty wakht l-send.",
+    isPhoneIssue: false,
+  };
+  if (c === "131009") return { title: "Parameter format mismatch", explanation: "Format dyl wahed mn template variables ghalat.", isPhoneIssue: false };
+  if (c === "131053" || /mimetype|codec/i.test(raw)) return { title: "Media format rejected", explanation: "File (audio/video/image) mimetype wla codec mch supported f WhatsApp.", isPhoneIssue: false };
+  if (c === "132000") return { title: "Template params count mismatch", explanation: "L-3adad dyl variables li t-sift mch nafs li f l-template (mtl: 0 mqabel 3 expected).", isPhoneIssue: false };
+  if (c === "132001") return { title: "Template not found", explanation: "Template ma-kayn-ch wla mch approved f had l-language.", isPhoneIssue: false };
+  if (c === "132005") return { title: "Template content too long", explanation: "Translated content dyl template tjawez l-limit.", isPhoneIssue: false };
+  if (c === "132007") return { title: "Template format rejected", explanation: "Template format ma-9blou-sh Meta.", isPhoneIssue: false };
+  if (c === "132012" || c === "132015") return { title: "Template param format invalid", explanation: "Format dyl variable ghalat (mtl: date, currency).", isPhoneIssue: false };
+  if (c === "368") return { title: "Number blocked by Meta", explanation: "Numéro dyl business temporarily blocked (policy wla quality issue).", isPhoneIssue: false };
+  if (/healthy ecosystem engagement/i.test(raw)) return {
+    title: "Quality limit reached",
+    explanation: "Meta blocked had send 7it phone quality dyl business naqsat (bzaf users blocked wla reported messages).",
+    isPhoneIssue: false,
+  };
+  if (/rate.?limit/i.test(raw)) return { title: "Rate limit", explanation: "T-siftet bzaf messages f wa9t qsir.", isPhoneIssue: false };
+  if (/invalid.+phone|phone.+invalid/i.test(raw)) return { title: "Invalid phone format", explanation: "Format dyl ra9m ghalat (khass country code bla 00 wla spaces).", isPhoneIssue: true };
+  return { title: "Unknown error", explanation: "Sabab dqi9 ma-3tah-ch Meta. Shouf raw details lta7t.", isPhoneIssue: false };
+}
+
+function parseFailure(raw?: string | null): FailureInfo {
+  if (!raw) return { title: "No reason", explanation: "WhatsApp ma 3tach 7etta sabab.", isPhoneIssue: false };
   const s = String(raw);
-  // Meta error code mapping
-  if (/131026/.test(s)) return "Message undeliverable — the recipient's number can't be reached on WhatsApp (not registered, blocked the business, or no app).";
-  if (/131030/.test(s)) return "Recipient not in allowed list — phone number not authorized to receive messages from this business.";
-  if (/131047/.test(s)) return "24-hour window expired — customer hasn't messaged in 24h, only template messages allowed.";
-  if (/131051/.test(s)) return "Unsupported message type for this recipient.";
-  if (/131008/.test(s)) return "Missing template parameter — one of the template variables was empty.";
-  if (/131009/.test(s)) return "Parameter format mismatch — a template variable doesn't match the expected format.";
-  if (/131053/.test(s)) return "Media upload failed — the file format/codec isn't supported by WhatsApp.";
-  if (/132000/.test(s)) return "Template parameter count mismatch — number of variables doesn't match the template.";
-  if (/132001/.test(s)) return "Template doesn't exist or wasn't approved in this language.";
-  if (/132005/.test(s)) return "Template translated content too long.";
-  if (/132007/.test(s)) return "Template format error — rejected by WhatsApp.";
-  if (/132012|132015/.test(s)) return "Template parameter format invalid.";
-  if (/133000/.test(s)) return "Incomplete deregistration — number was being deregistered.";
-  if (/133010/.test(s)) return "Phone number not registered on WhatsApp Business.";
-  if (/368/.test(s)) return "Number temporarily blocked by Meta (policy/quality issue).";
-  if (/rate.?limit/i.test(s)) return "Rate limit reached — too many messages sent in a short time.";
-  if (/invalid.+phone|phone.+invalid/i.test(s)) return "Invalid phone number format.";
-  if (/template/i.test(s) && /not.+found|missing/i.test(s)) return "Template not found or not approved.";
-  // Fallback: show raw message trimmed
-  return s.length > 200 ? s.slice(0, 200) + "…" : s;
+  try {
+    const obj = JSON.parse(s);
+    const err = obj?.error ?? obj;
+    const code = err?.code;
+    const message: string = err?.message ?? "";
+    const details: string | undefined = err?.error_data?.details ?? err?.details;
+    const friendly = friendlyForCode(code, message + " " + (details ?? ""));
+    return {
+      code,
+      title: friendly.title,
+      explanation: friendly.explanation,
+      details: details || message || undefined,
+      isPhoneIssue: friendly.isPhoneIssue,
+    };
+  } catch {
+    const friendly = friendlyForCode(undefined, s);
+    return {
+      title: friendly.title,
+      explanation: friendly.explanation,
+      details: s.length > 240 ? s.slice(0, 240) + "…" : s,
+      isPhoneIssue: friendly.isPhoneIssue,
+    };
+  }
 }
 
 function RecipientStatusBadge({ status }: { status: string }) {
