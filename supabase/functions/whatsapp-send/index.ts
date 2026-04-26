@@ -281,10 +281,13 @@ Deno.serve(async (req) => {
       if (placeholders.length > 0) {
         components.push({
           type: "body",
-          parameters: placeholders.map((name) => ({
-            type: "text",
-            text: String(vars[name] ?? ""),
-          })),
+          parameters: placeholders.map((name) => {
+            const raw = vars[name];
+            const val = raw == null ? "" : String(raw).trim();
+            // Meta rejects empty text parameters with error 131008.
+            // Fall back to a non-empty placeholder so the send succeeds.
+            return { type: "text", text: val.length > 0 ? val : "-" };
+          }),
         });
       }
 
