@@ -3,7 +3,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { eachDayOfInterval, startOfDay, subDays, isAfter, format as fmtDate } from "date-fns";
-import { Search, SlidersHorizontal, X, Columns3, CalendarIcon, Filter, Pencil, History, MessageCircle, Download, RefreshCw, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Search, SlidersHorizontal, X, Columns3, CalendarIcon, Filter, Pencil, History, MessageCircle, Download, RefreshCw, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Copy, Check } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
@@ -211,6 +211,7 @@ export default function Orders() {
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [trackingTarget, setTrackingTarget] = useState<{ orioId: number; systemId?: number | null; sellerId?: string | null } | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sellerNames, setSellerNames] = useState<string[]>([]);
   const [agentNames, setAgentNames] = useState<string[]>([]);
@@ -889,7 +890,28 @@ export default function Orders() {
                     </td>
                   )}
                   {isAdmin && isCol('systemId') && <td className="py-2.5 px-4 font-mono text-xs text-muted-foreground">{order.systemId ?? '—'}</td>}
-                  {isCol('id') && <td className="py-2.5 px-4 font-medium text-xs">{order.id}</td>}
+                  {isCol('id') && (
+                    <td className="py-2.5 px-4 font-medium text-xs" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(order.id);
+                          setCopiedId(order.id);
+                          toast.success("Order ID copied");
+                          setTimeout(() => setCopiedId(prev => prev === order.id ? null : prev), 1500);
+                        }}
+                        className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
+                        title="Click to copy"
+                      >
+                        <span>{order.id}</span>
+                        {copiedId === order.id ? (
+                          <Check className="w-3 h-3 text-success" />
+                        ) : (
+                          <Copy className="w-3 h-3 opacity-0 group-hover:opacity-60" />
+                        )}
+                      </button>
+                    </td>
+                  )}
                   {isAdmin && isCol('orioId') && (
                     <td className="py-2.5 px-4 text-xs" onClick={(e) => e.stopPropagation()}>
                       {order.orioOrderId ? (
