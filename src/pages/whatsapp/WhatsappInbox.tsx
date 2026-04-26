@@ -931,8 +931,11 @@ export default function WhatsappInbox() {
             {filteredConvos.map((c) => {
               const unreadCount = unreadMap[c.id] ?? 0;
               const unread = unreadCount > 0;
+              const needsReview = c.status === "manual_review_needed";
               const ts = c.last_reply_at || c.last_message_at || c.updated_at;
-              const tooltip = unread
+              const tooltip = needsReview
+                ? "⚠️ Needs human review — AI flagged this conversation"
+                : unread
                 ? `${unreadCount} unread message${unreadCount > 1 ? "s" : ""}${
                     c.last_reply_at
                       ? ` • last reply ${formatDistanceToNowStrict(new Date(c.last_reply_at), { addSuffix: true })}`
@@ -951,24 +954,35 @@ export default function WhatsappInbox() {
                     setTab("reply");
                   }}
                   className={cn(
-                    "w-full text-left px-3 py-3 border-b border-border/60 hover:bg-muted/40 transition-colors flex gap-3",
+                    "w-full text-left px-3 py-3 border-b border-border/60 hover:bg-muted/40 transition-colors flex gap-3 relative",
                     selected === c.id && "bg-muted/60",
+                    needsReview && "bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-l-sky-500",
                   )}
                 >
-                  <div
-                    className={cn(
-                      "h-10 w-10 rounded-full grid place-items-center text-sm font-semibold shrink-0",
-                      colorFor(c.customer_phone),
+                  <div className="relative shrink-0">
+                    <div
+                      className={cn(
+                        "h-10 w-10 rounded-full grid place-items-center text-sm font-semibold",
+                        colorFor(c.customer_phone),
+                      )}
+                    >
+                      {initials(c.customer_name, c.customer_phone)}
+                    </div>
+                    {needsReview && (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-sky-500 border-2 border-background items-center justify-center">
+                          <AlertCircle className="h-2 w-2 text-white" />
+                        </span>
+                      </span>
                     )}
-                  >
-                    {initials(c.customer_name, c.customer_phone)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <div
                         className={cn(
                           "text-sm truncate",
-                          unread ? "font-bold text-foreground" : "font-semibold",
+                          unread || needsReview ? "font-bold text-foreground" : "font-semibold",
                         )}
                       >
                         {c.customer_name || c.customer_phone}
@@ -991,6 +1005,15 @@ export default function WhatsappInbox() {
                       >
                         {c.order_id ? `#${c.order_id}` : c.customer_phone}
                       </div>
+                      {needsReview && (
+                        <span
+                          className="inline-flex items-center gap-0.5 h-5 px-1.5 rounded-full bg-sky-500 text-white text-[9px] font-bold shrink-0 uppercase tracking-wide"
+                          aria-label="Needs human review"
+                        >
+                          <AlertCircle className="h-2.5 w-2.5" />
+                          Review
+                        </span>
+                      )}
                       {unread && (
                         <span
                           className="min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[11px] font-bold grid place-items-center shrink-0"
