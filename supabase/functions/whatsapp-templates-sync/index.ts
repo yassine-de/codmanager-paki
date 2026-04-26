@@ -190,33 +190,102 @@ Deno.serve(async (req) => {
 
     if (mode === "refresh") {
       const r = await fetch(
-        `${base}/${s.waba_id}/message_templates?limit=200&fields=name,language,status,category,id,rejected_reason`,
+        `${base}/${s.waba_id}/message_templates?limit=200&fields=name,language,status,category,id,rejected_reason,components`,
         { headers: { Authorization: `Bearer ${s.access_token}` } },
       );
       const data = await r.json();
       if (!r.ok) return json(400, { ok: false, error: data?.error?.message || "Meta error" });
       const items = data?.data ?? [];
       let updated = 0;
+      let imported = 0;
+
+      // Convert Meta numbered placeholders {{1}} {{2}} -> friendly names {{var_1}} {{var_2}}
+      const denormalize = (text: string) =>
+        (text || "").replace(/\{\{\s*(\d+)\s*\}\}/g, (_m, n) => `{{var_${n}}}`);
+
+      const parseComponents = (components: any[] = []) => {
+        let header_type = "NONE";
+        let header_text = "";
+        let header_media_url = "";
+        let body = "";
+        let footer = "";
+        const buttons: any[] = [];
+        for (const c of components) {
+          const type = String(c.type || "").toUpperCase();
+          if (type === "HEADER") {
+            header_type = String(c.format || "NONE").toUpperCase();
+            if (header_type === "TEXT") header_text = denormalize(c.text || "");
+            else if (Array.isArray(c.example?.header_handle) && c.example.header_handle.length) {
+              header_media_url = String(c.example.header_handle[0] || "");
+            }
+          } else if (type === "BODY") {
+            body = denormalize(c.text || "");
+          } else if (type === "FOOTER") {
+            footer = c.text || "";
+          } else if (type === "BUTTONS" && Array.isArray(c.buttons)) {
+            for (const b of c.buttons) {
+              const bt = String(b.type || "").toUpperCase();
+              if (bt === "URL") buttons.push({ type: "URL", text: b.text, url: b.url });
+              else if (bt === "PHONE_NUMBER") buttons.push({ type: "PHONE_NUMBER", text: b.text, phone_number: b.phone_number });
+              else buttons.push({ type: "QUICK_REPLY", text: b.text });
+            }
+          }
+        }
+        return { header_type, header_text, header_media_url, body, footer, buttons };
+      };
+
       for (const it of items) {
         const { data: rows } = await supabase
           .from("whatsapp_templates")
           .select("id")
           .eq("meta_template_name", it.name)
           .eq("language", it.language);
+
+        const parsed = parseComponents(it.components || []);
+
         if (rows && rows.length) {
+          // Update existing — refresh status + content from Meta (source of truth)
           await supabase
             .from("whatsapp_templates")
             .update({
               sync_status: String(it.status || "PENDING").toUpperCase(),
               meta_template_id: it.id ? String(it.id) : null,
               rejection_reason: it.rejected_reason || null,
+              category: String(it.category || "UTILITY").toUpperCase(),
+              header_type: parsed.header_type,
+              header_text: parsed.header_text,
+              header_media_url: parsed.header_media_url,
+              body: parsed.body,
+              footer: parsed.footer,
+              buttons: parsed.buttons,
               last_synced_at: new Date().toISOString(),
             })
             .eq("id", rows[0].id);
           updated++;
+        } else {
+          // Import template that exists on Meta but not locally
+          await supabase.from("whatsapp_templates").insert({
+            name: it.name,
+            type: "first_message",
+            language: it.language || "en",
+            category: String(it.category || "UTILITY").toUpperCase(),
+            meta_template_name: it.name,
+            meta_template_id: it.id ? String(it.id) : null,
+            sync_status: String(it.status || "PENDING").toUpperCase(),
+            rejection_reason: it.rejected_reason || null,
+            header_type: parsed.header_type,
+            header_text: parsed.header_text,
+            header_media_url: parsed.header_media_url,
+            body: parsed.body,
+            footer: parsed.footer,
+            buttons: parsed.buttons,
+            active: true,
+            last_synced_at: new Date().toISOString(),
+          });
+          imported++;
         }
       }
-      return json(200, { ok: true, updated, total: items.length });
+      return json(200, { ok: true, updated, imported, total: items.length });
     }
 
     if (mode === "delete") {

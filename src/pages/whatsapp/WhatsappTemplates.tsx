@@ -218,7 +218,7 @@ export default function WhatsappTemplates() {
     setRefreshing(false);
     qc.invalidateQueries({ queryKey: ["wts-templates"] });
     if (error || !data?.ok) toast.error(data?.error || error?.message || "Refresh failed");
-    else toast.success(`Synced ${data.updated}/${data.total} templates`);
+    else toast.success(`Synced ${data.updated} updated, ${data.imported ?? 0} imported (${data.total} total)`);
   };
 
   const remove = async (id: string) => {
