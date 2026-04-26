@@ -234,9 +234,9 @@ async function applyOutcome(
     updates.confirmation_channel = "agent";
     updates.agent_id = null;
   } else if (outcome === "canceled") {
-    updates.confirmation_status = "new";
-    updates.confirmation_channel = "agent";
-    updates.agent_id = null;
+    updates.confirmation_status = "cancelled";
+    updates.confirmation_channel = "whatsapp";
+    updates.cancel_reason = "Canceled by customer via WhatsApp";
     updates.whatsapp_note = "Canceled in WhatsApp";
     updates.note = `${order.note ? order.note + "\n" : ""}Canceled in WhatsApp`;
   }
