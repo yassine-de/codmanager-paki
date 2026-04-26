@@ -1189,6 +1189,21 @@ export default function WhatsappInbox() {
                   </div>
                 </div>
 
+                {/* Mark as resolved (only when conversation needs review) */}
+                {conv?.status === "manual_review_needed" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setResolveOpen(true)}
+                    className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs font-medium border-sky-500/30 bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 hover:text-sky-700 dark:text-sky-400"
+                    title="Mark this conversation as resolved"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span className="hidden md:inline">Mark Resolved</span>
+                  </Button>
+                )}
+
                 {/* AI auto-reply toggle */}
                 <Button
                   type="button"
