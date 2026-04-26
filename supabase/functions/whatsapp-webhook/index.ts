@@ -1296,6 +1296,99 @@ Rules:
   });
 }
 
+// ---------------------------------------------------------------------------
+// Sweep: find conversations where the customer's last message went unanswered
+// (no outbound reply after the last inbound) and trigger AI continuation so
+// the AI keeps the conversation flowing automatically.
+// ---------------------------------------------------------------------------
+async function sweepUnansweredConversations(opts?: { limit?: number; minSilenceSec?: number }) {
+  const limit = Math.max(1, Math.min(50, opts?.limit ?? 20));
+  const minSilenceSec = Math.max(30, opts?.minSilenceSec ?? 90);
+  const cutoffIso = new Date(Date.now() - minSilenceSec * 1000).toISOString();
+
+  // Candidate convs: AI enabled, had a recent inbound, not too stale (last 24h).
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: convs } = await admin
+    .from("whatsapp_conversations")
+    .select("id, order_id, customer_phone, ai_enabled, last_reply_at, last_message_at")
+    .eq("ai_enabled", true)
+    .gte("last_reply_at", since24h)
+    .lte("last_reply_at", cutoffIso)
+    .order("last_reply_at", { ascending: false })
+    .limit(limit * 3); // overshoot then filter
+
+  let triggered = 0;
+  for (const conv of convs ?? []) {
+    if (triggered >= limit) break;
+    try {
+      // Last message in conversation must be inbound (direction=in)
+      const { data: lastMsg } = await admin
+        .from("whatsapp_messages")
+        .select("direction, body, message_type, created_at")
+        .eq("conversation_id", conv.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!lastMsg || lastMsg.direction !== "in") continue;
+      // Silence threshold based on lastMsg.created_at
+      if (new Date(lastMsg.created_at).getTime() > Date.now() - minSilenceSec * 1000) continue;
+
+      // Skip if any outbound was sent after the last inbound
+      const { data: laterOut } = await admin
+        .from("whatsapp_messages")
+        .select("id")
+        .eq("conversation_id", conv.id)
+        .eq("direction", "out")
+        .gt("created_at", lastMsg.created_at)
+        .limit(1)
+        .maybeSingle();
+      if (laterOut) continue;
+
+      // Skip if there's a paused automation run waiting on this conversation
+      const { data: pausedRun } = await admin
+        .from("whatsapp_automation_runs")
+        .select("id")
+        .eq("conversation_id", conv.id)
+        .eq("status", "waiting_reply")
+        .limit(1)
+        .maybeSingle();
+      if (pausedRun) continue;
+
+      // Resolve order if any
+      let order: any = null;
+      if (conv.order_id) {
+        const { data: o } = await admin
+          .from("orders")
+          .select("*")
+          .eq("order_id", conv.order_id)
+          .maybeSingle();
+        order = o ?? null;
+      }
+
+      // Aggregate recent inbound messages (last 5 min) so the AI sees full context
+      const sinceBatch = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data: batched } = await admin
+        .from("whatsapp_messages")
+        .select("body, message_type, created_at, direction")
+        .eq("conversation_id", conv.id)
+        .eq("direction", "in")
+        .gte("created_at", sinceBatch)
+        .order("created_at", { ascending: true });
+      const combinedText = (batched ?? [])
+        .map((m: any) => m.body || `[${m.message_type}]`)
+        .filter(Boolean)
+        .join("\n") || lastMsg.body || `[${lastMsg.message_type}]`;
+
+      log("sweep: ai-continue triggered", { conv: conv.id, order: order?.order_id ?? null });
+      await aiContinueReply({ conv, order, customerText: combinedText });
+      triggered++;
+    } catch (e) {
+      errLog("sweep iteration failed", (e as Error).message);
+    }
+  }
+  return { scanned: convs?.length ?? 0, triggered };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -1322,6 +1415,17 @@ Deno.serve(async (req) => {
   // POST: always return 200 to Meta even on internal failures, so they don't
   // disable the webhook. Errors are logged for internal triage.
   try {
+    // Internal sweep mode — invoked by pg_cron via service role JWT.
+    const url = new URL(req.url);
+    if (url.searchParams.get("sweep") === "1") {
+      const result = await sweepUnansweredConversations({});
+      log("sweep done", result);
+      return new Response(JSON.stringify({ ok: true, ...result }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     log("webhook received");
     const settings = await getSettings();
     if (!settings?.receiving_enabled) {
@@ -1333,6 +1437,20 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
+
+    // Body-based sweep trigger (e.g., supabase.functions.invoke("whatsapp-webhook", { body: { sweep: true } }))
+    if (body?.sweep === true) {
+      const result = await sweepUnansweredConversations({
+        limit: body?.limit,
+        minSilenceSec: body?.min_silence_sec,
+      });
+      log("sweep done (body)", result);
+      return new Response(JSON.stringify({ ok: true, ...result }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const entries: any[] = body?.entry ?? [];
     for (const entry of entries) {
       const changes: any[] = entry?.changes ?? [];
