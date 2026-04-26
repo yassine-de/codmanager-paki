@@ -111,7 +111,65 @@ async function transcribeWhatsappAudio(audio: any): Promise<string | null> {
   }
 }
 
-// Try to find an order linked to this phone number.
+/**
+ * Fetch a WhatsApp media (image/document) and return it as a base64 data URL
+ * usable directly in OpenAI multimodal `image_url` content parts.
+ *
+ * WhatsApp's lookaside.fbsbx.com URLs require a Bearer token, so the AI cannot
+ * fetch them directly. We download server-side, then inline as data URL.
+ */
+async function fetchWhatsappMediaAsDataUrl(media: any): Promise<{ dataUrl: string; mimeType: string } | null> {
+  try {
+    const mediaId: string | undefined = media?.id;
+    const directUrl: string | undefined = media?.link || media?.url;
+    let mimeType: string = media?.mime_type || "image/jpeg";
+    if (!mediaId && !directUrl) return null;
+
+    const settings = await getSettings();
+    const accessToken =
+      (settings as any)?.access_token || Deno.env.get("WHATSAPP_META_ACCESS_TOKEN");
+    if (!accessToken) {
+      log("media-fetch: WhatsApp access token missing");
+      return null;
+    }
+
+    let downloadUrl = directUrl;
+    if (mediaId) {
+      const base = ((settings as any)?.api_base_url || "https://graph.facebook.com/v21.0").replace(/\/$/, "");
+      const metaResp = await fetch(`${base}/${mediaId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const metaJson = await metaResp.json().catch(() => ({}));
+      if (!metaResp.ok || !metaJson?.url) {
+        log("media-fetch: meta resolve failed", metaResp.status, metaJson?.error);
+        return null;
+      }
+      downloadUrl = metaJson.url;
+      if (metaJson.mime_type) mimeType = metaJson.mime_type;
+    }
+
+    const mediaResp = await fetch(downloadUrl!, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!mediaResp.ok) {
+      log("media-fetch: download failed", mediaResp.status);
+      return null;
+    }
+    const buf = await mediaResp.arrayBuffer();
+    // Encode to base64 in chunks to avoid call-stack issues on large images
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+    }
+    const base64 = btoa(binary);
+    return { dataUrl: `data:${mimeType};base64,${base64}`, mimeType };
+  } catch (e) {
+    errLog("media-fetch: exception", (e as Error).message);
+    return null;
+  }
+}
 // Priority:
 //  1. explicit orderId from button payload
 //  2. latest order with confirmation_status = 'new_wts'
