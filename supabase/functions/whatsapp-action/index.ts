@@ -73,13 +73,12 @@ Deno.serve(async (req) => {
       };
       convStatus = "more_info";
     } else if (action === "cancel") {
+      // IMPORTANT: WhatsApp can only confirm orders, never cancel them.
+      // We only flag the conversation so a human agent can decide.
+      // Do NOT change confirmation_status, agent_id, or confirmation_channel.
       updates = {
-        confirmation_status: "cancelled",
-        confirmation_channel: "whatsapp",
-        cancel_reason: "Canceled via WhatsApp Inbox",
         whatsapp_status: "canceled",
-        whatsapp_note: "Canceled via WhatsApp Inbox",
-        note: `${order.note ? order.note + "\n" : ""}Canceled in WhatsApp`,
+        whatsapp_note: "Customer requested cancellation via WhatsApp Inbox",
       };
       convStatus = "canceled";
     } else if (action === "resend") {
