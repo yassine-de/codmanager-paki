@@ -673,7 +673,7 @@ async function handleIncoming(value: any) {
         !aiDisabledForConv &&
         (
           (
-            m.type === "text" &&
+            (m.type === "text" || messageType === "audio_transcribed") &&
             !outcome &&
             (!resumedRun || addressIncomplete || orderNotConfirmed)
           ) || (
