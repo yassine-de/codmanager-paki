@@ -552,8 +552,13 @@ const AgentOrders = () => {
     setSubmitting(true);
 
     try {
-      // If agent didn't change the status, release the order back instead of treating it
-      if (selectedStatus === currentOrder.confirmation_status && selectedStatus !== "no_answer") {
+      // If agent didn't change the status, release the order back instead of treating it.
+      // Exceptions: no_answer (always a retry attempt) and postponed (re-postponing with a new date/note is a real action).
+      if (
+        selectedStatus === currentOrder.confirmation_status &&
+        selectedStatus !== "no_answer" &&
+        selectedStatus !== "postponed"
+      ) {
         await supabase.rpc("release_order_lock" as any, { p_order_id: currentOrder.id, p_agent_id: authUser.id });
         // For non-new orders, also un-assign agent
         if (currentOrder.confirmation_status !== "new") {
