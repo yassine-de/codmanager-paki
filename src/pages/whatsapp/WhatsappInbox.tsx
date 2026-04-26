@@ -886,6 +886,7 @@ export default function WhatsappInbox() {
               {([
                 { key: "all", label: "All" },
                 { key: "unread", label: "Unread" },
+                { key: "needs_review", label: "Needs Review", count: needsReviewCount },
                 { key: "ai_on", label: "AI On" },
                 { key: "ai_off", label: "AI Off" },
                 { key: "with_order", label: "With Order" },
@@ -896,13 +897,25 @@ export default function WhatsappInbox() {
                   key={f.key}
                   onClick={() => setFilter(f.key)}
                   className={cn(
-                    "px-2.5 py-1 rounded-full font-medium border transition-colors text-[11px]",
+                    "px-2.5 py-1 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1",
                     filter === f.key
-                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                      ? f.key === "needs_review"
+                        ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                       : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
                   )}
                 >
                   {f.label}
+                  {"count" in f && f.count > 0 && (
+                    <span className={cn(
+                      "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
+                      filter === f.key
+                        ? "bg-sky-500 text-white"
+                        : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
+                    )}>
+                      {f.count > 99 ? "99+" : f.count}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
