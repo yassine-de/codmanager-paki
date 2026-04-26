@@ -13,12 +13,20 @@ After every AI-generated reply to a customer text message (in `aiContinueReply`)
 - Uses OpenAI JSON mode (response_format: json_object) with the same model as the AI assistant.
 - Sends last 10 conversation messages + latest customer text.
 - Strict schema: `{ complete: boolean, full_address: string, city: string }`.
-- `complete=true` requires: house/flat + street + area + city all present.
-- `full_address` excludes the city (city is stored separately).
+
+## Strict deliverability rule (both extractor + AI prompt)
+`complete=true` requires ALL three:
+1. A real Pakistan city, AND
+2. A specific area / neighborhood / colony / block / sector / phase (e.g. "Gulshan-e-Iqbal Block 7", "DHA Phase 5", "G-9/4", "Saddar"), AND
+3. A precise locator INSIDE that area: house/flat/plot/shop number OR specific street/lane/road/gali name OR a small named landmark tied to a specific street.
+
+A single big landmark (government building, big institution, big plaza, university, "near main bazaar") with NO street/house/block is REJECTED — courier rider would still get lost. AI must keep asking for the missing piece.
+
+`full_address` excludes the city (city is stored separately).
 
 ## City matching
 - City must match `orio_cities_cache` (case-insensitive exact, then partial fallback).
-- If no match → no confirmation, AI keeps asking.
+- Non-blocking: if no match, the order is still confirmed using the raw city text.
 
 ## Auto-confirm side effects
 On a valid extraction the order is updated:
