@@ -126,6 +126,15 @@ export default function WhatsappAutomationBuilder() {
     nodes.forEach((n) => {
       if (n.type === "send_message" && !n.data.message?.trim()) errors.push(`"Send Message" needs text`);
       if (n.type === "send_template" && !n.data.template_id) errors.push(`"Send Template" needs a template`);
+      if (n.type === "send_template" && Array.isArray(n.data.template_buttons) && n.data.template_buttons.length > 0) {
+        const acts = Array.isArray(n.data.button_actions) ? n.data.button_actions : [];
+        n.data.template_buttons.forEach((b: any, i: number) => {
+          const a = acts[i];
+          if (!a || typeof a.status === "undefined" || a.status === "") {
+            errors.push(`Pick a status action for template button "${b?.text || `#${i + 1}`}"`);
+          }
+        });
+      }
       if (n.type === "delay" && !n.data.minutes) errors.push(`"Delay" needs duration`);
       if (n.type === "condition" && !n.data.field) errors.push(`"Condition" needs a field`);
       if (n.type === "add_tag" && !n.data.tag?.trim()) errors.push(`"Add Tag" needs a tag`);
