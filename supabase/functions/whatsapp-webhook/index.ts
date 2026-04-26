@@ -1344,7 +1344,12 @@ Rules:
 
   await admin
     .from("whatsapp_conversations")
-    .update({ status: "confirmed", outcome: "confirmed", updated_at: new Date().toISOString() })
+    .update({
+      status: "confirmed",
+      outcome: "confirmed",
+      pending_button_intent: null, // Clear: AI gating finalized via confirm.
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", conv.id);
 
   // Combined "after" for history logging
