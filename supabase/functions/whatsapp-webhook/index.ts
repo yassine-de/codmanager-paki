@@ -1437,22 +1437,27 @@ async function tryExtractAndConfirmAddress(args: {
     return;
   }
 
-  const extractPrompt = `You are an address-extraction assistant. Given a WhatsApp conversation between a customer and a sales agent in Pakistan, extract the customer's delivery address ONLY if it is detailed enough for a courier to find.
+  const extractPrompt = `You are a STRICT address-extraction assistant for a courier in Pakistan. Your job is to REJECT any address that a courier rider could not realistically deliver to without calling the customer back.
 
-What "detailed enough" means:
-- The address must contain a city (a real Pakistan city) AND
-- At least ONE strong location signal: a house/flat/plot/shop number, OR a specific street/lane/road name, OR a clear block/sector/phase identifier, OR a recognizable named landmark (mosque, school, bazaar, plaza, etc.) tied to a specific area.
-- A combination of these signals is even better, but not all are required.
+A "deliverable" address requires ALL of the following:
+1) A city (a real Pakistan city), AND
+2) A specific area / neighborhood / town / colony / block / sector / phase (e.g. "Gulshan-e-Iqbal Block 7", "DHA Phase 5", "Saddar", "G-9/4"), AND
+3) At least ONE precise locator INSIDE that area:
+   - a house / flat / plot / shop / office number, OR
+   - a specific street / lane / road / gali name or number, OR
+   - a very specific named landmark that uniquely identifies a small spot WITHIN the area (e.g. "near XYZ Masjid, Street 4" — NOT just a huge government building or a whole institution name).
+
+A government building, big institution, big plaza, university, or any large landmark BY ITSELF is NOT enough — the courier still wouldn't know which gate/block/street. In that case set complete=false and the agent will ask for more detail.
 
 Return JSON ONLY in this exact schema:
 { "complete": boolean, "full_address": string, "city": string }
 
 Rules:
-- "complete" = true ONLY if the address is specific enough for a courier (a single named landmark with no area/city is NOT enough; a city alone is NOT enough).
-- "full_address" must be a single line containing all detail parts the customer provided (house/flat, street, block/sector, area, landmark) — DO NOT include the city.
-- "city" must be the city name in English/Latin script (e.g. "Karachi", "Lahore").
+- "complete" = true ONLY if ALL three requirements above (city + specific area + precise locator inside that area) are clearly present in what the CUSTOMER explicitly said. When in doubt, return false.
+- "full_address" must be a single line containing all the detail parts the customer provided (house/flat, street, block/sector/phase, area, landmark) — DO NOT include the city.
+- "city" must be the city name in English/Latin script (e.g. "Karachi", "Lahore", "Peshawar").
 - REJECT obvious fake / test / placeholder values such as "test address", "fake", "dummy", "sample", "abc", "xyz", "n/a", "asdf", random keyboard mashing, or a single word. For these, return complete=false.
-- REJECT vague answers like just "my home", "same as before", "here", "send it" or only a city name.
+- REJECT vague answers like just "my home", "same as before", "here", "send it", a city name only, or a single landmark with no street/house/block.
 - If the address is missing, vague, fake, or not detailed enough, return { "complete": false, "full_address": "", "city": "" }.
 - DO NOT invent details. Only use what the customer explicitly said.`;
 
