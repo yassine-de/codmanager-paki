@@ -1148,11 +1148,17 @@ export default function WhatsappInbox() {
                                       failed
                                     </span>
                                   ) : m.status === "read" ? (
-                                    <CheckCheck className="w-3.5 h-3.5 text-sky-300" />
+                                    <CheckCheck className="w-3.5 h-3.5 text-sky-300" aria-label="Read" >
+                                      <title>Read by customer</title>
+                                    </CheckCheck>
                                   ) : m.status === "delivered" ? (
-                                    <CheckCheck className="w-3.5 h-3.5 text-white/80" />
+                                    <span title="Delivered to customer's phone (read receipts may be disabled)">
+                                      <CheckCheck className="w-3.5 h-3.5 text-white/80" />
+                                    </span>
                                   ) : m.status === "sent" ? (
-                                    <Check className="w-3.5 h-3.5 text-white/80" />
+                                    <span title="Sent to WhatsApp">
+                                      <Check className="w-3.5 h-3.5 text-white/80" />
+                                    </span>
                                   ) : null}
                                 </>
                               )}
