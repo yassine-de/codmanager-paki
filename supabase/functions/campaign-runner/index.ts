@@ -432,18 +432,29 @@ Deno.serve(async (req) => {
     const isService = authHeader === `Bearer ${serviceKey}`;
 
     if (!isService) {
-      const userClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
-      );
-      const { data: userData } = await userClient.auth.getUser();
-      if (!userData?.user) {
+      // Decode JWT directly (avoids "session not found" 401 when refresh token
+      // was rotated but the access token is still cryptographically valid).
+      let userId: string | null = null;
+      const m = authHeader.match(/^Bearer\s+(.+)$/i);
+      if (m) {
+        try {
+          const parts = m[1].split(".");
+          if (parts.length >= 2) {
+            const payload = JSON.parse(
+              atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")),
+            );
+            if (payload?.sub && (!payload.exp || payload.exp * 1000 > Date.now())) {
+              userId = String(payload.sub);
+            }
+          }
+        } catch (_) { /* fallthrough */ }
+      }
+      if (!userId) {
         return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
           status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const { data: isAdmin } = await userClient.rpc("is_admin", { _user_id: userData.user.id });
+      const { data: isAdmin } = await admin.rpc("is_admin", { _user_id: userId });
       if (!isAdmin) {
         return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
