@@ -26,9 +26,23 @@ function normalizePhone(phone: string, defaultCC: string) {
 }
 
 function render(template: string, vars: Record<string, any>) {
+  const positional = [vars.customer_name, vars.product_name, vars.order_id, vars.price, vars.city];
+  const synonyms: Record<string, any> = {
+    name: vars.customer_name, customer: vars.customer_name,
+    product: vars.product_name, order: vars.order_id,
+    total: vars.price, amount: vars.price, address: vars.city,
+  };
   return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_m, k) => {
-    const v = vars[k];
-    return v == null ? "" : String(v);
+    const direct = vars[k];
+    if (direct != null && String(direct).trim() !== "") return String(direct);
+    const syn = synonyms[String(k).toLowerCase()];
+    if (syn != null && String(syn).trim() !== "") return String(syn);
+    const num = String(k).toLowerCase().match(/^(?:var|param|p|v)?_?(\d+)$/);
+    if (num) {
+      const v = positional[parseInt(num[1], 10) - 1];
+      if (v != null && String(v).trim() !== "") return String(v);
+    }
+    return "";
   });
 }
 
