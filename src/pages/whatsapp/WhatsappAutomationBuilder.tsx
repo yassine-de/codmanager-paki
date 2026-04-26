@@ -643,13 +643,16 @@ function FromTemplateConfig({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("whatsapp_templates")
-        .select("id, name, language, body, meta_template_name, active")
+        .select("id, name, language, body, meta_template_name, active, buttons")
         .eq("active", true)
         .order("name", { ascending: true });
       if (error) throw error;
       return data ?? [];
     },
   });
+
+  const selected = templates.find((t: any) => t.id === config.template_id);
+  const buttons: any[] = Array.isArray(selected?.buttons) ? selected!.buttons : [];
 
   return (
     <div className="mt-3 space-y-2">
@@ -658,7 +661,16 @@ function FromTemplateConfig({
       </Label>
       <Select
         value={config.template_id ?? ""}
-        onValueChange={(v) => onChange({ ...config, template_id: v })}
+        onValueChange={(v) => {
+          const tpl = templates.find((t: any) => t.id === v);
+          const btns = Array.isArray(tpl?.buttons) ? tpl!.buttons : [];
+          onChange({
+            ...config,
+            template_id: v,
+            template_name: tpl?.name ?? null,
+            template_buttons: btns,
+          });
+        }}
       >
         <SelectTrigger className="h-8 text-xs">
           <SelectValue placeholder={isLoading ? "Loading…" : "Pick a template"} />
@@ -667,6 +679,9 @@ function FromTemplateConfig({
           {templates.map((t: any) => (
             <SelectItem key={t.id} value={t.id} className="text-xs">
               {t.name} <span className="text-muted-foreground">({t.language})</span>
+              {Array.isArray(t.buttons) && t.buttons.length > 0 && (
+                <span className="text-emerald-500"> · {t.buttons.length} buttons</span>
+              )}
             </SelectItem>
           ))}
           {!isLoading && templates.length === 0 && (
@@ -676,9 +691,15 @@ function FromTemplateConfig({
           )}
         </SelectContent>
       </Select>
-      <p className="text-[10px] text-muted-foreground leading-snug">
-        Automation will start when the customer sends any reply to a message that used this template.
-      </p>
+      {buttons.length > 0 ? (
+        <p className="text-[10px] text-emerald-600 leading-snug">
+          {buttons.length} button{buttons.length > 1 ? "s" : ""} detected. Each button gets its own branch below.
+        </p>
+      ) : (
+        <p className="text-[10px] text-muted-foreground leading-snug">
+          Automation will start when the customer sends any reply to a message that used this template.
+        </p>
+      )}
     </div>
   );
 }
