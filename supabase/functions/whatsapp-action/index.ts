@@ -149,9 +149,47 @@ Deno.serve(async (req) => {
       throw new Error("Invalid action");
     }
 
+    // Snapshot tracked fields BEFORE update so we can log deltas to order_history.
+    const trackedFields = ["confirmation_status", "delivery_status", "shipping_status", "agent_id"];
+    const before: Record<string, any> = {};
+    for (const f of trackedFields) before[f] = (order as any)[f] ?? null;
+
     await admin.from("orders").update(updates).eq("order_id", order_id);
     if (conversation_id && convStatus) {
       await admin.from("whatsapp_conversations").update({ status: convStatus }).eq("id", conversation_id);
+    }
+
+    // Log order_history deltas so invoice/analytics see WhatsApp confirmations.
+    // Sentinel UUID for non-user actors (matches whatsapp-webhook helper).
+    const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
+    const actionType =
+      action === "confirm" ? "whatsapp_confirm" :
+      action === "to_agent" ? "whatsapp_more_info" :
+      action === "cancel" ? "whatsapp_cancel" : "whatsapp_action";
+    try {
+      const groupId = crypto.randomUUID();
+      const rows: any[] = [];
+      for (const f of trackedFields) {
+        if (!(f in updates)) continue;
+        const oldV = before[f];
+        const newV = (updates as any)[f];
+        if (String(oldV ?? "") === String(newV ?? "")) continue;
+        rows.push({
+          order_id,
+          changed_by: SYSTEM_USER_ID,
+          changed_by_role: "whatsapp",
+          action_type: actionType,
+          field_changed: f,
+          old_value: oldV != null ? String(oldV) : null,
+          new_value: newV != null ? String(newV) : null,
+          group_id: groupId,
+        });
+      }
+      if (rows.length > 0) {
+        await admin.from("order_history").insert(rows);
+      }
+    } catch (e) {
+      console.error("[wa-action] order_history insert failed", (e as Error).message);
     }
 
     return new Response(JSON.stringify({ ok: true }), {
