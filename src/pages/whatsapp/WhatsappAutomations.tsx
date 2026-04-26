@@ -63,6 +63,13 @@ export const TRIGGERS = [
     icon: Tag,
     group: "Contacts",
   },
+  {
+    value: "from_template",
+    label: "From Template",
+    description: "Start the automation by sending one of your saved WhatsApp templates",
+    icon: Send,
+    group: "Templates",
+  },
 ] as const;
 
 export type TriggerValue = (typeof TRIGGERS)[number]["value"];
