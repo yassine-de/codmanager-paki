@@ -61,6 +61,7 @@ const getWhatsappSubItems = (inboxUnread: number) => [
   { title: "Overview", url: "/whatsapp", icon: LayoutDashboard, end: true },
   { title: "Inbox", url: "/whatsapp/inbox", icon: Inbox, badge: inboxUnread > 0 ? inboxUnread : undefined },
   { title: "Confirmations", url: "/whatsapp/confirmations", icon: CheckCircle2 },
+  { title: "Campaigns", url: "/whatsapp/campaigns", icon: Send },
   { title: "Automations", url: "/whatsapp/automations", icon: Zap },
   { title: "Templates", url: "/whatsapp/templates", icon: FileText },
   { title: "AI", url: "/whatsapp/ai", icon: Sparkles },
