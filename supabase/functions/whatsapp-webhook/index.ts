@@ -234,11 +234,10 @@ async function applyOutcome(
     updates.confirmation_channel = "agent";
     updates.agent_id = null;
   } else if (outcome === "canceled") {
-    updates.confirmation_status = "cancelled";
-    updates.confirmation_channel = "whatsapp";
-    updates.cancel_reason = "Canceled by customer via WhatsApp";
-    updates.whatsapp_note = "Canceled in WhatsApp";
-    updates.note = `${order.note ? order.note + "\n" : ""}Canceled in WhatsApp`;
+    // IMPORTANT: WhatsApp button can only confirm orders, NEVER cancel them.
+    // We only flag the conversation/order so a human agent can decide.
+    // Do NOT change confirmation_status, agent_id, or confirmation_channel.
+    updates.whatsapp_note = "Customer requested cancellation via WhatsApp";
   }
 
   // Snapshot fields we care about BEFORE update so we can write history deltas
