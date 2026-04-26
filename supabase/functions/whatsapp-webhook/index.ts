@@ -900,24 +900,26 @@ async function aiContinueReply(args: {
   const orderCtx = order
     ? `\n\nOrder context:\n- Order ID: ${order.order_id}\n- Customer: ${order.customer_name}\n- Product: ${order.product_name}\n- Quantity: ${order.quantity}\n- Total: ${order.total_amount} PKR\n- City: ${order.customer_city}\n- Address: ${order.customer_address ?? "(not provided)"}`
     : "";
-  // Validate that the stored address looks like a REAL deliverable address.
-  // Reject obvious test/fake placeholders, and require concrete signals of a
-  // detailed address (a digit for house/flat number OR a street/area keyword).
+  // Validate that the stored address looks like a REAL, DETAILED deliverable
+  // address. The goal is NOT to require every part (house+street+area+city),
+  // but to ensure the address is detailed enough for a courier to find it AND
+  // is not obviously fake / test / placeholder data.
   const isAddressDeliverable = (addr?: string | null): boolean => {
     if (!addr) return false;
     const raw = String(addr).trim();
-    if (raw.length < 12) return false;
+    if (raw.length < 10) return false;
     const lower = raw.toLowerCase();
     // Reject common fake / test / placeholder patterns
-    const fakePattern = /\b(test|testing|fake|dummy|sample|example|n\/?a|none|xxx+|asdf+|qwerty|aaaa+|placeholder|abc+|address here|adress)\b/i;
+    const fakePattern = /\b(test|testing|tester|fake|dummy|sample|example|n\/?a|none|null|xxx+|asdf+|qwerty|aaaa+|placeholder|abc+|address here|adress|same|here)\b/i;
     if (fakePattern.test(lower)) return false;
-    // Require a digit (house/flat/plot/street number) OR an explicit street keyword
+    // Need at least 2 distinct word tokens (avoid single-word addresses)
+    const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
+    if (tokens.length < 2) return false;
+    // Detail signal: either contains a digit (house/flat/plot/street #) OR
+    // contains a recognizable street/area keyword. One of these is enough.
     const hasNumber = /\d/.test(raw);
-    const streetKeyword = /\b(house|flat|plot|street|road|st\.?|rd\.?|lane|block|sector|phase|town|colony|mohalla|near|opposite|main|gali|chowk|bazar|bazaar|market|society|villa|apartment|building|floor|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر)\b/i;
+    const streetKeyword = /\b(house|flat|plot|street|road|st\.?|rd\.?|lane|block|sector|phase|town|colony|mohalla|near|opposite|main|gali|chowk|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر)\b/i;
     if (!hasNumber && !streetKeyword.test(lower)) return false;
-    // Must contain at least 2 word tokens (avoid single-word addresses)
-    const wordCount = raw.split(/\s+/).filter((w) => w.length > 1).length;
-    if (wordCount < 2) return false;
     return true;
   };
   const hasStoredAddress =
@@ -926,9 +928,9 @@ async function aiContinueReply(args: {
     !!order.customer_city &&
     String(order.customer_city).trim().length > 0;
   const addressRule = order && !hasStoredAddress
-    ? `\n\nIMPORTANT: The customer's delivery address is MISSING, FAKE, TEST data, or NOT detailed enough (current value: "${order.customer_address ?? "(none)"}", city: "${order.customer_city ?? "(none)"}"). A deliverable address MUST include: house/flat/plot number, street or lane name, area/block/sector/landmark, AND city. Do NOT close the conversation and DO NOT confirm delivery to a vague, test, or placeholder address. Politely (in the customer's language) explain that the courier needs the full address and ask the customer to send: house/flat number, street name, area or nearest landmark, and city. Keep asking in follow-ups until you receive a complete, real, deliverable address. Never accept words like "test", "fake", "same", or a single word/city name as a valid address.\n\nOnly when the customer provides a complete REAL address (house/flat + street + area + city), thank them briefly and confirm the order will be delivered. The system will auto-confirm in the background.`
+    ? `\n\nIMPORTANT: The customer's delivery address is MISSING, FAKE, TEST data, or NOT detailed enough for a courier to find (current value: "${order.customer_address ?? "(none)"}", city: "${order.customer_city ?? "(none)"}"). A deliverable address must be DETAILED — for example a house/flat/plot number, OR a recognizable street/lane/block/sector/landmark, plus a city. The parts do not all need to be present, but the address as a whole must be specific enough for a delivery courier. Do NOT close the conversation and DO NOT confirm delivery to a vague, single-word, test, or placeholder address. Politely (in the customer's language) explain that the courier needs a more detailed address and ask the customer to share something specific: a house/flat number, street name, block/sector, or a clear nearby landmark in their area. Keep asking in follow-ups until the address is detailed and real. Never accept words like "test", "fake", "same", "here", or just a city name as a valid address.\n\nOnly once the customer provides a detailed, real address, thank them briefly and confirm the order will be delivered. The system will auto-confirm in the background.`
     : order && hasStoredAddress
-    ? `\n\nIMPORTANT: The customer ALREADY has a complete delivery address on file:\n  📍 ${order.customer_address}, ${order.customer_city}\n\nDo NOT ask the customer for their address again. Instead:\n- Confirm the existing address by reading it back briefly and ask if it is correct (e.g. "Should we deliver to: <address>, <city>? Reply YES to confirm or send a new address.").\n- If the customer replies with affirmation (yes / ok / sahi / 7aja / na3am / oui / ✅ / thumbs up / "send it" / "deliver" etc.) OR sends only a city name that matches the stored city, treat the existing address as confirmed and tell them their order is being processed for delivery. The system will auto-confirm in the background.\n- Only ask for a new address if the customer explicitly says the stored address is wrong or sends new address details.`
+    ? `\n\nIMPORTANT: The customer ALREADY has a detailed delivery address on file:\n  📍 ${order.customer_address}, ${order.customer_city}\n\nDo NOT ask the customer for their address again. Instead:\n- Confirm the existing address by reading it back briefly and ask if it is correct (e.g. "Should we deliver to: <address>, <city>? Reply YES to confirm or send a new address.").\n- If the customer replies with affirmation (yes / ok / sahi / 7aja / na3am / oui / ✅ / thumbs up / "send it" / "deliver" etc.) OR sends only a city name that matches the stored city, treat the existing address as confirmed and tell them their order is being processed for delivery. The system will auto-confirm in the background.\n- Only ask for a new address if the customer explicitly says the stored address is wrong or sends new address details.`
     : "";
   const imageRule = hasProductImage
     ? `\n\nProduct image: an official image of "${order.product_name}" is available. If the customer asks for a photo / picture / image of the product (in any language: "تصويرة", "صورة", "tswira", "photo", "image", "pic", "send me the picture", "بعتلي صورة", etc.), CALL the tool \`send_product_image\` to send it as a real WhatsApp image. After calling the tool, write a short natural reply confirming you sent the photo. Never paste the image URL as text.`
