@@ -475,11 +475,26 @@ function CreateCampaignDialog({
   const { data: products = [] } = useQuery({
     queryKey: ["products-for-campaign"],
     queryFn: async () => {
-      const { data } = await supabase.from("products").select("id, name").order("name");
+      const { data } = await supabase.from("products").select("id, name, seller_id").order("name");
       return data ?? [];
     },
     enabled: open,
   });
+
+  // Filter products by selected sellers (if any). Deduplicate by name.
+  const filteredProductOptions = useMemo(() => {
+    const list = (products as any[]).filter((p) =>
+      filters.seller_ids.length === 0 ? true : filters.seller_ids.includes(p.seller_id),
+    );
+    const seen = new Set<string>();
+    const opts: { value: string; label: string }[] = [];
+    for (const p of list) {
+      if (!p?.name || seen.has(p.name)) continue;
+      seen.add(p.name);
+      opts.push({ value: p.name, label: p.name });
+    }
+    return opts;
+  }, [products, filters.seller_ids]);
 
   const selectedTemplate = useMemo(
     () => templates.find((t: any) => t.id === templateId),
