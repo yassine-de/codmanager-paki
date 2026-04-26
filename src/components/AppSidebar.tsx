@@ -1,4 +1,4 @@
-import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Headphones, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Zap, Sparkles } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Headphones, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Zap, Sparkles, Send } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -61,6 +61,7 @@ const getWhatsappSubItems = (inboxUnread: number) => [
   { title: "Overview", url: "/whatsapp", icon: LayoutDashboard, end: true },
   { title: "Inbox", url: "/whatsapp/inbox", icon: Inbox, badge: inboxUnread > 0 ? inboxUnread : undefined },
   { title: "Confirmations", url: "/whatsapp/confirmations", icon: CheckCircle2 },
+  { title: "Campaigns", url: "/whatsapp/campaigns", icon: Send },
   { title: "Automations", url: "/whatsapp/automations", icon: Zap },
   { title: "Templates", url: "/whatsapp/templates", icon: FileText },
   { title: "AI", url: "/whatsapp/ai", icon: Sparkles },
