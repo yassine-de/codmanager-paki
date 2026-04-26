@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
       updates = {
         confirmation_status: "cancelled",
         confirmation_channel: "whatsapp",
-        cancelled_at: new Date().toISOString(),
+        cancel_reason: "Canceled via WhatsApp Inbox",
         whatsapp_status: "canceled",
         whatsapp_note: "Canceled via WhatsApp Inbox",
         note: `${order.note ? order.note + "\n" : ""}Canceled in WhatsApp`,
