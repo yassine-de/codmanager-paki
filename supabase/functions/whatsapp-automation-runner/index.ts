@@ -1105,7 +1105,45 @@ async function tickDelays() {
     }
   }
   const switched = await tickAgentSwitches();
-  return { processed: due?.length ?? 0, switched };
+  const recovered = await sweepMissedNewOrders();
+  return { processed: due?.length ?? 0, switched, recovered };
+}
+
+// Recovery sweep: find recent WhatsApp-routed orders (new_wts/whatsapp channel)
+// that never got an automation run started — usually because the pg_net call
+// from the AFTER INSERT trigger timed out or hit a 503 — and start one now.
+async function sweepMissedNewOrders() {
+  const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: orders, error } = await admin
+    .from("orders")
+    .select("order_id")
+    .eq("confirmation_channel", "whatsapp")
+    .eq("confirmation_status", "new_wts")
+    .eq("whatsapp_status", "pending")
+    .is("whatsapp_last_sent_at", null)
+    .gte("created_at", sinceIso)
+    .limit(50);
+  if (error) {
+    errLog("sweepMissedNewOrders query", error.message);
+    return 0;
+  }
+  if (!orders?.length) return 0;
+  let started = 0;
+  for (const o of orders) {
+    const { count } = await admin
+      .from("whatsapp_automation_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("order_id", o.order_id);
+    if ((count ?? 0) > 0) continue;
+    try {
+      const r = await startNewRuns("new_order", o.order_id);
+      if (r.started) started += r.started;
+      log("recovered missed new_order", { order_id: o.order_id, started: r.started });
+    } catch (e) {
+      errLog("recover startNewRuns failed", o.order_id, (e as Error).message);
+    }
+  }
+  return started;
 }
 
 // Switch WhatsApp orders to the agent queue when the configured timeout
