@@ -463,6 +463,17 @@ async function handleIncoming(value: any) {
         }
       } else if (m.type === "text") {
         bodyText = m.text?.body ?? "";
+      } else if (m.type === "audio" || m.type === "voice") {
+        // Voice notes: transcribe with OpenAI Whisper so the AI can understand
+        // and reply naturally. We re-tag as "text" downstream so the AI flow
+        // (which gates on text) treats it like a normal customer message.
+        const transcript = await transcribeWhatsappAudio(m.audio || m.voice);
+        if (transcript) {
+          bodyText = transcript;
+          messageType = "audio_transcribed";
+        } else {
+          bodyText = "[audio]";
+        }
       } else {
         bodyText = JSON.stringify(m).slice(0, 500);
       }
