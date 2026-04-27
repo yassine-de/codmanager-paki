@@ -432,7 +432,7 @@ export function AppSidebar() {
                                   <span className="flex-1">{sub.title}</span>
                                   {(sub as any).badge != null && (
                                     <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
-                                      {(sub as any).badge > 999 ? '999+' : (sub as any).badge}
+                                      {(sub as any).badge.toLocaleString()}
                                     </span>
                                   )}
                                 </NavLink>
