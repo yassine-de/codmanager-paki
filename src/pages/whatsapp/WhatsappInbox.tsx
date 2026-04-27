@@ -36,6 +36,7 @@ import {
   CheckCheck,
   AlertCircle,
   Languages,
+  ArrowLeft,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -995,8 +996,11 @@ export default function WhatsappInbox() {
       </div>
 
       <div className="grid grid-cols-12 gap-0 h-[calc(100dvh-200px)] max-h-[calc(100dvh-160px)] rounded-xl border border-border overflow-hidden bg-card">
-        {/* LEFT PANEL */}
-        <aside className="col-span-12 md:col-span-4 lg:col-span-3 border-r border-border flex flex-col bg-background/40 min-h-0 overflow-hidden">
+        {/* LEFT PANEL — hidden on mobile when a conversation is selected */}
+        <aside className={cn(
+          "col-span-12 md:col-span-4 lg:col-span-3 border-r border-border flex-col bg-background/40 min-h-0 overflow-hidden",
+          selected ? "hidden md:flex" : "flex"
+        )}>
           <div className="px-4 h-12 border-b border-border flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <FilterIcon className="h-4 w-4 text-muted-foreground" />
@@ -1156,8 +1160,11 @@ export default function WhatsappInbox() {
           </div>
         </aside>
 
-        {/* RIGHT PANEL */}
-        <section className="col-span-12 md:col-span-8 lg:col-span-9 flex min-h-0 flex-col bg-background/20">
+        {/* RIGHT PANEL — hidden on mobile when no conversation selected */}
+        <section className={cn(
+          "col-span-12 md:col-span-8 lg:col-span-9 min-h-0 flex-col bg-background/20",
+          selected ? "flex" : "hidden md:flex"
+        )}>
           {!conv ? (
             <div className="flex-1 grid place-items-center text-sm text-muted-foreground">
               Select a conversation to view the order and chat.
@@ -1166,6 +1173,16 @@ export default function WhatsappInbox() {
             <>
               {/* Chat header */}
               <div className="border-b border-border px-3 sm:px-4 py-2 flex items-center gap-2.5 shrink-0 bg-card">
+                {/* Mobile back button */}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 md:hidden -ml-1"
+                  onClick={() => setSelected(null)}
+                  title="Back to inbox"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
                 <div
                   role="button"
                   tabIndex={0}
