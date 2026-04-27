@@ -1,60 +1,61 @@
-# Address-Gated Order Confirmation
+# WhatsApp Inbox — Maximize Message Area & Compact Composer
 
-## Problem
+## Problem (from screenshot)
 
-Fach kayji new order, l-system kaysift template m3a buttons (YES / NO).
-Melli l-customer kayclicki **YES**, l-order automatic kaywoli **confirmed** — hta ila l-address dyalo na9sa wla ghir "Karachi center" wla ghir l-city. Hadchi kaydir mochkil f tawsil l9a l-rider ma 3andoش wein imchi.
+Two issues waste vertical space and shrink the visible messages area:
 
-Bghina:
-1. Melli customer iclicki YES → l-AI kayverifie l-address l9adim f order.
-2. Ila l-address **kamla w mzyana** → confirme automatic (kif daba).
-3. Ila l-address **na9sa / vague / ghir city / fake** → **MA tconfirmich**, sift WhatsApp message lil-customer (b lougha dyalo) tatlobou full address (house/street/area + landmark).
-4. Melli customer kay-reply b address kamla → l-AI ydir auto-update l `customer_address` w `customer_city`, w 3ad confirme l-order.
+1. **Empty black strip below the inbox card** — The chat container uses a hardcoded desktop height `h-[calc(100dvh-200px)]` even though the AppLayout main has `overflow-auto` and small padding. On a 1106×680 viewport (and similar laptop sizes), this leaves ~120–180px of unused space under the card.
+2. **Bulky composer** — The reply area takes ~3 stacked rows: Reply/Note tabs row + 2-row textarea + a separate full-width icon toolbar row (emoji, camera, paperclip, mic, AI, template, quick replies) + Send button. This squeezes the messages list, so only ~3 bubbles are visible at once.
 
-## Plan
+## Goal
 
-### 1. Force AI gating on every confirm-button (server-side safety net)
+Make the inbox feel like WhatsApp Web / Respond.io: the chat fills the full viewport height, the composer is compact (one row with inline icons + textarea + Send), and the messages area gets maximum vertical room.
 
-`supabase/functions/whatsapp-automation-runner/index.ts` → `applyButtonAction()`:
-- Ila l-button `status === "confirmed"` w l-order ma 3ndoش address deliverable (n-checkiw b nafs `isDeliverable` helper li f webhook), **noverridiw** l-action: nstashiw `pending_button_intent = { intent: "confirm", button_text }`, n-set `ai_enabled = true`, `whatsapp_status = "pending_address"`, w **MA n-changeoش** `confirmation_status`. Hadchi kaydir kif `ai_gate=validate` automatic mn ghir maykhass admin yconfiguri walou.
-- Ila address **already deliverable** → confirme normal (mafihaш delay).
+## Changes (single file: `src/pages/whatsapp/WhatsappInbox.tsx`)
 
-`supabase/functions/whatsapp-webhook/index.ts` → `applyOutcome()`:
-- Nfs logic: ila `outcome === "confirmed"` w address ma deliverable, n-skip update l `confirmation_status`, n-set `whatsapp_status = "pending_address"`, w n-set `pending_button_intent` 3la l-conversation bach AI tcontinui.
+### 1. Stretch container to true full height
 
-### 2. AI takes over to ask for the address
+Replace the hardcoded desktop height so the card consumes whatever vertical space is available, eliminating the empty strip below.
 
-L-AI `aiContinueReply()` (`whatsapp-webhook/index.ts`) deja kaytعamel m3a `pending_button_intent.intent === "confirm"` w `addressIncomplete` — kayseft message kayrequesti l-address.
+- Current: `md:h-[calc(100dvh-200px)] md:max-h-[calc(100dvh-160px)]`
+- New: `md:h-[calc(100dvh-140px)] md:max-h-[calc(100dvh-140px)]`
+  - 140px accounts for: 56px topbar + ~32px page padding + ~40px filters bar + a small breathing margin.
+- Also reduce the `mb-2` on the filters bar to `mb-1.5` to claw back a few more pixels.
 
-Ghadi nزidو:
-- Tswab message kaybda b: "Shukria 🙏 order dyalk confirmed! Bach n-shippiw lik, 3afak عtina l-full delivery address (house/flat #, street, area, landmark + city)."
-- Wakha l-status f DB ma3adش `confirmed`, l-customer ka-yhss bli l-confirmation t-9ablat — only address li khass.
+### 2. Compact the composer
 
-### 3. Auto-confirm after customer sends full address
+Restructure the Reply tab so the textarea, all action icons, and the Send button live on **one horizontal row** (WhatsApp-style), with tabs above as a slim header.
 
-Logic deja kaykhdem f `tryExtractAndConfirmAddress()`:
-- Kay-runi 3la kol customer text reply.
-- Ila AI extracted complete address → kay-update `customer_address`, `customer_city`, w kay-set `confirmation_status = "confirmed"`, kay-clear `pending_button_intent`.
-- Hna مa khassش tbdil — ghir n-confirmiw bli logic kaykhdem fhal blast li ma kanetش `confirmation_status` confirmed.
+```text
+┌──────────────────────────────────────────────────────────┐
+│ [Reply] [Note]                       Last reply 9m ago   │  ← slim tabs row, mb-2 → mb-1.5
+├──────────────────────────────────────────────────────────┤
+│ 😊 📷 📎 🎤 ✨ 📄 💬 │ Type a reply…           │ [Send] │  ← single row
+└──────────────────────────────────────────────────────────┘
+```
 
-### 4. Inbox visibility
+Specifically:
+- Wrap icon toolbar + textarea + Send in `flex items-end gap-2` instead of stacking them.
+- Icon toolbar: keep all 7 buttons but shrink to `h-8 w-8` (was `h-9 w-9`) and group inside a `flex items-center gap-0.5 shrink-0` block on the **left** of the textarea.
+- Textarea: change `rows={2}` → `rows={1}` with `min-h-[40px] max-h-[120px]` so it auto-grows up to a cap but starts compact. Keep `resize-none`.
+- Send button stays on the right with `shrink-0` and matches textarea bottom alignment.
+- Tabs row: reduce `mb-3` → `mb-2`, button padding `px-4 py-2` → `px-3 py-1.5`, font slightly smaller.
+- Container padding: `p-3` → `px-3 py-2`.
+- Note tab: same compact single-row treatment (textarea + Save button only — already minimal, just shrink padding/rows to match).
 
-Nزidو badge sغir f WhatsApp Inbox conversation list:
-- Ila `pending_button_intent?.intent === "confirm"` → tban "⏳ Awaiting address" badge tahta esm dyal customer.
-- Hadi tكhli admins yshofو bsرعa f7al li customer clicka YES walakin baqi ka-yssناو address.
+### 3. AI suggestions chips
 
-`src/pages/whatsapp/WhatsappInbox.tsx` → conversation list item render.
+The violet AI suggestions panel (when present) stays above the composer row but use `p-1.5` instead of `p-2` and chips `py-1` instead of `py-1.5` to keep them compact.
 
-## Technical notes
+## Net visual result
 
-- `isAddressDeliverable` helper deja exists f `aiContinueReply` — n-extractiw m module-level function bach `applyOutcome` w `applyButtonAction` ystaعmlوha.
-- `pending_button_intent` column deja exists 3la `whatsapp_conversations`.
-- `whatsapp_status` value `pending_address` jdida — ghir text flag, ma kat-affectiش schema.
-- `tryExtractAndConfirmAddress` deja handles l-case dyal `wasAlreadyConfirmed === false` — kay-set confirmation_status. Maخassش tbdil.
-- AI prompt block li f line ~1184 (ADDRESS COLLECTION) deja mzyana — ghir n-tweakiw l wording bach تbdaa b "Thanks for confirming! Now we just need your full address" wat l-pending_button_intent block (~1202) yقول l-AI explicitly: "MA tقولش 'order is being processed' hta address tkoun deliverable."
+- Empty space below the card disappears — card extends to near the bottom of the viewport.
+- Composer height drops from ~165px to ~95px → roughly **70 extra pixels** of visible messages (≈2 more bubbles on a typical laptop).
+- All existing actions (emoji, image, file, voice, AI suggest, template, quick replies) remain accessible — just inline next to the textarea instead of stacked below.
+- No behavior/logic changes: send/note/AI/upload handlers untouched.
 
-## Files to edit
+## Out of scope
 
-- `supabase/functions/whatsapp-webhook/index.ts` — extract `isAddressDeliverable` to module scope; gate `applyOutcome` for confirm; tweak AI prompt wording for pending_address case.
-- `supabase/functions/whatsapp-automation-runner/index.ts` — gate `applyButtonAction` confirm path the same way.
-- `src/pages/whatsapp/WhatsappInbox.tsx` — show "⏳ Awaiting address" badge on conversations with `pending_button_intent.intent === "confirm"`.
+- No backend / Supabase changes.
+- No changes to message bubble rendering, conversation list, or 24h-window banner logic.
+- No changes to mobile layout (mobile already uses full-screen `h-[calc(100dvh-80px)]` which is fine).
