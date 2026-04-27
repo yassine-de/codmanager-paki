@@ -317,11 +317,18 @@ export default function Orders() {
     const fetchOrders = async () => {
       // Paginate using `.range()` to bypass PostgREST's `db-max-rows` cap
       // (commonly 1000). Page size is intentionally kept below that cap so
-      // each request always returns a full page when more rows exist —
-      // otherwise the loop would stop one page early and the UI would freeze
-      // at e.g. 999/1000 even when the database has more rows.
+      // each request returns a full page when more rows exist — otherwise
+      // the loop would stop one page early and the UI would freeze at e.g.
+      // 999/1000 even when the database has more rows.
+      //
+      // Order by a stable, unique secondary key (`id`) so pagination is
+      // deterministic. Without it, rows that share the same `created_at`
+      // can shift between offset windows and we lose count (e.g. 1,050 → 999).
+      // We also de-duplicate by `id` as a final safety net in case a row
+      // is re-inserted between fetches.
       const PAGE = 500;
       let from = 0;
+      const seen = new Set<string>();
       const all: any[] = [];
       // Hard ceiling to prevent runaway loops — bump if the system grows past this.
       const MAX_ROWS = 200000;
@@ -331,6 +338,7 @@ export default function Orders() {
           .from("orders")
           .select("*")
           .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
           .range(from, from + PAGE - 1);
 
         if (error) {
@@ -339,7 +347,12 @@ export default function Orders() {
         }
 
         const batch = data || [];
-        all.push(...batch);
+        for (const row of batch) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            all.push(row);
+          }
+        }
         if (batch.length < PAGE) break;
         from += PAGE;
       }
