@@ -221,38 +221,13 @@ Deno.serve(async (req) => {
         mediaObj.voice = true;
       } else if (mode === "image") {
         // WhatsApp Cloud only accepts image/jpeg and image/png. For unsafe
-        // formats (e.g. .webp, .avif) we transcode to JPEG and upload binary.
+        // formats (e.g. .webp, .avif) route through wsrv.nl which serves a
+        // re-encoded JPEG with the correct Content-Type.
         const lowerUrl = body.media_url.toLowerCase().split("?")[0];
         const safeForLink = /\.(jpe?g|png)$/.test(lowerUrl);
-        if (safeForLink) {
-          mediaObj.link = body.media_url;
-        } else {
-          const fetchResp = await fetch(body.media_url);
-          if (!fetchResp.ok) throw new Error(`Failed to fetch image: ${fetchResp.status}`);
-          const srcBytes = new Uint8Array(await fetchResp.arrayBuffer());
-          const photonMod: any = await import("https://esm.sh/@cf-wasm/photon@0.1.27?target=deno");
-          const PhotonImage = photonMod.PhotonImage;
-          const img = PhotonImage.new_from_byteslice(srcBytes);
-          const jpegBytes: Uint8Array = img.get_bytes_jpeg(85);
-          try { img.free(); } catch (_) { /* noop */ }
-
-          const fd = new FormData();
-          fd.append("messaging_product", "whatsapp");
-          fd.append("type", "image/jpeg");
-          fd.append("file", new Blob([jpegBytes], { type: "image/jpeg" }), "image.jpg");
-
-          const uploadUrl = `${settings.api_base_url}/${settings.phone_number_id}/media`;
-          const upResp = await fetch(uploadUrl, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${accessToken}` },
-            body: fd,
-          });
-          const upJson = await upResp.json();
-          if (!upResp.ok || !upJson?.id) {
-            throw new Error(`Meta media upload failed: ${JSON.stringify(upJson)}`);
-          }
-          mediaObj.id = upJson.id;
-        }
+        mediaObj.link = safeForLink
+          ? body.media_url
+          : `https://wsrv.nl/?url=${encodeURIComponent(body.media_url)}&output=jpg&q=85`;
         if (bodyText) mediaObj.caption = bodyText;
       } else {
         mediaObj.link = body.media_url;
