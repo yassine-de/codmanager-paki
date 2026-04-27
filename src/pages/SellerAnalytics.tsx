@@ -109,7 +109,7 @@ export default function SellerAnalytics() {
 
   const confirmedOrders = useMemo(() => {
     return sellerScopedOrders.filter(o => reachedConfirmedStage(o) && isWithinSelectedRange(getConfirmationDate(o), dateRange));
-  }, [orders, sellerFilter, dateRange]);
+  }, [sellerScopedOrders, dateRange]);
 
   const deliveredStatuses = ["delivered", "paid"];
   const shippedStatuses = ["shipped", "in_transit", "with_courier", "delivered", "paid", "returned"];
