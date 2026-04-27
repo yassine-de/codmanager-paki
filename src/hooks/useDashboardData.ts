@@ -245,7 +245,9 @@ export function useDashboardData(dateRange?: DateRange) {
   }, [allOrders, dateRange]);
 
   const kpis = useMemo(() => computeKPIs(orders), [orders]);
-  const last7 = useMemo(() => computeDailyData(orders, 7), [orders]);
+  // Daily charts use ALL orders so each metric is bucketed by its own event date
+  // (created_at for dropped, confirmed_at for confirmed, delivered_at for delivered).
+  const last7 = useMemo(() => computeDailyData(allOrders, 7), [allOrders]);
 
   const totals7 = useMemo(() => ({
     orders: last7.reduce((s, d) => s + d.orders, 0),
