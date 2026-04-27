@@ -410,8 +410,18 @@ export function AppSidebar() {
                         {!collapsed && (
                           <>
                             <span className="flex-1">WhatsApp</span>
-                            <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/whatsapp:rotate-180 opacity-50" />
+                            {whatsappInboxUnread > 0 && (
+                              <span className="ml-1 inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
+                                {whatsappInboxUnread.toLocaleString()}
+                              </span>
+                            )}
+                            <ChevronDown className="ml-2 h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/whatsapp:rotate-180 opacity-50" />
                           </>
+                        )}
+                        {collapsed && whatsappInboxUnread > 0 && (
+                          <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[18px]">
+                            {whatsappInboxUnread > 9 ? "9+" : whatsappInboxUnread}
+                          </span>
                         )}
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
