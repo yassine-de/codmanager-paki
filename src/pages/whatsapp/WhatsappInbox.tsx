@@ -592,8 +592,11 @@ export default function WhatsappInbox() {
       list = list.filter((c) => !c.order_id);
     } else if (filter === "window_open") {
       list = list.filter((c) => {
-        if (!c.last_reply_at) return false;
-        return differenceInHours(new Date(), new Date(c.last_reply_at)) < 24;
+        // Use last_message_at as a proxy for last customer activity (the
+        // 24h WA window opens on inbound messages).
+        const ts = c.last_message_at || c.last_reply_at;
+        if (!ts) return false;
+        return differenceInHours(new Date(), new Date(ts)) < 24;
       });
     }
     // Sort by most recent activity (last message timestamp), WhatsApp-style.
@@ -642,10 +645,17 @@ export default function WhatsappInbox() {
     }
   };
 
+  // The WhatsApp 24h customer-service window opens whenever the CUSTOMER
+  // sends a message (inbound). Find the most recent inbound message for
+  // the selected conversation. Fall back to conv.last_message_at.
   const lastInboundAt = useMemo(() => {
-    if (!conv?.last_reply_at) return null;
-    return new Date(conv.last_reply_at);
-  }, [conv]);
+    const lastInboundMsg = [...messages]
+      .reverse()
+      .find((m) => m.direction === "in" || m.direction === "inbound");
+    if (lastInboundMsg) return new Date(lastInboundMsg.created_at);
+    if (conv?.last_message_at) return new Date(conv.last_message_at);
+    return null;
+  }, [messages, conv]);
 
   const windowExpired = useMemo(() => {
     if (!lastInboundAt) return true;
