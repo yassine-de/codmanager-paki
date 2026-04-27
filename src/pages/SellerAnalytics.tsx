@@ -61,6 +61,14 @@ function getConfirmationDate(order: SellerAnalyticsOrder): Date {
   return new Date(order.confirmed_at || order.updated_at);
 }
 
+function isWithinSelectedRange(date: Date, range: DateRange | undefined): boolean {
+  if (!range?.from) return true;
+  if (date < startOfDay(range.from)) return false;
+  if (range.to && date > endOfDay(range.to)) return false;
+  if (!range.to && date > endOfDay(range.from)) return false;
+  return true;
+}
+
 export default function SellerAnalytics() {
   const [sellerFilter, setSellerFilter] = useState<string>("all");
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
@@ -91,18 +99,16 @@ export default function SellerAnalytics() {
     return [...ids].map(id => ({ value: id, label: profileNameMap[id] || id.slice(0, 8) })).sort((a, b) => a.label.localeCompare(b.label));
   }, [orders, profileNameMap]);
 
+  const sellerScopedOrders = useMemo(() => {
+    return sellerFilter === "all" ? orders : orders.filter(o => o.seller_id === sellerFilter);
+  }, [orders, sellerFilter]);
+
   const filteredOrders = useMemo(() => {
-    let filtered = [...orders];
-    if (sellerFilter !== "all") filtered = filtered.filter(o => o.seller_id === sellerFilter);
-    if (dateRange?.from) filtered = filtered.filter(o => {
-      const date = reachedConfirmedStage(o) ? getConfirmationDate(o) : new Date(o.created_at);
-      return date >= startOfDay(dateRange.from!);
-    });
-    if (dateRange?.to) filtered = filtered.filter(o => {
-      const date = reachedConfirmedStage(o) ? getConfirmationDate(o) : new Date(o.created_at);
-      return date <= endOfDay(dateRange.to!);
-    });
-    return filtered;
+    return sellerScopedOrders.filter(o => isWithinSelectedRange(new Date(o.created_at), dateRange));
+  }, [sellerScopedOrders, dateRange]);
+
+  const confirmedOrders = useMemo(() => {
+    return sellerScopedOrders.filter(o => reachedConfirmedStage(o) && isWithinSelectedRange(getConfirmationDate(o), dateRange));
   }, [orders, sellerFilter, dateRange]);
 
   const deliveredStatuses = ["delivered", "paid"];
@@ -110,13 +116,13 @@ export default function SellerAnalytics() {
 
   const stats = useMemo(() => {
     const total = filteredOrders.length;
-    const confirmed = filteredOrders.filter(reachedConfirmedStage).length;
+    const confirmed = confirmedOrders.length;
     // Shipped = all orders that left warehouse (in transit + delivered + returned)
     const shipped = filteredOrders.filter(o => o.delivery_status && shippedStatuses.includes(o.delivery_status)).length;
     // Delivered = successfully received by customer
     const delivered = filteredOrders.filter(o => o.delivery_status && deliveredStatuses.includes(o.delivery_status)).length;
     return { total, confirmed, shipped, delivered };
-  }, [filteredOrders]);
+  }, [filteredOrders, confirmedOrders]);
 
   // Top sellers by orders
   const topSellersByOrders = useMemo(() => {
