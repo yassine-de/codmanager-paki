@@ -522,6 +522,37 @@ export default function WhatsappInbox() {
     }
   }, [messages.length, selected]);
 
+  // Auto-translate inbound non-English messages (staff-only, never sent to customer)
+  const autoTranslatedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!messages.length) return;
+    const toTranslate = messages.filter((m) => {
+      if (m.direction !== "inbound") return false;
+      if (!m.body) return false;
+      if (translations[m.id]) return false;
+      if ((m.payload as any)?._translation_en) return false;
+      if (autoTranslatedRef.current.has(m.id)) return false;
+      if (!needsTranslation(m.body)) return false;
+      return true;
+    });
+    if (!toTranslate.length) return;
+    toTranslate.forEach((m) => {
+      autoTranslatedRef.current.add(m.id);
+      void (async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke("whatsapp-translate", {
+            body: { message_id: m.id, text: m.body },
+          });
+          if (error || !data?.ok) return;
+          setTranslations((prev) => ({ ...prev, [m.id]: data.translation }));
+        } catch {
+          // silent — staff-only feature, no toast spam
+        }
+      })();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
+
   // Mark conversation read on open. We update `last_read_at` only — touching
   // `last_message_at` would re-sort the list and jump this thread to the top
   // (because of the `update_updated_at_column` trigger).
