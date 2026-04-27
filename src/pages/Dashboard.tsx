@@ -449,36 +449,31 @@ export default function Dashboard() {
         {/* ═══════════ DELIVERY PERFORMANCE ═══════════ */}
         <div className="space-y-3">
           <SectionHeader icon={Truck} title="Delivery Performance" color="text-success" iconBg="bg-success/10" delay={280} />
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            <SectionKPI title="Delivered" value={kpis.delivered} percentage={kpis.deliveryRate}
-              percentLabel="of shipped" icon={Truck} color="text-success" iconBg="bg-success/10"
-              highlight delay={290}
-              onClick={() => navigate("/orders?delivery=delivered")} />
-            <SectionKPI title="Shipped" value={kpis.shipped} percentage={pct(kpis.shipped, kpis.total)}
-              percentLabel="of total" icon={Package} color="text-primary" iconBg="bg-primary/10" delay={300}
-              onClick={() => navigate("/orders?delivery=shipped")} />
-            <SectionKPI title="Pending" value={kpis.pending} percentage={pct(kpis.pending, kpis.total)}
-              percentLabel="of total" icon={CheckCircle2} color="text-info" iconBg="bg-info/10" delay={310}
-              onClick={() => navigate("/orders?delivery=pending")} />
-            <SectionKPI title="In Transit" value={kpis.inTransit} percentage={pct(kpis.inTransit, kpis.total)}
-              percentLabel="of total" icon={Navigation} color="text-info" iconBg="bg-info/10" delay={320}
-              onClick={() => navigate("/orders?delivery=in_transit")} />
-            <SectionKPI title="With Courier" value={kpis.withCourier} percentage={pct(kpis.withCourier, kpis.total)}
-              percentLabel="of total" icon={UserCheck} color="text-primary" iconBg="bg-primary/10" delay={330}
-              onClick={() => navigate("/orders?delivery=with_courier")} />
-            <SectionKPI title="Postponed" value={kpis.deliveryPostponed} percentage={pct(kpis.deliveryPostponed, kpis.total)}
-              percentLabel="of total" icon={CalendarClock} color="text-warning" iconBg="bg-warning/10" delay={340}
-              onClick={() => navigate("/orders?delivery=postponed")} />
-            <SectionKPI title="No Answer" value={kpis.deliveryNoAnswer} percentage={pct(kpis.deliveryNoAnswer, kpis.total)}
-              percentLabel="of total" icon={PhoneOff} color="text-warning" iconBg="bg-warning/10" delay={350}
-              onClick={() => navigate("/orders?delivery=no_answer")} />
-            <SectionKPI title="Cancelled" value={kpis.deliveryCancelled} percentage={pct(kpis.deliveryCancelled, kpis.total)}
-              percentLabel="of total" icon={XCircle} color="text-destructive" iconBg="bg-destructive/10" delay={360}
-              onClick={() => navigate("/orders?delivery=cancelled")} />
-            <SectionKPI title="Returned" value={kpis.returned} percentage={pct(kpis.returned, kpis.total)}
-              percentLabel="of total" icon={RotateCcw} color="text-muted-foreground" iconBg="bg-muted" delay={370}
-              onClick={() => navigate("/orders?delivery=returned")} />
-          </div>
+          {(() => {
+            // Denominator = total orders that reached delivery stage (confirmed pool)
+            const deliveryPool = kpis.delivered + kpis.shipped + kpis.pending + kpis.deliveryNoAnswer + kpis.returned;
+            const deliveryPct = (n: number) => pct(n, deliveryPool);
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                <SectionKPI title="Delivered" value={kpis.delivered} percentage={deliveryPct(kpis.delivered)}
+                  percentLabel="of delivery pool" icon={Truck} color="text-success" iconBg="bg-success/10"
+                  highlight delay={290}
+                  onClick={() => navigate("/orders?delivery=delivered")} />
+                <SectionKPI title="Shipped" value={kpis.shipped} percentage={deliveryPct(kpis.shipped)}
+                  percentLabel="of delivery pool" icon={Package} color="text-primary" iconBg="bg-primary/10" delay={300}
+                  onClick={() => navigate("/orders?delivery=shipped")} />
+                <SectionKPI title="Pending" value={kpis.pending} percentage={deliveryPct(kpis.pending)}
+                  percentLabel="of delivery pool" icon={CheckCircle2} color="text-info" iconBg="bg-info/10" delay={310}
+                  onClick={() => navigate("/orders?delivery=pending")} />
+                <SectionKPI title="Failed Attempt" value={kpis.deliveryNoAnswer} percentage={deliveryPct(kpis.deliveryNoAnswer)}
+                  percentLabel="of delivery pool" icon={PhoneOff} color="text-warning" iconBg="bg-warning/10" delay={320}
+                  onClick={() => navigate("/orders?delivery=no_answer")} />
+                <SectionKPI title="Returned" value={kpis.returned} percentage={deliveryPct(kpis.returned)}
+                  percentLabel="of delivery pool" icon={RotateCcw} color="text-destructive" iconBg="bg-destructive/10" delay={330}
+                  onClick={() => navigate("/orders?delivery=returned")} />
+              </div>
+            );
+          })()}
         </div>
 
         {/* Team status moved to top */}
