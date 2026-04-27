@@ -315,13 +315,16 @@ export default function Orders() {
   // Fetch orders from database
   useEffect(() => {
     const fetchOrders = async () => {
-      // Paginate to bypass Supabase's default 1000-row hard limit so the UI
-      // reflects the true number of orders in the system.
-      const PAGE = 1000;
+      // Paginate using `.range()` to bypass PostgREST's `db-max-rows` cap
+      // (commonly 1000). Page size is intentionally kept below that cap so
+      // each request always returns a full page when more rows exist —
+      // otherwise the loop would stop one page early and the UI would freeze
+      // at e.g. 999/1000 even when the database has more rows.
+      const PAGE = 500;
       let from = 0;
       const all: any[] = [];
-      // Hard cap to avoid runaway loops — bump if the system grows past this.
-      const MAX_ROWS = 100000;
+      // Hard ceiling to prevent runaway loops — bump if the system grows past this.
+      const MAX_ROWS = 200000;
 
       while (from < MAX_ROWS) {
         const { data, error } = await supabase
