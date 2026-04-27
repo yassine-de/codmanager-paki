@@ -3,7 +3,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Settings, LogOut, User, Bell, Globe, Check, ShoppingCart, AlertTriangle, Info, Eye, EyeOff, Sun, Moon, Search } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useLanguage, type Language } from "@/contexts/LanguageContext";
