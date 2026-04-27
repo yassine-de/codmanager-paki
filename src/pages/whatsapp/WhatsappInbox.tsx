@@ -611,8 +611,9 @@ export default function WhatsappInbox() {
     return list;
   }, [convos, search, filter, sortDesc, unreadMap]);
 
+  // Count CONVERSATIONS (contacts) with unread — not total unread messages.
   const totalUnread = useMemo(
-    () => Object.values(unreadMap).reduce((sum, n) => sum + n, 0),
+    () => Object.values(unreadMap).filter((n) => (n ?? 0) > 0).length,
     [unreadMap],
   );
 
