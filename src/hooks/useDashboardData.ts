@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
-import { format, subDays, startOfDay, endOfDay, eachDayOfInterval, isAfter, isWithinInterval } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, eachDayOfInterval, isWithinInterval } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
 export interface DashboardOrder {
@@ -54,6 +54,10 @@ export interface DashboardKPIs {
 const DASHBOARD_ORDER_SELECT = "id, order_id, confirmation_status, delivery_status, total_amount, price, quantity, product_name, seller_id, created_at, confirmed_at, delivered_at, last_attempt_at, last_activity_at, updated_at";
 const DASHBOARD_PAGE_SIZE = 1000;
 const POST_CONFIRM_DELIVERY_STATUSES = ['booked', 'shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'];
+
+function isInDay(date: Date, start: Date, nextDay: Date): boolean {
+  return date >= start && date < nextDay;
+}
 
 async function fetchAllDashboardOrders(): Promise<DashboardOrder[]> {
   const rows: DashboardOrder[] = [];
