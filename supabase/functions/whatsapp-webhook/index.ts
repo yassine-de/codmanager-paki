@@ -411,13 +411,82 @@ async function applyOutcome(
   };
 
   // ── Address-gated confirm path ────────────────────────────────────────────
-  // ALWAYS gate confirm-buttons through the AI, regardless of whether the
-  // stored address looks deliverable. Why: imported sheet addresses often
-  // pass the heuristic check ("Mansehra near foji") but are NOT actually
-  // courier-deliverable. We force the AI to re-validate the address with the
-  // customer and only then finalize the confirmation. This guarantees we
-  // never confirm an order before the customer's real address is captured.
+  // Strategy:
+  //   • If stored address is ALREADY deliverable → confirm IMMEDIATELY (no AI
+  //     round-trip needed). Otherwise customer never sends a follow-up text
+  //     and the order would be stuck in pending_address forever (e.g. AB-369).
+  //   • If stored address is missing/weak → gate through the AI, ask the
+  //     customer for their full address, finalize once they reply.
   if (outcome === "confirmed") {
+    const addrLooksDeliverable = (() => {
+      const addr = order.customer_address;
+      const city = order.customer_city;
+      if (!addr || !city) return false;
+      const raw = String(addr).trim();
+      if (raw.length < 10) return false;
+      const lower = raw.toLowerCase();
+      const fakePattern = /\b(test|testing|tester|fake|dummy|sample|example|n\/?a|none|null|xxx+|asdf+|qwerty|aaaa+|placeholder|abc+|address here|adress|same|here)\b/i;
+      if (fakePattern.test(lower)) return false;
+      const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
+      if (tokens.length < 2) return false;
+      const hasNumber = /\d/.test(raw);
+      const streetKeyword = /\b(house|flat|plot|street|road|st\.?|rd\.?|lane|block|sector|phase|town|colony|mohalla|near|opposite|main|gali|chowk|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر)\b/i;
+      if (!hasNumber && !streetKeyword.test(lower)) return false;
+      return true;
+    })();
+
+    if (addrLooksDeliverable && order.confirmation_status !== "confirmed") {
+      // Direct confirm — stored address is good enough, no need to ask again.
+      const settings = await getSettings();
+      const trackedFields = ["confirmation_status", "delivery_status", "shipping_status"];
+      const before: Record<string, any> = {};
+      for (const f of trackedFields) before[f] = order[f] ?? null;
+
+      const confirmUpdate: Record<string, any> = {
+        confirmation_status: "confirmed",
+        confirmation_channel: "whatsapp",
+        confirmed_at: new Date().toISOString(),
+        whatsapp_status: "confirmed",
+        whatsapp_last_reply_at: new Date().toISOString(),
+        whatsapp_note: `Customer clicked "${buttonText || "YES"}" — auto-confirmed (address on file)`,
+      };
+      if (settings?.auto_book_shipping) {
+        const ds = String(order.delivery_status ?? "").toLowerCase();
+        const blockBooking = ["booked", "shipped", "in_transit", "delivered", "returned"].includes(ds);
+        if (!blockBooking) {
+          confirmUpdate.delivery_status = "booked";
+          confirmUpdate.shipping_status = "Booked";
+        }
+      }
+      await admin.from("orders").update(confirmUpdate).eq("order_id", order.order_id);
+
+      if (conversationId) {
+        await admin
+          .from("whatsapp_conversations")
+          .update({
+            status: "confirmed",
+            outcome: "confirmed",
+            pending_button_intent: null,
+            ai_enabled: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", conversationId);
+      }
+      try {
+        await logOrderHistory({
+          orderId: order.order_id,
+          actionType: "ai_confirm",
+          role: "ai",
+          before,
+          after: confirmUpdate,
+          fields: trackedFields,
+        });
+      } catch (_) { /* non-blocking */ }
+      log("button confirm: stored-address auto-confirmed", order.order_id);
+      return;
+    }
+
+    // Stored address is weak/missing → gate through AI.
     if (conversationId) {
       await admin
         .from("whatsapp_conversations")
@@ -441,7 +510,7 @@ async function applyOutcome(
         whatsapp_last_reply_at: new Date().toISOString(),
       })
       .eq("order_id", order.order_id);
-    log("button confirm gated (always): awaiting AI address validation", order.order_id);
+    log("button confirm gated: awaiting AI address validation", order.order_id);
     return;
   } else if (outcome === "more_info") {
     updates.confirmation_status = "new";
