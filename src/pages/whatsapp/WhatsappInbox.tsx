@@ -1444,10 +1444,15 @@ export default function WhatsappInbox() {
                         );
                       }
                       if (m.message_type === "reaction") {
-                        const emoji =
-                          (typeof m.body === "string" && m.body.trim()) ||
-                          m.payload?.reaction?.emoji ||
-                          "👍";
+                        // Extract just the emoji — never render JSON payloads or long strings
+                        const rawBody = typeof m.body === "string" ? m.body.trim() : "";
+                        const payloadEmoji = m.payload?.reaction?.emoji;
+                        const bodyLooksLikeEmoji =
+                          rawBody.length > 0 &&
+                          rawBody.length <= 8 &&
+                          !rawBody.startsWith("{") &&
+                          !rawBody.startsWith("[");
+                        const emoji = payloadEmoji || (bodyLooksLikeEmoji ? rawBody : "👍");
                         return (
                           <div
                             key={m.id}
