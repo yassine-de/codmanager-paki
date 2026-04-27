@@ -1,0 +1,2 @@
+UPDATE orders SET confirmation_status='confirmed', confirmation_channel='whatsapp', confirmed_at=COALESCE(confirmed_at, now()), whatsapp_status='confirmed', whatsapp_note='Auto-confirmed via WhatsApp (address on file)' WHERE order_id='AB-369';
+UPDATE whatsapp_conversations SET pending_button_intent=NULL, status='confirmed', outcome='confirmed', updated_at=now() WHERE id='e89caf84-652c-43aa-b525-a8767832f45e';
