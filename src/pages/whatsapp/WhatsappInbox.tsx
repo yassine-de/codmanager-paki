@@ -951,7 +951,50 @@ export default function WhatsappInbox() {
 
   return (
     <>
-      <div className="grid grid-cols-12 gap-0 h-[calc(100dvh-160px)] max-h-[calc(100dvh-120px)] rounded-xl border border-border overflow-hidden bg-card">
+      {/* Horizontal filters bar above inbox */}
+      <div className="mb-2 flex items-center gap-2 flex-wrap rounded-xl border border-border bg-card px-3 py-2">
+        <div className="flex items-center gap-1.5 mr-1">
+          <FilterIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Filters</span>
+        </div>
+        {([
+          { key: "all", label: "All" },
+          { key: "unread", label: "Unread" },
+          { key: "needs_review", label: "Needs Review", count: needsReviewCount },
+          { key: "ai_on", label: "AI On" },
+          { key: "ai_off", label: "AI Off" },
+          { key: "with_order", label: "With Order" },
+          { key: "no_order", label: "No Order" },
+          { key: "window_open", label: "24h Window" },
+        ] as const).map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className={cn(
+              "px-2.5 py-1 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1",
+              filter === f.key
+                ? f.key === "needs_review"
+                  ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                  : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            )}
+          >
+            {f.label}
+            {"count" in f && f.count > 0 && (
+              <span className={cn(
+                "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
+                filter === f.key
+                  ? "bg-sky-500 text-white"
+                  : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
+              )}>
+                {f.count > 99 ? "99+" : f.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-12 gap-0 h-[calc(100dvh-200px)] max-h-[calc(100dvh-160px)] rounded-xl border border-border overflow-hidden bg-card">
         {/* LEFT PANEL */}
         <aside className="col-span-12 md:col-span-4 lg:col-span-3 border-r border-border flex flex-col bg-background/40 min-h-0 overflow-hidden">
           <div className="px-4 h-12 border-b border-border flex items-center justify-between gap-2">
