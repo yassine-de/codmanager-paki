@@ -9,35 +9,47 @@ Deno.serve(async (req) => {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) return new Response("no key", { status: 500, headers: corsHeaders });
 
-  const extractPrompt = `You are a STRICT address-extraction assistant for a courier in Pakistan. Your job is to REJECT any address that a courier rider could not realistically deliver to without calling the customer back.
+  const extractPrompt = `You are an address-extraction assistant for a courier in Pakistan. Pakistan has BIG cities (Karachi, Lahore, Islamabad, Rawalpindi, Faisalabad, Multan, Peshawar, etc.) AND many SMALL towns / villages / tehsils (Batagram, Layyah, Tank, Wari, Shahdad Kot, Dera Ismail Khan, etc.). Address quality expectations are different for each.
 
-A "deliverable" address requires ALL of the following:
-1) A city (a real Pakistan city), AND
-2) A specific area / neighborhood / town / colony / block / sector / phase (e.g. "Gulshan-e-Iqbal Block 7", "DHA Phase 5", "Saddar", "G-9/4"), AND
-3) At least ONE precise locator INSIDE that area:
+A "deliverable" address requires:
+1) A city OR town OR tehsil OR village name (anywhere in Pakistan), AND
+2) AT LEAST ONE locator that helps the rider find the spot. Any ONE of these is enough:
    - a house / flat / plot / shop / office number, OR
-   - a specific street / lane / road / gali name or number, OR
-   - a very specific named landmark that uniquely identifies a small spot WITHIN the area (e.g. "near XYZ Masjid, Street 4" — NOT just a huge government building or a whole institution name).
+   - a specific street / lane / road / gali name or number (e.g. "Ajmera Road", "Street 4", "Main Bazaar Road"), OR
+   - a neighborhood / area / colony / block / sector / phase / mohalla / town name (e.g. "Gulshan-e-Iqbal Block 7", "DHA Phase 5", "Saddar", "G-9/4", "Johar Town"), OR
+   - a recognizable named landmark with proximity wording (e.g. "near Allahdin Hotel", "near Adalat Stop", "Fuara Chowk", "near UBL Bank Zarobi", "opposite XYZ Masjid"). Small-town landmarks like a chowk, a named stop, a small bank branch, or a small hotel ARE enough — the rider knows the town and can ask locally.
 
-A government building, big institution, big plaza, university, or any large landmark BY ITSELF is NOT enough — the courier still wouldn't know which gate/block/street. In that case set complete=false and the agent will ask for more detail.
+Only REJECT when the address gives the rider NOTHING to go on:
+- Just a city name with no other detail (e.g. "Lahore" alone).
+- Single vague words: "home", "here", "same", "send it".
+- Obvious fake / test / placeholder values: "test", "fake", "dummy", "sample", "abc", "xyz", "n/a", "asdf", random keyboard mashing.
+- A standalone giant institution with no street/area context AND no proximity wording (e.g. just "CM Secretariat" with nothing else).
+
+In big metro cities (Karachi, Lahore, Islamabad, Rawalpindi, Faisalabad, Multan, Peshawar, Hyderabad, Quetta, Gujranwala, Sialkot) prefer at least an area/block/sector/town in addition to the locator when possible — but if the customer gave a clear shop/street + landmark + city, accept it.
+
+In small towns / villages / tehsils, a road / chowk / named landmark + the town name IS enough. Do NOT demand a formal block/sector/phase that does not exist there.
 
 Return JSON ONLY in this exact schema:
 { "complete": boolean, "full_address": string, "city": string }
 
 Rules:
-- "complete" = true ONLY if ALL three requirements above (city + specific area + precise locator inside that area) are clearly present in what the CUSTOMER explicitly said. When in doubt, return false.
+- "complete" = true if the address has a city/town + at least one usable locator from the list above. When in doubt for SMALL towns, lean toward true. When in doubt for BIG metros with no area at all, lean toward false.
 - "full_address" must be a single line containing all the detail parts the customer provided (house/flat, street, block/sector/phase, area, landmark) — DO NOT include the city.
-- "city" must be the city name in English/Latin script (e.g. "Karachi", "Lahore", "Peshawar").
-- REJECT obvious fake / test / placeholder values such as "test address", "fake", "dummy", "sample", "abc", "xyz", "n/a", "asdf", random keyboard mashing, or a single word. For these, return complete=false.
-- REJECT vague answers like just "my home", "same as before", "here", "send it", a city name only, or a single landmark with no street/house/block.
-- If the address is missing, vague, fake, or not detailed enough, return { "complete": false, "full_address": "", "city": "" }.
-- DO NOT invent details. Only use what the customer explicitly said.`;
+- "city" must be the city/town/village name in English/Latin script (e.g. "Karachi", "Lahore", "Peshawar", "Batagram", "Layyah").
+- For obvious fake/test/placeholder values or single vague words, return complete=false.
+- DO NOT invent details. Only use what the customer explicitly said anywhere in the conversation (history + latest message).`;
 
   const tests = [
     "ajmera road near adalt stop batagram road batagram\nplz deliver",
     "ajmera road near adalt stop batagram road batagram",
     "Fuara chok\nDera Ismail Khan",
     "Near Allahdin Hotel\nLayyah",
+    "Wari dir upper",
+    "Lahore", // should reject
+    "test", // should reject
+    "home", // should reject
+    "Shop no 6 near sheritolln hotel johar town lahore",
+    "House 12, Street 5, DHA Phase 5, Karachi",
   ];
 
   const results: any[] = [];
