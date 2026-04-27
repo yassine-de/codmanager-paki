@@ -791,15 +791,16 @@ async function applyButtonAction(opts: {
     return true;
   };
 
-  // FORCE address-gating on EVERY confirm-button: regardless of what address
-  // is currently stored on the order or what admin set ai_gate to. Sheet
-  // imports often contain vague addresses that pass the heuristic check but
-  // are NOT courier-deliverable. We always force the AI to re-validate the
-  // address with the customer before flipping confirmation_status.
+  // Address-gating logic for confirm-buttons:
+  //   • Stored address ALREADY deliverable → SKIP gate, confirm immediately
+  //     (otherwise customer never replies and order stays stuck in
+  //     pending_address forever, e.g. AB-369).
+  //   • Address missing/weak → force AI gate to ask customer.
   const wantsConfirm =
     action.status === "confirmed" ||
     action.intent_kind === "confirm";
-  const forceAddressGate = wantsConfirm && !!order;
+  const storedAddrDeliverable = !!order && isAddressDeliverable(order.customer_address, order.customer_city);
+  const forceAddressGate = wantsConfirm && !!order && !storedAddrDeliverable;
 
   const aiGated = action.ai_gate === "validate" || forceAddressGate;
   const wantsTakeover = action.ai_takeover === true || aiGated;
