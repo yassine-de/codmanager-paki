@@ -952,12 +952,58 @@ export default function WhatsappInbox() {
 
   return (
     <>
+      {/* Horizontal filters bar above inbox — hidden on mobile when a conversation is open */}
+      <div className={cn(
+        "mb-2 items-center gap-2 flex-wrap rounded-xl border border-border bg-card px-3 py-2",
+        selected ? "hidden md:flex" : "flex"
+      )}>
+        <div className="flex items-center gap-1.5 mr-1">
+          <FilterIcon className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Filters</span>
+        </div>
+        {([
+          { key: "all", label: "All" },
+          { key: "unread", label: "Unread" },
+          { key: "needs_review", label: "Needs Review", count: needsReviewCount },
+          { key: "ai_on", label: "AI On" },
+          { key: "ai_off", label: "AI Off" },
+          { key: "with_order", label: "With Order" },
+          { key: "no_order", label: "No Order" },
+          { key: "window_open", label: "24h Window" },
+        ] as const).map((f) => (
+          <button
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className={cn(
+              "px-2.5 py-1 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1",
+              filter === f.key
+                ? f.key === "needs_review"
+                  ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                  : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            )}
+          >
+            {f.label}
+            {"count" in f && f.count > 0 && (
+              <span className={cn(
+                "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
+                filter === f.key
+                  ? "bg-sky-500 text-white"
+                  : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
+              )}>
+                {f.count > 99 ? "99+" : f.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       <div className={cn(
         "grid grid-cols-12 gap-0 rounded-xl border border-border overflow-hidden bg-card",
-        // More vertical space for inbox now that the top filters bar is removed
+        // Full-screen on mobile when chat is open; constrained on desktop and on mobile list view
         selected
-          ? "h-[calc(100dvh-80px)] max-h-[calc(100dvh-80px)] md:h-[calc(100dvh-140px)] md:max-h-[calc(100dvh-100px)]"
-          : "h-[calc(100dvh-140px)] max-h-[calc(100dvh-100px)]"
+          ? "h-[calc(100dvh-80px)] max-h-[calc(100dvh-80px)] md:h-[calc(100dvh-200px)] md:max-h-[calc(100dvh-160px)]"
+          : "h-[calc(100dvh-200px)] max-h-[calc(100dvh-160px)]"
       )}>
         {/* LEFT PANEL — hidden on mobile when a conversation is selected */}
         <aside className={cn(
@@ -1002,7 +1048,7 @@ export default function WhatsappInbox() {
             </div>
           </div>
 
-          <div className="p-3 space-y-2 border-b border-border">
+          <div className="p-3 border-b border-border">
             <div className="relative">
               <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -1011,44 +1057,6 @@ export default function WhatsappInbox() {
                 placeholder="Search by name, phone, or message"
                 className="pl-9 h-9"
               />
-            </div>
-            {/* Compact filter chips inside sidebar */}
-            <div className="flex items-center gap-1 flex-wrap">
-              {([
-                { key: "all", label: "All" },
-                { key: "unread", label: "Unread" },
-                { key: "needs_review", label: "Review", count: needsReviewCount },
-                { key: "ai_on", label: "AI On" },
-                { key: "ai_off", label: "AI Off" },
-                { key: "with_order", label: "Order" },
-                { key: "no_order", label: "No Order" },
-                { key: "window_open", label: "24h" },
-              ] as const).map((f) => (
-                <button
-                  key={f.key}
-                  onClick={() => setFilter(f.key)}
-                  className={cn(
-                    "px-2 py-0.5 rounded-full font-medium border transition-colors text-[10px] inline-flex items-center gap-1",
-                    filter === f.key
-                      ? f.key === "needs_review"
-                        ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                      : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                  )}
-                >
-                  {f.label}
-                  {"count" in f && f.count > 0 && (
-                    <span className={cn(
-                      "inline-flex items-center justify-center min-w-[14px] h-[14px] px-1 rounded-full text-[9px] font-semibold",
-                      filter === f.key
-                        ? "bg-sky-500 text-white"
-                        : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
-                    )}>
-                      {f.count > 99 ? "99+" : f.count}
-                    </span>
-                  )}
-                </button>
-              ))}
             </div>
           </div>
 
