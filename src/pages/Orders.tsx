@@ -167,18 +167,18 @@ function OrderSparklineCards({ orders }: { orders: Order[] }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 animate-fade-in">
       {cards.map((c) => (
-        <div key={c.title} className="bg-card rounded-xl border shadow-soft px-5 py-4 hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200">
-          <p className="text-sm text-muted-foreground font-medium">{c.title}</p>
-          <div className="flex items-end justify-between mt-2">
+        <div key={c.title} className="bg-card rounded-lg border shadow-soft px-3.5 py-2.5 hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200">
+          <p className="text-xs text-muted-foreground font-medium">{c.title}</p>
+          <div className="flex items-end justify-between mt-1">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-bold tabular-nums">
+              <span className="text-xl font-bold tabular-nums leading-tight">
                 {isDataVisible ? c.value.toLocaleString() : <MaskedValue className="gap-1" />}
               </span>
-              {isDataVisible && <span className="text-success text-xs font-semibold">↑</span>}
+              {isDataVisible && <span className="text-success text-[10px] font-semibold">↑</span>}
             </div>
-            <div className="w-20 h-8">
+            <div className="w-16 h-6">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={sparkData}>
                   <defs>
@@ -601,16 +601,16 @@ export default function Orders() {
 
   return (
     <TooltipProvider delayDuration={200}>
-    <div className="space-y-5 max-w-7xl">
+    <div className="space-y-3 max-w-[1600px]">
       {/* Header */}
       <div className="flex items-center justify-between animate-fade-in">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage all your COD orders</p>
+          <h1 className="text-xl font-bold tracking-tight leading-tight">Orders</h1>
+          <p className="text-muted-foreground text-xs">Manage all your COD orders</p>
         </div>
         {!isAdmin && (
-          <Button size="sm" className="gap-1.5" onClick={() => setShowCreateModal(true)}>
-            <Plus className="w-4 h-4" /> Create Order
+          <Button size="sm" className="gap-1.5 h-8" onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-3.5 h-3.5" /> Create Order
           </Button>
         )}
       </div>
