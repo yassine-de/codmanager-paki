@@ -203,9 +203,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </DropdownMenu>
             </div>
           </header>
-          <main className="flex-1 overflow-auto px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-5">
-            <SellerAlertsBanner />
-            {children}
+          <main className="flex-1 overflow-auto px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-5 2xl:px-8">
+            <div className="mx-auto w-full max-w-[1500px] 2xl:max-w-[1700px]">
+              <SellerAlertsBanner />
+              {children}
+            </div>
           </main>
         </div>
       </div>
