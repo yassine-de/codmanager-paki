@@ -952,8 +952,11 @@ export default function WhatsappInbox() {
 
   return (
     <>
-      {/* Horizontal filters bar above inbox */}
-      <div className="mb-2 flex items-center gap-2 flex-wrap rounded-xl border border-border bg-card px-3 py-2">
+      {/* Horizontal filters bar above inbox — hidden on mobile when a conversation is open */}
+      <div className={cn(
+        "mb-2 items-center gap-2 flex-wrap rounded-xl border border-border bg-card px-3 py-2",
+        selected ? "hidden md:flex" : "flex"
+      )}>
         <div className="flex items-center gap-1.5 mr-1">
           <FilterIcon className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Filters</span>
@@ -995,7 +998,13 @@ export default function WhatsappInbox() {
         ))}
       </div>
 
-      <div className="grid grid-cols-12 gap-0 h-[calc(100dvh-200px)] max-h-[calc(100dvh-160px)] rounded-xl border border-border overflow-hidden bg-card">
+      <div className={cn(
+        "grid grid-cols-12 gap-0 rounded-xl border border-border overflow-hidden bg-card",
+        // Full-screen on mobile when chat is open; constrained on desktop and on mobile list view
+        selected
+          ? "h-[calc(100dvh-80px)] max-h-[calc(100dvh-80px)] md:h-[calc(100dvh-200px)] md:max-h-[calc(100dvh-160px)]"
+          : "h-[calc(100dvh-200px)] max-h-[calc(100dvh-160px)]"
+      )}>
         {/* LEFT PANEL — hidden on mobile when a conversation is selected */}
         <aside className={cn(
           "col-span-12 md:col-span-4 lg:col-span-3 border-r border-border flex-col bg-background/40 min-h-0 overflow-hidden",
