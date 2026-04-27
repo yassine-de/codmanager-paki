@@ -68,6 +68,12 @@ type Conv = {
   review_note?: string | null;
   resolved_by?: string | null;
   resolved_at?: string | null;
+  pending_button_intent?: {
+    intent?: string;
+    button_text?: string;
+    mapped_status?: string | null;
+    created_at?: string;
+  } | null;
 };
 
 type Msg = {
