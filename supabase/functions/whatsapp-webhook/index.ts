@@ -1532,12 +1532,20 @@ async function tryExtractAndConfirmAddress(args: {
     return true;
   };
 
-  // If the order is already confirmed AND already has a deliverable address,
-  // there's nothing to do. BUT if the order was confirmed via a button click
-  // BEFORE the customer provided a real address, we still need to capture the
-  // address now and patch the order — otherwise the rider gets no address.
+  // We always run extraction when there is a pending_button_intent (customer
+  // clicked confirm and we're awaiting their real address) OR the order is
+  // not yet confirmed OR the stored address is not deliverable. The only
+  // skip-case is: order is confirmed, address looks deliverable, AND no
+  // pending intent is awaiting clearing.
   const alreadyDeliverable = isDeliverable(order.customer_address, order.customer_city);
-  if (order.confirmation_status === "confirmed" && alreadyDeliverable) return;
+  const hasPendingIntent = !!(conv as any)?.pending_button_intent;
+  if (
+    order.confirmation_status === "confirmed" &&
+    alreadyDeliverable &&
+    !hasPendingIntent
+  ) {
+    return;
+  }
 
   // Load ORIO cities for matching
   const { data: cities } = await admin
