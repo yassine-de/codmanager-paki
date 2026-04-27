@@ -620,10 +620,15 @@ async function handleIncoming(value: any) {
       }
 
       const nowIso = new Date().toISOString();
+      // NOTE: last_reply_at is reserved for AI/agent OUTBOUND replies.
+      // We only bump last_message_at here (inbound activity). Bumping
+      // last_reply_at on every inbound caused the sweeper to skip
+      // conversations where the customer sent the final message but the
+      // AI never replied (e.g. address arriving right after a button
+      // confirm) — the conv looked "freshly answered" forever.
       await admin
         .from("whatsapp_conversations")
         .update({
-          last_reply_at: nowIso,
           last_message_at: nowIso,
           updated_at: nowIso,
           status: nextStatus,
@@ -1661,15 +1666,20 @@ async function sweepUnansweredConversations(opts?: { limit?: number; minSilenceS
   const minSilenceSec = Math.max(30, opts?.minSilenceSec ?? 90);
   const cutoffIso = new Date(Date.now() - minSilenceSec * 1000).toISOString();
 
-  // Candidate convs: AI enabled, had a recent inbound, not too stale (last 24h).
+  // Candidate convs: AI enabled, had a recent inbound (last 24h) and the
+  // last activity is older than the silence threshold. We filter on
+  // last_message_at (any activity) — NOT last_reply_at — so convs where
+  // the customer sent the final message but the AI never replied still
+  // get picked up. The per-iteration check below ensures the very last
+  // message was inbound.
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: convs } = await admin
     .from("whatsapp_conversations")
     .select("id, order_id, customer_phone, ai_enabled, last_reply_at, last_message_at")
     .eq("ai_enabled", true)
-    .gte("last_reply_at", since24h)
-    .lte("last_reply_at", cutoffIso)
-    .order("last_reply_at", { ascending: false })
+    .gte("last_message_at", since24h)
+    .lte("last_message_at", cutoffIso)
+    .order("last_message_at", { ascending: false })
     .limit(limit * 3); // overshoot then filter
 
   let triggered = 0;
