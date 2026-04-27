@@ -748,6 +748,52 @@ export default function WhatsappInbox() {
     toast.success(next ? "AI auto-reply enabled" : "AI stopped for this conversation");
   };
 
+  const [forcingAgent, setForcingAgent] = useState(false);
+  const forceToAgent = async () => {
+    if (!selected || !conv?.order_id) {
+      toast.error("No order linked to this conversation");
+      return;
+    }
+    if (!window.confirm(
+      `Force order #${conv.order_id} to the agent queue?\n\n` +
+      `• AI will stop replying\n` +
+      `• Order returns to "new" status in the agent pool\n` +
+      `• Any agent can claim and call the customer`,
+    )) return;
+    setForcingAgent(true);
+    try {
+      // 1) Stop AI on the conversation + flag channel as agent
+      const { error: convErr } = await supabase
+        .from("whatsapp_conversations")
+        .update({ ai_enabled: false, status: "manual_review_needed" })
+        .eq("id", selected);
+      if (convErr) throw convErr;
+
+      // 2) Reset order back into the agent queue (unassign + status=new + channel=agent)
+      const { error: ordErr } = await supabase
+        .from("orders")
+        .update({
+          confirmation_channel: "agent",
+          confirmation_status: "new",
+          agent_id: null,
+          assigned_at: null,
+          postpone_date: null,
+          whatsapp_status: "handed_to_agent",
+          last_activity_at: new Date().toISOString(),
+        })
+        .eq("order_id", conv.order_id);
+      if (ordErr) throw ordErr;
+
+      qc.invalidateQueries({ queryKey: ["wts-convos"] });
+      qc.invalidateQueries({ queryKey: ["wts-order", conv.order_id] });
+      toast.success(`Order #${conv.order_id} sent to agent queue`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to send to agent");
+    } finally {
+      setForcingAgent(false);
+    }
+  };
+
   // Detect if a message body likely needs English translation (internal staff only).
   const needsTranslation = (text: string | null | undefined): boolean => {
     if (!text) return false;
@@ -1322,6 +1368,26 @@ export default function WhatsappInbox() {
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     <span className="hidden md:inline">Mark Resolved</span>
+                  </Button>
+                )}
+
+                {/* Force to Agent — hand the order off to the call-center queue */}
+                {conv?.order_id && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={forceToAgent}
+                    disabled={forcingAgent}
+                    className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs font-medium border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 hover:text-orange-700 dark:text-orange-400"
+                    title="Stop AI and send this order to the agent queue"
+                  >
+                    {forcingAgent ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <UserPlus className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden md:inline">Force to Agent</span>
                   </Button>
                 )}
 
