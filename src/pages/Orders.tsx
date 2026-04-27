@@ -601,7 +601,7 @@ export default function Orders() {
 
   return (
     <TooltipProvider delayDuration={200}>
-    <div className="space-y-3 max-w-[1600px]">
+    <div className="space-y-3 w-full">
       {/* Header */}
       <div className="flex items-center justify-between animate-fade-in">
         <div>
