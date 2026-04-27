@@ -106,17 +106,19 @@ function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
   const doubleOrders = orders.filter(o => o.confirmation_status === 'double').length;
   const wrongNumber = orders.filter(o => o.confirmation_status === 'wrong_number').length;
 
-  // Delivery status counts
-  // "Pending" = orders with delivery_status: with_courier, in_transit, postponed, no_answer
-  const pending = orders.filter(o => ['with_courier', 'in_transit', 'postponed', 'no_answer'].includes(o.delivery_status || '')).length;
-  const shipped = orders.filter(o => o.delivery_status === 'shipped').length;
+  // Delivery status counts (matching real DB values)
+  // Pending = explicit 'pending' OR legacy in-flight statuses
+  const pending = orders.filter(o => ['pending', 'with_courier', 'in_transit', 'postponed'].includes(o.delivery_status || '')).length;
+  const shipped = orders.filter(o => ['shipped', 'booked'].includes(o.delivery_status || '')).length;
   const inTransit = orders.filter(o => o.delivery_status === 'in_transit').length;
   const withCourier = orders.filter(o => o.delivery_status === 'with_courier').length;
   const delivered = orders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
   const paid = orders.filter(o => o.delivery_status === 'paid').length;
-  const returned = orders.filter(o => o.delivery_status === 'returned').length;
+  // Returned = 'return' (current) OR 'returned' (legacy) OR 'ready_for_return'
+  const returned = orders.filter(o => ['return', 'returned', 'ready_for_return'].includes(o.delivery_status || '')).length;
   const deliveryCancelled = orders.filter(o => o.delivery_status === 'cancelled').length;
-  const deliveryNoAnswer = orders.filter(o => o.delivery_status === 'no_answer').length;
+  // Failed Attempt = 'failed_attempt' (current) OR 'no_answer' (legacy)
+  const deliveryNoAnswer = orders.filter(o => ['failed_attempt', 'no_answer'].includes(o.delivery_status || '')).length;
   const deliveryPostponed = orders.filter(o => o.delivery_status === 'postponed').length;
 
   // Rates
