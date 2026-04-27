@@ -943,20 +943,17 @@ async function refreshCampaignCounters(campaignId: string) {
 // Send a WhatsApp image message (used by the AI when the customer asks for a
 // product photo). Logs the outbound message and returns whether it succeeded.
 //
-// IMPORTANT: WhatsApp Cloud API only accepts image/jpeg and image/png.
-// WebP / AVIF / etc. are rejected ("Unsupported Image mime type"). When the
-// source URL is not a JPEG/PNG, we download the bytes, transcode them to JPEG
-// using Photon (Rust → WASM), upload the binary to Meta's /media endpoint, and
-// then send the message by media `id` instead of by `link`.
+// IMPORTANT: WhatsApp Cloud API only accepts image/jpeg and image/png. WebP /
+// AVIF / etc. are rejected ("Unsupported Image mime type image/webp"). We
+// detect non-JPEG/PNG URLs and route them through the public wsrv.nl image
+// proxy which serves a re-encoded JPEG with the correct Content-Type, so
+// Meta's media-fetch accepts it.
 // ---------------------------------------------------------------------------
-async function transcodeToJpeg(bytes: Uint8Array): Promise<Uint8Array> {
-  // Photon supports webp/png/jpeg/bmp decode and jpeg encode in WASM.
-  const photonMod: any = await import("https://esm.sh/@cf-wasm/photon@0.1.27?target=deno");
-  const PhotonImage = photonMod.PhotonImage;
-  const img = PhotonImage.new_from_byteslice(bytes);
-  const jpegBytes: Uint8Array = img.get_bytes_jpeg(85);
-  try { img.free(); } catch (_) { /* noop */ }
-  return jpegBytes;
+function ensureJpegFriendlyUrl(srcUrl: string): string {
+  const lower = srcUrl.toLowerCase().split("?")[0];
+  if (/\.(jpe?g|png)$/.test(lower)) return srcUrl;
+  // Route through wsrv.nl to force re-encoding to image/jpeg.
+  return `https://wsrv.nl/?url=${encodeURIComponent(srcUrl)}&output=jpg&q=85`;
 }
 
 async function sendWhatsappImage(args: {
@@ -969,61 +966,8 @@ async function sendWhatsappImage(args: {
   accessToken: string;
 }): Promise<boolean> {
   const { to, imageUrl, caption, conversationId, orderId, settings, accessToken } = args;
-
-  // Quick MIME hint from URL extension (cheap fast path).
-  const lowerUrl = imageUrl.toLowerCase().split("?")[0];
-  const isJpeg = /\.(jpe?g)$/.test(lowerUrl);
-  const isPng = /\.png$/.test(lowerUrl);
-  const safeForLink = isJpeg || isPng;
-
-  let mediaObj: any = {};
-  let needsTranscode = !safeForLink;
-  let transcodeError: string | null = null;
-
-  if (safeForLink) {
-    mediaObj.link = imageUrl;
-  } else {
-    // Fetch + transcode + upload to Meta as image/jpeg
-    try {
-      const fetchResp = await fetch(imageUrl);
-      if (!fetchResp.ok) throw new Error(`fetch image failed: ${fetchResp.status}`);
-      const srcBytes = new Uint8Array(await fetchResp.arrayBuffer());
-      const jpegBytes = await transcodeToJpeg(srcBytes);
-
-      const fd = new FormData();
-      fd.append("messaging_product", "whatsapp");
-      fd.append("type", "image/jpeg");
-      fd.append("file", new Blob([jpegBytes], { type: "image/jpeg" }), "product.jpg");
-
-      const uploadUrl = `${settings.api_base_url}/${settings.phone_number_id}/media`;
-      const upResp = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}` },
-        body: fd,
-      });
-      const upJson = await upResp.json();
-      if (!upResp.ok || !upJson?.id) {
-        throw new Error(`Meta media upload failed: ${JSON.stringify(upJson).slice(0, 300)}`);
-      }
-      mediaObj.id = upJson.id;
-    } catch (e: any) {
-      transcodeError = e?.message || String(e);
-      errLog("ai send_product_image transcode/upload failed", { error: transcodeError, url: imageUrl });
-      // Log the failure and bail
-      await admin.from("whatsapp_messages").insert({
-        conversation_id: conversationId,
-        order_id: orderId,
-        direction: "out",
-        message_type: "image",
-        body: caption || "[image]",
-        payload: { _ai_continuation: true, _ai_tool: "send_product_image", _src_url: imageUrl },
-        status: "failed",
-        error_message: `Transcode/upload failed: ${transcodeError}`.slice(0, 500),
-      });
-      return false;
-    }
-  }
-
+  const finalUrl = ensureJpegFriendlyUrl(imageUrl);
+  const mediaObj: any = { link: finalUrl };
   if (caption) mediaObj.caption = caption;
   const payload = {
     messaging_product: "whatsapp",
@@ -1047,13 +991,13 @@ async function sendWhatsappImage(args: {
     direction: "out",
     message_type: "image",
     body: caption || "[image]",
-    payload: { ...payload, _ai_continuation: true, _ai_tool: "send_product_image", _src_url: imageUrl, _transcoded: needsTranscode },
+    payload: { ...payload, _ai_continuation: true, _ai_tool: "send_product_image", _src_url: imageUrl },
     meta_message_id: metaMsgId,
     status: ok ? "sent" : "failed",
     error_message: ok ? null : JSON.stringify(respJson).slice(0, 500),
   });
   if (!ok) errLog("ai send_product_image failed", respJson);
-  else log("ai send_product_image sent", { conv: conversationId, transcoded: needsTranscode });
+  else log("ai send_product_image sent", { conv: conversationId, proxied: finalUrl !== imageUrl });
   return ok;
 }
 
