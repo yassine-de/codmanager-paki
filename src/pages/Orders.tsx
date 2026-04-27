@@ -315,15 +315,33 @@ export default function Orders() {
   // Fetch orders from database
   useEffect(() => {
     const fetchOrders = async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false });
+      // Paginate to bypass Supabase's default 1000-row hard limit so the UI
+      // reflects the true number of orders in the system.
+      const PAGE = 1000;
+      let from = 0;
+      const all: any[] = [];
+      // Hard cap to avoid runaway loops — bump if the system grows past this.
+      const MAX_ROWS = 100000;
 
-      if (error) {
-        console.error("Error fetching orders:", error);
-        return;
+      while (from < MAX_ROWS) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .range(from, from + PAGE - 1);
+
+        if (error) {
+          console.error("Error fetching orders:", error);
+          return;
+        }
+
+        const batch = data || [];
+        all.push(...batch);
+        if (batch.length < PAGE) break;
+        from += PAGE;
       }
+
+      const data = all;
 
       // Fetch seller & agent names for display
       const sellerIds = [...new Set((data || []).map(o => o.seller_id))];
