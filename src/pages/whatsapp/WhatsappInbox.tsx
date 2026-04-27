@@ -1422,6 +1422,38 @@ export default function WhatsappInbox() {
                                 </div>
                               );
                             })()}
+                            {/* Internal English translation (staff-only, never sent to customer) */}
+                            {!isOut && !isTemplate && m.body && (() => {
+                              const cached = m.payload?._translation_en as string | undefined;
+                              const shown = translations[m.id] || cached;
+                              if (shown) {
+                                return (
+                                  <div className="mt-1.5 pt-1.5 border-t border-border/60 text-[12px] italic text-muted-foreground flex gap-1.5">
+                                    <Languages className="h-3 w-3 mt-0.5 shrink-0 opacity-70" />
+                                    <span className="whitespace-pre-wrap break-words">{shown}</span>
+                                  </div>
+                                );
+                              }
+                              if (needsTranslation(m.body)) {
+                                const isLoading = translatingId === m.id;
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTranslate(m)}
+                                    disabled={isLoading}
+                                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60"
+                                  >
+                                    {isLoading ? (
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                      <Languages className="h-3 w-3" />
+                                    )}
+                                    {isLoading ? "Translating…" : "Translate to English"}
+                                  </button>
+                                );
+                              }
+                              return null;
+                            })()}
                             <div
                               className={cn(
                                 "text-[10px] mt-1 flex items-center gap-1",
