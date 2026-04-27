@@ -699,6 +699,34 @@ export default function WhatsappInbox() {
     toast.success(next ? "AI auto-reply enabled" : "AI stopped for this conversation");
   };
 
+  // Detect if a message body likely needs English translation (internal staff only).
+  const needsTranslation = (text: string | null | undefined): boolean => {
+    if (!text) return false;
+    const t = text.trim();
+    if (t.length < 2) return false;
+    if (/[\u0600-\u06FF\u0900-\u097F\u0980-\u09FF\u4E00-\u9FFF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/.test(t)) {
+      return true;
+    }
+    const romanHints = /\b(hai|hain|nahi|nhi|kya|kyun|kyu|kuch|raha|rahi|rahe|karo|karna|mujhe|mera|meri|aap|apka|tum|tumhara|bhai|theek|thik|acha|achha|abhi|chahiye|paisa|paise|qeemat|keemat|bhej|plz|haan|bilkul|sahi|ghalat|samjh|samajh|matlab|kaisa|kaise|kahan|magar|lekin|liye|wala|wali|mein|hum|hamara|pouch|pucha|baat|kaam)\b/i;
+    return romanHints.test(t);
+  };
+
+  const handleTranslate = async (m: Msg) => {
+    if (!m.body || translations[m.id]) return;
+    setTranslatingId(m.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("whatsapp-translate", {
+        body: { message_id: m.id, text: m.body },
+      });
+      if (error || !data?.ok) throw new Error(error?.message || data?.error || "Translation failed");
+      setTranslations((prev) => ({ ...prev, [m.id]: data.translation }));
+    } catch (e: any) {
+      toast.error(e.message || "Translation failed");
+    } finally {
+      setTranslatingId(null);
+    }
+  };
+
   const sendReply = async () => {
     if (!selected || !conv || !draft.trim()) return;
     if (windowExpired) {
