@@ -467,10 +467,10 @@ export default function Dashboard() {
                   onClick={() => navigate("/orders?delivery=pending")} />
                 <SectionKPI title="Failed Attempt" value={kpis.deliveryNoAnswer} percentage={deliveryPct(kpis.deliveryNoAnswer)}
                   percentLabel="of delivery pool" icon={PhoneOff} color="text-warning" iconBg="bg-warning/10" delay={320}
-                  onClick={() => navigate("/orders?delivery=no_answer")} />
+                  onClick={() => navigate("/orders?delivery=failed_attempt")} />
                 <SectionKPI title="Returned" value={kpis.returned} percentage={deliveryPct(kpis.returned)}
                   percentLabel="of delivery pool" icon={RotateCcw} color="text-destructive" iconBg="bg-destructive/10" delay={330}
-                  onClick={() => navigate("/orders?delivery=returned")} />
+                  onClick={() => navigate("/orders?delivery=return")} />
               </div>
             );
           })()}
