@@ -11,34 +11,44 @@ After every AI-generated reply to a customer text message (in `aiContinueReply`)
 
 ## Extraction logic
 - Uses OpenAI JSON mode (response_format: json_object) with the same model as the AI assistant.
-- Sends last 10 conversation messages + latest customer text.
+- Sends last 10 conversation messages + latest customer text (batched).
 - Strict schema: `{ complete: boolean, full_address: string, city: string }`.
 
-## Strict deliverability rule (both extractor + AI prompt)
-`complete=true` requires ALL three:
-1. A real Pakistan city, AND
-2. A specific area / neighborhood / colony / block / sector / phase (e.g. "Gulshan-e-Iqbal Block 7", "DHA Phase 5", "G-9/4", "Saddar"), AND
-3. A precise locator INSIDE that area: house/flat/plot/shop number OR specific street/lane/road/gali name OR a small named landmark tied to a specific street.
+## Deliverability rule (extractor + AI prompt) — RURAL-FRIENDLY
+Pakistan has BIG cities AND many small towns / villages / tehsils. The rule adapts:
 
-A single big landmark (government building, big institution, big plaza, university, "near main bazaar") with NO street/house/block is REJECTED — courier rider would still get lost. AI must keep asking for the missing piece.
+`complete=true` requires:
+1. A city OR town OR tehsil OR village name (anywhere in PK), AND
+2. AT LEAST ONE locator (any ONE is enough):
+   - house/flat/plot/shop number, OR
+   - specific street/lane/road/gali name, OR
+   - neighborhood/area/colony/block/sector/phase/mohalla/town name, OR
+   - recognizable named landmark with proximity wording (e.g. "near Allahdin Hotel", "Fuara Chowk", "near Adalat Stop").
+
+In small towns / villages / tehsils a road / chowk / named landmark + town IS enough — the rider knows the town and asks locally. We do NOT demand a formal block/sector/phase that does not exist there. In big metros (Karachi, Lahore, Islamabad, Rawalpindi, Faisalabad, Multan, Peshawar, …) we prefer area + locator when possible.
+
+REJECT: just a city name, single vague words ("home", "here", "same", "send it"), fake/test/placeholder values, or a giant institution with no street/area context.
 
 `full_address` excludes the city (city is stored separately).
 
 ## City matching
-- City must match `orio_cities_cache` (case-insensitive exact, then partial fallback).
+- City must match `orio_cities_cache` (case-insensitive exact, then partial fallback). Note ORIO sometimes uses non-standard spellings (e.g. "Batgram" for Batagram).
 - Non-blocking: if no match, the order is still confirmed using the raw city text.
 
 ## Auto-confirm side effects
 On a valid extraction the order is updated:
 - `customer_address` ← extracted full address
 - `customer_city` ← matched ORIO city (canonical name)
-- `confirmation_status` = "confirmed", `confirmation_channel` = "whatsapp", `confirmed_at` = now
+- `confirmation_status` = "confirmed", `confirmation_channel` = "whatsapp", `confirmed_at` = now (only if not already confirmed)
 - `whatsapp_status` = "confirmed"
 - If `whatsapp_settings.auto_book_shipping` is true → `delivery_status="booked"`, `shipping_status="Booked"` (triggers ORIO sync)
 
 Conversation status → "confirmed", outcome → "confirmed".
 
 ## Skip conditions
-- Order already `confirmation_status = "confirmed"` → no-op.
+- Order already `confirmation_status = "confirmed"` AND already has a deliverable address on file → no-op.
 - ORIO cities cache empty → skip.
 - AI returns `complete=false` → skip (AI prompt instructs it to keep asking).
+
+## Known historical bug (fixed)
+Original prompt required city + formal area + precise locator (3 mandatory criteria). This silently rejected nearly all rural Pakistan addresses (Batagram, Layyah, Tank, Wari, DIK, etc.) because they don't have formal blocks/sectors. AI would reply with confirmation in chat but the DB never got updated. Prompt was rewritten to accept rural addresses while still rejecting junk.
