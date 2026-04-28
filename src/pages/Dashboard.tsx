@@ -380,7 +380,7 @@ export default function Dashboard() {
         {!isSeller && <OnlineStatusPanel />}
 
         {/* ═══════════ SYSTEM STATUS (admin only) ═══════════ */}
-        {!isSeller && <SystemStatusPanel />}
+        {!isSeller && <SystemStatusPanel dateRange={dateRange} />}
 
         {/* ═══════════ TOP: 7-DAY SPARKLINES ═══════════ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

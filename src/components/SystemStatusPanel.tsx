@@ -37,18 +37,28 @@ const severityConfig = {
   },
 };
 
-export default function SystemStatusPanel() {
+export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange }) {
   const navigate = useNavigate();
   const [syncModalOpen, setSyncModalOpen] = useState(false);
 
+  const fromIso = dateRange?.from ? startOfDay(dateRange.from).toISOString() : null;
+  const toIso = dateRange?.from
+    ? (dateRange.to ? endOfDay(dateRange.to).toISOString() : endOfDay(dateRange.from).toISOString())
+    : null;
+  const rangeKey = `${fromIso ?? "all"}_${toIso ?? "all"}`;
+
+  const applyRange = (q: any) => {
+    if (fromIso && toIso) return q.gte("created_at", fromIso).lte("created_at", toIso);
+    return q;
+  };
+
   // Failed ORIO syncs
   const { data: failedSyncCount = 0 } = useQuery({
-    queryKey: ["system-failed-syncs"],
+    queryKey: ["system-failed-syncs", rangeKey],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("orio_sync_status", "failed");
+      const { count, error } = await applyRange(
+        supabase.from("orders").select("id", { count: "exact", head: true }).eq("orio_sync_status", "failed")
+      );
       if (error) throw error;
       return count || 0;
     },
@@ -57,17 +67,19 @@ export default function SystemStatusPanel() {
 
   // Stuck pending syncs (confirmed+booked, no orio_order_id, pending > 1h)
   const { data: stuckPendingCount = 0 } = useQuery({
-    queryKey: ["system-stuck-pending-syncs"],
+    queryKey: ["system-stuck-pending-syncs", rangeKey],
     queryFn: async () => {
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      const { count, error } = await supabase
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("confirmation_status", "confirmed")
-        .eq("delivery_status", "booked")
-        .is("orio_order_id", null)
-        .or("orio_sync_status.is.null,orio_sync_status.eq.pending")
-        .lt("updated_at", oneHourAgo);
+      const { count, error } = await applyRange(
+        supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("confirmation_status", "confirmed")
+          .eq("delivery_status", "booked")
+          .is("orio_order_id", null)
+          .or("orio_sync_status.is.null,orio_sync_status.eq.pending")
+          .lt("updated_at", oneHourAgo)
+      );
       if (error) throw error;
       return count || 0;
     },
@@ -76,12 +88,11 @@ export default function SystemStatusPanel() {
 
   // Pending adjustments
   const { data: pendingAdjustments = 0 } = useQuery({
-    queryKey: ["system-pending-adjustments"],
+    queryKey: ["system-pending-adjustments", rangeKey],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("invoice_adjustments")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending");
+      const { count, error } = await applyRange(
+        supabase.from("invoice_adjustments").select("id", { count: "exact", head: true }).eq("status", "pending")
+      );
       if (error) throw error;
       return count || 0;
     },
@@ -90,13 +101,11 @@ export default function SystemStatusPanel() {
 
   // Unassigned new orders
   const { data: unassignedOrders = 0 } = useQuery({
-    queryKey: ["system-unassigned-orders"],
+    queryKey: ["system-unassigned-orders", rangeKey],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("orders")
-        .select("id", { count: "exact", head: true })
-        .eq("confirmation_status", "new")
-        .is("agent_id", null);
+      const { count, error } = await applyRange(
+        supabase.from("orders").select("id", { count: "exact", head: true }).eq("confirmation_status", "new").is("agent_id", null)
+      );
       if (error) throw error;
       return count || 0;
     },
