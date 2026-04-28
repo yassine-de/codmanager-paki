@@ -28,6 +28,9 @@ If any pending_button_intent exists, extraction always runs (so the badge gets c
 ## Stored-address short-circuit inside extraction (legacy, still used)
 If the customer DID reply with text after the button click but the stored address was already deliverable, `tryExtractAndConfirmAddress` short-circuits and finalizes the existing address without calling OpenAI.
 
+## Dedup-bypass when customer message is newer than last outbound (AB-395)
+The AI continuation pipeline applies a dedup window (`ai_dedup_window_seconds`, default 30s) to avoid double-replies. Previously, when a customer clicked YES + sent a follow-up question (e.g. "send me the product picture") in the same webhook batch, `applyOutcome` would auto-send the "order confirmed" template, then the AI continuation got blocked by dedup and the picture request was dropped. Now: if the latest inbound message is newer than the most recent outbound, dedup is bypassed so the AI always answers the pending customer question.
+
 ## Inbox UI
 The conversation list in `WhatsappInbox.tsx` shows a yellow "⏳ Awaiting address" badge next to any conversation whose `pending_button_intent.intent === "confirm"`.
 
