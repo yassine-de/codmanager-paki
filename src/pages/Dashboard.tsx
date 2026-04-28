@@ -382,6 +382,71 @@ export default function Dashboard() {
         {/* ═══════════ SYSTEM STATUS (admin only) ═══════════ */}
         {!isSeller && <SystemStatusPanel dateRange={dateRange} />}
 
+        {/* ═══════════ HERO KPIs ═══════════ */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {(() => {
+            const heroCards = [
+              {
+                title: "Total Orders",
+                value: kpis.total,
+                sub: `${kpis.newOrders} new orders`,
+                icon: ShoppingCart,
+                gradient: "from-indigo-500 to-violet-600",
+                shadow: "shadow-[0_8px_24px_-8px_rgba(99,102,241,0.5)]",
+                onClick: () => navigate("/orders"),
+              },
+              {
+                title: "Confirmed",
+                value: kpis.confirmed,
+                sub: `${kpis.confirmationRate}% confirmation rate`,
+                icon: CheckCircle2,
+                gradient: "from-emerald-500 to-teal-600",
+                shadow: "shadow-[0_8px_24px_-8px_rgba(16,185,129,0.5)]",
+                onClick: () => navigate("/orders?confirmation=confirmed"),
+              },
+              {
+                title: "Delivered",
+                value: kpis.delivered,
+                sub: `${kpis.deliveryRate}% delivery rate`,
+                icon: Truck,
+                gradient: "from-sky-500 to-blue-600",
+                shadow: "shadow-[0_8px_24px_-8px_rgba(14,165,233,0.5)]",
+                onClick: () => navigate("/orders?delivery=delivered"),
+              },
+              {
+                title: "Revenue (PKR)",
+                value: kpis.revenue,
+                sub: `≈ ${formatUSD(pkrToUsd(kpis.revenue))}`,
+                icon: DollarSign,
+                gradient: "from-violet-500 to-purple-600",
+                shadow: "shadow-[0_8px_24px_-8px_rgba(139,92,246,0.5)]",
+                onClick: () => navigate("/finance"),
+              },
+            ];
+            return heroCards.map((c, i) => {
+              const Icon = c.icon;
+              return (
+                <button
+                  key={c.title}
+                  onClick={c.onClick}
+                  className={`relative overflow-hidden rounded-2xl p-5 text-left text-white bg-gradient-to-br ${c.gradient} ${c.shadow} hover:-translate-y-0.5 hover:shadow-2xl transition-all duration-200 animate-slide-up min-h-[150px]`}
+                  style={{ animationDelay: `${i * 60}ms` }}
+                >
+                  <Icon className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" strokeWidth={1.5} />
+                  <div className="w-10 h-10 rounded-full bg-white/15 backdrop-blur flex items-center justify-center mb-6">
+                    <Icon className="w-5 h-5 text-white" />
+                  </div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/80">{c.title}</p>
+                  <p className="text-4xl font-bold tabular-nums mt-1 leading-tight">
+                    <AnimatedNumber value={c.value} />
+                  </p>
+                  <p className="text-[11px] text-white/75 mt-3">{c.sub}</p>
+                </button>
+              );
+            });
+          })()}
+        </div>
+
         {/* ═══════════ TOP: 7-DAY SPARKLINES ═══════════ */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <SparkMiniChart data={last7} dataKey="dropped" color="hsl(210,60%,52%)" gradientId="spark7O"
