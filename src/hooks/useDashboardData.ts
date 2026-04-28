@@ -267,7 +267,12 @@ export function useDashboardData(dateRange?: DateRange) {
     });
   }, [allOrders, dateRange]);
 
-  const kpis = useMemo(() => computeKPIs(orders), [orders]);
+  const kpis = useMemo(() => {
+    if (!dateRange?.from) return computeKPIs(orders);
+    const from = startOfDay(dateRange.from);
+    const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    return computeKPIs(orders, allOrders, { from, to });
+  }, [orders, allOrders, dateRange]);
   // Daily charts use ALL orders so each metric is bucketed by its own event date
   // (created_at for dropped, confirmed_at for confirmed, delivered_at for delivered).
   const last7 = useMemo(() => computeDailyData(allOrders, 7), [allOrders]);
