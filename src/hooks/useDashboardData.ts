@@ -91,15 +91,23 @@ function getConfirmationEventDate(o: DashboardOrder): Date {
   return new Date(o.confirmed_at || o.updated_at);
 }
 
-function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
-  const total = orders.length;
+function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dateRange?: { from: Date; to: Date }): DashboardKPIs {
+  // If date range provided, recompute each metric using its own event date from allOrders.
+  // Otherwise fall back to the pre-filtered orders list (no date filter).
+  const source = allOrders && dateRange ? allOrders : orders;
+  const inRange = (d: Date) => !dateRange || (d >= dateRange.from && d <= dateRange.to);
 
-  // Confirmation status counts
+  // Total Orders = orders CREATED in this period (created_at)
+  const total = dateRange
+    ? source.filter(o => inRange(new Date(o.created_at))).length
+    : orders.length;
+
+  // Confirmation status counts — use treatment-filtered orders for status breakdown
   const newOrders = orders.filter(o => o.confirmation_status === 'new').length;
-  // Confirmed = ANY order that reached the confirmed stage in this period.
-  // Once an order is confirmed it may move on to shipped/booked/in_transit/delivered/etc.
-  // The confirmation event itself still happened — count it.
-  const confirmed = orders.filter(reachedConfirmedStage).length;
+  // Confirmed = orders whose confirmation EVENT happened in this period (confirmed_at)
+  const confirmed = dateRange
+    ? source.filter(o => reachedConfirmedStage(o) && inRange(getConfirmationEventDate(o))).length
+    : orders.filter(reachedConfirmedStage).length;
   const noAnswer = orders.filter(o => o.confirmation_status === 'no_answer').length;
   const postponed = orders.filter(o => o.confirmation_status === 'postponed').length;
   const cancelled = orders.filter(o => o.confirmation_status === 'cancelled').length;
@@ -112,7 +120,10 @@ function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
   const shipped = orders.filter(o => ['shipped', 'booked'].includes(o.delivery_status || '')).length;
   const inTransit = orders.filter(o => o.delivery_status === 'in_transit').length;
   const withCourier = orders.filter(o => o.delivery_status === 'with_courier').length;
-  const delivered = orders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
+  // Delivered = orders DELIVERED in this period (delivered_at event date)
+  const delivered = dateRange
+    ? source.filter(o => reachedDeliveredStage(o) && inRange(getDeliveredEventDate(o))).length
+    : orders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
   const paid = orders.filter(o => o.delivery_status === 'paid').length;
   // Returned = 'return' (current) OR 'returned' (legacy) OR 'ready_for_return'
   const returned = orders.filter(o => ['return', 'returned', 'ready_for_return'].includes(o.delivery_status || '')).length;
@@ -126,19 +137,31 @@ function computeKPIs(orders: DashboardOrder[]): DashboardKPIs {
   const confirmationRate = confirmableTotal > 0 ? Math.round((confirmed / confirmableTotal) * 100) : 0;
   const deliveryRate = confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0;
 
-  // Financial
-  // Delivered Amount = total of orders with delivery_status 'delivered' OR 'paid'
-  const revenue = orders
-    .filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid')
-    .reduce((s, o) => s + Number(o.total_amount), 0);
-  // Paid Amount = total of orders with delivery_status 'paid'
-  const paidAmount = orders
-    .filter(o => o.delivery_status === 'paid')
-    .reduce((s, o) => s + Number(o.total_amount), 0);
-  // Pending Amount = total of orders with delivery_status 'delivered' (delivered but not yet paid)
-  const pendingAmount = orders
-    .filter(o => o.delivery_status === 'delivered')
-    .reduce((s, o) => s + Number(o.total_amount), 0);
+  // Financial — use delivered_at event date when filtering
+  // Revenue (Delivered Amount) = total of orders delivered/paid in this period
+  const revenue = dateRange
+    ? source
+        .filter(o => reachedDeliveredStage(o) && inRange(getDeliveredEventDate(o)))
+        .reduce((s, o) => s + Number(o.total_amount), 0)
+    : orders
+        .filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid')
+        .reduce((s, o) => s + Number(o.total_amount), 0);
+  // Paid Amount = total of orders with delivery_status 'paid' in this period (by delivered_at event)
+  const paidAmount = dateRange
+    ? source
+        .filter(o => o.delivery_status === 'paid' && inRange(getDeliveredEventDate(o)))
+        .reduce((s, o) => s + Number(o.total_amount), 0)
+    : orders
+        .filter(o => o.delivery_status === 'paid')
+        .reduce((s, o) => s + Number(o.total_amount), 0);
+  // Pending Amount = delivered (not yet paid) in this period
+  const pendingAmount = dateRange
+    ? source
+        .filter(o => o.delivery_status === 'delivered' && inRange(getDeliveredEventDate(o)))
+        .reduce((s, o) => s + Number(o.total_amount), 0)
+    : orders
+        .filter(o => o.delivery_status === 'delivered')
+        .reduce((s, o) => s + Number(o.total_amount), 0);
 
   return {
     total, newOrders, confirmed, noAnswer, postponed, cancelled, doubleOrders, wrongNumber,
@@ -244,7 +267,12 @@ export function useDashboardData(dateRange?: DateRange) {
     });
   }, [allOrders, dateRange]);
 
-  const kpis = useMemo(() => computeKPIs(orders), [orders]);
+  const kpis = useMemo(() => {
+    if (!dateRange?.from) return computeKPIs(orders);
+    const from = startOfDay(dateRange.from);
+    const to = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    return computeKPIs(orders, allOrders, { from, to });
+  }, [orders, allOrders, dateRange]);
   // Daily charts use ALL orders so each metric is bucketed by its own event date
   // (created_at for dropped, confirmed_at for confirmed, delivered_at for delivered).
   const last7 = useMemo(() => computeDailyData(allOrders, 7), [allOrders]);
