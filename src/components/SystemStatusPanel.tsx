@@ -111,6 +111,8 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
     },
     refetchInterval: 30_000,
   });
+
+  const items: StatusItem[] = [
     {
       id: "sync-errors",
       label: "Shipping Sync Errors",
