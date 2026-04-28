@@ -1147,6 +1147,7 @@ export default function WhatsappInbox() {
                   className={cn(
                     "w-full text-left px-3 py-3 border-b border-border/60 hover:bg-muted/40 transition-colors flex gap-3 relative",
                     selected === c.id && "bg-muted/60",
+                    unread && !needsReview && "bg-emerald-500/5 hover:bg-emerald-500/10 border-l-4 border-l-emerald-500",
                     needsReview && "bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-l-sky-500",
                   )}
                 >
