@@ -534,7 +534,7 @@ export default function WhatsappInbox() {
   useEffect(() => {
     if (!messages.length) return;
     const toTranslate = messages.filter((m) => {
-      if (m.direction !== "inbound") return false;
+      if (m.direction !== "in" && m.direction !== "inbound") return false;
       if (!m.body) return false;
       if (translations[m.id]) return false;
       if ((m.payload as any)?._translation_en) return false;
