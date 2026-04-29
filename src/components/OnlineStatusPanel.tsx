@@ -212,7 +212,7 @@ export default function OnlineStatusPanel() {
                     {u.status === "online"
                       ? "Active now"
                       : u.status === "idle"
-                      ? "Away"
+                      ? `Away ${u.timeAgo}`
                       : u.timeAgo}
                   </p>
                 </div>
