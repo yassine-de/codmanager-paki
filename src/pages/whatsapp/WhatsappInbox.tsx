@@ -2160,7 +2160,7 @@ export default function WhatsappInbox() {
                       disabled={updatingStatus}
                       onClick={async () => {
                         setUpdatingStatus(true);
-                        const updates: Record<string, string> = { updated_at: new Date().toISOString() };
+                        const updates: { updated_at: string; confirmation_status?: string; delivery_status?: string } = { updated_at: new Date().toISOString() };
                         if (editConfStatus && editConfStatus !== (order.confirmation_status || "new")) updates.confirmation_status = editConfStatus;
                         if (editDelStatus && editDelStatus !== (order.delivery_status || "pending")) updates.delivery_status = editDelStatus;
                         await supabase.from("orders").update(updates).eq("order_id", order.order_id);
