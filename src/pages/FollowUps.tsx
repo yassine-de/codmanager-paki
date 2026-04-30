@@ -428,6 +428,21 @@ export default function FollowUps() {
     }
   }
 
+  async function handleNoteSave(orderId: string, note: string) {
+    if (!authUser) return;
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ follow_up_note: note })
+        .eq("order_id", orderId);
+      if (error) throw error;
+      toast.success("Note saved");
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save note");
+    }
+  }
+
   if (!authLoading && authUser && authUser.role !== "admin" && authUser.role !== "agent" && authUser.role !== "follow_up") {
     return <Navigate to="/" replace />;
   }
