@@ -205,6 +205,8 @@ type ColumnKey =
   | "days"
   | "segment"
   | "follow_up"
+  | "note"
+  | "assigned_to"
   | "created"
   | "updated"
   | "actions";
@@ -221,6 +223,8 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "days", label: "Days" },
   { key: "segment", label: "Segment" },
   { key: "follow_up", label: "Follow Up" },
+  { key: "note", label: "FU Note" },
+  { key: "assigned_to", label: "FU Agent" },
   { key: "created", label: "Created" },
   { key: "updated", label: "Updated" },
   { key: "actions", label: "Actions" },
