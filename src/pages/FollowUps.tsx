@@ -893,14 +893,14 @@ function renderCell(
     case "updated": return format(new Date(row.order_updated_at), "dd MMM HH:mm");
     case "actions":
       return (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 onClick={() => navigate(`/orders/${row.order_id}`)}
-                className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[hsl(30,90%,55%)]/10 text-[hsl(30,90%,55%)] hover:bg-[hsl(30,90%,55%)]/20 transition-colors active:scale-95"
+                className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-[hsl(30,90%,55%)]/10 text-[hsl(30,90%,55%)] hover:bg-[hsl(30,90%,55%)]/20 transition-colors active:scale-95"
               >
-                <Pencil className="w-3.5 h-3.5" />
+                <Pencil className="w-3 h-3" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top"><p className="text-xs">Edit Order</p></TooltipContent>
@@ -909,9 +909,9 @@ function renderCell(
             <TooltipTrigger asChild>
               <button
                 onClick={() => setHistoryOrder({ id: row.order_id, customer: row.customer_name })}
-                className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[hsl(210,60%,52%)]/10 text-[hsl(210,60%,52%)] hover:bg-[hsl(210,60%,52%)]/20 transition-colors active:scale-95"
+                className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-[hsl(210,60%,52%)]/10 text-[hsl(210,60%,52%)] hover:bg-[hsl(210,60%,52%)]/20 transition-colors active:scale-95"
               >
-                <History className="w-3.5 h-3.5" />
+                <History className="w-3 h-3" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top"><p className="text-xs">Order History</p></TooltipContent>
