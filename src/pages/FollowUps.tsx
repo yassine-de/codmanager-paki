@@ -468,7 +468,8 @@ export default function FollowUps() {
     return <Navigate to="/" replace />;
   }
 
-  const visibleColumns = columns.filter((c) => c.visible);
+  const isSeller = authUser?.role === "seller";
+  const visibleColumns = columns.filter((c) => c.visible && !(isSeller && c.key === "note"));
 
   return (
     <TooltipProvider>
