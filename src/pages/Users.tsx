@@ -476,6 +476,7 @@ const Users = () => {
                     <SelectItem value="admin" className="text-xs">Admin</SelectItem>
                     <SelectItem value="seller" className="text-xs">Seller</SelectItem>
                     <SelectItem value="agent" className="text-xs">Agent</SelectItem>
+                    <SelectItem value="follow_up" className="text-xs">Follow Up</SelectItem>
                     <SelectItem value="custom" className="text-xs">Custom</SelectItem>
                   </SelectContent>
                 </Select>
