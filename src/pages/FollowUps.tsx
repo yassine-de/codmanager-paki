@@ -746,22 +746,23 @@ function renderCell(
     case "city": return row.customer_city || "—";
     case "delivery": return <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />;
     case "days": return row.days_since_shipped ?? "—";
-    case "segment":
+    case "segment": {
+      const raw = row.shipping_status;
+      if (!raw) return <span className="text-muted-foreground text-xs">—</span>;
+      const label = raw.replace(/\b\w/g, (c) => c.toUpperCase());
+      const s = raw.toLowerCase().trim();
+      let cls = "bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)] border-[hsl(200,65%,50%)]/20";
+      if (s === "delivered") cls = "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20";
+      else if (s === "cancelled" || s === "refused to accept") cls = "bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20";
+      else if (s === "failed attempt") cls = "bg-[hsl(25,85%,55%)]/12 text-[hsl(25,85%,55%)] border-[hsl(25,85%,55%)]/20";
+      else if (s === "ready for return" || s.startsWith("return")) cls = "bg-[hsl(340,65%,52%)]/12 text-[hsl(340,65%,52%)] border-[hsl(340,65%,52%)]/20";
+      else if (s === "new") cls = "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20";
       return (
-        <div className="flex flex-col gap-1 items-start">
-          {segMeta ? (
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap ${segMeta.pill}`}>
-              <segMeta.icon className="h-3 w-3" />
-              {segMeta.label}
-            </span>
-          ) : <span className="text-muted-foreground text-xs">—</span>}
-          {row.delivery_status && (
-            <span className="text-[10px] text-muted-foreground leading-none">
-              {formatStatus(row.delivery_status)}
-            </span>
-          )}
-        </div>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap ${cls}`}>
+          {label}
+        </span>
       );
+    }
     case "follow_up":
       return (
         <Select
