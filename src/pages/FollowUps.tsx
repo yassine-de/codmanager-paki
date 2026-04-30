@@ -779,17 +779,17 @@ const columnWidths: Record<ColumnKey, string> = {
 
 function cellClassFor(key: ColumnKey): string {
   switch (key) {
-    case "order_id": return "font-mono text-xs font-medium px-3 truncate";
-    case "orio_id": return "font-mono text-xs px-3 truncate";
-    case "customer": return "text-sm font-medium px-3 truncate";
-    case "phone": return "text-xs tabular-nums text-muted-foreground px-3 truncate";
-    case "city": return "text-sm text-muted-foreground px-3 truncate";
-    case "product": return "text-sm px-3 truncate";
-    case "price": return "text-sm tabular-nums font-semibold px-3";
-    case "days": return "text-center text-xs tabular-nums font-medium px-2";
+    case "order_id": return "px-4 font-medium text-xs";
+    case "orio_id": return "px-4 text-xs";
+    case "customer": return "px-4 text-xs";
+    case "phone": return "px-4 text-xs text-muted-foreground tabular-nums";
+    case "city": return "px-4 text-xs text-muted-foreground";
+    case "product": return "px-4 text-xs text-muted-foreground";
+    case "price": return "px-4 text-xs font-medium tabular-nums text-right";
+    case "days": return "px-4 text-xs tabular-nums font-medium text-center";
     case "created":
-    case "updated": return "text-xs text-muted-foreground tabular-nums px-3";
-    default: return "px-3";
+    case "updated": return "px-4 text-xs text-muted-foreground tabular-nums";
+    default: return "px-4";
   }
 }
 
