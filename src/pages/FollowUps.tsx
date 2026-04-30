@@ -149,7 +149,10 @@ function computeSegment(row: FollowUpRow): "failed_attempt" | "delayed" | "on_go
   const days = row.days_since_shipped ?? 0;
 
   if (ds === "failed_attempt") return "failed_attempt";
-  if ((ds === "in_transit" || ds === "out_for_delivery" || ds === "with_courier") && days >= 3) {
+  if (
+    (ds === "shipped" || ds === "in_transit" || ds === "out_for_delivery" || ds === "with_courier") &&
+    days >= 3
+  ) {
     return "delayed";
   }
   if (
