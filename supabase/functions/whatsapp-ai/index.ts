@@ -70,8 +70,10 @@ function buildSystem(settings: any, memory: any | null, productCtx: string) {
   const tone = settings.brand_tone || "friendly";
   const lines = settings.response_lines ?? 3;
   let sys = `${settings.system_prompt}\n\nBrand tone: ${tone}.\nLanguage rules: ${settings.language_rules}\nProduct context: ${settings.product_context}\n\nKeep replies to about ${lines} short line(s). Do not invent prices or stock. Be concise.`;
+  // CRITICAL language mirroring rule — overrides any conflicting setting
+  sys += `\n\nCRITICAL LANGUAGE RULE (highest priority, overrides everything else):\n- Detect the language/script of the CUSTOMER'S MOST RECENT message and reply in EXACTLY that same language and script.\n- If the customer writes in English (Latin script, English words) → reply in English ONLY.\n- If the customer writes in Urdu (Arabic script) → reply in Urdu (Arabic script).\n- If the customer writes in Roman Urdu (Urdu words in Latin letters like "kya hai", "bhej do") → reply in Roman Urdu (Latin letters).\n- NEVER switch the customer's language. NEVER reply in Urdu script if the customer wrote in English. NEVER reply in English if the customer wrote in Urdu script.\n- Ignore the stored "Customer memory > Language" field if it conflicts with the language of the latest message — the latest message wins.`;
   if (productCtx) sys += `\n\nAvailable products:\n${productCtx}`;
-  if (memory?.summary) sys += `\n\nCustomer memory:\n${memory.summary}\nLanguage: ${memory.language ?? "unknown"}\nIntent: ${memory.intent ?? "unknown"}\nSentiment: ${memory.sentiment ?? "unknown"}\nLead score: ${memory.lead_score ?? 0}`;
+  if (memory?.summary) sys += `\n\nCustomer memory (for context only, do NOT use for language choice):\n${memory.summary}\nPrevious language seen: ${memory.language ?? "unknown"}\nIntent: ${memory.intent ?? "unknown"}\nSentiment: ${memory.sentiment ?? "unknown"}\nLead score: ${memory.lead_score ?? 0}`;
   return sys;
 }
 
