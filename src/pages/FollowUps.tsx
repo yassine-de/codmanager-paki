@@ -687,11 +687,11 @@ export default function FollowUps() {
                   filtered.map((row) => {
                     const segMeta = row.segment ? segmentMeta[row.segment] : null;
                     return (
-                      <TableRow key={row.order_id} className="hover:bg-muted/40">
+                      <TableRow key={row.order_id} className="hover:bg-muted/40 h-9">
                         {visibleColumns.map((col) => (
                           <TableCell
                             key={col.key}
-                            className={cellClassFor(col.key)}
+                            className={`py-1 ${cellClassFor(col.key)}`}
                           >
                             {renderCell(col.key, row, segMeta, savingId, handleStatusChange, handleNoteSave, navigate, setHistoryOrder, setTrackingTarget, openNoteDialog)}
                           </TableCell>
