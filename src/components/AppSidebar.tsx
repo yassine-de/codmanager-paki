@@ -24,6 +24,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number, agentNewOrders: number, pendingAdjustments: number) => [
   { title: "dashboard", url: "/", icon: LayoutDashboard },
   { title: "orders", url: "/orders", icon: ShoppingCart, badge: orderCount, permission: "access_to_orders", sellerVisible: true },
+  { title: "Follow Ups", url: "/follow-ups", icon: ClipboardCheck, adminOnly: true },
   { title: "products", url: "/products", icon: BoxIcon, permission: "access_to_products", sellerVisible: true, badge: productUnseen > 0 ? productUnseen : undefined },
   
   { title: "sourcing", url: "/sourcing", icon: Package2, permission: "access_to_sourcing", badge: adminSourcingUnseen > 0 ? adminSourcingUnseen : undefined },
@@ -31,7 +32,6 @@ const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUn
   { title: "Alerts", url: "/alerts", icon: Megaphone, permission: "access_to_settings" },
   { title: "invoices", url: "/invoices", icon: FileText, permission: "access_to_settings", sellerVisible: true },
   { title: "Adjustments", url: "/adjustments", icon: ArrowUpDown, permission: "access_to_settings", badge: pendingAdjustments > 0 ? pendingAdjustments : undefined },
-  { title: "Follow Ups", url: "/follow-ups", icon: ClipboardCheck, adminOnly: true },
   { title: "sourcing", url: "/seller-sourcing", icon: Package2, sellerOnly: true, badge: sourcingUnseen > 0 ? sourcingUnseen : undefined },
   { title: "sheets", url: "/sheets", icon: FileSpreadsheet, sellerOnly: true },
   { title: "simulation", url: "/simulation", icon: Calculator, sellerOnly: true },
