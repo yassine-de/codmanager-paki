@@ -551,30 +551,6 @@ export default function FollowUps() {
               </SelectContent>
             </Select>
 
-            <Select value={filterSeller} onValueChange={setFilterSeller}>
-              <SelectTrigger className="h-9 text-xs min-w-0">
-                <SelectValue placeholder="Seller" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sellers</SelectItem>
-                {filterOptions.sellers.map(([id, name]) => (
-                  <SelectItem key={id} value={id}>{name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={filterAgent} onValueChange={setFilterAgent}>
-              <SelectTrigger className="h-9 text-xs min-w-0">
-                <SelectValue placeholder="Agent" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Agents</SelectItem>
-                {filterOptions.agents.map(([id, name]) => (
-                  <SelectItem key={id} value={id}>{name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
             <Select value={filterFollowUp} onValueChange={setFilterFollowUp}>
               <SelectTrigger className="h-9 text-xs min-w-0">
                 <SelectValue placeholder="Follow Up Status" />
