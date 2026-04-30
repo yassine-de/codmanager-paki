@@ -779,16 +779,17 @@ async function applyButtonAction(opts: {
     if (!addr) return false;
     if (!city || String(city).trim().length === 0) return false;
     const raw = String(addr).trim();
-    if (raw.length < 10) return false;
+    if (raw.length < 15) return false;
     const lower = raw.toLowerCase();
     const fakePattern = /\b(test|testing|tester|fake|dummy|sample|example|n\/?a|none|null|xxx+|asdf+|qwerty|aaaa+|placeholder|abc+|address here|adress|same|here)\b/i;
     if (fakePattern.test(lower)) return false;
     const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
-    if (tokens.length < 2) return false;
+    if (tokens.length < 3) return false;
     const hasNumber = /\d/.test(raw);
-    const streetKeyword = /\b(house|flat|plot|street|road|st\.?|rd\.?|lane|block|sector|phase|town|colony|mohalla|near|opposite|main|gali|chowk|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر)\b/i;
-    if (!hasNumber && !streetKeyword.test(lower)) return false;
-    return true;
+    const preciseKeyword = /\b(house|flat|plot|street|road|st\.?|rd\.?|lane|block|sector|phase|town|colony|mohalla|gali|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر)\b/i;
+    if (hasNumber) return true;
+    if (preciseKeyword.test(lower)) return true;
+    return false;
   };
 
   // Address-gating logic for confirm-buttons:
