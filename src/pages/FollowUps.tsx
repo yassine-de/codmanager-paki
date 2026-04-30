@@ -723,6 +723,38 @@ export default function FollowUps() {
             onClose={() => setTrackingTarget(null)}
           />
         )}
+
+        {/* Note Dialog */}
+        <Dialog open={!!noteDialog} onOpenChange={(o) => !o && setNoteDialog(null)}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="text-sm flex items-center gap-2">
+                <StickyNote className="w-4 h-4 text-[hsl(45,90%,55%)]" />
+                {noteDialog?.fromStatusChange ? "Add a Follow-Up Note" : "Follow-Up Note"}
+              </DialogTitle>
+            </DialogHeader>
+            <Textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Write your note here…"
+              className="min-h-[100px] text-sm"
+              autoFocus
+            />
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" size="sm" onClick={() => setNoteDialog(null)}>
+                {noteDialog?.fromStatusChange ? "Skip" : "Cancel"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (noteDialog) handleNoteSave(noteDialog.orderId, noteText.trim());
+                }}
+              >
+                Save Note
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </TooltipProvider>
   );
