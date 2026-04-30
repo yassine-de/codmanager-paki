@@ -219,14 +219,30 @@ export function AppSidebar() {
     refetchInterval: 10000,
   });
 
-  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments);
+  const { data: followUpPending = 0 } = useQuery({
+    queryKey: ["follow-up-pending-count", authUser?.id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .eq("follow_up_assigned_to", authUser!.id);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: isFollowUp && !!authUser,
+    refetchInterval: 15000,
+  });
+
+  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments, followUpPending);
   const whatsappSubItems = getWhatsappSubItems(whatsappInboxUnread);
 
   const visibleItems = navItems.filter((item: any) => {
+    if (item.followUpOnly) return isFollowUp;
     if (item.agentOnly) return isAgent;
     if (item.sellerOnly) return isSeller;
     if (item.adminOnly) return isAdmin;
     if (item.adminAgentOnly) return isAdmin || isAgent;
+    if (isFollowUp) return false;
     if (isAgent) return false;
     if (isSeller) return !item.permission || item.sellerVisible;
     return !item.permission || hasPermission(item.permission);
