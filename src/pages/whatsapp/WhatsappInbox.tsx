@@ -2016,7 +2016,13 @@ export default function WhatsappInbox() {
       />
 
       {/* Customer & Order Info Dialog */}
-      <Dialog open={orderInfoOpen} onOpenChange={setOrderInfoOpen}>
+      <Dialog open={orderInfoOpen} onOpenChange={(o) => {
+        setOrderInfoOpen(o);
+        if (o && order) {
+          setEditConfStatus(order.confirmation_status || "new");
+          setEditDelStatus(order.delivery_status || "pending");
+        }
+      }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
