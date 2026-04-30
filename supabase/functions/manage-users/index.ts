@@ -80,6 +80,7 @@ function getRolePermissions(role: string, allPermissionKeys: string[], customPer
   if (role === "admin") return allPermissionKeys;
   if (role === "seller") return sellerPermissions;
   if (role === "agent") return agentPermissions;
+  if (role === "follow_up") return [];
   return customPermissions || [];
 }
 
