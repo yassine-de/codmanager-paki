@@ -841,7 +841,7 @@ function renderCell(
       else if (s === "ready for return" || s.startsWith("return")) cls = "bg-[hsl(340,65%,52%)]/12 text-[hsl(340,65%,52%)] border-[hsl(340,65%,52%)]/20";
       else if (s === "new") cls = "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20";
       return (
-        <span className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none whitespace-nowrap ${cls}`}>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium leading-none whitespace-nowrap ${cls}`}>
           {label}
         </span>
       );
