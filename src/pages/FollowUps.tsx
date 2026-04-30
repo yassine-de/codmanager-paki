@@ -713,6 +713,8 @@ function cellClassFor(key: ColumnKey): string {
     case "customer": return "text-xs";
     case "phone": return "text-xs tabular-nums text-muted-foreground";
     case "city": return "text-xs text-muted-foreground";
+    case "product": return "text-xs max-w-[160px] truncate";
+    case "price": return "text-xs tabular-nums font-medium";
     case "days": return "text-center text-xs tabular-nums font-medium";
     case "created":
     case "updated": return "text-[11px] text-muted-foreground tabular-nums";
@@ -750,6 +752,8 @@ function renderCell(
     case "customer": return row.customer_name || "—";
     case "phone": return row.customer_phone || "—";
     case "city": return row.customer_city || "—";
+    case "product": return row.product_name || "—";
+    case "price": return row.total_amount != null ? `${Number(row.total_amount).toLocaleString()} PKR` : "—";
     case "delivery": return <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />;
     case "days": return row.days_since_shipped ?? "—";
     case "segment": {
