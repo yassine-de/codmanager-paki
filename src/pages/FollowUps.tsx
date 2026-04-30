@@ -473,7 +473,7 @@ export default function FollowUps() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-4 max-w-[1500px] animate-fade-in">
+      <div className="space-y-5 max-w-[1500px] animate-fade-in">
         {/* Header */}
         <div>
           <div className="flex items-center gap-2">
@@ -648,7 +648,7 @@ export default function FollowUps() {
         {/* Table */}
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <Table className="w-full" style={{ minWidth: "900px" }}>
+            <Table className="w-full" style={{ minWidth: "1100px" }}>
               <TableHeader>
                 <TableRow>
                   {visibleColumns.map((col) => {
@@ -658,7 +658,7 @@ export default function FollowUps() {
                       <TableHead
                         key={col.key}
                         style={{ width: columnWidths[col.key] }}
-                        className={`text-[10px] uppercase tracking-wider px-1.5 ${isCenter ? "text-center" : ""}`}
+                        className={`text-xs font-medium uppercase tracking-wider text-muted-foreground px-3 py-3 ${isCenter ? "text-center" : ""}`}
                       >
                         {meta.label}
                       </TableHead>
@@ -687,11 +687,11 @@ export default function FollowUps() {
                   filtered.map((row) => {
                     const segMeta = row.segment ? segmentMeta[row.segment] : null;
                     return (
-                      <TableRow key={row.order_id} className="hover:bg-muted/40 h-9">
+                      <TableRow key={row.order_id} className="hover:bg-muted/40">
                         {visibleColumns.map((col) => (
                           <TableCell
                             key={col.key}
-                            className={`py-1 ${cellClassFor(col.key)}`}
+                            className={`py-3 ${cellClassFor(col.key)}`}
                           >
                             {renderCell(col.key, row, segMeta, savingId, handleStatusChange, handleNoteSave, navigate, setHistoryOrder, setTrackingTarget, openNoteDialog)}
                           </TableCell>
@@ -761,36 +761,36 @@ export default function FollowUps() {
 }
 
 const columnWidths: Record<ColumnKey, string> = {
-  order_id: "72px",
-  orio_id: "68px",
-  customer: "100px",
-  phone: "100px",
-  city: "80px",
-  product: "120px",
-  price: "70px",
-  delivery: "82px",
-  segment: "90px",
-  days: "40px",
-  follow_up: "95px",
-  note: "42px",
-  created: "78px",
-  updated: "78px",
-  actions: "52px",
+  order_id: "100px",
+  orio_id: "90px",
+  customer: "150px",
+  phone: "120px",
+  city: "100px",
+  product: "160px",
+  price: "100px",
+  delivery: "110px",
+  segment: "110px",
+  days: "50px",
+  follow_up: "110px",
+  note: "50px",
+  created: "95px",
+  updated: "95px",
+  actions: "70px",
 };
 
 function cellClassFor(key: ColumnKey): string {
   switch (key) {
-    case "order_id": return "font-mono text-[11px] font-medium px-1.5 truncate";
-    case "orio_id": return "font-mono text-[11px] px-1.5 truncate";
-    case "customer": return "text-[11px] px-1.5 truncate";
-    case "phone": return "text-[11px] tabular-nums text-muted-foreground px-1.5 truncate";
-    case "city": return "text-[11px] text-muted-foreground px-1.5 truncate";
-    case "product": return "text-[11px] px-1.5 truncate";
-    case "price": return "text-[11px] tabular-nums font-medium px-1.5";
-    case "days": return "text-center text-[11px] tabular-nums font-medium px-1";
+    case "order_id": return "font-mono text-xs font-medium px-3 truncate";
+    case "orio_id": return "font-mono text-xs px-3 truncate";
+    case "customer": return "text-sm font-medium px-3 truncate";
+    case "phone": return "text-xs tabular-nums text-muted-foreground px-3 truncate";
+    case "city": return "text-sm text-muted-foreground px-3 truncate";
+    case "product": return "text-sm px-3 truncate";
+    case "price": return "text-sm tabular-nums font-semibold px-3";
+    case "days": return "text-center text-xs tabular-nums font-medium px-2";
     case "created":
-    case "updated": return "text-[10px] text-muted-foreground tabular-nums px-1.5";
-    default: return "px-1.5";
+    case "updated": return "text-xs text-muted-foreground tabular-nums px-3";
+    default: return "px-3";
   }
 }
 
@@ -822,11 +822,24 @@ function renderCell(
       ) : (
         <span className="text-muted-foreground">—</span>
       );
-    case "customer": return row.customer_name || "—";
+    case "customer": {
+      const name = row.customer_name || "—";
+      const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("");
+      return (
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="shrink-0 w-7 h-7 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground">{initials}</span>
+          <span className="truncate">{name}</span>
+        </div>
+      );
+    }
     case "phone": return row.customer_phone || "—";
-    case "city": return row.customer_city || "—";
+    case "city": return row.customer_city ? (
+      <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />{row.customer_city}</span>
+    ) : "—";
     case "product": return row.product_name || "—";
-    case "price": return row.total_amount != null ? `${Number(row.total_amount).toLocaleString()} PKR` : "—";
+    case "price": return row.total_amount != null ? (
+      <span><span className="text-foreground">{Number(row.total_amount).toLocaleString()}</span> <span className="text-muted-foreground text-xs">PKR</span></span>
+    ) : "—";
     case "delivery": return <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />;
     case "days": return row.days_since_shipped ?? "—";
     case "segment": {
@@ -841,7 +854,7 @@ function renderCell(
       else if (s === "ready for return" || s.startsWith("return")) cls = "bg-[hsl(340,65%,52%)]/12 text-[hsl(340,65%,52%)] border-[hsl(340,65%,52%)]/20";
       else if (s === "new") cls = "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20";
       return (
-        <span className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium leading-none whitespace-nowrap ${cls}`}>
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium leading-none whitespace-nowrap ${cls}`}>
           {label}
         </span>
       );
@@ -853,7 +866,7 @@ function renderCell(
           onValueChange={(v) => handleStatusChange(row.order_id, v)}
           disabled={savingId === row.order_id}
         >
-          <SelectTrigger className={`h-6 text-[10px] border rounded-full px-1.5 py-0 w-fit min-w-0 gap-0.5 [&>span]:truncate ${followUpStatusStyle[row.follow_up_status] ?? ""}`}>
+          <SelectTrigger className={`h-7 text-xs border rounded-full px-2.5 py-0 w-fit min-w-0 gap-1 [&>span]:truncate ${followUpStatusStyle[row.follow_up_status] ?? ""}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -893,14 +906,14 @@ function renderCell(
     case "updated": return format(new Date(row.order_updated_at), "dd MMM HH:mm");
     case "actions":
       return (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 onClick={() => navigate(`/orders/${row.order_id}`)}
-                className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-[hsl(30,90%,55%)]/10 text-[hsl(30,90%,55%)] hover:bg-[hsl(30,90%,55%)]/20 transition-colors active:scale-95"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[hsl(30,90%,55%)]/10 text-[hsl(30,90%,55%)] hover:bg-[hsl(30,90%,55%)]/20 transition-colors active:scale-95"
               >
-                <Pencil className="w-3 h-3" />
+                <Pencil className="w-3.5 h-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top"><p className="text-xs">Edit Order</p></TooltipContent>
@@ -909,9 +922,9 @@ function renderCell(
             <TooltipTrigger asChild>
               <button
                 onClick={() => setHistoryOrder({ id: row.order_id, customer: row.customer_name })}
-                className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-[hsl(210,60%,52%)]/10 text-[hsl(210,60%,52%)] hover:bg-[hsl(210,60%,52%)]/20 transition-colors active:scale-95"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[hsl(210,60%,52%)]/10 text-[hsl(210,60%,52%)] hover:bg-[hsl(210,60%,52%)]/20 transition-colors active:scale-95"
               >
-                <History className="w-3 h-3" />
+                <History className="w-3.5 h-3.5" />
               </button>
             </TooltipTrigger>
             <TooltipContent side="top"><p className="text-xs">Order History</p></TooltipContent>
