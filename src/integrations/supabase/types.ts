@@ -2251,6 +2251,8 @@ export type Database = {
           customer_phone: string
           days_since_shipped: number
           delivery_status: string
+          follow_up_assigned_to: string
+          follow_up_note: string
           follow_up_status: string
           follow_up_updated_at: string
           follow_up_updated_by: string
