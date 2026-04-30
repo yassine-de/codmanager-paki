@@ -695,7 +695,7 @@ export default function FollowUps() {
                             key={col.key}
                             className={cellClassFor(col.key)}
                           >
-                            {renderCell(col.key, row, segMeta, savingId, handleStatusChange, navigate, setHistoryOrder, setTrackingTarget)}
+                            {renderCell(col.key, row, segMeta, savingId, handleStatusChange, handleNoteSave, navigate, setHistoryOrder, setTrackingTarget)}
                           </TableCell>
                         ))}
                       </TableRow>
