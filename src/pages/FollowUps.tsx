@@ -768,8 +768,8 @@ const columnWidths: Record<ColumnKey, string> = {
   city: "90px",
   product: "140px",
   price: "95px",
-  delivery: "140px",
-  segment: "155px",
+  delivery: "155px",
+  segment: "180px",
   days: "50px",
   follow_up: "130px",
   note: "50px",
@@ -868,7 +868,7 @@ function renderCell(
         <TooltipProvider delayDuration={200}>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className={`block rounded-full border px-2.5 py-0.5 text-xs font-medium leading-5 truncate max-w-full ${cls}`}>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium leading-5 whitespace-nowrap ${cls}`}>
                 {label}
               </span>
             </TooltipTrigger>
