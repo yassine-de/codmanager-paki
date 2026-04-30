@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number, agentNewOrders: number, pendingAdjustments: number) => [
+const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number, agentNewOrders: number, pendingAdjustments: number, followUpPending: number) => [
   { title: "dashboard", url: "/", icon: LayoutDashboard },
   { title: "orders", url: "/orders", icon: ShoppingCart, badge: orderCount, permission: "access_to_orders", sellerVisible: true },
   { title: "Follow Ups", url: "/follow-ups", icon: ClipboardCheck, adminOnly: true },
@@ -39,6 +39,9 @@ const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUn
   { title: "My Dashboard", url: "/agent-dashboard", icon: LayoutDashboard, agentOnly: true },
   { title: "Process Orders", url: "/agent-orders", icon: Play, agentOnly: true, badge: agentNewOrders > 0 ? agentNewOrders : undefined },
   { title: "Confirmed Orders", url: "/agent-confirmed", icon: ListChecks, agentOnly: true },
+  { title: "Dashboard", url: "/follow-up/dashboard", icon: LayoutDashboard, followUpOnly: true },
+  { title: "Follow Ups", url: "/follow-up/queue", icon: ClipboardCheck, followUpOnly: true, badge: followUpPending > 0 ? followUpPending : undefined },
+  { title: "Control", url: "/follow-up/control", icon: ListChecks, followUpOnly: true },
 ];
 
 const analyticsSubItems = [
@@ -76,6 +79,7 @@ export function AppSidebar() {
   const { t } = useLanguage();
   const isSeller = authUser?.role === "seller";
   const isAgent = authUser?.role === "agent";
+  const isFollowUp = authUser?.role === "follow_up";
 
   const { data: orderCount = 0 } = useQuery({
     queryKey: ["sidebar-order-count"],
@@ -215,14 +219,30 @@ export function AppSidebar() {
     refetchInterval: 10000,
   });
 
-  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments);
+  const { data: followUpPending = 0 } = useQuery({
+    queryKey: ["follow-up-pending-count", authUser?.id],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .eq("follow_up_assigned_to", authUser!.id);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: isFollowUp && !!authUser,
+    refetchInterval: 15000,
+  });
+
+  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments, followUpPending);
   const whatsappSubItems = getWhatsappSubItems(whatsappInboxUnread);
 
   const visibleItems = navItems.filter((item: any) => {
+    if (item.followUpOnly) return isFollowUp;
     if (item.agentOnly) return isAgent;
     if (item.sellerOnly) return isSeller;
     if (item.adminOnly) return isAdmin;
     if (item.adminAgentOnly) return isAdmin || isAgent;
+    if (isFollowUp) return false;
     if (isAgent) return false;
     if (isSeller) return !item.permission || item.sellerVisible;
     return !item.permission || hasPermission(item.permission);

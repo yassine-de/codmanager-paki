@@ -149,6 +149,48 @@ export type Database = {
         }
         Relationships: []
       }
+      follow_up_product_assignments: {
+        Row: {
+          created_at: string
+          follow_up_user_id: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          created_at?: string
+          follow_up_user_id: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          created_at?: string
+          follow_up_user_id?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: []
+      }
+      follow_up_seller_assignments: {
+        Row: {
+          created_at: string
+          follow_up_user_id: string
+          id: string
+          seller_id: string
+        }
+        Insert: {
+          created_at?: string
+          follow_up_user_id: string
+          id?: string
+          seller_id: string
+        }
+        Update: {
+          created_at?: string
+          follow_up_user_id?: string
+          id?: string
+          seller_id?: string
+        }
+        Relationships: []
+      }
       integration_errors: {
         Row: {
           created_at: string
@@ -529,6 +571,9 @@ export type Database = {
           customer_phone: string
           delivered_at: string | null
           delivery_status: string | null
+          follow_up_assigned_at: string | null
+          follow_up_assigned_to: string | null
+          follow_up_note: string | null
           fragile: boolean | null
           id: string
           invoice_id: string | null
@@ -587,6 +632,9 @@ export type Database = {
           customer_phone?: string
           delivered_at?: string | null
           delivery_status?: string | null
+          follow_up_assigned_at?: string | null
+          follow_up_assigned_to?: string | null
+          follow_up_note?: string | null
           fragile?: boolean | null
           id?: string
           invoice_id?: string | null
@@ -645,6 +693,9 @@ export type Database = {
           customer_phone?: string
           delivered_at?: string | null
           delivery_status?: string | null
+          follow_up_assigned_at?: string | null
+          follow_up_assigned_to?: string | null
+          follow_up_note?: string | null
           fragile?: boolean | null
           id?: string
           invoice_id?: string | null
@@ -2120,6 +2171,9 @@ export type Database = {
           customer_phone: string
           delivered_at: string | null
           delivery_status: string | null
+          follow_up_assigned_at: string | null
+          follow_up_assigned_to: string | null
+          follow_up_note: string | null
           fragile: boolean | null
           id: string
           invoice_id: string | null
@@ -2197,6 +2251,8 @@ export type Database = {
           customer_phone: string
           days_since_shipped: number
           delivery_status: string
+          follow_up_assigned_to: string
+          follow_up_note: string
           follow_up_status: string
           follow_up_updated_at: string
           follow_up_updated_by: string
@@ -2246,7 +2302,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "seller" | "agent" | "custom"
+      app_role: "admin" | "seller" | "agent" | "custom" | "follow_up"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2374,7 +2430,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "seller", "agent", "custom"],
+      app_role: ["admin", "seller", "agent", "custom", "follow_up"],
     },
   },
 } as const

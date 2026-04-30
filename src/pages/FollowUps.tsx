@@ -129,6 +129,8 @@ interface FollowUpRow {
   seller_name: string | null;
   agent_id: string | null;
   agent_name: string | null;
+  follow_up_assigned_to: string | null;
+  follow_up_note: string | null;
 }
 
 function computeSegment(row: FollowUpRow): "failed_attempt" | "delayed" | "on_going" | null {
@@ -205,6 +207,8 @@ type ColumnKey =
   | "days"
   | "segment"
   | "follow_up"
+  | "note"
+  | "assigned_to"
   | "created"
   | "updated"
   | "actions";
@@ -221,6 +225,8 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "days", label: "Days" },
   { key: "segment", label: "Segment" },
   { key: "follow_up", label: "Follow Up" },
+  { key: "note", label: "FU Note" },
+  { key: "assigned_to", label: "FU Agent" },
   { key: "created", label: "Created" },
   { key: "updated", label: "Updated" },
   { key: "actions", label: "Actions" },
@@ -280,7 +286,7 @@ export default function FollowUps() {
       if (error) throw error;
       return (data ?? []) as FollowUpRow[];
     },
-    enabled: !!authUser && (authUser.role === "admin" || authUser.role === "agent"),
+    enabled: !!authUser && (authUser.role === "admin" || authUser.role === "agent" || authUser.role === "follow_up"),
     refetchInterval: 30000,
   });
 
@@ -422,7 +428,22 @@ export default function FollowUps() {
     }
   }
 
-  if (!authLoading && authUser && authUser.role !== "admin" && authUser.role !== "agent") {
+  async function handleNoteSave(orderId: string, note: string) {
+    if (!authUser) return;
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ follow_up_note: note })
+        .eq("order_id", orderId);
+      if (error) throw error;
+      toast.success("Note saved");
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save note");
+    }
+  }
+
+  if (!authLoading && authUser && authUser.role !== "admin" && authUser.role !== "agent" && authUser.role !== "follow_up") {
     return <Navigate to="/" replace />;
   }
 
@@ -674,7 +695,7 @@ export default function FollowUps() {
                             key={col.key}
                             className={cellClassFor(col.key)}
                           >
-                            {renderCell(col.key, row, segMeta, savingId, handleStatusChange, navigate, setHistoryOrder, setTrackingTarget)}
+                            {renderCell(col.key, row, segMeta, savingId, handleStatusChange, handleNoteSave, navigate, setHistoryOrder, setTrackingTarget)}
                           </TableCell>
                         ))}
                       </TableRow>
@@ -731,6 +752,7 @@ function renderCell(
   segMeta: (typeof segmentMeta)[keyof typeof segmentMeta] | null,
   savingId: string | null,
   handleStatusChange: (id: string, status: string) => void,
+  handleNoteSave: (id: string, note: string) => void,
   navigate: (to: string) => void,
   setHistoryOrder: (v: { id: string; customer: string } | null) => void,
   setTrackingTarget: (v: { orioId: number; sellerId: string } | null) => void,
@@ -794,6 +816,25 @@ function renderCell(
             ))}
           </SelectContent>
         </Select>
+      );
+    case "note":
+      return (
+        <input
+          type="text"
+          defaultValue={row.follow_up_note ?? ""}
+          placeholder="Add note…"
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            if (v !== (row.follow_up_note ?? "")) handleNoteSave(row.order_id, v);
+          }}
+          className="h-7 text-xs px-2 rounded-md border border-input bg-background w-full min-w-[140px] focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+      );
+    case "assigned_to":
+      return row.follow_up_assigned_to ? (
+        <span className="text-[11px] font-mono text-muted-foreground">{row.follow_up_assigned_to.slice(0, 8)}</span>
+      ) : (
+        <span className="text-muted-foreground text-xs">Unassigned</span>
       );
     case "created": return format(new Date(row.order_created_at), "dd MMM HH:mm");
     case "updated": return format(new Date(row.order_updated_at), "dd MMM HH:mm");

@@ -37,6 +37,8 @@ import Alerts from "./pages/Alerts";
 import Adjustments from "./pages/Adjustments";
 import SystemHealth from "./pages/SystemHealth";
 import FollowUps from "./pages/FollowUps";
+import FollowUpDashboard from "./pages/FollowUpDashboard";
+import FollowUpControl from "./pages/FollowUpControl";
 import WhatsappLayout from "./pages/whatsapp/WhatsappLayout";
 import WhatsappOverview from "./pages/whatsapp/WhatsappOverview";
 import WhatsappInbox from "./pages/whatsapp/WhatsappInbox";
@@ -170,6 +172,9 @@ function AppRoutes() {
         <Route path="/adjustments" element={<ProtectedRoute permission="access_to_settings"><Adjustments /></ProtectedRoute>} />
         <Route path="/system-health" element={<ProtectedRoute permission="access_to_settings"><SystemHealth /></ProtectedRoute>} />
         <Route path="/follow-ups" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />
+        <Route path="/follow-up/dashboard" element={<ProtectedRoute><FollowUpDashboard /></ProtectedRoute>} />
+        <Route path="/follow-up/queue" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />
+        <Route path="/follow-up/control" element={<ProtectedRoute><FollowUpControl /></ProtectedRoute>} />
         <Route path="/whatsapp" element={<ProtectedRoute permission="access_to_settings"><WhatsappLayout /></ProtectedRoute>}>
           <Route index element={<WhatsappOverview />} />
           <Route path="inbox" element={<WhatsappInbox />} />
