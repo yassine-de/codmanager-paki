@@ -706,19 +706,37 @@ export default function FollowUps() {
   );
 }
 
+const columnWidths: Record<ColumnKey, string> = {
+  order_id: "80px",
+  orio_id: "75px",
+  customer: "110px",
+  phone: "110px",
+  city: "85px",
+  product: "130px",
+  price: "80px",
+  delivery: "90px",
+  segment: "100px",
+  days: "45px",
+  follow_up: "100px",
+  note: "130px",
+  created: "85px",
+  updated: "85px",
+  actions: "60px",
+};
+
 function cellClassFor(key: ColumnKey): string {
   switch (key) {
-    case "order_id": return "font-mono text-xs font-medium";
-    case "orio_id": return "font-mono text-xs";
-    case "customer": return "text-xs";
-    case "phone": return "text-xs tabular-nums text-muted-foreground";
-    case "city": return "text-xs text-muted-foreground";
-    case "product": return "text-xs max-w-[160px] truncate";
-    case "price": return "text-xs tabular-nums font-medium";
-    case "days": return "text-center text-xs tabular-nums font-medium";
+    case "order_id": return "font-mono text-[11px] font-medium px-2 truncate";
+    case "orio_id": return "font-mono text-[11px] px-2 truncate";
+    case "customer": return "text-[11px] px-2 truncate";
+    case "phone": return "text-[11px] tabular-nums text-muted-foreground px-2 truncate";
+    case "city": return "text-[11px] text-muted-foreground px-2 truncate";
+    case "product": return "text-[11px] px-2 truncate";
+    case "price": return "text-[11px] tabular-nums font-medium px-2";
+    case "days": return "text-center text-[11px] tabular-nums font-medium px-2";
     case "created":
-    case "updated": return "text-[11px] text-muted-foreground tabular-nums";
-    default: return "";
+    case "updated": return "text-[10px] text-muted-foreground tabular-nums px-2";
+    default: return "px-2";
   }
 }
 
