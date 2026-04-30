@@ -473,7 +473,7 @@ export default function FollowUps() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-6 max-w-[1500px] animate-fade-in">
+      <div className="space-y-4 max-w-[1500px] animate-fade-in">
         {/* Header */}
         <div>
           <div className="flex items-center gap-2">
