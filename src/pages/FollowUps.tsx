@@ -761,21 +761,21 @@ export default function FollowUps() {
 }
 
 const columnWidths: Record<ColumnKey, string> = {
-  order_id: "80px",
-  orio_id: "75px",
-  customer: "110px",
-  phone: "110px",
-  city: "85px",
-  product: "130px",
-  price: "80px",
-  delivery: "90px",
-  segment: "100px",
-  days: "45px",
-  follow_up: "100px",
-  note: "50px",
-  created: "85px",
-  updated: "85px",
-  actions: "60px",
+  order_id: "72px",
+  orio_id: "68px",
+  customer: "100px",
+  phone: "100px",
+  city: "80px",
+  product: "120px",
+  price: "70px",
+  delivery: "82px",
+  segment: "90px",
+  days: "40px",
+  follow_up: "95px",
+  note: "42px",
+  created: "78px",
+  updated: "78px",
+  actions: "52px",
 };
 
 function cellClassFor(key: ColumnKey): string {
