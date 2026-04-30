@@ -422,7 +422,7 @@ export default function FollowUps() {
     }
   }
 
-  if (!authLoading && authUser && authUser.role !== "admin" && authUser.role !== "agent") {
+  if (!authLoading && authUser && authUser.role !== "admin" && authUser.role !== "agent" && authUser.role !== "follow_up") {
     return <Navigate to="/" replace />;
   }
 
