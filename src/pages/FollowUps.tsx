@@ -822,11 +822,24 @@ function renderCell(
       ) : (
         <span className="text-muted-foreground">—</span>
       );
-    case "customer": return row.customer_name || "—";
+    case "customer": {
+      const name = row.customer_name || "—";
+      const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("");
+      return (
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="shrink-0 w-7 h-7 rounded-full bg-muted flex items-center justify-center text-[10px] font-semibold text-muted-foreground">{initials}</span>
+          <span className="truncate">{name}</span>
+        </div>
+      );
+    }
     case "phone": return row.customer_phone || "—";
-    case "city": return row.customer_city || "—";
+    case "city": return row.customer_city ? (
+      <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />{row.customer_city}</span>
+    ) : "—";
     case "product": return row.product_name || "—";
-    case "price": return row.total_amount != null ? `${Number(row.total_amount).toLocaleString()} PKR` : "—";
+    case "price": return row.total_amount != null ? (
+      <span><span className="text-foreground">{Number(row.total_amount).toLocaleString()}</span> <span className="text-muted-foreground text-xs">PKR</span></span>
+    ) : "—";
     case "delivery": return <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />;
     case "days": return row.days_since_shipped ?? "—";
     case "segment": {
