@@ -2261,10 +2261,12 @@ export type Database = {
           order_updated_at: string
           orio_consignment_no: string
           orio_order_id: number
+          product_name: string
           seller_id: string
           seller_name: string
           shipped_at: string
           shipping_status: string
+          total_amount: number
         }[]
       }
       get_invoice_summary: { Args: { p_invoice_id: string }; Returns: Json }
