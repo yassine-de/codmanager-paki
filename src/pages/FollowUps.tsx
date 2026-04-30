@@ -780,17 +780,17 @@ const columnWidths: Record<ColumnKey, string> = {
 
 function cellClassFor(key: ColumnKey): string {
   switch (key) {
-    case "order_id": return "font-mono text-[11px] font-medium px-1.5 truncate";
-    case "orio_id": return "font-mono text-[11px] px-1.5 truncate";
-    case "customer": return "text-[11px] px-1.5 truncate";
-    case "phone": return "text-[11px] tabular-nums text-muted-foreground px-1.5 truncate";
-    case "city": return "text-[11px] text-muted-foreground px-1.5 truncate";
-    case "product": return "text-[11px] px-1.5 truncate";
-    case "price": return "text-[11px] tabular-nums font-medium px-1.5";
-    case "days": return "text-center text-[11px] tabular-nums font-medium px-1";
+    case "order_id": return "font-mono text-xs font-medium px-3 truncate";
+    case "orio_id": return "font-mono text-xs px-3 truncate";
+    case "customer": return "text-sm font-medium px-3 truncate";
+    case "phone": return "text-xs tabular-nums text-muted-foreground px-3 truncate";
+    case "city": return "text-sm text-muted-foreground px-3 truncate";
+    case "product": return "text-sm px-3 truncate";
+    case "price": return "text-sm tabular-nums font-semibold px-3";
+    case "days": return "text-center text-xs tabular-nums font-medium px-2";
     case "created":
-    case "updated": return "text-[10px] text-muted-foreground tabular-nums px-1.5";
-    default: return "px-1.5";
+    case "updated": return "text-xs text-muted-foreground tabular-nums px-3";
+    default: return "px-3";
   }
 }
 
