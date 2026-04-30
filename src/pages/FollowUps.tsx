@@ -771,6 +771,7 @@ function renderCell(
   navigate: (to: string) => void,
   setHistoryOrder: (v: { id: string; customer: string } | null) => void,
   setTrackingTarget: (v: { orioId: number; sellerId: string } | null) => void,
+  openNoteDialog: (orderId: string, currentNote: string) => void,
 ) {
   switch (key) {
     case "order_id": return row.order_id;
