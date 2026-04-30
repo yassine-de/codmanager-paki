@@ -37,6 +37,8 @@ import Alerts from "./pages/Alerts";
 import Adjustments from "./pages/Adjustments";
 import SystemHealth from "./pages/SystemHealth";
 import FollowUps from "./pages/FollowUps";
+import FollowUpDashboard from "./pages/FollowUpDashboard";
+import FollowUpControl from "./pages/FollowUpControl";
 import WhatsappLayout from "./pages/whatsapp/WhatsappLayout";
 import WhatsappOverview from "./pages/whatsapp/WhatsappOverview";
 import WhatsappInbox from "./pages/whatsapp/WhatsappInbox";
