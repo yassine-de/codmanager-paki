@@ -768,10 +768,10 @@ const columnWidths: Record<ColumnKey, string> = {
   city: "90px",
   product: "140px",
   price: "95px",
-  delivery: "110px",
-  segment: "110px",
+  delivery: "140px",
+  segment: "155px",
   days: "50px",
-  follow_up: "110px",
+  follow_up: "130px",
   note: "50px",
   created: "95px",
   updated: "95px",
@@ -865,9 +865,20 @@ function renderCell(
       else if (s === "ready for return" || s.startsWith("return")) cls = "bg-[hsl(340,65%,52%)]/12 text-[hsl(340,65%,52%)] border-[hsl(340,65%,52%)]/20";
       else if (s === "new") cls = "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20";
       return (
-        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium leading-none whitespace-nowrap ${cls}`}>
-          {label}
-        </span>
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className={`block rounded-full border px-2.5 py-0.5 text-xs font-medium leading-5 truncate max-w-full ${cls}`}>
+                {label}
+              </span>
+            </TooltipTrigger>
+            {label.length > 16 && (
+              <TooltipContent side="top" className="text-xs">
+                {label}
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       );
     }
     case "follow_up":
