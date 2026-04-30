@@ -52,7 +52,16 @@ import {
   CalendarIcon,
   Eye,
   EyeOff,
+  StickyNote,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { format, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import OrderHistoryModal from "@/components/OrderHistoryModal";
