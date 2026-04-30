@@ -497,7 +497,7 @@ export default function FollowUps() {
         </div>
 
         {/* Segment cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           {(["failed_attempt", "delayed", "on_going"] as const).map((seg) => {
             const meta = segmentMeta[seg];
             const Icon = meta.icon;
@@ -506,18 +506,18 @@ export default function FollowUps() {
               <button
                 key={seg}
                 onClick={() => setSegment(active ? "all" : seg)}
-                className={`text-left rounded-xl border p-4 transition-all hover:shadow-soft ${
+                className={`text-left rounded-lg border px-3 py-2 transition-all hover:shadow-soft ${
                   active ? "ring-2 ring-primary border-primary" : "bg-card"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`p-1.5 rounded-md ${meta.chip}`}>
-                      <Icon className="h-4 w-4" />
+                  <div className="flex items-center gap-1.5">
+                    <div className={`p-1 rounded-md ${meta.chip}`}>
+                      <Icon className="h-3.5 w-3.5" />
                     </div>
-                    <span className="text-sm font-medium">{meta.label}</span>
+                    <span className="text-xs font-medium">{meta.label}</span>
                   </div>
-                  <span className="text-2xl font-bold tabular-nums">{segCounts[seg]}</span>
+                  <span className="text-lg font-bold tabular-nums">{segCounts[seg]}</span>
                 </div>
               </button>
             );
