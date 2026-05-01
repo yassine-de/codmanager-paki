@@ -1684,9 +1684,16 @@ Rules:
 - For obvious fake/test/placeholder values or single vague words, return complete=false.
 - DO NOT invent details. Only use what the customer explicitly said anywhere in the conversation (history + latest message).`;
 
+  // CRITICAL: Only feed CUSTOMER messages to the extractor. If we include
+  // assistant turns, the AI will read back the address the bot echoed (e.g.
+  // "Should we deliver to: <stored address>?") and treat it as customer-
+  // provided, then a bare "YES" reply will look like a complete address and
+  // auto-confirm the order. The customer must have ACTUALLY typed address
+  // details themselves.
+  const customerHistory = history.filter((h) => h.role === "user");
   const extractMessages = [
     { role: "system", content: extractPrompt },
-    ...history.slice(-10),
+    ...customerHistory.slice(-10),
     { role: "user", content: customerText },
   ];
 
