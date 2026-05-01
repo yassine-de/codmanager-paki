@@ -1295,30 +1295,9 @@ async function aiContinueReply(args: {
   const orderCtx = order
     ? `\n\nOrder context:\n- Order ID: ${order.order_id}\n- Customer: ${order.customer_name}\n- Product: ${order.product_name}\n- Quantity: ${order.quantity}\n- Total: ${order.total_amount} PKR\n- City: ${order.customer_city}\n- Address: ${order.customer_address ?? "(not provided)"}`
     : "";
-  // Validate that the stored address looks like a REAL, DETAILED deliverable
-  // address. The goal is NOT to require every part (house+street+area+city),
-  // but to ensure the address is detailed enough for a courier to find it AND
-  // is not obviously fake / test / placeholder data.
-  const isAddressDeliverable = (addr?: string | null): boolean => {
-    if (!addr) return false;
-    const raw = String(addr).trim();
-    if (raw.length < 15) return false;
-    const lower = raw.toLowerCase();
-    const fakePattern = /\b(test|testing|tester|fake|dummy|sample|example|n\/?a|none|null|xxx+|asdf+|qwerty|aaaa+|placeholder|abc+|address here|adress|same|here)\b/i;
-    if (fakePattern.test(lower)) return false;
-    const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
-    if (tokens.length < 3) return false;
-    const hasNumber = /\d/.test(raw);
-    const preciseKeyword = /\b(house|flat|plot|street|road|st\.?|rd\.?|lane|block|sector|phase|town|colony|mohalla|gali|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر)\b/i;
-    if (hasNumber) return true;
-    if (preciseKeyword.test(lower)) return true;
-    return false;
-  };
   const hasStoredAddress =
     !!order &&
-    isAddressDeliverable(order.customer_address) &&
-    !!order.customer_city &&
-    String(order.customer_city).trim().length > 0;
+    isAddressDeliverable(order.customer_address, order.customer_city);
   const addressRule = order && !hasStoredAddress
     ? `\n\nIMPORTANT — ADDRESS COLLECTION: The customer's delivery address is MISSING, FAKE, TEST data, or NOT detailed enough for a courier to find (current value: "${order.customer_address ?? "(none)"}", city: "${order.customer_city ?? "(none)"}").\n\nA deliverable address MUST have ENOUGH DETAIL for a courier to find the exact location. It requires:\n1) A city OR town OR tehsil OR village name (anywhere in Pakistan), AND\n2) A SPECIFIC locator — "near [landmark]" ALONE is NOT enough. The customer must provide at least ONE of:\n   - a house/flat/plot/shop/office NUMBER (e.g. "House 45", "Plot 12"), OR\n   - a specific street / lane / road / gali NAME or number (e.g. "Ajmera Road", "Street 4", "Gali 3"), OR\n   - a neighborhood / area / colony / block / sector / phase / mohalla name (e.g. "Gulshan-e-Iqbal Block 7", "DHA Phase 5", "Saddar", "Johar Town"), OR\n   - a COMBINATION of landmark + area/street (e.g. "near Allahdin Hotel, Main Bazaar Road" — NOT just "near Allahdin Hotel" alone)\n\nEXAMPLES of GOOD addresses: "House 12 Street 4 Gulshan-e-Iqbal", "Plot 7 near UBL Bank Main Road Batagram", "Mohalla Islamia Gali 2 Layyah"\nEXAMPLES of BAD addresses (REJECT): "Near Allahdin Hotel" (no street/area/number), "Chowk Fawara" (no area detail), "Lahore" (just city)\n\nRules:\n- Do NOT confirm delivery to a vague address. "Near [landmark]" without any street, area, or house number is NOT specific enough.\n- Do NOT accept just a city name with no other detail.\n- Reject "test", "fake", "same", "here" or random keyboard mashing.\n- Politely (in the customer's language) ask for the EXACT address with house/plot number, street/gali, and area/mohalla. Example: "Please share your complete address — house/plot number, street/gali, area/mohalla — so the courier can reach you easily 🏠"\n- Keep asking until you get a house number OR street name OR area/mohalla — not just a landmark.\n\nOnce the customer provides a detailed address (city + house/street/area, not just a landmark), thank them briefly and confirm the order will be delivered. The system will auto-confirm in the background.`
     : order && hasStoredAddress
