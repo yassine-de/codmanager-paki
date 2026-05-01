@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { toast } from "sonner";
+import { CitySelect } from "@/components/CitySelect";
 
 interface FailedSyncModalProps {
   open: boolean;
@@ -33,6 +34,8 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
     enabled: open,
     refetchInterval: open ? 15_000 : false,
   });
+
+  const [updatingCityId, setUpdatingCityId] = useState<string | null>(null);
 
   const handleRetry = async (orderId: string, orderDbId: string) => {
     setRetryingId(orderId);
@@ -63,9 +66,28 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
     }
   };
 
+  const handleCityChange = async (orderId: string, newCity: string) => {
+    setUpdatingCityId(orderId);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ customer_city: newCity })
+        .eq("order_id", orderId);
+      if (error) throw error;
+      toast.success(`City updated to ${newCity}`);
+      queryClient.invalidateQueries({ queryKey: ["failed-sync-orders"] });
+      // Auto-retry sync since the most common failure is invalid city
+      await handleRetry(orderId, orderId);
+    } catch (e: any) {
+      toast.error(`Update failed: ${e.message}`);
+    } finally {
+      setUpdatingCityId(null);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <AlertTriangle className="w-4 h-4 text-destructive" />
@@ -108,7 +130,13 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
                       </div>
                     </TableCell>
                     <TableCell className="text-xs">{order.customer_name}</TableCell>
-                    <TableCell className="text-xs">{order.customer_city}</TableCell>
+                    <TableCell className="text-xs" onClick={(e) => e.stopPropagation()}>
+                      <CitySelect
+                        value={order.customer_city || ""}
+                        onValueChange={(v) => handleCityChange(order.order_id, v)}
+                        triggerClassName="h-7 text-xs w-[140px] px-2"
+                      />
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">
                         {order.confirmation_status}
