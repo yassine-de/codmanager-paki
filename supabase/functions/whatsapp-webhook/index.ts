@@ -1665,6 +1665,7 @@ REJECT these as incomplete (complete=false):
 - "opposite XYZ Masjid" (landmark only, no area)
 - Just a city name (e.g. "Lahore" alone)
 - Single vague words: "home", "here", "same", "send it"
+- Affirmations / payment / generic chatter with NO address detail: "yes", "ok", "sahi", "haan", "confirm", "cash on delivery", "COD", "send karo", "deliver kar do", "bhej do", "thik hai" — these are NOT addresses, even if a previous message contained one
 - Fake / test / placeholder values
 
 ACCEPT these as complete (complete=true):
