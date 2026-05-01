@@ -2297,6 +2297,30 @@ export default function WhatsappInbox() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Image lightbox — click any image in chat to view full-size */}
+      <Dialog open={!!lightboxSrc} onOpenChange={(o) => !o && setLightboxSrc(null)}>
+        <DialogContent className="max-w-5xl p-0 bg-transparent border-0 shadow-none">
+          {lightboxSrc && (
+            <div className="flex flex-col items-center gap-3">
+              <img
+                src={lightboxSrc}
+                alt="attachment full size"
+                className="max-h-[85vh] max-w-full rounded-lg object-contain"
+              />
+              <a
+                href={lightboxSrc}
+                download
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-white/80 hover:text-white underline underline-offset-2"
+              >
+                Open in new tab
+              </a>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
