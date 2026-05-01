@@ -385,6 +385,9 @@ export default function WhatsappInbox() {
   const [orderInfoOpen, setOrderInfoOpen] = useState(false);
   const [editConfStatus, setEditConfStatus] = useState("");
   const [editDelStatus, setEditDelStatus] = useState("");
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [addressDraft, setAddressDraft] = useState("");
+  const [savingAddress, setSavingAddress] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveNote, setResolveNote] = useState("");
@@ -2114,12 +2117,71 @@ export default function WhatsappInbox() {
                     <div className="text-[11px] text-muted-foreground">Created</div>
                     <div>{order.created_at ? format(new Date(order.created_at), "dd/MM/yyyy HH:mm") : "—"}</div>
                   </div>
-                  {order.customer_address && (
-                    <div className="col-span-2">
+                  <div className="col-span-2">
+                    <div className="flex items-center justify-between mb-1">
                       <div className="text-[11px] text-muted-foreground">Address</div>
-                      <div className="text-sm">{order.customer_address}</div>
+                      {!editingAddress && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[11px]"
+                          onClick={() => {
+                            setAddressDraft(order.customer_address || "");
+                            setEditingAddress(true);
+                          }}
+                        >
+                          {order.customer_address ? "Edit" : "Add"}
+                        </Button>
+                      )}
                     </div>
-                  )}
+                    {editingAddress ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          value={addressDraft}
+                          onChange={(e) => setAddressDraft(e.target.value)}
+                          rows={3}
+                          className="text-sm resize-none"
+                          placeholder="Customer address"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs"
+                            disabled={savingAddress}
+                            onClick={async () => {
+                              setSavingAddress(true);
+                              const { error } = await supabase
+                                .from("orders")
+                                .update({ customer_address: addressDraft.trim(), updated_at: new Date().toISOString() })
+                                .eq("order_id", order.order_id);
+                              setSavingAddress(false);
+                              if (error) {
+                                toast.error("Failed to update address");
+                                return;
+                              }
+                              qc.invalidateQueries({ queryKey: ["wts-order", order.order_id] });
+                              toast.success("Address updated");
+                              setEditingAddress(false);
+                            }}
+                          >
+                            {savingAddress ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            disabled={savingAddress}
+                            onClick={() => setEditingAddress(false)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm">{order.customer_address || <span className="text-muted-foreground italic">No address</span>}</div>
+                    )}
+                  </div>
                   {order.note && (
                     <div className="col-span-2">
                       <div className="text-[11px] text-muted-foreground">Note</div>
