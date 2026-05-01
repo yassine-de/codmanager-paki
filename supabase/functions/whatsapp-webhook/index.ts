@@ -854,8 +854,8 @@ async function handleIncoming(value: any) {
           }
         } catch (e) {
           errLog("from_template trigger lookup failed", (e as Error).message);
-        }
-      }
+    }
+  }
 
 
       // Trigger when:
@@ -1322,8 +1322,9 @@ async function aiContinueReply(args: {
 
   const baseSys = aiSettings.system_prompt || "You are a helpful WhatsApp sales assistant.";
   const inspectionRule = `\n\nPARCEL INSPECTION POLICY (Pakistan COD — CRITICAL):\n- This is Cash on Delivery. The customer IS allowed to OPEN and INSPECT the parcel BEFORE paying the courier.\n- If the customer asks (in any language: "open parcel", "check before pay", "parcel khol kr dekh sakte hain", "khol ke check karna hai", "before payment open", "kya main parcel khol sakta hun", "inspect karna", "dekhna hai pehle", etc.) → reply YES, confirm clearly that they CAN open and check the product before paying, since it's Cash on Delivery.\n- Reassure them: if not satisfied with quality, they can REFUSE the parcel and not pay anything.\n- NEVER say "you cannot open before payment" or "payment first then check". That is WRONG for COD in Pakistan.\n- Keep the reply short, warm, and confident.`;
+  const handoffRule = `\n\nHUMAN HANDOFF POLICY (CRITICAL — NO STALLING):\n- You are FORBIDDEN from sending stalling messages like "let me check", "please hold on", "I'll get back to you shortly", "let me confirm and revert", "give me a moment", "خليني نشوف", "ek minute", "ruko zara", or any equivalent in any language.\n- Whenever you would say something like that — OR the customer asks for a brochure / detailed spec sheet / warranty document / OEM info / something not in your product context — you MUST call the tool \`handoff_to_agent\` with a short reason.\n- When you call \`handoff_to_agent\`, your text reply to the customer MUST clearly tell them you are transferring them to a human agent who will contact them shortly. Use the customer's language. Examples:\n  • English: "I'm transferring you to one of our human agents who will assist you shortly 🙏"\n  • Roman Urdu: "Main aap ko hamare human agent ke pass transfer kar raha hoon, wo jaldi aap se contact karenge 🙏"\n  • Urdu: "میں آپ کو ہمارے انسانی ایجنٹ کے پاس منتقل کر رہا ہوں، وہ جلد آپ سے رابطہ کریں گے 🙏"\n- After calling \`handoff_to_agent\`, do NOT continue the conversation yourself. The agent takes over.`;
   const sysPrompt =
-    `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${productContext}${addressRule}${imageRule}${cancelRule}${pendingIntentRule}${inspectionRule}`;
+    `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${productContext}${addressRule}${imageRule}${cancelRule}${pendingIntentRule}${inspectionRule}${handoffRule}`;
 
   const rawModel = aiSettings.model || "gpt-4o-mini";
   // Always OpenAI: strip provider prefix; map gemini → gpt-4o-mini.
@@ -1350,6 +1351,24 @@ async function aiContinueReply(args: {
     });
   }
   if (order) {
+    toolList.push({
+      type: "function",
+      function: {
+        name: "handoff_to_agent",
+        description: "Transfer this conversation to a human agent and stop the AI. Call this whenever you cannot answer with certainty (missing product spec, technical detail, warranty/return question you don't know, customer insists on speaking to a human, complaint, or any case where you would otherwise say 'let me check / hold on / I'll get back to you'). NEVER tell the customer to 'wait while I check' without calling this tool.",
+        parameters: {
+          type: "object",
+          properties: {
+            reason: {
+              type: "string",
+              description: "Short English reason why a human agent is needed (max 120 chars).",
+            },
+          },
+          required: ["reason"],
+          additionalProperties: false,
+        },
+      },
+    });
     toolList.push({
       type: "function",
       function: {
@@ -1473,6 +1492,72 @@ async function aiContinueReply(args: {
       log("ai-continue: flagged for human discount", { conv: conv.id, reason });
     } catch (e) {
       errLog("flag_for_human_discount handler failed", (e as Error).message);
+    }
+  }
+
+  // Handle handoff_to_agent tool call: route the order to the agent queue
+  // (confirmation_status='new', agent_id=null, channel='agent') and turn AI
+  // off on this conversation so a human takes over.
+  const handoffCall = toolCalls.find(
+    (c: any) => c?.function?.name === "handoff_to_agent",
+  );
+  if (handoffCall && order) {
+    let reason = "";
+    try {
+      const args = JSON.parse(handoffCall.function?.arguments || "{}");
+      reason = String(args?.reason || "").slice(0, 120);
+    } catch { /* ignore */ }
+    try {
+      await admin
+        .from("whatsapp_conversations")
+        .update({
+          ai_enabled: false,
+          status: "needs_human",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", conv.id);
+
+      const beforeStatus = order.confirmation_status;
+      const beforeAgent = order.agent_id;
+      const releasable = !["confirmed", "booked", "shipped", "delivered", "canceled", "cancelled"]
+        .includes(String(order.confirmation_status || "").toLowerCase());
+
+      if (releasable) {
+        await admin
+          .from("orders")
+          .update({
+            confirmation_status: "new",
+            confirmation_channel: "agent",
+            agent_id: null,
+            whatsapp_status: "handoff_to_agent",
+            whatsapp_note: `AI handoff to human agent. ${reason ? `Reason: ${reason}` : ""}`.slice(0, 500),
+            whatsapp_last_reply_at: new Date().toISOString(),
+          })
+          .eq("order_id", order.order_id);
+
+        try {
+          await logOrderHistory({
+            orderId: order.order_id,
+            actionType: "whatsapp_handoff",
+            role: "ai",
+            before: { confirmation_status: beforeStatus, agent_id: beforeAgent ?? null },
+            after: { confirmation_status: "new", agent_id: null },
+            fields: ["confirmation_status", "agent_id"],
+          });
+        } catch { /* non-fatal */ }
+      } else {
+        await admin
+          .from("orders")
+          .update({
+            whatsapp_status: "handoff_to_agent",
+            whatsapp_note: `AI handoff to human agent (order already ${order.confirmation_status}). ${reason ? `Reason: ${reason}` : ""}`.slice(0, 500),
+            whatsapp_last_reply_at: new Date().toISOString(),
+          })
+          .eq("order_id", order.order_id);
+      }
+      log("ai-continue: handoff_to_agent", { conv: conv.id, order: order.order_id, reason });
+    } catch (e) {
+      errLog("handoff_to_agent handler failed", (e as Error).message);
     }
   }
 
