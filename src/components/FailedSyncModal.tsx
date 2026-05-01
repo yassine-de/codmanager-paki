@@ -130,7 +130,13 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
                       </div>
                     </TableCell>
                     <TableCell className="text-xs">{order.customer_name}</TableCell>
-                    <TableCell className="text-xs">{order.customer_city}</TableCell>
+                    <TableCell className="text-xs" onClick={(e) => e.stopPropagation()}>
+                      <CitySelect
+                        value={order.customer_city || ""}
+                        onValueChange={(v) => handleCityChange(order.order_id, v)}
+                        triggerClassName="h-7 text-xs w-[140px] px-2"
+                      />
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">
                         {order.confirmation_status}
