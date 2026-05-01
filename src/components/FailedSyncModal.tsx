@@ -35,6 +35,8 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
     refetchInterval: open ? 15_000 : false,
   });
 
+  const [updatingCityId, setUpdatingCityId] = useState<string | null>(null);
+
   const handleRetry = async (orderId: string, orderDbId: string) => {
     setRetryingId(orderId);
     try {
@@ -61,6 +63,25 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
       queryClient.invalidateQueries({ queryKey: ["failed-sync-orders"] });
     } finally {
       setRetryingId(null);
+    }
+  };
+
+  const handleCityChange = async (orderId: string, newCity: string) => {
+    setUpdatingCityId(orderId);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ customer_city: newCity })
+        .eq("order_id", orderId);
+      if (error) throw error;
+      toast.success(`City updated to ${newCity}`);
+      queryClient.invalidateQueries({ queryKey: ["failed-sync-orders"] });
+      // Auto-retry sync since the most common failure is invalid city
+      await handleRetry(orderId, orderId);
+    } catch (e: any) {
+      toast.error(`Update failed: ${e.message}`);
+    } finally {
+      setUpdatingCityId(null);
     }
   };
 
