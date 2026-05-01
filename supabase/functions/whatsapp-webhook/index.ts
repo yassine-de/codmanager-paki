@@ -424,23 +424,7 @@ async function applyOutcome(
   //   • If stored address is missing/weak → gate through the AI, ask the
   //     customer for their full address, finalize once they reply.
   if (outcome === "confirmed") {
-    const addrLooksDeliverable = (() => {
-      const addr = order.customer_address;
-      const city = order.customer_city;
-      if (!addr || !city) return false;
-      const raw = String(addr).trim();
-      if (raw.length < 15) return false;
-      const lower = raw.toLowerCase();
-      const fakePattern = /\b(test|testing|tester|fake|dummy|sample|example|n\/?a|none|null|xxx+|asdf+|qwerty|aaaa+|placeholder|abc+|address here|adress|same|here)\b/i;
-      if (fakePattern.test(lower)) return false;
-      const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
-      if (tokens.length < 3) return false;
-      const hasNumber = /\d/.test(raw);
-      const preciseKeyword = /\b(house|flat|plot|street|road|st\.?|rd\.?|lane|block|sector|phase|town|colony|mohalla|gali|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر)\b/i;
-      if (hasNumber) return true;
-      if (preciseKeyword.test(lower)) return true;
-      return false;
-    })();
+    const addrLooksDeliverable = isAddressDeliverable(order.customer_address, order.customer_city);
 
     if (addrLooksDeliverable && order.confirmation_status !== "confirmed") {
       // Direct confirm — stored address is good enough, no need to ask again.
