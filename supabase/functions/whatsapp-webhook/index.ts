@@ -1321,8 +1321,9 @@ async function aiContinueReply(args: {
     : "";
 
   const baseSys = aiSettings.system_prompt || "You are a helpful WhatsApp sales assistant.";
+  const inspectionRule = `\n\nPARCEL INSPECTION POLICY (Pakistan COD — CRITICAL):\n- This is Cash on Delivery. The customer IS allowed to OPEN and INSPECT the parcel BEFORE paying the courier.\n- If the customer asks (in any language: "open parcel", "check before pay", "parcel khol kr dekh sakte hain", "khol ke check karna hai", "before payment open", "kya main parcel khol sakta hun", "inspect karna", "dekhna hai pehle", etc.) → reply YES, confirm clearly that they CAN open and check the product before paying, since it's Cash on Delivery.\n- Reassure them: if not satisfied with quality, they can REFUSE the parcel and not pay anything.\n- NEVER say "you cannot open before payment" or "payment first then check". That is WRONG for COD in Pakistan.\n- Keep the reply short, warm, and confident.`;
   const sysPrompt =
-    `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${productContext}${addressRule}${imageRule}${cancelRule}${pendingIntentRule}`;
+    `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${productContext}${addressRule}${imageRule}${cancelRule}${pendingIntentRule}${inspectionRule}`;
 
   const rawModel = aiSettings.model || "gpt-4o-mini";
   // Always OpenAI: strip provider prefix; map gemini → gpt-4o-mini.
