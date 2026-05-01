@@ -862,11 +862,16 @@ async function applyButtonAction(opts: {
   }
 
   // 3) Non-gated path: apply mapping immediately (legacy).
-  const noteFlag = `Customer clicked "${buttonText}" on WhatsApp`;
+  const noteFlag = skipGateForConfirmedAddress
+    ? `Customer clicked "${buttonText}" — auto-confirmed (address on file)`
+    : `Customer clicked "${buttonText}" on WhatsApp`;
   const updates: Record<string, any> = {
     whatsapp_note: noteFlag,
     whatsapp_last_reply_at: new Date().toISOString(),
   };
+  if (skipGateForConfirmedAddress) {
+    updates.whatsapp_status = "confirmed";
+  }
 
   if (hasMappedStatus) {
     const before = order.confirmation_status;
@@ -891,6 +896,21 @@ async function applyButtonAction(opts: {
     }
   } else {
     await admin.from("orders").update(updates).eq("order_id", order.order_id);
+  }
+
+  // When skipping gate for a confirmed-address auto-confirm, also clear any
+  // stale pending_button_intent on the conversation and mark it confirmed so
+  // the AI does NOT keep asking the customer for their address.
+  if (skipGateForConfirmedAddress && conversationId) {
+    await admin
+      .from("whatsapp_conversations")
+      .update({
+        status: "confirmed",
+        outcome: "confirmed",
+        pending_button_intent: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId);
   }
 }
 
