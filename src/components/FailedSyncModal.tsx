@@ -87,7 +87,7 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <AlertTriangle className="w-4 h-4 text-destructive" />
