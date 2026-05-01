@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { toast } from "sonner";
+import { CitySelect } from "@/components/CitySelect";
 
 interface FailedSyncModalProps {
   open: boolean;
