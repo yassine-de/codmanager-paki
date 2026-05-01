@@ -1544,6 +1544,7 @@ export default function WhatsappInbox() {
                                       message={m}
                                       directUrl={mediaUrl}
                                       className="rounded-lg max-w-full max-h-64 object-cover mb-1"
+                                      onOpen={(s) => setLightboxSrc(s)}
                                     />
                                     {caption && <div className="whitespace-pre-wrap break-words">{caption}</div>}
                                   </div>
