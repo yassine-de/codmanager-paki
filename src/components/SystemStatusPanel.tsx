@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AlertTriangle, CheckCircle2, Clock, ShieldAlert, Package, Activity, CreditCard } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { startOfDay, endOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
@@ -40,6 +41,10 @@ const severityConfig = {
 export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange }) {
   const navigate = useNavigate();
   const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [dismissedAtCount, setDismissedAtCount] = useState<number | null>(() => {
+    const v = localStorage.getItem("wa_payment_warning_dismissed_count");
+    return v ? Number(v) : null;
+  });
 
   const fromIso = dateRange?.from ? startOfDay(dateRange.from).toISOString() : null;
   const toIso = dateRange?.from
@@ -177,12 +182,12 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
 
   return (
     <>
-      {whatsappPaymentFailures > 0 && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-3 animate-slide-up flex items-start gap-3">
+      {whatsappPaymentFailures > 0 && dismissedAtCount !== whatsappPaymentFailures && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-3 animate-slide-up flex items-start gap-3 relative">
           <div className="p-2 rounded-lg bg-red-500/20 shrink-0">
             <CreditCard className="w-5 h-5 text-red-500" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 pr-6">
             <h3 className="text-sm font-bold text-red-600 dark:text-red-400">
               WhatsApp Delivery Blocked — Payment Issue
             </h3>
@@ -198,6 +203,16 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
               Open Meta Billing →
             </a>
           </div>
+          <button
+            onClick={() => {
+              localStorage.setItem("wa_payment_warning_dismissed_count", String(whatsappPaymentFailures));
+              setDismissedAtCount(whatsappPaymentFailures);
+            }}
+            className="absolute top-2 right-2 p-1 rounded-md hover:bg-red-500/20 transition-colors text-red-500/70 hover:text-red-500"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
       <div
