@@ -1573,13 +1573,16 @@ async function tryExtractAndConfirmAddress(args: {
     return;
   }
 
-  // SHORT-CIRCUIT: customer clicked the "Confirm" button AND the stored
-  // address is already deliverable. There is no new address text to extract
-  // (customerText is just the button label). Finalize the existing address
-  // immediately — otherwise the AI extractor returns "incomplete" and the
-  // order is stuck on `new` forever.
+  // SHORT-CIRCUIT: stored address is already deliverable AND order is not yet
+  // confirmed. This covers two flows:
+  //   (a) Customer clicked the "Confirm" button (pending_button_intent set), OR
+  //   (b) Customer replied with text to the template/AI (no button click) and
+  //       the stored address from the imported sheet is already complete.
+  // In both cases there is no NEW address detail to extract — the AI extractor
+  // would return "incomplete" on a generic reply ("ok", "haan", "thanks") and
+  // the order would stay on `new` forever even though the bot already told the
+  // customer "your order is confirmed". Finalize using the stored address.
   if (
-    pendingIntent?.intent === "confirm" &&
     alreadyDeliverable &&
     order.confirmation_status !== "confirmed"
   ) {
