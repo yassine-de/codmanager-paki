@@ -1561,30 +1561,8 @@ async function tryExtractAndConfirmAddress(args: {
 }) {
   const { order, conv, customerText, history, apiKey, model } = args;
 
-  // Helper: re-evaluate if the stored address is courier-deliverable.
-  // Mirrors `isAddressDeliverable` in aiContinueReply.
-  const isDeliverable = (addr?: string | null, city?: string | null): boolean => {
-    if (!addr || !city) return false;
-    const raw = String(addr).trim();
-    if (raw.length < 15) return false;
-    const lower = raw.toLowerCase();
-    const fakePattern = /\b(test|testing|tester|fake|dummy|sample|example|n\/?a|none|null|xxx+|asdf+|qwerty|aaaa+|placeholder|abc+|address here|adress|same|here)\b/i;
-    if (fakePattern.test(lower)) return false;
-    const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
-    if (tokens.length < 3) return false;
-    const hasNumber = /\d/.test(raw);
-    const preciseKeyword = /\b(house|flat|plot|street|road|st\.?|rd\.?|lane|block|sector|phase|town|colony|mohalla|gali|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر)\b/i;
-    if (hasNumber) return true;
-    if (preciseKeyword.test(lower)) return true;
-    return false;
-  };
-
-  // We always run extraction when there is a pending_button_intent (customer
-  // clicked confirm and we're awaiting their real address) OR the order is
-  // not yet confirmed OR the stored address is not deliverable. The only
-  // skip-case is: order is confirmed, address looks deliverable, AND no
-  // pending intent is awaiting clearing.
-  const alreadyDeliverable = isDeliverable(order.customer_address, order.customer_city);
+  // Use module-level isAddressDeliverable for consistency.
+  const alreadyDeliverable = isAddressDeliverable(order.customer_address, order.customer_city);
   const pendingIntent = (conv as any)?.pending_button_intent ?? null;
   const hasPendingIntent = !!pendingIntent;
   if (
