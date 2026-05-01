@@ -803,8 +803,14 @@ async function applyButtonAction(opts: {
   const storedAddrDeliverable = !!order && isAddressDeliverable(order.customer_address, order.customer_city);
   const forceAddressGate = wantsConfirm && !!order && !storedAddrDeliverable;
 
-  const aiGated = action.ai_gate === "validate" || forceAddressGate;
-  const wantsTakeover = action.ai_takeover === true || aiGated;
+  // CRITICAL: when the customer pressed a CONFIRM button AND the stored address
+  // is already deliverable, NEVER gate. We confirm immediately. Otherwise we
+  // would stash a pending_button_intent and rely on the AI / customer to send
+  // a follow-up text that may never come, leaving the order stuck on WhatsApp
+  // forever (AB-606).
+  const skipGateForConfirmedAddress = wantsConfirm && storedAddrDeliverable;
+  const aiGated = !skipGateForConfirmedAddress && (action.ai_gate === "validate" || forceAddressGate);
+  const wantsTakeover = !skipGateForConfirmedAddress && (action.ai_takeover === true || aiGated);
 
   // 1) AI takeover (gated buttons always force takeover so AI drives the convo)
   if (conversationId && wantsTakeover) {
@@ -856,11 +862,16 @@ async function applyButtonAction(opts: {
   }
 
   // 3) Non-gated path: apply mapping immediately (legacy).
-  const noteFlag = `Customer clicked "${buttonText}" on WhatsApp`;
+  const noteFlag = skipGateForConfirmedAddress
+    ? `Customer clicked "${buttonText}" — auto-confirmed (address on file)`
+    : `Customer clicked "${buttonText}" on WhatsApp`;
   const updates: Record<string, any> = {
     whatsapp_note: noteFlag,
     whatsapp_last_reply_at: new Date().toISOString(),
   };
+  if (skipGateForConfirmedAddress) {
+    updates.whatsapp_status = "confirmed";
+  }
 
   if (hasMappedStatus) {
     const before = order.confirmation_status;
@@ -885,6 +896,21 @@ async function applyButtonAction(opts: {
     }
   } else {
     await admin.from("orders").update(updates).eq("order_id", order.order_id);
+  }
+
+  // When skipping gate for a confirmed-address auto-confirm, also clear any
+  // stale pending_button_intent on the conversation and mark it confirmed so
+  // the AI does NOT keep asking the customer for their address.
+  if (skipGateForConfirmedAddress && conversationId) {
+    await admin
+      .from("whatsapp_conversations")
+      .update({
+        status: "confirmed",
+        outcome: "confirmed",
+        pending_button_intent: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId);
   }
 }
 
@@ -1142,7 +1168,85 @@ async function tickDelays() {
   }
   const switched = await tickAgentSwitches();
   const recovered = await sweepMissedNewOrders();
-  return { processed: due?.length ?? 0, switched, recovered };
+  const handedOff = await tickPendingIntentHandoff();
+  return { processed: due?.length ?? 0, switched, recovered, handedOff };
+}
+
+// Hand off conversations stuck on a `pending_button_intent` for too long to a
+// human agent. Triggered when the customer pressed a button (e.g. confirm)
+// that was AI-gated, but never replied to the AI's follow-up question. Without
+// this fallback the order would stay pinned in WhatsApp limbo (AB-606).
+//
+// Threshold: 60 minutes since `pending_button_intent.created_at` AND no
+// inbound message in the last 60 minutes either.
+async function tickPendingIntentHandoff(): Promise<number> {
+  const cutoffIso = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { data: convs, error } = await admin
+    .from("whatsapp_conversations")
+    .select("id, order_id, pending_button_intent, last_message_at")
+    .not("pending_button_intent", "is", null)
+    .lte("last_message_at", cutoffIso)
+    .limit(100);
+  if (error) {
+    errLog("tickPendingIntentHandoff query", error.message);
+    return 0;
+  }
+  if (!convs?.length) return 0;
+  let handed = 0;
+  for (const c of convs) {
+    try {
+      const intent: any = c.pending_button_intent ?? null;
+      const intentCreatedAt = intent?.created_at ? new Date(intent.created_at).getTime() : 0;
+      if (intentCreatedAt && intentCreatedAt > Date.now() - 60 * 60 * 1000) continue;
+
+      if (c.order_id) {
+        const { data: ord } = await admin
+          .from("orders")
+          .select("order_id, confirmation_status")
+          .eq("order_id", c.order_id)
+          .maybeSingle();
+        if (ord) {
+          const before = ord.confirmation_status;
+          await admin.from("orders").update({
+            confirmation_channel: "agent",
+            confirmation_status: "new",
+            agent_id: null,
+            assigned_at: null,
+            whatsapp_status: "handed_to_agent",
+            whatsapp_note: "Auto-routed to agent — customer never replied to AI address request",
+            last_activity_at: new Date().toISOString(),
+          }).eq("order_id", c.order_id);
+          if (before !== "new") {
+            await admin.from("order_history").insert({
+              order_id: c.order_id,
+              action_type: "whatsapp_auto_handoff",
+              changed_by: "00000000-0000-0000-0000-000000000000",
+              changed_by_role: "system",
+              field_changed: "confirmation_status",
+              old_value: before ?? null,
+              new_value: "new",
+            });
+          }
+        }
+      }
+
+      await admin
+        .from("whatsapp_conversations")
+        .update({
+          ai_enabled: false,
+          status: "manual_review_needed",
+          pending_button_intent: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", c.id);
+
+      handed++;
+      log("pending-intent: auto-handoff to agent", { conv: c.id, order: c.order_id });
+    } catch (e) {
+      errLog("tickPendingIntentHandoff iter failed", (e as Error).message);
+    }
+  }
+  return handed;
 }
 
 // Recovery sweep: find recent WhatsApp-routed orders (new_wts/whatsapp channel)
