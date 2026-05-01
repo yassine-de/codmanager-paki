@@ -803,8 +803,14 @@ async function applyButtonAction(opts: {
   const storedAddrDeliverable = !!order && isAddressDeliverable(order.customer_address, order.customer_city);
   const forceAddressGate = wantsConfirm && !!order && !storedAddrDeliverable;
 
-  const aiGated = action.ai_gate === "validate" || forceAddressGate;
-  const wantsTakeover = action.ai_takeover === true || aiGated;
+  // CRITICAL: when the customer pressed a CONFIRM button AND the stored address
+  // is already deliverable, NEVER gate. We confirm immediately. Otherwise we
+  // would stash a pending_button_intent and rely on the AI / customer to send
+  // a follow-up text that may never come, leaving the order stuck on WhatsApp
+  // forever (AB-606).
+  const skipGateForConfirmedAddress = wantsConfirm && storedAddrDeliverable;
+  const aiGated = !skipGateForConfirmedAddress && (action.ai_gate === "validate" || forceAddressGate);
+  const wantsTakeover = !skipGateForConfirmedAddress && (action.ai_takeover === true || aiGated);
 
   // 1) AI takeover (gated buttons always force takeover so AI drives the convo)
   if (conversationId && wantsTakeover) {
