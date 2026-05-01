@@ -165,13 +165,9 @@ function AudioMessagePlayer({ message }: { message: Msg }) {
       setFailed(false);
       setSrc(null);
       try {
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
-        if (!token) throw new Error("Missing session");
-
         const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-media-proxy?messageId=${message.id}`;
         const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: await getFunctionHeaders(),
         });
 
         if (!response.ok) {
@@ -275,13 +271,9 @@ function MediaImage({ message, directUrl, alt = "attachment", className, onOpen 
 
     const load = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
-        if (!token) throw new Error("Missing session");
-
         const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-media-proxy?messageId=${message.id}`;
         const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: await getFunctionHeaders(),
         });
 
         const contentType = response.headers.get("Content-Type") || "";
