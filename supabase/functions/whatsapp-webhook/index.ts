@@ -854,8 +854,79 @@ async function handleIncoming(value: any) {
           }
         } catch (e) {
           errLog("from_template trigger lookup failed", (e as Error).message);
-        }
+    }
+  }
+
+  // Handle handoff_to_agent tool call: route the order to the agent queue
+  // (confirmation_status='new', agent_id=null, channel='agent') and turn AI
+  // off on this conversation so a human takes over.
+  const handoffCall = toolCalls.find(
+    (c: any) => c?.function?.name === "handoff_to_agent",
+  );
+  if (handoffCall && order) {
+    let reason = "";
+    try {
+      const args = JSON.parse(handoffCall.function?.arguments || "{}");
+      reason = String(args?.reason || "").slice(0, 120);
+    } catch { /* ignore */ }
+    try {
+      // Disable AI on this conversation and mark it for human handling.
+      await admin
+        .from("whatsapp_conversations")
+        .update({
+          ai_enabled: false,
+          status: "needs_human",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", conv.id);
+
+      // Snapshot for history
+      const beforeStatus = order.confirmation_status;
+      const beforeAgent = order.agent_id;
+
+      // Route order to the agent queue (only if not already confirmed/booked/etc.)
+      const releasable = !["confirmed", "booked", "shipped", "delivered", "canceled", "cancelled"]
+        .includes(String(order.confirmation_status || "").toLowerCase());
+      if (releasable) {
+        await admin
+          .from("orders")
+          .update({
+            confirmation_status: "new",
+            confirmation_channel: "agent",
+            agent_id: null,
+            whatsapp_status: "handoff_to_agent",
+            whatsapp_note: `AI handoff to human agent. ${reason ? `Reason: ${reason}` : ""}`.slice(0, 500),
+            whatsapp_last_reply_at: new Date().toISOString(),
+          })
+          .eq("order_id", order.order_id);
+
+        try {
+          await logOrderHistory({
+            orderId: order.order_id,
+            actionType: "whatsapp_handoff",
+            changes: [
+              { field: "confirmation_status", oldValue: beforeStatus, newValue: "new" },
+              { field: "agent_id", oldValue: beforeAgent ?? null, newValue: null },
+            ],
+            metadata: { reason, source: "ai_handoff_tool" },
+          });
+        } catch { /* non-fatal */ }
+      } else {
+        // Already finalized — just leave a note + AI off
+        await admin
+          .from("orders")
+          .update({
+            whatsapp_status: "handoff_to_agent",
+            whatsapp_note: `AI handoff to human agent (order already ${order.confirmation_status}). ${reason ? `Reason: ${reason}` : ""}`.slice(0, 500),
+            whatsapp_last_reply_at: new Date().toISOString(),
+          })
+          .eq("order_id", order.order_id);
       }
+      log("ai-continue: handoff_to_agent", { conv: conv.id, order: order.order_id, reason });
+    } catch (e) {
+      errLog("handoff_to_agent handler failed", (e as Error).message);
+    }
+  }
 
 
       // Trigger when:
