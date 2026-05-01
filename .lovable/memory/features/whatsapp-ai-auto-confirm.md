@@ -9,37 +9,26 @@ The WhatsApp AI continuation flow (`whatsapp-webhook` edge function) automatical
 ## Trigger
 After every AI-generated reply to a customer text message (in `aiContinueReply`), the system runs `tryExtractAndConfirmAddress`.
 
-## Extraction logic
-- Uses OpenAI JSON mode (response_format: json_object) with the same model as the AI assistant.
-- Sends last 10 conversation messages + latest customer text (batched).
-- Strict schema: `{ complete: boolean, full_address: string, city: string }`.
+## Deliverability rule — RELAXED VALIDATION (AB-614 fix)
 
-## Deliverability rule — STRICT ADDRESS VALIDATION (AB-610 fix)
+`isAddressDeliverable(addr, city)` requires:
+1. City present, AND
+2. Address ≥ 12 chars + ≥ 3 meaningful tokens, AND
+3. ANY ONE of:
+   - has a digit (house/plot number), OR
+   - matches `preciseKeyword` regex (street, road, lane, block, sector, phase, mohalla, gali, bazaar, market, society, colony, **shop, office, store, center, care, hotel, masjid, mosque, school, college, hospital, bank, station, chowk, square, tehsil, ward, town, village, abad, pura, nagar, kot, gunj, garh, wala**, Urdu equivalents پور آباد گھر مکان گلی سڑک محلہ فلیٹ بلاک سیکٹر چوک تحصیل دکان), OR
+   - has a `landmarkIndicator` (near/opposite/behind/front/main/stop/adjacent/side) + ≥ 4 tokens
 
-`complete=true` requires:
-1. A city OR town OR tehsil OR village name (anywhere in PK), AND
-2. AT LEAST ONE **precise** locator — "near [landmark]" ALONE is **NOT** enough:
-   - house/flat/plot/shop number, OR
-   - specific street/lane/road/gali name or number, OR
-   - neighborhood/area/colony/block/sector/phase/mohalla name, OR
-   - landmark + street/area combination (e.g. "near Allahdin Hotel, Main Bazaar Road")
+### What gets ACCEPTED now (AB-614 fix):
+- "Tehsil Dipalpur Madina Chowk Mobile Care Shop" ✅ (shop + chowk + tehsil)
+- "Near UBL Bank Main Bazaar Road Batagram" ✅ (bank + bazaar + road)
+- "House 12 Street 4 Gulshan-e-Iqbal" ✅ (number + street)
+- "Mohalla Islamia Gali 2 Layyah" ✅ (mohalla + gali)
 
-### What gets REJECTED now (was previously accepted):
-- "Near Allahdin Hotel" alone → NO (no street/area/number)
-- "Chowk Fawara" alone → NO
-- "opposite XYZ Masjid" alone → NO
-
-### What gets ACCEPTED:
-- "House 12 Street 4 Gulshan-e-Iqbal" → YES
-- "Near Allahdin Hotel Main Bazaar Road" → YES (landmark + street)
-- "Mohalla Islamia Gali 2" → YES (area + street)
-
-### isAddressDeliverable heuristic (all 4 copies synchronized):
-- Min length: 15 chars (was 10)
-- Min tokens: 3 meaningful words (was 2)
-- Has a digit → deliverable (house/plot number)
-- Has a preciseKeyword (house/flat/plot/street/road/lane/block/sector/phase/colony/mohalla/gali/bazar/market/society etc.) → deliverable
-- "near/opposite/chowk/main" alone without preciseKeyword → NOT deliverable
+### What still gets REJECTED:
+- "Lahore" alone (just city, no other detail)
+- "test" / "same" / "asdf" / "n/a" (fake/placeholder)
+- Single word with no context
 
 ## City matching
 - City must match `orio_cities_cache` (case-insensitive exact, then partial fallback).
@@ -53,9 +42,5 @@ On a valid extraction the order is updated:
 - `whatsapp_status` = "confirmed"
 - If `whatsapp_settings.auto_book_shipping` is true → `delivery_status="booked"`, `shipping_status="Booked"` (triggers ORIO sync)
 
-Conversation status → "confirmed", outcome → "confirmed".
-
-## Skip conditions
-- Order already `confirmation_status = "confirmed"` AND already has a deliverable address on file → no-op.
-- ORIO cities cache empty → skip.
-- AI returns `complete=false` → skip (AI prompt instructs it to keep asking).
+## Code location
+`isAddressDeliverable` is a single module-level export in `supabase/functions/whatsapp-webhook/index.ts` (line ~374). All call-sites (`applyOutcome`, AI prompt builder, `tryExtractAndConfirmAddress`) reuse this same helper. The automation-runner has a synchronized inline copy with identical regex.
