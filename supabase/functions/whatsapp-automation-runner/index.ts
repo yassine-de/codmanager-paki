@@ -1204,30 +1204,44 @@ async function tickPendingIntentHandoff(): Promise<number> {
       if (c.order_id) {
         const { data: ord } = await admin
           .from("orders")
-          .select("order_id, confirmation_status")
+          .select("order_id, confirmation_status, customer_address, customer_city")
           .eq("order_id", c.order_id)
           .maybeSingle();
         if (ord) {
+          // SAFETY: never downgrade an already-confirmed/cancelled/postponed
+          // order back to "new". The handoff is ONLY meant for orders that
+          // are still pending after the AI gave up on collecting an address.
+          // Without this guard, a successfully auto-confirmed order would be
+          // wiped by the sweeper if its conversation still had a stale
+          // pending_button_intent (e.g. AB-682 / AB-666).
+          const protectedStatuses = ["confirmed", "cancelled", "canceled", "postponed", "double", "wrong_number"];
           const before = ord.confirmation_status;
-          await admin.from("orders").update({
-            confirmation_channel: "agent",
-            confirmation_status: "new",
-            agent_id: null,
-            assigned_at: null,
-            whatsapp_status: "handed_to_agent",
-            whatsapp_note: "Auto-routed to agent — customer never replied to AI address request",
-            last_activity_at: new Date().toISOString(),
-          }).eq("order_id", c.order_id);
-          if (before !== "new") {
-            await admin.from("order_history").insert({
-              order_id: c.order_id,
-              action_type: "whatsapp_auto_handoff",
-              changed_by: "00000000-0000-0000-0000-000000000000",
-              changed_by_role: "system",
-              field_changed: "confirmation_status",
-              old_value: before ?? null,
-              new_value: "new",
+          if (protectedStatuses.includes(String(before))) {
+            // Just clear the conversation pending intent and skip the order.
+            log("pending-intent: skipping handoff — order already finalized", {
+              conv: c.id, order: c.order_id, status: before,
             });
+          } else {
+            await admin.from("orders").update({
+              confirmation_channel: "agent",
+              confirmation_status: "new",
+              agent_id: null,
+              assigned_at: null,
+              whatsapp_status: "handed_to_agent",
+              whatsapp_note: "Auto-routed to agent — customer never replied to AI address request",
+              last_activity_at: new Date().toISOString(),
+            }).eq("order_id", c.order_id);
+            if (before !== "new") {
+              await admin.from("order_history").insert({
+                order_id: c.order_id,
+                action_type: "whatsapp_auto_handoff",
+                changed_by: "00000000-0000-0000-0000-000000000000",
+                changed_by_role: "system",
+                field_changed: "confirmation_status",
+                old_value: before ?? null,
+                new_value: "new",
+              });
+            }
           }
         }
       }
