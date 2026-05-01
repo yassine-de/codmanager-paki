@@ -41,6 +41,10 @@ const severityConfig = {
 export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange }) {
   const navigate = useNavigate();
   const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [dismissedAtCount, setDismissedAtCount] = useState<number | null>(() => {
+    const v = localStorage.getItem("wa_payment_warning_dismissed_count");
+    return v ? Number(v) : null;
+  });
 
   const fromIso = dateRange?.from ? startOfDay(dateRange.from).toISOString() : null;
   const toIso = dateRange?.from
