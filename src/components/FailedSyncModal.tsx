@@ -135,6 +135,7 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
                         value={order.customer_city || ""}
                         onValueChange={(v) => handleCityChange(order.order_id, v)}
                         triggerClassName="h-7 text-xs w-[140px] px-2"
+                        highlightInvalid
                       />
                     </TableCell>
                     <TableCell>
