@@ -1539,11 +1539,10 @@ async function aiContinueReply(args: {
           await logOrderHistory({
             orderId: order.order_id,
             actionType: "whatsapp_handoff",
-            changes: [
-              { field: "confirmation_status", oldValue: beforeStatus, newValue: "new" },
-              { field: "agent_id", oldValue: beforeAgent ?? null, newValue: null },
-            ],
-            metadata: { reason, source: "ai_handoff_tool" },
+            role: "ai",
+            before: { confirmation_status: beforeStatus, agent_id: beforeAgent ?? null },
+            after: { confirmation_status: "new", agent_id: null },
+            fields: ["confirmation_status", "agent_id"],
           });
         } catch { /* non-fatal */ }
       } else {
