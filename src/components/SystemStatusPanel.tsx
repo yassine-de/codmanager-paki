@@ -190,7 +190,7 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
 
   return (
     <>
-      {whatsappPaymentFailures > 0 && dismissedAtCount !== whatsappPaymentFailures && (
+      {whatsappPaymentFailures > 0 && whatsappPaymentFailures > dismissedAtCount && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-3 animate-slide-up flex items-start gap-3 relative">
           <div className="p-2 rounded-lg bg-red-500/20 shrink-0">
             <CreditCard className="w-5 h-5 text-red-500" />
