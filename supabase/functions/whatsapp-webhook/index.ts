@@ -1696,6 +1696,24 @@ async function tryExtractAndConfirmAddress(args: {
     return;
   }
 
+  // POSITIVE INTENT GUARD (AB-862 fix): the stored-address shortcut must only
+  // fire when the customer has clearly expressed CONFIRMATION INTENT — either
+  // by clicking the YES button (pending_button_intent set) or by sending a
+  // clearly affirmative text. A neutral/auto-reply ("Hello & Welcome to Land
+  // Advisor 😊", "thanks", a greeting, or a business auto-responder) must NOT
+  // trigger auto-confirmation. Without this guard the system finalizes orders
+  // the customer never agreed to.
+  const positiveIntentRe = /\b(yes|yeah|yep|yup|sure|ok|okay|okk+|k|kk+|confirm|confirmed|done|haan|haanji|han|hanji|jee|jee?\s*haan|ji|ji\s*haan|theek|thik|thik\s*hai|theek\s*hai|sahi|sahih|correct|right|right\s*hai|order\s*kar|order\s*do|bhej\s*do|bhejo|deliver|chahiye|chaahiye|chahyie|mangwa|mangwao|book|book\s*kar|accept|agree|approve|proceed|go\s*ahead|نعم|أيوة|تمام|موافق|بسم\s*الله|ہاں|جی|جی\s*ہاں|ٹھیک|درست|تصدیق|بھیج|منگوا)\b/i;
+  const hasPositiveIntent = positiveIntentRe.test(txt);
+  if (!hasPendingIntent && !hasPositiveIntent) {
+    log("address-extract: skipped stored-address shortcut (no positive intent)", {
+      order: order.order_id,
+      sample: txt.slice(0, 80),
+    });
+    return;
+  }
+
+
   if (
     alreadyDeliverable &&
     order.confirmation_status !== "confirmed"

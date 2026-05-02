@@ -1,0 +1,1 @@
+UPDATE public.orders SET confirmed_at=NULL, note=COALESCE(note,'') || E'\n[AB-862 fix] AI shortcut auto-confirmed on customer auto-reply ("Hello & Welcome..."). Cleared confirmed_at; order routed to agent.' WHERE order_id='AB-862';
