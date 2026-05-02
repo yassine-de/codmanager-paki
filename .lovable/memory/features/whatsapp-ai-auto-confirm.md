@@ -9,14 +9,15 @@ The WhatsApp AI continuation flow (`whatsapp-webhook` edge function) automatical
 ## Trigger
 After every AI-generated reply to a customer text message (in `aiContinueReply`), the system runs `tryExtractAndConfirmAddress`.
 
-## Deliverability rule — TIGHTENED (AB-803 fix)
+## Deliverability rule — TIGHTENED (AB-861 fix)
 
 `isAddressDeliverable(addr, city)` requires city present, address ≥ 12 chars + ≥ 3 tokens, NOT a fake placeholder, AND any of:
 - **digit + (strong/weak/landmark keyword)** — e.g. "House 12 Gulshan", OR
 - **digit + ≥ 4 tokens** — e.g. "12 4 DHA Lahore", OR
 - **strong keyword** alone (house/flat/plot/block/sector/phase/apartment/building/floor/villa/tower/plaza, or "shop/office/street/gali no <digit>"), OR
-- **≥ 2 distinct weak keywords** (street/road/lane/town/village/colony/mohalla/gali/bazaar/market/society/park/stop/gate/center/care/hotel/masjid/school/hospital/bank/station/chowk/tehsil/abad/pura/nagar/kot/garh/wala + Urdu), OR
-- **≥ 1 weak keyword + landmark word + ≥ 5 tokens**.
+- **≥ 2 distinct weak keywords** (street/road/lane/town/village/colony/mohalla/gali/bazaar/market/society/park/stop/gate/center/care/hotel/masjid/school/hospital/bank/station/chowk/tehsil/abad/pura/nagar/kot/garh/wala + Urdu).
+
+Landmark-only loophole removed (AB-861): "1 weak + landmark + 5 tokens" no longer passes.
 
 ### What gets ACCEPTED:
 - "House 12 Street 4 Gulshan-e-Iqbal" ✅ (digit + street)
@@ -25,10 +26,12 @@ After every AI-generated reply to a customer text message (in `aiContinueReply`)
 - "Mohalla Islamia Gali 2 Layyah" ✅ (digit + gali)
 
 ### What gets REJECTED (tightened):
-- "National bank ghalegay" ❌ — only 1 weak hit (bank), 3 tokens, no number → too vague (AB-803)
-- "Near UBL Bank" ❌ — landmark + 1 weak, < 5 tokens
+- "Emaar builders and construction company near sarena hotel" ❌ — only 1 weak (hotel) + landmark (AB-861)
+- "National bank ghalegay" ❌ — only 1 weak (AB-803)
+- "Near UBL Bank" ❌
 - "Lahore" alone ❌
 - "test" / "same" / "asdf" / "n/a" ❌
+
 
 - Single word with no context
 

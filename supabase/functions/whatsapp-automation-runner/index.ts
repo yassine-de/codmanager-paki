@@ -794,7 +794,6 @@ async function applyButtonAction(opts: {
     if (strongKeyword.test(lower)) return true;
     const weakHits = (lower.match(weakKeyword) || []).length;
     if (weakHits >= 2) return true;
-    if (weakHits >= 1 && landmarkIndicator.test(lower) && tokens.length >= 5) return true;
     return false;
   };
 

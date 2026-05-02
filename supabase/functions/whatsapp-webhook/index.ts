@@ -399,13 +399,13 @@ export function isAddressDeliverable(addr?: string | null, city?: string | null)
   // Strong structural keyword present → deliverable even without a number
   // (e.g. "Phase 2 DHA Lahore" — phase implies sector structure).
   if (strongKeyword.test(lower)) return true;
-  // Weak keywords only: require AT LEAST TWO distinct weak signals OR a
-  // landmark + weak keyword + 5+ tokens. A single vague POI like "National
-  // bank ghalegay" (3 tokens, only "bank") is NOT enough — courier can't find
-  // it without a street/house/sector. AB-803 fix.
+  // Weak keywords only: require AT LEAST TWO distinct weak signals. A single
+  // vague POI like "National bank ghalegay" (AB-803) or "company near sarena
+  // hotel" (AB-861) is NOT enough — courier can't find it without a real
+  // street / house / sector. The "landmark + 1 weak + 5 tokens" branch was
+  // dropped because long landmark-only POI strings kept slipping through.
   const weakHits = (lower.match(weakKeyword) || []).length;
   if (weakHits >= 2) return true;
-  if (weakHits >= 1 && landmarkIndicator.test(lower) && tokens.length >= 5) return true;
   return false;
 }
 
