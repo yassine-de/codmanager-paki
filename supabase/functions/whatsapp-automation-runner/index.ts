@@ -488,6 +488,20 @@ async function executeFlow(args: {
         const customPrompt = String(node.data?.prompt ?? "").trim();
         if (!normalizedPhone) throw new Error("Customer phone invalid");
 
+        // SHORT-CIRCUIT (AB-861 fix): if this AI step's job is to collect a
+        // delivery address but the order ALREADY has a deliverable address on
+        // file AND has been auto-confirmed by applyOutcome, do NOT send a
+        // redundant "please send your full detailed address" message. The
+        // customer was just told the order is confirmed — asking for the
+        // address again contradicts that and confuses them.
+        const orderAlreadyConfirmed = order?.confirmation_status === "confirmed";
+        const storedAddrOk = !!order && isAddressDeliverable(order.customer_address, order.customer_city);
+        if (orderAlreadyConfirmed && storedAddrOk) {
+          await appendLog(runId, { type: "ai_step", node_id: node.id, skipped: "order_confirmed_with_deliverable_address" });
+          currentId = findNextNode(edges, node.id)?.target ?? null;
+          continue;
+        }
+
         // Load AI settings + key + history for context
         const { data: aiSettings } = await admin
           .from("whatsapp_ai_settings")
@@ -523,12 +537,14 @@ async function executeFlow(args: {
         const orderCtx = order
           ? `\n\nOrder context:\n- Order ID: ${order.order_id}\n- Customer: ${order.customer_name}\n- Product: ${order.product_name}\n- Quantity: ${order.quantity}\n- Total: ${order.total_amount} PKR\n- City: ${order.customer_city}\n- Address: ${order.customer_address ?? "(not provided)"}`
           : "";
-        // Address-completion rule: if the address is missing or clearly incomplete
-        // (no street / house / area), the AI MUST keep the conversation going and
-        // politely ask for the missing pieces before moving on.
-        const addressRule = order && (!order.customer_address || String(order.customer_address).trim().length < 10)
-          ? `\n\nIMPORTANT: The customer's delivery address is missing or incomplete. Do NOT close the conversation. Politely ask for the full address (house/flat number, street, area/landmark, and city) in the customer's language. Keep asking in follow-ups until you receive a complete, deliverable address.`
-          : "";
+        // Address-completion rule: explicit, deterministic signal so the AI
+        // does NOT re-ask for an address that is already deliverable on file.
+        const addressDeliverable = !!order && isAddressDeliverable(order.customer_address, order.customer_city);
+        const addressRule = !order
+          ? ""
+          : addressDeliverable
+          ? `\n\nADDRESS STATUS: The customer's stored address ("${order.customer_address}", ${order.customer_city}) is ALREADY detailed enough for delivery. DO NOT ask the customer to send their address again. Just send a short, warm confirmation that the order is being processed and the courier will contact them. Never write "please send your full address", "to ensure smooth delivery please send", or any equivalent.`
+          : `\n\nADDRESS STATUS: The stored address ("${order.customer_address ?? "(none)"}", ${order.customer_city ?? "(none)"}) is missing or too vague for the courier. Politely ask the customer (in their language) for the FULL address: house/flat #, street, area/block, nearest landmark, and city. Keep asking in follow-ups until you receive a complete, deliverable address. Do NOT confirm the order yourself — the system will auto-confirm once the address is complete.`;
         // Resolve effective system prompt based on node-level mode:
         //  - instructions_mode = "general" → always use global AI Settings prompt
         //  - instructions_mode = "custom"  → use node prompt; mode "override" replaces, "append" extends global
