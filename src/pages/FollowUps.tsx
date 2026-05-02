@@ -53,6 +53,9 @@ import {
   Eye,
   EyeOff,
   StickyNote,
+  Check,
+  ChevronDown,
+  PhoneOff,
 } from "lucide-react";
 import {
   Dialog,
@@ -296,7 +299,7 @@ export default function FollowUps() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(columns));
   }, [columns]);
 
-  const { data: rows = [], isLoading, refetch } = useQuery({
+  const { data: rows = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: ["follow-ups-data"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_follow_ups_data");
@@ -305,6 +308,9 @@ export default function FollowUps() {
     },
     enabled: !!authUser && (authUser.role === "admin" || authUser.role === "agent" || authUser.role === "follow_up"),
     refetchInterval: 30000,
+    staleTime: 25_000,
+    placeholderData: (prev) => prev,
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
@@ -655,12 +661,30 @@ export default function FollowUps() {
           </div>
         </Card>
 
+        {/* Result count + refetch indicator */}
+        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+          <span className="tabular-nums">
+            {isLoading ? "Loading…" : `${filtered.length.toLocaleString()} of ${enriched.length.toLocaleString()} orders`}
+          </span>
+          {isFetching && !isLoading && (
+            <span className="flex items-center gap-1.5 text-[11px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Refreshing…
+            </span>
+          )}
+        </div>
+
         {/* Table */}
-        <div className="bg-card rounded-xl border shadow-soft overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-card rounded-xl border shadow-soft overflow-hidden relative">
+          {isFetching && !isLoading && (
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary/20 overflow-hidden z-10">
+              <div className="h-full w-1/3 bg-primary animate-slide" />
+            </div>
+          )}
+          <div className="overflow-x-auto max-h-[calc(100vh-22rem)] overflow-y-auto">
             <table className="w-full text-sm table-fixed">
-              <thead>
-                <tr className="border-b bg-muted/40">
+              <thead className="sticky top-0 z-[5]">
+                <tr className="border-b bg-muted/95 backdrop-blur-sm">
                   {visibleColumns.map((col) => {
                     const meta = ALL_COLUMNS.find((c) => c.key === col.key)!;
                     const isCenter = col.key === "days";
@@ -668,7 +692,7 @@ export default function FollowUps() {
                       <th
                         key={col.key}
                         style={{ width: columnWidths[col.key] }}
-                        className={`text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider ${isCenter ? "text-center" : ""} overflow-hidden`}
+                        className={`text-left py-3 px-4 font-semibold text-[11px] text-muted-foreground uppercase tracking-wider ${isCenter ? "text-center" : ""} overflow-hidden`}
                       >
                         {meta.label}
                       </th>
@@ -681,7 +705,7 @@ export default function FollowUps() {
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i} className="border-b">
                       {visibleColumns.map((c) => (
-                        <td key={c.key} className="py-2.5 px-4">
+                        <td key={c.key} className="py-3 px-4">
                           <Skeleton className="h-4 w-full" />
                         </td>
                       ))}
@@ -689,8 +713,16 @@ export default function FollowUps() {
                   ))
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleColumns.length} className="text-center text-muted-foreground py-12">
-                      No follow-ups found
+                    <td colSpan={visibleColumns.length} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="p-3 rounded-full bg-muted/60">
+                          <Search className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">No follow-ups found</p>
+                        <p className="text-xs text-muted-foreground">
+                          {activeFilterCount > 0 ? "Try clearing some filters" : "Orders will appear here once shipped"}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -701,7 +733,7 @@ export default function FollowUps() {
                         {visibleColumns.map((col) => (
                           <td
                             key={col.key}
-                            className={`py-2.5 overflow-hidden ${cellClassFor(col.key)}`}
+                            className={`py-3 overflow-hidden ${cellClassFor(col.key)}`}
                           >
                             {renderCell(col.key, row, segMeta, savingId, handleStatusChange, handleNoteSave, navigate, setHistoryOrder, setTrackingTarget, openNoteDialog)}
                           </td>
@@ -816,101 +848,128 @@ function FollowUpStatusCell({
   onStatusChange: (id: string, status: string, attempt?: number) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [attemptOpen, setAttemptOpen] = useState(false);
   const doneCount = row.fu_no_answer_count ?? 0;
   const nextAttempt = doneCount + 1;
+  const isNoAnswer = row.follow_up_status === "no_answer";
+  const exhausted = doneCount >= FU_MAX_ATTEMPTS;
+  const isSaving = savingId === row.order_id;
 
-  const displayLabel =
-    row.follow_up_status === "no_answer" && doneCount > 0
-      ? `No Answer · ${doneCount}`
-      : (FOLLOW_UP_STATUSES.find((s) => s.value === row.follow_up_status)?.label ?? row.follow_up_status);
+  const currentStatus = FOLLOW_UP_STATUSES.find((s) => s.value === row.follow_up_status);
+  const triggerLabel =
+    isNoAnswer && doneCount > 0
+      ? `No Answer · ${doneCount}/${FU_MAX_ATTEMPTS}`
+      : currentStatus?.label ?? row.follow_up_status;
+
+  function pick(status: string, attempt?: number) {
+    setOpen(false);
+    onStatusChange(row.order_id, status, attempt);
+  }
 
   return (
-    <div className="flex items-center gap-1.5">
-      {/* Main status select */}
-      <Select
-        open={open}
-        onOpenChange={setOpen}
-        value={row.follow_up_status}
-        onValueChange={(v) => {
-          setOpen(false);
-          if (v === "no_answer") {
-            setAttemptOpen(true);
-          } else {
-            onStatusChange(row.order_id, v);
-          }
-        }}
-        disabled={savingId === row.order_id}
-      >
-        <SelectTrigger className={`h-7 text-xs border rounded-full px-2.5 py-0 w-fit min-w-0 gap-1 [&>span]:truncate ${followUpStatusStyle[row.follow_up_status] ?? ""}`}>
-          <span className="truncate">{displayLabel}</span>
-        </SelectTrigger>
-        <SelectContent>
-          {FOLLOW_UP_STATUSES.map((s) => (
-            <SelectItem key={s.value} value={s.value} className="text-xs">
-              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle[s.value] ?? ""}`}>
-                {s.label}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={isSaving}
+          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none whitespace-nowrap transition-all hover:shadow-sm hover:brightness-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+            followUpStatusStyle[row.follow_up_status] ?? "bg-muted text-muted-foreground border-border"
+          }`}
+        >
+          <span className="truncate max-w-[110px]">{triggerLabel}</span>
+          <ChevronDown className="h-3 w-3 opacity-60 flex-shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0 overflow-hidden">
+        {/* Header */}
+        <div className="px-3 py-2 border-b bg-muted/40">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Update Follow Up
+          </p>
+        </div>
 
-      {/* Attempt picker popover */}
-      <Popover open={attemptOpen} onOpenChange={setAttemptOpen}>
-        <PopoverTrigger asChild>
-          <span />
-        </PopoverTrigger>
-        <PopoverContent side="bottom" align="start" className="w-56 p-3">
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-foreground">No Answer — Select Attempt</p>
+        {/* Status list */}
+        <div className="p-1.5 space-y-0.5">
+          {FOLLOW_UP_STATUSES.filter((s) => s.value !== "no_answer").map((s) => {
+            const active = row.follow_up_status === s.value;
+            return (
               <button
-                onClick={() => setAttemptOpen(false)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                key={s.value}
+                onClick={() => pick(s.value)}
+                className={`w-full flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-muted ${
+                  active ? "bg-muted/60" : ""
+                }`}
               >
-                <X className="h-3.5 w-3.5" />
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${
+                    followUpStatusStyle[s.value] ?? ""
+                  }`}
+                >
+                  {s.label}
+                </span>
+                {active && <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
               </button>
+            );
+          })}
+        </div>
+
+        {/* No Answer attempts panel */}
+        <div className="border-t bg-[hsl(0,65%,52%)]/[0.04] px-3 py-2.5 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <PhoneOff className="h-3.5 w-3.5 text-[hsl(0,65%,52%)]" />
+              <p className="text-[11px] font-semibold text-[hsl(0,65%,52%)]">
+                No Answer Attempts
+              </p>
             </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {Array.from({ length: FU_MAX_ATTEMPTS }, (_, i) => i + 1).map((n) => {
-                const isDone = n < nextAttempt;
-                const isNext = n === nextAttempt;
-                const isLocked = n > nextAttempt;
-                return (
-                  <button
-                    key={n}
-                    disabled={!isNext}
-                    onClick={() => {
-                      onStatusChange(row.order_id, "no_answer", n);
-                      setAttemptOpen(false);
-                    }}
-                    className={`
-                      relative flex flex-col items-center justify-center h-9 rounded-lg border text-[11px] font-bold transition-all
-                      ${isDone ? "bg-[hsl(0,65%,52%)]/8 border-[hsl(0,65%,52%)]/20 text-[hsl(0,65%,52%)]/50 cursor-default" : ""}
-                      ${isNext ? "bg-[hsl(0,65%,52%)]/15 border-[hsl(0,65%,52%)]/50 text-[hsl(0,65%,52%)] hover:bg-[hsl(0,65%,52%)]/25 shadow-sm cursor-pointer ring-1 ring-[hsl(0,65%,52%)]/30" : ""}
-                      ${isLocked ? "bg-muted/40 border-border/50 text-muted-foreground/40 cursor-not-allowed" : ""}
-                    `}
-                  >
-                    {isDone && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[hsl(0,65%,52%)]/70 flex items-center justify-center">
-                        <span className="text-white text-[7px] leading-none">✓</span>
-                      </span>
-                    )}
-                    {n}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[10px] text-muted-foreground text-center">
-              {doneCount === 0
-                ? "First attempt"
-                : `${doneCount} attempt${doneCount > 1 ? "s" : ""} done · next: #${nextAttempt}`}
-            </p>
+            <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+              {doneCount}/{FU_MAX_ATTEMPTS}
+            </span>
           </div>
-        </PopoverContent>
-      </Popover>
-    </div>
+
+          <div className="grid grid-cols-5 gap-1.5">
+            {Array.from({ length: FU_MAX_ATTEMPTS }, (_, i) => i + 1).map((n) => {
+              const isDone = n <= doneCount;
+              const isNext = n === nextAttempt && !exhausted;
+              const isLocked = !isDone && !isNext;
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  disabled={!isNext}
+                  onClick={() => pick("no_answer", n)}
+                  title={
+                    isDone
+                      ? `Attempt ${n} — done`
+                      : isNext
+                      ? `Submit attempt ${n}`
+                      : `Locked — finish attempt ${nextAttempt} first`
+                  }
+                  className={`relative flex items-center justify-center h-9 rounded-lg border text-xs font-bold transition-all
+                    ${isDone ? "bg-[hsl(0,65%,52%)]/15 border-[hsl(0,65%,52%)]/40 text-[hsl(0,65%,52%)] cursor-default" : ""}
+                    ${isNext ? "bg-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)] text-white hover:bg-[hsl(0,65%,45%)] shadow-md cursor-pointer ring-2 ring-[hsl(0,65%,52%)]/25 ring-offset-1 animate-pulse-subtle" : ""}
+                    ${isLocked ? "bg-muted/40 border-border/40 text-muted-foreground/40 cursor-not-allowed" : ""}
+                  `}
+                >
+                  {isDone ? <Check className="h-4 w-4" /> : n}
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="text-[10px] text-center font-medium">
+            {exhausted ? (
+              <span className="text-[hsl(0,65%,52%)]">All 5 attempts exhausted</span>
+            ) : doneCount === 0 ? (
+              <span className="text-muted-foreground">Tap <span className="font-bold text-[hsl(0,65%,52%)]">1</span> for first attempt</span>
+            ) : (
+              <span className="text-muted-foreground">
+                Next: tap <span className="font-bold text-[hsl(0,65%,52%)]">#{nextAttempt}</span>
+              </span>
+            )}
+          </p>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
