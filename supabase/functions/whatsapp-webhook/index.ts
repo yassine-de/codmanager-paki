@@ -384,14 +384,28 @@ export function isAddressDeliverable(addr?: string | null, city?: string | null)
   const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
   if (tokens.length < 3) return false;
   const hasNumber = /\d/.test(raw);
-  // Expanded: street/area indicators
-  const preciseKeyword = /\b(house|flat|plot|shop|office|store|street|road|st\.?|rd\.?|lane|block|sector|phase|town|village|colony|mohalla|mahalla|gali|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|center|centre|care|hotel|masjid|mosque|school|college|university|hospital|clinic|bank|station|chowk|square|more|tehsil|tehseel|ward|union|abad|pura|nagar|kot|gunj|ganj|garh|wala|پور|آباد|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر|چوک|تحصیل|دکان)\b/i;
-  // Landmark/locator indicators that imply customer is referring to a place
+  // STRONG indicators: explicitly numbered/structured location markers. These
+  // unambiguously point to a deliverable spot for a courier.
+  const strongKeyword = /\b(house|flat|plot|shop\s*(?:no|number|#)?\s*\d|office\s*(?:no|number|#)?\s*\d|street\s*(?:no|number|#)?\s*\d|gali\s*(?:no|number|#)?\s*\d|block|sector|phase|apartment|building|floor|villa|tower|plaza)\b/i;
+  // WEAK indicators: area/landmark words. Helpful but NOT enough on their own
+  // (e.g. "National bank ghalegay" is just a vague POI — courier can't find it).
+  const weakKeyword = /\b(shop|office|store|street|road|st\.?|rd\.?|lane|town|village|colony|mohalla|mahalla|gali|bazar|bazaar|market|society|park|stop|stand|gate|center|centre|care|hotel|masjid|mosque|school|college|university|hospital|clinic|bank|station|chowk|square|more|tehsil|tehseel|ward|union|abad|pura|nagar|kot|gunj|ganj|garh|wala|پور|آباد|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر|چوک|تحصیل|دکان)\b/gi;
   const landmarkIndicator = /\b(near|opposite|behind|front|side|adjacent|main|stop)\b/i;
-  if (hasNumber) return true;
-  if (preciseKeyword.test(lower)) return true;
-  // Landmark + 4+ tokens (city already required separately) → deliverable
-  if (landmarkIndicator.test(lower) && tokens.length >= 4) return true;
+
+  // Has a digit AND any structural/area context → deliverable.
+  if (hasNumber && (strongKeyword.test(lower) || weakKeyword.test(lower) || landmarkIndicator.test(lower))) return true;
+  // Has a digit and ≥ 4 tokens (e.g. "House 12 Gulshan Block 4") → deliverable.
+  if (hasNumber && tokens.length >= 4) return true;
+  // Strong structural keyword present → deliverable even without a number
+  // (e.g. "Phase 2 DHA Lahore" — phase implies sector structure).
+  if (strongKeyword.test(lower)) return true;
+  // Weak keywords only: require AT LEAST TWO distinct weak signals OR a
+  // landmark + weak keyword + 5+ tokens. A single vague POI like "National
+  // bank ghalegay" (3 tokens, only "bank") is NOT enough — courier can't find
+  // it without a street/house/sector. AB-803 fix.
+  const weakHits = (lower.match(weakKeyword) || []).length;
+  if (weakHits >= 2) return true;
+  if (weakHits >= 1 && landmarkIndicator.test(lower) && tokens.length >= 5) return true;
   return false;
 }
 

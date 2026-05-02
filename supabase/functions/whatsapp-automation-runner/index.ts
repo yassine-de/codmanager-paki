@@ -786,11 +786,15 @@ async function applyButtonAction(opts: {
     const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
     if (tokens.length < 3) return false;
     const hasNumber = /\d/.test(raw);
-    const preciseKeyword = /\b(house|flat|plot|shop|office|store|street|road|st\.?|rd\.?|lane|block|sector|phase|town|village|colony|mohalla|mahalla|gali|bazar|bazaar|market|society|villa|apartment|building|floor|park|stop|stand|gate|tower|plaza|center|centre|care|hotel|masjid|mosque|school|college|university|hospital|clinic|bank|station|chowk|square|more|tehsil|tehseel|ward|union|abad|pura|nagar|kot|gunj|ganj|garh|wala|پور|آباد|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر|چوک|تحصیل|دکان)\b/i;
+    const strongKeyword = /\b(house|flat|plot|shop\s*(?:no|number|#)?\s*\d|office\s*(?:no|number|#)?\s*\d|street\s*(?:no|number|#)?\s*\d|gali\s*(?:no|number|#)?\s*\d|block|sector|phase|apartment|building|floor|villa|tower|plaza)\b/i;
+    const weakKeyword = /\b(shop|office|store|street|road|st\.?|rd\.?|lane|town|village|colony|mohalla|mahalla|gali|bazar|bazaar|market|society|park|stop|stand|gate|center|centre|care|hotel|masjid|mosque|school|college|university|hospital|clinic|bank|station|chowk|square|more|tehsil|tehseel|ward|union|abad|pura|nagar|kot|gunj|ganj|garh|wala|پور|آباد|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر|چوک|تحصیل|دکان)\b/gi;
     const landmarkIndicator = /\b(near|opposite|behind|front|side|adjacent|main|stop)\b/i;
-    if (hasNumber) return true;
-    if (preciseKeyword.test(lower)) return true;
-    if (landmarkIndicator.test(lower) && tokens.length >= 4) return true;
+    if (hasNumber && (strongKeyword.test(lower) || weakKeyword.test(lower) || landmarkIndicator.test(lower))) return true;
+    if (hasNumber && tokens.length >= 4) return true;
+    if (strongKeyword.test(lower)) return true;
+    const weakHits = (lower.match(weakKeyword) || []).length;
+    if (weakHits >= 2) return true;
+    if (weakHits >= 1 && landmarkIndicator.test(lower) && tokens.length >= 5) return true;
     return false;
   };
 
