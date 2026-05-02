@@ -1,22 +1,26 @@
 ---
 name: WhatsApp Confirm Address Gate
-description: Customer YES button never finalizes order until AI validates a deliverable address; auto-confirm shortcut is blocked on negative intent (denial/cancel).
+description: Customer YES button or text reply never finalizes order until both deliverable address AND positive intent are present
 type: feature
 ---
 
-In `whatsapp-webhook` → `tryExtractAndConfirmAddress`:
+The WhatsApp confirmation flow gates auto-confirmation behind TWO requirements to avoid wrongful confirmations:
 
-1. If the order already has a deliverable stored address (`isAddressDeliverable`) AND `confirmation_status !== 'confirmed'` AND there is no negative intent → finalize immediately (`confirmation_status='confirmed'`, `confirmation_channel='whatsapp'`, optional auto-book).
-2. Otherwise, run the AI address extractor against the latest customer text to detect a fresh address.
+## Stored-address shortcut (in `tryExtractAndConfirmAddress`, `whatsapp-webhook`)
 
-## Negative-intent guard (AB-790 fix)
+The shortcut auto-confirms an order using the address already on file (from sheet import) — but ONLY when:
 
-Before the stored-address shortcut runs, the customer's latest text is matched against a multilingual negative-intent regex covering:
-- denial: "I don't know about that order", "didn't order", "not mine", "wrong order", "nahi pata", "maine order nahi kiya", "غلط", "پتہ نہیں"
-- cancellation: "cancel", "annul", "annuler", "الغاء", "إلغاء", "rahne do", "mat bhejo", "stop", "refuse", "return", "refund", "mistake", "by mistake"
-- refusal: "I don't want", "nahi chahiye", "نہیں چاہیے", "ما بغيتش", "free", "muft" (asking for free product)
+1. **Address is deliverable** per `isAddressDeliverable()` (see `whatsapp-ai-auto-confirm`).
+2. **Customer expressed clear intent** — one of:
+   - `pending_button_intent` is set on the conversation (customer clicked the YES button), OR
+   - Customer's latest text matches `positiveIntentRe` (yes/ok/haan/ji/confirm/sahi/theek/correct/order kar do/bhej do/chahiye/book/accept/agree, plus Urdu/Arabic equivalents).
+3. **Customer's text does NOT match `negativeIntentRe`** (cancel/don't know/wrong order/nahi chahiye/الغاء/etc.) — AB-790 fix.
 
-If any term matches → the shortcut is SKIPPED and the function returns. The order stays in its current status so a human agent (or the AI's cancellation flow / discount flag / handoff_to_agent tool) can take over. Without this guard, AB-790 was auto-confirmed the moment the customer first replied — even though they said they didn't recognize the order and then asked to cancel.
+If text is neutral (greeting, auto-reply, "thanks", off-topic chitchat) → shortcut is SKIPPED, AI continues conversation, no confirmation happens.
 
-## Pending-button-intent path
-If `pending_button_intent` is set on the conversation (customer clicked "Confirm" earlier), the gate still runs the address validator, but the negative-intent guard does NOT apply (button click is the explicit positive intent).
+### Incidents fixed
+- **AB-790**: customer wrote "I don't know about that order" → AI shortcut auto-confirmed because address was on file. Fixed by `negativeIntentRe` guard.
+- **AB-862**: customer's WhatsApp business sent an auto-reply "Hello & Welcome to Land Advisor 😊 Smart moves start here." → AI shortcut auto-confirmed because address was on file and text wasn't negative. Fixed by requiring `positiveIntentRe` (or pending button intent).
+
+## Code location
+`supabase/functions/whatsapp-webhook/index.ts` → `tryExtractAndConfirmAddress()`, near line ~1685.
