@@ -1,0 +1,1 @@
+UPDATE public.orders SET confirmation_status='new', whatsapp_status=NULL, confirmed_at=NULL, agent_id=NULL, note=COALESCE(note,'') || E'\n[AB-803 fix] AI auto-confirmed on vague address ("National bank ghalegay") — reset for agent re-treatment.' WHERE order_id='AB-803';
