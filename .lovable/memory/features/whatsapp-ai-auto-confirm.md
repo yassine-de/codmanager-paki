@@ -9,25 +9,27 @@ The WhatsApp AI continuation flow (`whatsapp-webhook` edge function) automatical
 ## Trigger
 After every AI-generated reply to a customer text message (in `aiContinueReply`), the system runs `tryExtractAndConfirmAddress`.
 
-## Deliverability rule — RELAXED VALIDATION (AB-614 fix)
+## Deliverability rule — TIGHTENED (AB-803 fix)
 
-`isAddressDeliverable(addr, city)` requires:
-1. City present, AND
-2. Address ≥ 12 chars + ≥ 3 meaningful tokens, AND
-3. ANY ONE of:
-   - has a digit (house/plot number), OR
-   - matches `preciseKeyword` regex (street, road, lane, block, sector, phase, mohalla, gali, bazaar, market, society, colony, **shop, office, store, center, care, hotel, masjid, mosque, school, college, hospital, bank, station, chowk, square, tehsil, ward, town, village, abad, pura, nagar, kot, gunj, garh, wala**, Urdu equivalents پور آباد گھر مکان گلی سڑک محلہ فلیٹ بلاک سیکٹر چوک تحصیل دکان), OR
-   - has a `landmarkIndicator` (near/opposite/behind/front/main/stop/adjacent/side) + ≥ 4 tokens
+`isAddressDeliverable(addr, city)` requires city present, address ≥ 12 chars + ≥ 3 tokens, NOT a fake placeholder, AND any of:
+- **digit + (strong/weak/landmark keyword)** — e.g. "House 12 Gulshan", OR
+- **digit + ≥ 4 tokens** — e.g. "12 4 DHA Lahore", OR
+- **strong keyword** alone (house/flat/plot/block/sector/phase/apartment/building/floor/villa/tower/plaza, or "shop/office/street/gali no <digit>"), OR
+- **≥ 2 distinct weak keywords** (street/road/lane/town/village/colony/mohalla/gali/bazaar/market/society/park/stop/gate/center/care/hotel/masjid/school/hospital/bank/station/chowk/tehsil/abad/pura/nagar/kot/garh/wala + Urdu), OR
+- **≥ 1 weak keyword + landmark word + ≥ 5 tokens**.
 
-### What gets ACCEPTED now (AB-614 fix):
-- "Tehsil Dipalpur Madina Chowk Mobile Care Shop" ✅ (shop + chowk + tehsil)
-- "Near UBL Bank Main Bazaar Road Batagram" ✅ (bank + bazaar + road)
-- "House 12 Street 4 Gulshan-e-Iqbal" ✅ (number + street)
-- "Mohalla Islamia Gali 2 Layyah" ✅ (mohalla + gali)
+### What gets ACCEPTED:
+- "House 12 Street 4 Gulshan-e-Iqbal" ✅ (digit + street)
+- "Tehsil Dipalpur Madina Chowk Mobile Care Shop" ✅ (multiple weak hits)
+- "Phase 2 DHA Lahore" ✅ (strong: phase)
+- "Mohalla Islamia Gali 2 Layyah" ✅ (digit + gali)
 
-### What still gets REJECTED:
-- "Lahore" alone (just city, no other detail)
-- "test" / "same" / "asdf" / "n/a" (fake/placeholder)
+### What gets REJECTED (tightened):
+- "National bank ghalegay" ❌ — only 1 weak hit (bank), 3 tokens, no number → too vague (AB-803)
+- "Near UBL Bank" ❌ — landmark + 1 weak, < 5 tokens
+- "Lahore" alone ❌
+- "test" / "same" / "asdf" / "n/a" ❌
+
 - Single word with no context
 
 ## City matching
