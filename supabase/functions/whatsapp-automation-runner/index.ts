@@ -502,6 +502,35 @@ async function executeFlow(args: {
           continue;
         }
 
+        // DEDUP GUARD: the webhook handler also runs an `aiContinueReply` task
+        // on every inbound. If that task already sent an outbound text within
+        // the last 90 seconds, this ai_step would produce a duplicate (the
+        // customer received the same "Your order is confirmed..." message
+        // twice). Skip the AI step in that case — the webhook AI already
+        // owned this turn.
+        if (conversation?.id) {
+          const dedupSinceIso = new Date(Date.now() - 90 * 1000).toISOString();
+          const { data: recentOut } = await admin
+            .from("whatsapp_messages")
+            .select("id, created_at, message_type")
+            .eq("conversation_id", conversation.id)
+            .eq("direction", "out")
+            .gt("created_at", dedupSinceIso)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (recentOut && (recentOut.message_type === "text" || !recentOut.message_type)) {
+            await appendLog(runId, {
+              type: "ai_step",
+              node_id: node.id,
+              skipped: "recent_outbound_dedup",
+              recent_out_at: recentOut.created_at,
+            });
+            currentId = findNextNode(edges, node.id)?.target ?? null;
+            continue;
+          }
+        }
+
         // Load AI settings + key + history for context
         const { data: aiSettings } = await admin
           .from("whatsapp_ai_settings")
