@@ -39,6 +39,8 @@ import {
   PackageCheck,
   Hourglass,
   X,
+  RefreshCw,
+  RotateCcw,
   Columns3,
   GripVertical,
   CalendarIcon,
@@ -60,7 +62,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   format, isWithinInterval, startOfDay, endOfDay,
   subDays, startOfMonth, endOfMonth, startOfYesterday, endOfYesterday,
-  isSameDay,
+  isSameDay, formatDistanceToNow,
 } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import OrderHistoryModal from "@/components/OrderHistoryModal";
@@ -81,26 +83,37 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-type Segment = "all" | "failed_attempt" | "delayed" | "on_going" | "none";
+type Segment = "all" | "failed_attempt" | "delayed" | "on_going" | "returned" | "re_attempted" | "no_answer" | "none";
 type DateField = "created" | "updated";
 
-const FOLLOW_UP_STATUSES = [
-  { value: "pending", label: "Pending" },
-  { value: "contacted_courier", label: "Contacted Courier" },
-  { value: "contacted_client", label: "Contacted Client" },
-  { value: "client_confirmed", label: "Client Confirmed" },
-  { value: "resent_to_courier", label: "Resent to Courier" },
+/* Top-level tracking statuses */
+const FU_TOP_STATUSES = [
+  { value: "ongoing",         label: "Ongoing"         },
+  { value: "failed_attempts", label: "Failed Attempts" },
+  { value: "delayed",         label: "Delayed"         },
+];
+/* Action statuses (agent picks one of these) */
+const FU_ACTION_STATUSES = [
+  { value: "re_attempted", label: "Re-attempted" },
+  { value: "refused",      label: "Refused"      },
+];
+const FOLLOW_UP_STATUSES = [...FU_TOP_STATUSES, ...FU_ACTION_STATUSES,
   { value: "no_answer", label: "No Answer" },
-  { value: "closed", label: "Closed" },
 ];
 
 const followUpStatusStyle: Record<string, string> = {
-  pending:           "bg-[hsl(30,6%,50%)]/12  text-[hsl(30,6%,50%)]    border-[hsl(30,6%,50%)]/25",
+  pending:         "bg-[hsl(30,6%,50%)]/12    text-[hsl(30,6%,50%)]    border-[hsl(30,6%,50%)]/25",
+  ongoing:         "bg-[hsl(160,50%,42%)]/12  text-[hsl(160,50%,42%)]  border-[hsl(160,50%,42%)]/25",
+  failed_attempts: "bg-[hsl(15,75%,52%)]/12   text-[hsl(15,75%,52%)]   border-[hsl(15,75%,52%)]/25",
+  delayed:         "bg-[hsl(38,90%,48%)]/12   text-[hsl(38,90%,48%)]   border-[hsl(38,90%,48%)]/25",
+  re_attempted:    "bg-[hsl(270,50%,55%)]/12  text-[hsl(270,50%,55%)]  border-[hsl(270,50%,55%)]/25",
+  no_answer:       "bg-[hsl(0,65%,52%)]/12    text-[hsl(0,65%,52%)]    border-[hsl(0,65%,52%)]/25",
+  refused:         "bg-[hsl(340,65%,45%)]/12  text-[hsl(340,65%,45%)]  border-[hsl(340,65%,45%)]/25",
+  /* legacy */
   contacted_courier: "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)]  border-[hsl(210,60%,52%)]/25",
   contacted_client:  "bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)]  border-[hsl(200,65%,50%)]/25",
   client_confirmed:  "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)]  border-[hsl(155,50%,42%)]/25",
   resent_to_courier: "bg-[hsl(270,50%,55%)]/12 text-[hsl(270,50%,55%)]  border-[hsl(270,50%,55%)]/25",
-  no_answer:         "bg-[hsl(0,65%,52%)]/12   text-[hsl(0,65%,52%)]    border-[hsl(0,65%,52%)]/25",
   closed:            "bg-[hsl(155,50%,42%)]/15 text-[hsl(155,50%,42%)]  border-[hsl(155,50%,42%)]/30 font-semibold",
 };
 
@@ -126,6 +139,7 @@ interface FollowUpRow {
   customer_city: string;
   delivery_status: string | null;
   shipping_status: string | null;
+  shipping_company: string | null;
   orio_order_id: number | null;
   orio_consignment_no: string | null;
   shipped_at: string | null;
@@ -290,8 +304,13 @@ export default function FollowUps() {
   }, [enriched]);
 
   const segCounts = useMemo(() => {
-    const c = { failed_attempt: 0, delayed: 0, on_going: 0, none: 0 };
-    for (const r of enriched) { if (r.segment) c[r.segment]++; else c.none++; }
+    const c = { failed_attempt: 0, delayed: 0, on_going: 0, none: 0, returned: 0, re_attempted: 0, no_answer: 0 };
+    for (const r of enriched) {
+      if (r.segment) c[r.segment]++; else c.none++;
+      if (["returned","return","ready_for_return"].includes(r.delivery_status ?? "")) c.returned++;
+      if (r.follow_up_status === "re_attempted") c.re_attempted++;
+      if (r.follow_up_status === "no_answer")    c.no_answer++;
+    }
     return c;
   }, [enriched]);
 
@@ -313,7 +332,10 @@ export default function FollowUps() {
 
   const filtered = useMemo(() => enriched.filter((r) => {
     if (segment !== "all") {
-      if (segment === "none") { if (r.segment !== null) return false; }
+      if (segment === "none")         { if (r.segment !== null) return false; }
+      else if (segment === "returned")     { if (!["returned","return","ready_for_return"].includes(r.delivery_status ?? "")) return false; }
+      else if (segment === "re_attempted") { if (r.follow_up_status !== "re_attempted") return false; }
+      else if (segment === "no_answer")    { if (r.follow_up_status !== "no_answer")    return false; }
       else if (r.segment !== segment) return false;
     }
     if (filterDelivery !== "all" && r.delivery_status !== filterDelivery) return false;
@@ -342,7 +364,7 @@ export default function FollowUps() {
     setFilterAgent("all"); setFilterFollowUp("all"); setSearch(""); setDateRange(undefined);
   }
 
-  async function handleStatusChange(orderId: string, newStatus: string, noAnswerAttempt?: number) {
+  async function handleStatusChange(orderId: string, newStatus: string, noAnswerAttempt?: number, note?: string) {
     if (!authUser) return;
     setSavingId(orderId);
     try {
@@ -350,11 +372,11 @@ export default function FollowUps() {
       if (newStatus === "no_answer" && noAnswerAttempt !== undefined) upsertData.fu_no_answer_count = noAnswerAttempt;
       const { error } = await supabase.from("order_follow_ups").upsert(upsertData as any, { onConflict: "order_id" });
       if (error) throw error;
+      if (note?.trim()) {
+        await supabase.from("orders").update({ follow_up_note: note.trim() }).eq("order_id", orderId);
+      }
       toast.success("Follow-up updated");
       refetch();
-      const row = enriched.find((r) => r.order_id === orderId);
-      setNoteText(row?.follow_up_note ?? "");
-      setNoteDialog({ orderId, currentNote: row?.follow_up_note ?? "", fromStatusChange: true });
     } catch (err: any) {
       toast.error(err.message || "Failed to update");
     } finally {
@@ -468,6 +490,66 @@ export default function FollowUps() {
               </button>
             );
           })}
+
+          {/* Separator */}
+          <div className="w-px h-5 bg-border mx-0.5" />
+
+          {/* Returned tab */}
+          {(() => {
+            const active = segment === "returned";
+            const clr = "hsl(0,55%,48%)";
+            return (
+              <button
+                onClick={() => setSegment(active ? "all" : "returned")}
+                style={active ? { backgroundColor: `color-mix(in srgb, ${clr} 15%, transparent)`, color: clr, borderColor: `color-mix(in srgb, ${clr} 40%, transparent)` } : {}}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium border transition-all ${active ? "shadow-sm" : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"}`}
+              >
+                <RotateCcw className="h-3 w-3 flex-shrink-0" />
+                Returned
+                <span style={active ? { backgroundColor: `color-mix(in srgb, ${clr} 20%, transparent)` } : {}} className={`tabular-nums text-[10px] rounded-full px-1.5 py-0.5 font-semibold ${active ? "" : "bg-muted"}`}>
+                  {segCounts.returned}
+                </span>
+              </button>
+            );
+          })()}
+
+          {/* Re-attempted tab */}
+          {(() => {
+            const active = segment === "re_attempted";
+            const clr = "hsl(270,50%,55%)";
+            return (
+              <button
+                onClick={() => setSegment(active ? "all" : "re_attempted")}
+                style={active ? { backgroundColor: `color-mix(in srgb, ${clr} 15%, transparent)`, color: clr, borderColor: `color-mix(in srgb, ${clr} 40%, transparent)` } : {}}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium border transition-all ${active ? "shadow-sm" : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"}`}
+              >
+                <RefreshCw className="h-3 w-3 flex-shrink-0" />
+                Re-attempted
+                <span style={active ? { backgroundColor: `color-mix(in srgb, ${clr} 20%, transparent)` } : {}} className={`tabular-nums text-[10px] rounded-full px-1.5 py-0.5 font-semibold ${active ? "" : "bg-muted"}`}>
+                  {segCounts.re_attempted}
+                </span>
+              </button>
+            );
+          })()}
+
+          {/* No Answer tab */}
+          {(() => {
+            const active = segment === "no_answer";
+            const clr = "hsl(0,65%,52%)";
+            return (
+              <button
+                onClick={() => setSegment(active ? "all" : "no_answer")}
+                style={active ? { backgroundColor: `color-mix(in srgb, ${clr} 15%, transparent)`, color: clr, borderColor: `color-mix(in srgb, ${clr} 40%, transparent)` } : {}}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium border transition-all ${active ? "shadow-sm" : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-foreground/40"}`}
+              >
+                <PhoneOff className="h-3 w-3 flex-shrink-0" />
+                No Answer
+                <span style={active ? { backgroundColor: `color-mix(in srgb, ${clr} 20%, transparent)` } : {}} className={`tabular-nums text-[10px] rounded-full px-1.5 py-0.5 font-semibold ${active ? "" : "bg-muted"}`}>
+                  {segCounts.no_answer}
+                </span>
+              </button>
+            );
+          })()}
         </div>
 
         {/* ── Toolbar ── */}
@@ -896,6 +978,8 @@ function DateRangePicker({
 
 const FU_MAX_ATTEMPTS = 5;
 
+type FuView = "status" | "attempts" | "refused_note";
+
 function FollowUpStatusCell({
   row,
   savingId,
@@ -903,9 +987,12 @@ function FollowUpStatusCell({
 }: {
   row: FollowUpRow & { segment: "failed_attempt" | "delayed" | "on_going" | null };
   savingId: string | null;
-  onStatusChange: (id: string, status: string, attempt?: number) => void;
+  onStatusChange: (id: string, status: string, attempt?: number, note?: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]       = useState(false);
+  const [view, setView]       = useState<FuView>("status");
+  const [refusedNote, setRefusedNote] = useState("");
+
   const doneCount   = row.fu_no_answer_count ?? 0;
   const nextAttempt = doneCount + 1;
   const isNoAnswer  = row.follow_up_status === "no_answer";
@@ -917,131 +1004,239 @@ function FollowUpStatusCell({
       ? `No Answer · ${doneCount}/${FU_MAX_ATTEMPTS}`
       : (FOLLOW_UP_STATUSES.find((s) => s.value === row.follow_up_status)?.label ?? row.follow_up_status);
 
-  function pick(status: string, attempt?: number) {
+  const updatedAt = row.follow_up_updated_at
+    ? formatDistanceToNow(new Date(row.follow_up_updated_at), { addSuffix: true })
+    : null;
+
+  function handleOpenChange(v: boolean) {
+    setOpen(v);
+    if (!v) { setView("status"); setRefusedNote(""); }
+  }
+
+  function pick(status: string, attempt?: number, note?: string) {
     setOpen(false);
-    onStatusChange(row.order_id, status, attempt);
+    setView("status");
+    setRefusedNote("");
+    onStatusChange(row.order_id, status, attempt, note);
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={isSaving}
-          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none whitespace-nowrap transition-all hover:shadow-sm hover:brightness-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none ${
-            followUpStatusStyle[row.follow_up_status] ?? "bg-muted text-muted-foreground border-border"
-          }`}
-        >
-          <span className="truncate max-w-[110px]">{triggerLabel}</span>
-          <ChevronDown className="h-3 w-3 opacity-60 flex-shrink-0" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0 overflow-hidden shadow-xl">
-        {/* Header */}
-        <div className="px-3 py-2 border-b bg-muted/50">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Update Follow Up
-          </p>
-        </div>
+    <div className="flex flex-col items-start gap-0.5">
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            disabled={isSaving}
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none whitespace-nowrap transition-all hover:shadow-sm hover:brightness-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none ${
+              followUpStatusStyle[row.follow_up_status] ?? "bg-muted text-muted-foreground border-border"
+            }`}
+          >
+            <span className="truncate max-w-[110px]">{triggerLabel}</span>
+            <ChevronDown className="h-3 w-3 opacity-60 flex-shrink-0" />
+          </button>
+        </PopoverTrigger>
 
-        {/* Status list */}
-        <div className="p-1.5 space-y-0.5">
-          {FOLLOW_UP_STATUSES.filter((s) => s.value !== "no_answer").map((s) => {
-            const active = row.follow_up_status === s.value;
-            return (
-              <button
-                key={s.value}
-                onClick={() => pick(s.value)}
-                className={`w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-muted/70 ${active ? "bg-muted/50" : ""}`}
-              >
-                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle[s.value] ?? ""}`}>
-                  {s.label}
-                </span>
-                {active && <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
+        <PopoverContent align="start" className="w-80 p-0 overflow-hidden shadow-xl">
 
-        {/* ── No Answer stepper ── */}
-        <div className="border-t bg-[hsl(0,65%,52%)]/[0.04] px-4 py-3 space-y-3">
-
-          {/* Section header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <div className="p-1 rounded-md bg-[hsl(0,65%,52%)]/15">
-                <PhoneOff className="h-3 w-3 text-[hsl(0,65%,52%)]" />
+          {/* ── VIEW 1: Status list ── */}
+          {view === "status" && (
+            <>
+              <div className="px-3 py-2 border-b bg-muted/50">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Update Follow Up
+                </p>
               </div>
-              <span className="text-xs font-bold text-[hsl(0,65%,52%)]">No Answer</span>
-            </div>
-            <span className="text-[11px] tabular-nums font-semibold text-muted-foreground">
-              {doneCount}/{FU_MAX_ATTEMPTS} done
-            </span>
-          </div>
+              <div className="p-1.5">
+                <div className="space-y-0.5">
+                  {/* Pending — direct save */}
+                  {(() => {
+                    const active = row.follow_up_status === "pending";
+                    return (
+                      <button
+                        onClick={() => pick("pending")}
+                        className={`w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-muted/70 ${active ? "bg-muted/50" : ""}`}
+                      >
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle["pending"]}`}>
+                          Pending
+                        </span>
+                        {active && <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
+                      </button>
+                    );
+                  })()}
 
-          {/* Stepper track */}
-          <div className="relative pt-1 pb-4">
-            {/* Gray base track */}
-            <div className="absolute left-[18px] right-[18px] top-[18px] h-[2px] bg-border" />
-            {/* Red progress track */}
-            {doneCount > 0 && (
-              <div
-                className="absolute left-[18px] top-[18px] h-[2px] bg-[hsl(0,65%,52%)] transition-all duration-500"
-                style={{ width: `calc((100% - 36px) * ${Math.max(0, doneCount - 1)} / ${FU_MAX_ATTEMPTS - 1})` }}
-              />
-            )}
+                  {/* Re-attempted — direct save */}
+                  {(() => {
+                    const s = FU_ACTION_STATUSES.find((x) => x.value === "re_attempted")!;
+                    const active = row.follow_up_status === s.value;
+                    return (
+                      <button
+                        key={s.value}
+                        onClick={() => pick(s.value)}
+                        className={`w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-muted/70 ${active ? "bg-muted/50" : ""}`}
+                      >
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle[s.value] ?? ""}`}>
+                          {s.label}
+                        </span>
+                        {active && <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
+                      </button>
+                    );
+                  })()}
 
-            {/* Circles row */}
-            <div className="relative flex justify-between items-start">
-              {Array.from({ length: FU_MAX_ATTEMPTS }, (_, i) => i + 1).map((n) => {
-                const isDone   = n <= doneCount;
-                const isNext   = n === nextAttempt && !exhausted;
-                const isLocked = !isDone && !isNext;
-                return (
-                  <div key={n} className="flex flex-col items-center gap-1.5">
-                    <button
-                      type="button"
-                      disabled={!isNext}
-                      onClick={() => pick("no_answer", n)}
-                      className={`relative w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm border-2 transition-all duration-200
-                        ${isDone   ? "bg-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)] text-white cursor-default" : ""}
-                        ${isNext   ? "bg-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)] text-white shadow-lg scale-110 cursor-pointer hover:scale-[1.18] hover:shadow-xl ring-4 ring-[hsl(0,65%,52%)]/20 animate-pulse-subtle" : ""}
-                        ${isLocked ? "bg-background border-border/60 text-muted-foreground/40 cursor-not-allowed" : ""}
-                      `}
-                    >
-                      {isDone ? <Check className="h-4 w-4 stroke-[2.5]" /> : n}
-                    </button>
-                    <span className={`text-[10px] font-semibold leading-none ${
-                      isDone   ? "text-[hsl(0,65%,52%)]" :
-                      isNext   ? "text-[hsl(0,65%,52%)] font-bold" :
-                      "text-muted-foreground/50"
-                    }`}>
-                      {isDone ? "Done" : isNext ? "Tap" : `#${n}`}
+                  {/* No Answer — opens stepper */}
+                  <button
+                    onClick={() => setView("attempts")}
+                    className={`w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-[hsl(0,65%,52%)]/8 ${isNoAnswer ? "bg-[hsl(0,65%,52%)]/8" : ""}`}
+                  >
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle["no_answer"]}`}>
+                      No Answer {isNoAnswer && doneCount > 0 ? `· ${doneCount}/${FU_MAX_ATTEMPTS}` : ""}
                     </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+                    <ChevronDown className="h-3.5 w-3.5 text-[hsl(0,65%,52%)]/70 -rotate-90 flex-shrink-0" />
+                  </button>
 
-          {/* Action hint */}
-          {exhausted ? (
-            <div className="rounded-lg bg-[hsl(0,65%,52%)]/10 border border-[hsl(0,65%,52%)]/20 px-3 py-2 text-center">
-              <p className="text-xs font-semibold text-[hsl(0,65%,52%)]">All 5 attempts exhausted</p>
-            </div>
-          ) : (
-            <div className="rounded-lg bg-[hsl(0,65%,52%)]/10 border border-[hsl(0,65%,52%)]/20 px-3 py-2 flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-[hsl(0,65%,52%)] animate-pulse flex-shrink-0" />
-              <p className="text-xs font-medium text-[hsl(0,65%,52%)]">
-                {doneCount === 0
-                  ? "Tap circle 1 to record first attempt"
-                  : `Tap circle ${nextAttempt} to record attempt ${nextAttempt}`}
-              </p>
+                  {/* Refused — opens note input (obligatory) */}
+                  <button
+                    onClick={() => setView("refused_note")}
+                    className={`w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-[hsl(340,65%,45%)]/8 ${row.follow_up_status === "refused" ? "bg-[hsl(340,65%,45%)]/8" : ""}`}
+                  >
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle["refused"]}`}>
+                      Refused
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wide">Note req.</span>
+                      <ChevronDown className="h-3.5 w-3.5 text-[hsl(340,65%,45%)]/70 -rotate-90 flex-shrink-0" />
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── VIEW 2: No Answer attempt stepper ── */}
+          {view === "attempts" && (
+            <div className="bg-[hsl(0,65%,52%)]/[0.03]">
+              <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/50">
+                <button
+                  onClick={() => setView("status")}
+                  className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                </button>
+                <div className="flex items-center gap-1.5 flex-1">
+                  <div className="p-1 rounded-md bg-[hsl(0,65%,52%)]/15">
+                    <PhoneOff className="h-3 w-3 text-[hsl(0,65%,52%)]" />
+                  </div>
+                  <span className="text-xs font-bold text-[hsl(0,65%,52%)]">No Answer — Select Attempt</span>
+                </div>
+                <span className="text-[11px] tabular-nums font-semibold text-muted-foreground">
+                  {doneCount}/{FU_MAX_ATTEMPTS}
+                </span>
+              </div>
+
+              <div className="px-4 py-4 space-y-4">
+                <div className="relative pt-1 pb-5">
+                  <div className="absolute left-[18px] right-[18px] top-[18px] h-[2px] bg-border" />
+                  {doneCount > 0 && (
+                    <div
+                      className="absolute left-[18px] top-[18px] h-[2px] bg-[hsl(0,65%,52%)] transition-all duration-500"
+                      style={{ width: `calc((100% - 36px) * ${Math.max(0, doneCount - 1)} / ${FU_MAX_ATTEMPTS - 1})` }}
+                    />
+                  )}
+                  <div className="relative flex justify-between items-start">
+                    {Array.from({ length: FU_MAX_ATTEMPTS }, (_, i) => i + 1).map((n) => {
+                      const isDone   = n <= doneCount;
+                      const isNext   = n === nextAttempt && !exhausted;
+                      const isLocked = !isDone && !isNext;
+                      return (
+                        <div key={n} className="flex flex-col items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={!isNext}
+                            onClick={() => pick("no_answer", n)}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm border-2 transition-all duration-200
+                              ${isDone   ? "bg-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)] text-white cursor-default" : ""}
+                              ${isNext   ? "bg-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)] text-white shadow-lg scale-110 cursor-pointer hover:scale-[1.15] ring-4 ring-[hsl(0,65%,52%)]/25 animate-pulse-subtle" : ""}
+                              ${isLocked ? "bg-background border-border/60 text-muted-foreground/40 cursor-not-allowed" : ""}
+                            `}
+                          >
+                            {isDone ? <Check className="h-4 w-4 stroke-[2.5]" /> : n}
+                          </button>
+                          <span className={`text-[10px] font-semibold leading-none ${
+                            isDone || isNext ? "text-[hsl(0,65%,52%)]" : "text-muted-foreground/40"
+                          }`}>
+                            {isDone ? "Done" : isNext ? "Tap" : `#${n}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {exhausted ? (
+                  <div className="rounded-xl bg-[hsl(0,65%,52%)]/10 border border-[hsl(0,65%,52%)]/20 px-3 py-2.5 text-center">
+                    <p className="text-xs font-semibold text-[hsl(0,65%,52%)]">All 5 attempts exhausted</p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-[hsl(0,65%,52%)]/10 border border-[hsl(0,65%,52%)]/20 px-3 py-2.5 flex items-center gap-2.5">
+                    <div className="w-2 h-2 rounded-full bg-[hsl(0,65%,52%)] animate-pulse flex-shrink-0" />
+                    <p className="text-xs font-medium text-[hsl(0,65%,52%)]">
+                      {doneCount === 0 ? "Tap circle 1 to record first attempt" : `Tap circle ${nextAttempt} to record attempt ${nextAttempt}`}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
-        </div>
-      </PopoverContent>
-    </Popover>
+
+          {/* ── VIEW 3: Refused — obligatory note ── */}
+          {view === "refused_note" && (
+            <div className="bg-[hsl(340,65%,45%)]/[0.03]">
+              <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/50">
+                <button
+                  onClick={() => { setView("status"); setRefusedNote(""); }}
+                  className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                </button>
+                <div className="flex items-center gap-1.5 flex-1">
+                  <div className="p-1 rounded-md bg-[hsl(340,65%,45%)]/15">
+                    <X className="h-3 w-3 text-[hsl(340,65%,45%)]" />
+                  </div>
+                  <span className="text-xs font-bold text-[hsl(340,65%,45%)]">Refused — Add Note</span>
+                </div>
+                <span className="text-[9px] font-bold uppercase tracking-wide text-[hsl(340,65%,45%)]/70 bg-[hsl(340,65%,45%)]/10 px-1.5 py-0.5 rounded-full border border-[hsl(340,65%,45%)]/20">
+                  Required
+                </span>
+              </div>
+
+              <div className="p-3 space-y-3">
+                <Textarea
+                  value={refusedNote}
+                  onChange={(e) => setRefusedNote(e.target.value)}
+                  placeholder="Why did the client refuse? (required)"
+                  className="text-xs resize-none min-h-[80px] focus:ring-[hsl(340,65%,45%)]/30 focus:border-[hsl(340,65%,45%)]/50"
+                  autoFocus
+                />
+                <button
+                  disabled={!refusedNote.trim()}
+                  onClick={() => pick("refused", undefined, refusedNote)}
+                  className="w-full py-2 rounded-lg text-xs font-semibold transition-all
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                    bg-[hsl(340,65%,45%)] text-white hover:bg-[hsl(340,65%,40%)] active:scale-95"
+                >
+                  Confirm Refused
+                </button>
+              </div>
+            </div>
+          )}
+
+        </PopoverContent>
+      </Popover>
+
+      {/* Timestamp under pill */}
+      {updatedAt && (
+        <span className="text-[9px] text-muted-foreground/45 leading-none pl-1">{updatedAt}</span>
+      )}
+    </div>
   );
 }
 
@@ -1051,7 +1246,7 @@ function renderCell(
   row: FollowUpRow & { segment: "failed_attempt" | "delayed" | "on_going" | null },
   segMeta: (typeof segmentMeta)[keyof typeof segmentMeta] | null,
   savingId: string | null,
-  handleStatusChange: (id: string, status: string, attempt?: number) => void,
+  handleStatusChange: (id: string, status: string, attempt?: number, note?: string) => void,
   handleNoteSave: (id: string, note: string) => void,
   navigate: (to: string) => void,
   setHistoryOrder: (v: { id: string; customer: string } | null) => void,
@@ -1068,12 +1263,27 @@ function renderCell(
 
     case "orio_id":
       return row.orio_order_id ? (
-        <button
-          onClick={() => setTrackingTarget({ orioId: row.orio_order_id!, sellerId: row.seller_id ?? "" })}
-          className="text-[hsl(210,60%,52%)] hover:underline font-semibold text-xs tabular-nums"
-        >
-          {row.orio_order_id}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => setTrackingTarget({ orioId: row.orio_order_id!, sellerId: row.seller_id ?? "" })}
+            className="text-[hsl(210,60%,52%)] hover:underline font-semibold text-xs tabular-nums"
+          >
+            {row.orio_order_id}
+          </button>
+          <a
+            href={`https://oms.getorio.com/orderDetail?odid=${row.orio_order_id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-muted-foreground/40 hover:text-[hsl(210,60%,52%)] transition-colors"
+            title="Open in Orio OMS"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </a>
+        </div>
       ) : <span className="text-muted-foreground/50">—</span>;
 
     case "customer": {
@@ -1098,12 +1308,29 @@ function renderCell(
       );
     }
 
-    case "phone":
+    case "phone": {
+      const phone = row.customer_phone;
+      if (!phone) return <span className="text-muted-foreground/50 text-xs">—</span>;
+      const cleaned = phone.replace(/\D/g, "");
+      const waNumber = cleaned.startsWith("92") ? cleaned : cleaned.startsWith("0") ? "92" + cleaned.slice(1) : cleaned;
+      const waUrl = `https://wa.me/${waNumber}`;
       return (
-        <span className="text-xs tabular-nums font-medium text-foreground/70">
-          {row.customer_phone || "—"}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs tabular-nums font-medium text-foreground/70">{phone}</span>
+          <a
+            href={waUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open WhatsApp"
+            className="flex-shrink-0 text-[hsl(142,70%,42%)]/50 hover:text-[hsl(142,70%,42%)] transition-colors"
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+            </svg>
+          </a>
+        </div>
       );
+    }
 
     case "city":
       return row.customer_city ? (
@@ -1136,7 +1363,16 @@ function renderCell(
       ) : <span className="text-muted-foreground/50 text-xs">—</span>;
 
     case "delivery":
-      return <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />;
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />
+          {row.shipping_company && (
+            <span className="text-[9px] font-semibold text-muted-foreground/55 leading-none pl-1 truncate max-w-[100px]">
+              {row.shipping_company}
+            </span>
+          )}
+        </div>
+      );
 
     case "days": {
       const d = row.days_since_shipped;
@@ -1215,7 +1451,11 @@ function renderCell(
       </span>
     );
 
-    case "actions":
+    case "actions": {
+      const phone = row.customer_phone ?? "";
+      const cleaned = phone.replace(/\D/g, "");
+      const waNumber = cleaned.startsWith("92") ? cleaned : cleaned.startsWith("0") ? "92" + cleaned.slice(1) : cleaned;
+      const waUrl = `https://wa.me/${waNumber}`;
       return (
         <div className="flex items-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity duration-150">
           <Tooltip>
@@ -1240,8 +1480,26 @@ function renderCell(
             </TooltipTrigger>
             <TooltipContent side="top"><p className="text-xs">Order History</p></TooltipContent>
           </Tooltip>
+          {phone && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  href={waUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[hsl(142,70%,42%)]/10 text-[hsl(142,70%,42%)] hover:bg-[hsl(142,70%,42%)]/20 transition-colors active:scale-95"
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="top"><p className="text-xs">WhatsApp {row.customer_name}</p></TooltipContent>
+            </Tooltip>
+          )}
         </div>
       );
+    }
   }
 }
 
