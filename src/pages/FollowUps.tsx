@@ -84,7 +84,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 type Segment = "all" | "failed_attempt" | "delayed" | "on_going" | "returned" | "re_attempted" | "no_answer" | "none";
-type DateField = "created" | "updated";
+type DateField = "created" | "updated" | "fu_updated";
 
 /* Top-level tracking statuses */
 const FU_TOP_STATUSES = [
@@ -346,12 +346,29 @@ export default function FollowUps() {
     if (filterAgent    !== "all" && r.agent_id        !== filterAgent)    return false;
     if (filterFollowUp !== "all" && r.follow_up_status !== filterFollowUp) return false;
     if (dateRange?.from) {
-      const target = new Date(dateField === "created" ? r.order_created_at : r.order_updated_at);
-      if (!isWithinInterval(target, { start: startOfDay(dateRange.from), end: endOfDay(dateRange.to ?? dateRange.from) })) return false;
+      try {
+        const ts = dateField === "created" ? r.order_created_at
+          : dateField === "fu_updated"     ? (r.follow_up_updated_at ?? r.order_updated_at)
+          : r.order_updated_at;
+        const target = new Date(ts);
+        const start  = startOfDay(dateRange.from);
+        const end    = endOfDay(dateRange.to ?? dateRange.from);
+        if (start > end || !isWithinInterval(target, { start, end })) return false;
+      } catch { return false; }
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      const hay = [r.order_id, r.customer_name, r.customer_phone, r.customer_city, r.seller_name ?? "", r.agent_name ?? ""].join(" ").toLowerCase();
+      const hay = [
+        r.order_id,
+        r.customer_name,
+        r.customer_phone,
+        r.customer_city,
+        r.seller_name ?? "",
+        r.agent_name ?? "",
+        r.orio_order_id?.toString() ?? "",
+        r.orio_consignment_no ?? "",
+        r.product_name ?? "",
+      ].join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -861,12 +878,13 @@ function DateRangePicker({
     <div className="flex gap-1">
       {/* Field toggle */}
       <Select value={dateField} onValueChange={(v) => onDateFieldChange(v as DateField)}>
-        <SelectTrigger className="h-8 text-xs w-[86px] px-2">
+        <SelectTrigger className="h-8 text-xs w-[100px] px-2">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="created">Created</SelectItem>
-          <SelectItem value="updated">Updated</SelectItem>
+          <SelectItem value="created">Order Created</SelectItem>
+          <SelectItem value="updated">Order Updated</SelectItem>
+          <SelectItem value="fu_updated">FU Updated</SelectItem>
         </SelectContent>
       </Select>
 
