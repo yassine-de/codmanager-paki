@@ -141,7 +141,6 @@ interface FollowUpRow {
   customer_city: string;
   delivery_status: string | null;
   shipping_status: string | null;
-  shipping_company: string | null;
   orio_order_id: number | null;
   orio_consignment_no: string | null;
   shipped_at: string | null;
@@ -160,6 +159,18 @@ interface FollowUpRow {
   product_name: string | null;
   total_amount: number | null;
   fu_no_answer_count: number;
+}
+
+// Detect courier from ORIO consignment number prefix
+function detectCourier(consignmentNo: string | null): string | null {
+  if (!consignmentNo) return null;
+  const cn = consignmentNo.toUpperCase().trim();
+  if (cn.startsWith("MP") || cn.includes("MPX")) return "MPostex";
+  if (cn.startsWith("BL") || cn.includes("BLX")) return "Bleux";
+  if (cn.startsWith("LD") || cn.includes("LEO")) return "Leopard";
+  if (cn.startsWith("TCS"))                       return "TCS";
+  if (cn.startsWith("TR") || cn.includes("TRX"))  return "Trax";
+  return null;
 }
 
 function computeSegment(row: FollowUpRow): "failed_attempt" | "delayed" | "on_going" | null {
@@ -1442,9 +1453,9 @@ function renderCell(
       return (
         <div className="flex flex-col items-start gap-0.5">
           <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />
-          {row.shipping_company && (
+          {detectCourier(row.orio_consignment_no) && (
             <span className="text-[9px] font-semibold text-muted-foreground/55 leading-none pl-1 truncate max-w-[100px]">
-              {row.shipping_company}
+              {detectCourier(row.orio_consignment_no)}
             </span>
           )}
         </div>
