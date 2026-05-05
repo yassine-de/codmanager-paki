@@ -41,7 +41,7 @@ type Order = {
   updated_at: string;
 };
 
-type SortField = "conf_rate" | "del_rate" | "orders" | "confirmed" | "shipped" | "delivered";
+type SortField = "confRate" | "delRate" | "orders" | "confirmed" | "shipped" | "delivered";
 type SortDir = "asc" | "desc";
 type SellerSortField = "orders" | "confirmed" | "confPct" | "shipped" | "delivered" | "delPct" | "revenue";
 
@@ -239,7 +239,7 @@ export default function SellerAnalytics() {
   const [dateFieldMode, setDateFieldMode] = useState<"created" | "updated">("created");
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [productSort, setProductSort] = useState<SortField>("conf_rate");
+  const [productSort, setProductSort] = useState<SortField>("confRate");
   const [productSortDir, setProductSortDir] = useState<SortDir>("desc");
   const [showAllProducts, setShowAllProducts] = useState(false);
   const [sellerSort, setSellerSort] = useState<SellerSortField>("orders");
@@ -892,8 +892,8 @@ export default function SellerAnalytics() {
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleProductSort("confirmed")}>
                     <span className="inline-flex items-center justify-end">Confirmed <SortIcon field="confirmed" /></span>
                   </th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[140px]" onClick={() => handleProductSort("conf_rate")}>
-                    <span className="inline-flex items-center">Conf. Rate <SortIcon field="conf_rate" /></span>
+                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[140px]" onClick={() => handleProductSort("confRate")}>
+                    <span className="inline-flex items-center">Conf. Rate <SortIcon field="confRate" /></span>
                   </th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleProductSort("shipped")}>
                     <span className="inline-flex items-center justify-end">Shipped <SortIcon field="shipped" /></span>
@@ -901,8 +901,8 @@ export default function SellerAnalytics() {
                   <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleProductSort("delivered")}>
                     <span className="inline-flex items-center justify-end">Delivered <SortIcon field="delivered" /></span>
                   </th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[140px]" onClick={() => handleProductSort("del_rate")}>
-                    <span className="inline-flex items-center">Del. Rate <SortIcon field="del_rate" /></span>
+                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[140px]" onClick={() => handleProductSort("delRate")}>
+                    <span className="inline-flex items-center">Del. Rate <SortIcon field="delRate" /></span>
                   </th>
                 </tr>
               </thead>
