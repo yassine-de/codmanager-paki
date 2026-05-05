@@ -49,7 +49,7 @@ type DateField = "created" | "updated";
 
 type CourierSortField = "courier" | "total" | "delivered" | "failed" | "returned" | "rate";
 type CitySortField = "city" | "total" | "delivered" | "failed" | "returned" | "inProcess" | "rate";
-type AgentSortField = "name" | "confirmed" | "delivered" | "failed" | "rate" | "waConfirmed" | "waRate";
+type AgentSortField = "name" | "confirmed" | "delivered" | "failed" | "rate";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -511,23 +511,33 @@ export default function DeliveryAnalytics() {
   // ── Agent Performance ────────────────────────────────────────────────────────
 
   const agentRows = useMemo(() => {
-    const map: Record<string, { confirmed: number; delivered: number; failed: number; waConfirmed: number; waDelivered: number }> = {};
+    // Per-agent stats (phone/manual confirmations)
+    const map: Record<string, { confirmed: number; delivered: number; failed: number }> = {};
+    // WhatsApp synthetic agent
+    const wa = { confirmed: 0, delivered: 0, failed: 0 };
+
     filteredOrders.forEach((o) => {
-      const agentId = o.agent_id || o.original_agent_id;
-      if (!agentId) return;
-      if (!map[agentId]) map[agentId] = { confirmed: 0, delivered: 0, failed: 0, waConfirmed: 0, waDelivered: 0 };
-      const isConfirmed = o.confirmation_status === "confirmed" || CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "");
-      if (isConfirmed) map[agentId].confirmed++;
-      if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[agentId].delivered++;
-      if (o.delivery_status === "failed_attempt") map[agentId].failed++;
-      // WhatsApp confirmed orders
       const isWa = o.confirmation_channel === "whatsapp";
+      const isConfirmed = o.confirmation_status === "confirmed" || CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "");
+      const isDelivered = DELIVERED_STATUSES.includes(o.delivery_status || "");
+      const isFailed = o.delivery_status === "failed_attempt";
+
       if (isWa) {
-        map[agentId].waConfirmed++;
-        if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[agentId].waDelivered++;
+        // WhatsApp row: count all WA-confirmed orders regardless of agent
+        if (isConfirmed) wa.confirmed++;
+        if (isDelivered) wa.delivered++;
+        if (isFailed) wa.failed++;
+      } else {
+        const agentId = o.agent_id || o.original_agent_id;
+        if (!agentId) return;
+        if (!map[agentId]) map[agentId] = { confirmed: 0, delivered: 0, failed: 0 };
+        if (isConfirmed) map[agentId].confirmed++;
+        if (isDelivered) map[agentId].delivered++;
+        if (isFailed) map[agentId].failed++;
       }
     });
-    return Object.entries(map)
+
+    const rows = Object.entries(map)
       .filter(([, d]) => d.confirmed > 0)
       .map(([id, d]) => ({
         id,
@@ -536,10 +546,23 @@ export default function DeliveryAnalytics() {
         delivered: d.delivered,
         failed: d.failed,
         rate: pct(d.delivered, d.confirmed),
-        waConfirmed: d.waConfirmed,
-        waDelivered: d.waDelivered,
-        waRate: pct(d.waDelivered, d.waConfirmed),
+        isWhatsApp: false,
       }));
+
+    // Add WhatsApp as a standalone row if it has any data
+    if (wa.confirmed > 0) {
+      rows.push({
+        id: "__whatsapp__",
+        name: "WhatsApp",
+        confirmed: wa.confirmed,
+        delivered: wa.delivered,
+        failed: wa.failed,
+        rate: pct(wa.delivered, wa.confirmed),
+        isWhatsApp: true,
+      });
+    }
+
+    return rows;
   }, [filteredOrders, profileMap]);
 
   const sortedAgentRows = useMemo(() => {
@@ -796,7 +819,130 @@ export default function DeliveryAnalytics() {
             ))}
           </div>
 
-          {/* ── Section 3: Delivery Rate by Courier ───────────────────────────── */}
+          {/* ── Section 3: Delivery by Agent ─────────────────────────────────── */}
+          {sortedAgentRows.length > 0 && (
+            <div
+              className="rounded-2xl bg-card border border-border/60 shadow-sm p-5 animate-slide-up"
+              style={{ animationDelay: "140ms" }}
+            >
+              <SectionHeader
+                icon={Users}
+                title="Delivery by Agent"
+                subtitle="Confirmed, delivered & failed per agent — WhatsApp included as a source"
+                iconBg="bg-indigo-100 dark:bg-indigo-900/30"
+                iconColor="text-indigo-600 dark:text-indigo-300"
+              />
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/60 text-xs text-muted-foreground">
+                      <th className="text-left py-2.5 pr-3 w-10 font-semibold">#</th>
+                      {(
+                        [
+                          { key: "name",      label: "Agent / Source", align: "left"  },
+                          { key: "confirmed", label: "Confirmed",      align: "right" },
+                          { key: "delivered", label: "Delivered",      align: "right" },
+                          { key: "failed",    label: "Failed Attempt", align: "right" },
+                          { key: "rate",      label: "Delivery Rate",  align: "right" },
+                        ] as { key: AgentSortField; label: string; align: string }[]
+                      ).map(({ key, label, align }) => (
+                        <th
+                          key={key}
+                          className={cn(
+                            "py-2.5 font-semibold cursor-pointer hover:text-foreground select-none",
+                            align === "left" ? "text-left pr-4" : "text-right px-3",
+                            key === "rate" && "min-w-[160px]"
+                          )}
+                          onClick={() => toggleAgentSort(key)}
+                        >
+                          {label} <SortIcon field={key} active={agentSort} dir={agentSortDir} />
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedAgentRows.map((row, i) => {
+                      const isWa = row.isWhatsApp;
+                      const agentRank = sortedAgentRows.filter((r) => !r.isWhatsApp).indexOf(row) + 1;
+                      const rankBadge =
+                        agentRank === 1
+                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-700"
+                          : agentRank === 2
+                          ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700"
+                          : agentRank === 3
+                          ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-700"
+                          : "bg-muted text-muted-foreground";
+                      return (
+                        <tr
+                          key={row.id}
+                          className={cn(
+                            "border-b border-border/40 last:border-0 transition-colors",
+                            isWa
+                              ? "bg-emerald-50/60 dark:bg-emerald-900/10 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                              : "hover:bg-muted/40"
+                          )}
+                        >
+                          <td className="py-3 pr-3">
+                            {isWa ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300">
+                                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                                  <path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.127 1.529 5.875L.057 23.97l6.256-1.635A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.8 9.8 0 01-5.028-1.378l-.36-.214-3.718.972.995-3.622-.234-.373A9.817 9.817 0 012.182 12C2.182 6.573 6.573 2.182 12 2.182S21.818 6.573 21.818 12 17.427 21.818 12 21.818z"/>
+                                </svg>
+                              </span>
+                            ) : (
+                              <span
+                                className={cn(
+                                  "inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold",
+                                  rankBadge
+                                )}
+                              >
+                                {agentRank <= 3 ? <Award className="h-3 w-3" /> : agentRank}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 pr-4">
+                            {isWa ? (
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-emerald-700 dark:text-emerald-300">WhatsApp</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 font-medium">Auto</span>
+                              </div>
+                            ) : (
+                              <span className="font-medium">{row.name}</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right tabular-nums font-medium">
+                            {row.confirmed.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
+                            {row.delivered.toLocaleString()}
+                          </td>
+                          <td className="py-3 px-3 text-right tabular-nums font-medium text-amber-600 dark:text-amber-400">
+                            {row.failed.toLocaleString()}
+                          </td>
+                          <td className="py-3 pl-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="w-14 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.min(row.rate, 100)}%`, backgroundColor: rateColor(row.rate) }}
+                                />
+                              </div>
+                              <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full min-w-[46px] text-center", rateBadgeClass(row.rate))}>
+                                {fmtPct(row.rate)}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Section 4: Delivery Rate by Courier ───────────────────────────── */}
           {sortedCourierRows.length > 0 && (
             <div
               className="rounded-2xl bg-card border border-border/60 shadow-sm p-5 animate-slide-up overflow-hidden"
@@ -1163,146 +1309,6 @@ export default function DeliveryAnalytics() {
             </div>
           )}
 
-          {/* ── Section 7: Agent Performance Table ────────────────────────────── */}
-          {sortedAgentRows.length > 0 && (
-            <div
-              className="rounded-2xl bg-card border border-border/60 shadow-sm p-5 animate-slide-up"
-              style={{ animationDelay: "340ms" }}
-            >
-              <SectionHeader
-                icon={Users}
-                title="Delivery by Agent"
-                subtitle="Delivery outcomes & WhatsApp confirmation performance per agent"
-                iconBg="bg-indigo-100 dark:bg-indigo-900/30"
-                iconColor="text-indigo-600 dark:text-indigo-300"
-              />
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/60 text-xs text-muted-foreground">
-                      <th className="text-left py-2.5 pr-3 w-10 font-semibold">#</th>
-                      {(
-                        [
-                          { key: "name",        label: "Agent",           align: "left",  group: "" },
-                          { key: "confirmed",   label: "Confirmed",       align: "right", group: "overall" },
-                          { key: "delivered",   label: "Delivered",       align: "right", group: "overall" },
-                          { key: "failed",      label: "Failed",          align: "right", group: "overall" },
-                          { key: "rate",        label: "Del. Rate",       align: "right", group: "overall" },
-                          { key: "waConfirmed", label: "WA Confirmed",    align: "right", group: "wa" },
-                          { key: "waRate",      label: "WA Del. Rate",    align: "right", group: "wa" },
-                        ] as { key: AgentSortField; label: string; align: string; group: string }[]
-                      ).map(({ key, label, align, group }) => (
-                        <th
-                          key={key}
-                          className={cn(
-                            "py-2.5 font-semibold cursor-pointer hover:text-foreground select-none",
-                            align === "left" ? "text-left pr-4" : "text-right px-3",
-                            (key === "rate" || key === "waRate") && "min-w-[150px]",
-                            group === "wa" && "text-emerald-600 dark:text-emerald-400"
-                          )}
-                          onClick={() => toggleAgentSort(key)}
-                        >
-                          {group === "wa" && (
-                            <svg viewBox="0 0 24 24" className="inline w-3 h-3 mr-1 fill-current" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                              <path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.127 1.529 5.875L.057 23.97l6.256-1.635A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.8 9.8 0 01-5.028-1.378l-.36-.214-3.718.972.995-3.622-.234-.373A9.817 9.817 0 012.182 12C2.182 6.573 6.573 2.182 12 2.182S21.818 6.573 21.818 12 17.427 21.818 12 21.818z"/>
-                            </svg>
-                          )}
-                          {label} <SortIcon field={key} active={agentSort} dir={agentSortDir} />
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedAgentRows.map((row, i) => {
-                      const rank = i + 1;
-                      const rankBadge =
-                        rank === 1
-                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-700"
-                          : rank === 2
-                          ? "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700"
-                          : rank === 3
-                          ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border border-orange-200 dark:border-orange-700"
-                          : "bg-muted text-muted-foreground";
-                      return (
-                        <tr
-                          key={row.id}
-                          className="border-b border-border/40 last:border-0 hover:bg-muted/40 transition-colors"
-                        >
-                          <td className="py-3 pr-3">
-                            <span
-                              className={cn(
-                                "inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold",
-                                rankBadge
-                              )}
-                            >
-                              {rank <= 3 ? <Award className="h-3 w-3" /> : rank}
-                            </span>
-                          </td>
-                          <td className="py-3 pr-4 font-medium">{row.name}</td>
-                          <td className="py-3 px-3 text-right tabular-nums">{row.confirmed.toLocaleString()}</td>
-                          <td className="py-3 px-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-medium">
-                            {row.delivered.toLocaleString()}
-                          </td>
-                          <td className="py-3 px-3 text-right tabular-nums text-amber-600 dark:text-amber-400 font-medium">
-                            {row.failed.toLocaleString()}
-                          </td>
-                          {/* Overall delivery rate */}
-                          <td className="py-3 pl-3 pr-4">
-                            <div className="flex items-center justify-end gap-2">
-                              <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{ width: `${Math.min(row.rate, 100)}%`, backgroundColor: rateColor(row.rate) }}
-                                />
-                              </div>
-                              <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full min-w-[46px] text-center", rateBadgeClass(row.rate))}>
-                                {fmtPct(row.rate)}
-                              </span>
-                            </div>
-                          </td>
-                          {/* WhatsApp confirmed */}
-                          <td className="py-3 px-3 text-right tabular-nums">
-                            {row.waConfirmed > 0 ? (
-                              <div className="flex items-center justify-end gap-1.5">
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
-                                  <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 fill-current" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                                    <path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.127 1.529 5.875L.057 23.97l6.256-1.635A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.8 9.8 0 01-5.028-1.378l-.36-.214-3.718.972.995-3.622-.234-.373A9.817 9.817 0 012.182 12C2.182 6.573 6.573 2.182 12 2.182S21.818 6.573 21.818 12 17.427 21.818 12 21.818z"/>
-                                  </svg>
-                                  {row.waConfirmed.toLocaleString()}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">—</span>
-                            )}
-                          </td>
-                          {/* WhatsApp delivery rate */}
-                          <td className="py-3 pl-3">
-                            {row.waConfirmed > 0 ? (
-                              <div className="flex items-center justify-end gap-2">
-                                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full transition-all duration-500"
-                                    style={{ width: `${Math.min(row.waRate, 100)}%`, backgroundColor: rateColor(row.waRate) }}
-                                  />
-                                </div>
-                                <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full min-w-[46px] text-center", rateBadgeClass(row.waRate))}>
-                                  {fmtPct(row.waRate)}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-right block text-muted-foreground text-xs">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
 
           {/* Empty state */}
           {filteredOrders.length === 0 && (
