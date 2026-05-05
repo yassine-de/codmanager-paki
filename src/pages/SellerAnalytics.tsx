@@ -41,8 +41,9 @@ type Order = {
   updated_at: string;
 };
 
-type SortField = "conf_rate" | "del_rate" | "orders";
+type SortField = "conf_rate" | "del_rate" | "orders" | "confirmed" | "shipped" | "delivered";
 type SortDir = "asc" | "desc";
+type SellerSortField = "orders" | "confirmed" | "confPct" | "shipped" | "delivered" | "delPct" | "revenue";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -240,6 +241,9 @@ export default function SellerAnalytics() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [productSort, setProductSort] = useState<SortField>("conf_rate");
   const [productSortDir, setProductSortDir] = useState<SortDir>("desc");
+  const [showAllProducts, setShowAllProducts] = useState(false);
+  const [sellerSort, setSellerSort] = useState<SellerSortField>("orders");
+  const [sellerSortDir, setSellerSortDir] = useState<SortDir>("desc");
 
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["seller-analytics-orders-v2"],
@@ -271,9 +275,10 @@ export default function SellerAnalytics() {
   }, [orders, profileMap]);
 
   const productOptions = useMemo(() => {
-    const names = [...new Set(orders.map((o) => o.product_name).filter(Boolean))];
+    const source = sellerFilter === "all" ? orders : orders.filter((o) => o.seller_id === sellerFilter);
+    const names = [...new Set(source.map((o) => o.product_name).filter(Boolean))];
     return names.sort().map((n) => ({ value: n, label: n }));
-  }, [orders]);
+  }, [orders, sellerFilter]);
 
   // ── Filtered orders ──────────────────────────────────────────────────────────
 
@@ -345,12 +350,13 @@ export default function SellerAnalytics() {
   }, [filteredOrders]);
 
   const sortedProductRows = useMemo(() => {
-    const sorted = [...productRows].sort((a, b) => {
+    return [...productRows].sort((a, b) => {
       const diff = a[productSort] - b[productSort];
       return productSortDir === "desc" ? -diff : diff;
     });
-    return sorted.slice(0, 20);
   }, [productRows, productSort, productSortDir]);
+
+  const visibleProductRows = showAllProducts ? sortedProductRows : sortedProductRows.slice(0, 10);
 
   // ── Seller Leaderboard ───────────────────────────────────────────────────────
 
@@ -371,20 +377,25 @@ export default function SellerAnalytics() {
       }
     });
 
-    return Object.entries(map)
-      .map(([id, d]) => ({
-        id,
-        name: profileMap[id] || id.slice(0, 8),
-        orders: d.orders,
-        confirmed: d.confirmed,
-        confPct: pct(d.confirmed, d.orders),
-        shipped: d.shipped,
-        delivered: d.delivered,
-        delPct: pct(d.delivered, d.confirmed),
-        revenue: d.revenue,
-      }))
-      .sort((a, b) => b.orders - a.orders);
+    return Object.entries(map).map(([id, d]) => ({
+      id,
+      name: profileMap[id] || id.slice(0, 8),
+      orders: d.orders,
+      confirmed: d.confirmed,
+      confPct: pct(d.confirmed, d.orders),
+      shipped: d.shipped,
+      delivered: d.delivered,
+      delPct: pct(d.delivered, d.confirmed),
+      revenue: d.revenue,
+    }));
   }, [filteredOrders, profileMap]);
+
+  const sortedSellerRows = useMemo(() => {
+    return [...sellerRows].sort((a, b) => {
+      const diff = a[sellerSort] - b[sellerSort];
+      return sellerSortDir === "desc" ? -diff : diff;
+    });
+  }, [sellerRows, sellerSort, sellerSortDir]);
 
   // ── Chart data: daily confirmed trend ───────────────────────────────────────
 
@@ -418,12 +429,26 @@ export default function SellerAnalytics() {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
+  function handleSellerChange(id: string) {
+    setSellerFilter(id);
+    setProductFilter("all"); // reset product when seller changes
+  }
+
   function handleProductSort(field: SortField) {
     if (productSort === field) {
       setProductSortDir((d) => (d === "desc" ? "asc" : "desc"));
     } else {
       setProductSort(field);
       setProductSortDir("desc");
+    }
+  }
+
+  function handleSellerSort(field: SellerSortField) {
+    if (sellerSort === field) {
+      setSellerSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setSellerSort(field);
+      setSellerSortDir("desc");
     }
   }
 
@@ -434,9 +459,16 @@ export default function SellerAnalytics() {
       : <ChevronUp className="h-3 w-3 text-primary ml-1" />;
   }
 
+  function SellerSortIcon({ field }: { field: SellerSortField }) {
+    if (sellerSort !== field) return <ChevronsUpDown className="h-3 w-3 text-muted-foreground/50 ml-1" />;
+    return sellerSortDir === "desc"
+      ? <ChevronDown className="h-3 w-3 text-primary ml-1" />
+      : <ChevronUp className="h-3 w-3 text-primary ml-1" />;
+  }
+
   const hasActiveFilters = sellerFilter !== "all" || productFilter !== "all" || datePreset !== "maximum";
   const maxProductOrders = sortedProductRows[0]?.orders ?? 1;
-  const maxSellerOrders = sellerRows[0]?.orders ?? 1;
+  const maxSellerOrders = sortedSellerRows[0]?.orders ?? 1;
 
   const TOOLTIP_STYLE = {
     borderRadius: "12px",
@@ -501,7 +533,7 @@ export default function SellerAnalytics() {
         <div className="flex flex-wrap gap-2 items-center">
           <SearchableSelect
             value={sellerFilter}
-            onValueChange={setSellerFilter}
+            onValueChange={handleSellerChange}
             options={sellerOptions}
             placeholder="Seller"
             allLabel="All Sellers"
@@ -556,6 +588,7 @@ export default function SellerAnalytics() {
                 setProductFilter("all");
                 setDatePreset("maximum");
                 setDateRange(undefined);
+                setShowAllProducts(false);
               }}
             >
               <XCircle className="h-3.5 w-3.5 mr-1.5" />
@@ -832,7 +865,7 @@ export default function SellerAnalytics() {
             <SectionHeader
               icon={Package}
               title="Product Performance"
-              subtitle={`Top ${sortedProductRows.length} products by selected metric`}
+              subtitle={`${sortedProductRows.length} products — showing ${visibleProductRows.length}`}
               iconBg="bg-orange-500/10"
               iconColor="text-orange-500"
             />
@@ -841,87 +874,63 @@ export default function SellerAnalytics() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/30">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-[200px]">
-                    Product
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-[200px]">Product</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleProductSort("orders")}>
+                    <span className="inline-flex items-center justify-end">Orders <SortIcon field="orders" /></span>
                   </th>
-                  <th
-                    className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
-                    onClick={() => handleProductSort("orders")}
-                  >
-                    <span className="inline-flex items-center justify-end">
-                      Orders <SortIcon field="orders" />
-                    </span>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleProductSort("confirmed")}>
+                    <span className="inline-flex items-center justify-end">Confirmed <SortIcon field="confirmed" /></span>
                   </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">
-                    Confirmed
+                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[140px]" onClick={() => handleProductSort("conf_rate")}>
+                    <span className="inline-flex items-center">Conf. Rate <SortIcon field="conf_rate" /></span>
                   </th>
-                  <th
-                    className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[140px]"
-                    onClick={() => handleProductSort("conf_rate")}
-                  >
-                    <span className="inline-flex items-center">
-                      Conf. Rate <SortIcon field="conf_rate" />
-                    </span>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleProductSort("shipped")}>
+                    <span className="inline-flex items-center justify-end">Shipped <SortIcon field="shipped" /></span>
                   </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">
-                    Shipped
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleProductSort("delivered")}>
+                    <span className="inline-flex items-center justify-end">Delivered <SortIcon field="delivered" /></span>
                   </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">
-                    Delivered
-                  </th>
-                  <th
-                    className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[140px]"
-                    onClick={() => handleProductSort("del_rate")}
-                  >
-                    <span className="inline-flex items-center">
-                      Del. Rate <SortIcon field="del_rate" />
-                    </span>
+                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[140px]" onClick={() => handleProductSort("del_rate")}>
+                    <span className="inline-flex items-center">Del. Rate <SortIcon field="del_rate" /></span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {sortedProductRows.map((row, i) => (
-                  <tr
-                    key={row.name}
-                    className={cn(
-                      "border-b border-border/40 hover:bg-muted/20 transition-colors",
-                      i % 2 === 0 ? "" : "bg-muted/5"
-                    )}
-                  >
+                {visibleProductRows.map((row, i) => (
+                  <tr key={row.name} className={cn("border-b border-border/40 hover:bg-muted/20 transition-colors", i % 2 === 0 ? "" : "bg-muted/5")}>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-xs truncate max-w-[180px]" title={row.name}>
-                        {row.name}
-                      </div>
+                      <div className="font-medium text-xs truncate max-w-[180px]" title={row.name}>{row.name}</div>
                       <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden w-full">
-                        <div
-                          className="h-full rounded-full bg-orange-400/60 transition-all"
-                          style={{ width: `${(row.orders / maxProductOrders) * 100}%` }}
-                        />
+                        <div className="h-full rounded-full bg-orange-400/60 transition-all" style={{ width: `${(row.orders / maxProductOrders) * 100}%` }} />
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums font-medium text-xs">
-                      {row.orders.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-xs text-muted-foreground">
-                      {row.confirmed.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <MiniBar value={row.confRate} max={100} color="bg-emerald-500" />
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-xs text-muted-foreground">
-                      {row.shipped.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-xs text-muted-foreground">
-                      {row.delivered.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <MiniBar value={row.delRate} max={100} color="bg-blue-500" />
-                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-medium text-xs">{row.orders.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-xs text-muted-foreground">{row.confirmed.toLocaleString()}</td>
+                    <td className="px-4 py-3"><MiniBar value={row.confRate} max={100} color="bg-emerald-500" /></td>
+                    <td className="px-4 py-3 text-right tabular-nums text-xs text-muted-foreground">{row.shipped.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-xs text-muted-foreground">{row.delivered.toLocaleString()}</td>
+                    <td className="px-4 py-3"><MiniBar value={row.delRate} max={100} color="bg-blue-500" /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {sortedProductRows.length > 10 && (
+            <div className="px-4 py-3 border-t border-border/40 flex items-center justify-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-foreground gap-1.5"
+                onClick={() => setShowAllProducts((v) => !v)}
+              >
+                {showAllProducts ? (
+                  <><ChevronUp className="h-3.5 w-3.5" /> Show less</>
+                ) : (
+                  <><ChevronDown className="h-3.5 w-3.5" /> Show more ({sortedProductRows.length - 10} more)</>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -946,17 +955,31 @@ export default function SellerAnalytics() {
                 <tr className="border-b border-border/60 bg-muted/30">
                   <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-12">Rank</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Seller</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Orders</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Confirmed</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground min-w-[120px]">Conf.%</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Shipped</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Delivered</th>
-                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground min-w-[120px]">Del.%</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">Revenue</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSellerSort("orders")}>
+                    <span className="inline-flex items-center justify-end">Orders <SellerSortIcon field="orders" /></span>
+                  </th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSellerSort("confirmed")}>
+                    <span className="inline-flex items-center justify-end">Confirmed <SellerSortIcon field="confirmed" /></span>
+                  </th>
+                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[120px]" onClick={() => handleSellerSort("confPct")}>
+                    <span className="inline-flex items-center">Conf.% <SellerSortIcon field="confPct" /></span>
+                  </th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSellerSort("shipped")}>
+                    <span className="inline-flex items-center justify-end">Shipped <SellerSortIcon field="shipped" /></span>
+                  </th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSellerSort("delivered")}>
+                    <span className="inline-flex items-center justify-end">Delivered <SellerSortIcon field="delivered" /></span>
+                  </th>
+                  <th className="px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors min-w-[120px]" onClick={() => handleSellerSort("delPct")}>
+                    <span className="inline-flex items-center">Del.% <SellerSortIcon field="delPct" /></span>
+                  </th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSellerSort("revenue")}>
+                    <span className="inline-flex items-center justify-end">Revenue <SellerSortIcon field="revenue" /></span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {sellerRows.map((row, i) => {
+                {sortedSellerRows.map((row, i) => {
                   const isGold = i === 0;
                   const isSilver = i === 1;
                   const isBronze = i === 2;
