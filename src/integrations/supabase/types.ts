@@ -487,6 +487,7 @@ export type Database = {
         Row: {
           created_at: string
           follow_up_status: string
+          fu_no_answer_count: number
           id: string
           order_id: string
           updated_at: string
@@ -495,6 +496,7 @@ export type Database = {
         Insert: {
           created_at?: string
           follow_up_status?: string
+          fu_no_answer_count?: number
           id?: string
           order_id: string
           updated_at?: string
@@ -503,6 +505,7 @@ export type Database = {
         Update: {
           created_at?: string
           follow_up_status?: string
+          fu_no_answer_count?: number
           id?: string
           order_id?: string
           updated_at?: string
@@ -2256,6 +2259,7 @@ export type Database = {
           follow_up_status: string
           follow_up_updated_at: string
           follow_up_updated_by: string
+          fu_no_answer_count: number
           order_created_at: string
           order_id: string
           order_updated_at: string
