@@ -9,25 +9,22 @@ const corsHeaders = {
 const ORIO_BASE = "https://apis.orio.digital/api";
 
 function getSupabaseAdmin() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
+  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
 // Status mapping: ORIO sub-status → our DELIVERY status
 // Source: user-provided ORIO status table (17 statuses)
 const STATUS_MAP: Record<string, string> = {
   // Direct mappings
-  "new": "booked",
-  "shipped": "shipped",
-  "cancelled": "cancelled",
-  "delivered": "delivered",
+  new: "booked",
+  shipped: "shipped",
+  cancelled: "cancelled",
+  delivered: "delivered",
   // All in-flight courier states → shipped
   "address closed": "shipped",
   "arrived at courier facility": "shipped",
-  "booked": "shipped",
-  "customer not available": "shipped",
+  booked: "shipped",
+  "customer not available": "failed_attempt",
   "hold on customer's request": "shipped",
   "hold on customers request": "shipped", // tolerate missing apostrophe
   "in transit": "shipped",
@@ -41,7 +38,7 @@ const STATUS_MAP: Record<string, string> = {
   // Terminal / outcome statuses
   "ready for return": "ready_for_return",
   "return to shipper": "return",
-  "return": "return",
+  return: "return",
 };
 
 function mapOrioStatus(orioStatus: string): string | null {
@@ -65,10 +62,9 @@ Deno.serve(async (req) => {
 
     if (!enabledSetting || enabledSetting.value !== "true") {
       console.log("ORIO API is disabled, skipping status sync");
-      return new Response(
-        JSON.stringify({ skipped: true, reason: "ORIO API disabled" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ skipped: true, reason: "ORIO API disabled" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Get ORIO credentials
@@ -89,10 +85,10 @@ Deno.serve(async (req) => {
 
     if (!token) {
       console.error("No ORIO API token configured");
-      return new Response(
-        JSON.stringify({ error: "No ORIO API token configured" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "No ORIO API token configured" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Fetch orders that need status sync — oldest updated first so all orders rotate through
@@ -114,11 +110,13 @@ Deno.serve(async (req) => {
       // Update last sync timestamp
       await supabase
         .from("app_settings")
-        .upsert({ key: "orio_last_status_sync", value: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: "key" });
-      return new Response(
-        JSON.stringify({ synced: 0, message: "No orders to sync" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        .upsert(
+          { key: "orio_last_status_sync", value: new Date().toISOString(), updated_at: new Date().toISOString() },
+          { onConflict: "key" },
+        );
+      return new Response(JSON.stringify({ synced: 0, message: "No orders to sync" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log(`Processing ${orders.length} orders for status sync (parallel batches of 15)`);
@@ -127,7 +125,15 @@ Deno.serve(async (req) => {
     const BATCH_SIZE = 15;
 
     // Statuses considered "post-shipped" — must have a shipped history event
-    const POST_SHIPPED = new Set(["shipped", "delivered", "rejected", "returned", "failed_attempt", "ready_for_return", "return"]);
+    const POST_SHIPPED = new Set([
+      "shipped",
+      "delivered",
+      "rejected",
+      "returned",
+      "failed_attempt",
+      "ready_for_return",
+      "return",
+    ]);
 
     // Process a single order: track + update
     const processOrder = async (order: any) => {
@@ -175,10 +181,7 @@ Deno.serve(async (req) => {
         }
 
         if (orioStatus !== order.orio_shipping_status || mappedStatus !== order.delivery_status) {
-          const { error: updateErr } = await supabase
-            .from("orders")
-            .update(updateData)
-            .eq("id", order.id);
+          const { error: updateErr } = await supabase.from("orders").update(updateData).eq("id", order.id);
 
           if (updateErr) {
             console.error(`Error updating order ${order.order_id}:`, updateErr);
@@ -213,7 +216,9 @@ Deno.serve(async (req) => {
                   action_type: "orio_sync_synthetic",
                   created_at: new Date(now.getTime() - 1).toISOString(),
                 });
-                console.log(`Order ${order.order_id}: inserting synthetic 'shipped' history event (jumped to ${mappedStatus})`);
+                console.log(
+                  `Order ${order.order_id}: inserting synthetic 'shipped' history event (jumped to ${mappedStatus})`,
+                );
               }
             }
 
@@ -258,21 +263,23 @@ Deno.serve(async (req) => {
     // Update last sync timestamp
     await supabase
       .from("app_settings")
-      .upsert({ key: "orio_last_status_sync", value: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: "key" });
+      .upsert(
+        { key: "orio_last_status_sync", value: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { onConflict: "key" },
+      );
 
     const updated = results.filter((r) => r.updated).length;
     const errored = results.filter((r) => r.error).length;
     console.log(`Sync complete: ${updated} updated, ${errored} errors, ${results.length} total`);
 
-    return new Response(
-      JSON.stringify({ synced: results.length, updated, errors: errored, results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ synced: results.length, updated, errors: errored, results }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (e) {
     console.error("orio-status-sync error:", e);
-    return new Response(
-      JSON.stringify({ error: (e as Error).message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: (e as Error).message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
