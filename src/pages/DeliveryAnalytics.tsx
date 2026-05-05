@@ -29,6 +29,7 @@ type Order = {
   id: string;
   order_id: string;
   confirmation_status: string;
+  confirmation_channel: string | null;
   delivery_status: string | null;
   product_name: string;
   seller_id: string;
@@ -48,12 +49,12 @@ type DateField = "created" | "updated";
 
 type CourierSortField = "courier" | "total" | "delivered" | "failed" | "returned" | "rate";
 type CitySortField = "city" | "total" | "delivered" | "failed" | "returned" | "inProcess" | "rate";
-type AgentSortField = "name" | "confirmed" | "delivered" | "failed" | "rate";
+type AgentSortField = "name" | "confirmed" | "delivered" | "failed" | "rate" | "waConfirmed" | "waRate";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ORDER_SELECT =
-  "id, order_id, confirmation_status, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, updated_at, shipping_status, orio_consignment_no";
+  "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, updated_at, shipping_status, orio_consignment_no";
 const PAGE_SIZE = 1000;
 
 const CONFIRMED_DELIVERY_STATUSES = [
@@ -281,6 +282,8 @@ export default function DeliveryAnalytics() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [dateField, setDateField] = useState<DateField>("created");
 
+  const [showAllProducts, setShowAllProducts] = useState(false);
+
   const [courierSort, setCourierSort] = useState<CourierSortField>("rate");
   const [courierSortDir, setCourierSortDir] = useState<SortDir>("desc");
 
@@ -487,35 +490,42 @@ export default function DeliveryAnalytics() {
   // ── By Product ───────────────────────────────────────────────────────────────
 
   const productRows = useMemo(() => {
-    const map: Record<string, { confirmed: number; delivered: number }> = {};
+    const map: Record<string, { confirmed: number; delivered: number; failed: number }> = {};
     filteredOrders.forEach((o) => {
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { confirmed: 0, delivered: 0 };
+      if (!map[name]) map[name] = { confirmed: 0, delivered: 0, failed: 0 };
       if (o.confirmation_status === "confirmed" || CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "")) {
         map[name].confirmed++;
       }
       if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[name].delivered++;
+      if (o.delivery_status === "failed_attempt") map[name].failed++;
     });
     return Object.entries(map)
       .filter(([, d]) => d.confirmed > 0)
-      .map(([name, d]) => ({ name, confirmed: d.confirmed, delivered: d.delivered, rate: pct(d.delivered, d.confirmed) }))
-      .sort((a, b) => b.rate - a.rate)
-      .slice(0, 15);
+      .map(([name, d]) => ({ name, confirmed: d.confirmed, delivered: d.delivered, failed: d.failed, rate: pct(d.delivered, d.confirmed) }))
+      .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
+
+  const visibleProductRows = showAllProducts ? productRows : productRows.slice(0, 12);
 
   // ── Agent Performance ────────────────────────────────────────────────────────
 
   const agentRows = useMemo(() => {
-    const map: Record<string, { confirmed: number; delivered: number; failed: number }> = {};
+    const map: Record<string, { confirmed: number; delivered: number; failed: number; waConfirmed: number; waDelivered: number }> = {};
     filteredOrders.forEach((o) => {
       const agentId = o.agent_id || o.original_agent_id;
       if (!agentId) return;
-      if (!map[agentId]) map[agentId] = { confirmed: 0, delivered: 0, failed: 0 };
-      if (o.confirmation_status === "confirmed" || CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "")) {
-        map[agentId].confirmed++;
-      }
+      if (!map[agentId]) map[agentId] = { confirmed: 0, delivered: 0, failed: 0, waConfirmed: 0, waDelivered: 0 };
+      const isConfirmed = o.confirmation_status === "confirmed" || CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "");
+      if (isConfirmed) map[agentId].confirmed++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[agentId].delivered++;
       if (o.delivery_status === "failed_attempt") map[agentId].failed++;
+      // WhatsApp confirmed orders
+      const isWa = o.confirmation_channel === "whatsapp";
+      if (isWa) {
+        map[agentId].waConfirmed++;
+        if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[agentId].waDelivered++;
+      }
     });
     return Object.entries(map)
       .filter(([, d]) => d.confirmed > 0)
@@ -526,6 +536,9 @@ export default function DeliveryAnalytics() {
         delivered: d.delivered,
         failed: d.failed,
         rate: pct(d.delivered, d.confirmed),
+        waConfirmed: d.waConfirmed,
+        waDelivered: d.waDelivered,
+        waRate: pct(d.waDelivered, d.waConfirmed),
       }));
   }, [filteredOrders, profileMap]);
 
@@ -1072,55 +1085,80 @@ export default function DeliveryAnalytics() {
               <SectionHeader
                 icon={BarChart2}
                 title="Delivery Rate by Product"
-                subtitle="Percentage of confirmed orders successfully delivered per product"
+                subtitle={`${productRows.length} product${productRows.length !== 1 ? "s" : ""} · sorted by delivery rate`}
                 iconBg="bg-amber-100 dark:bg-amber-900/30"
                 iconColor="text-amber-600 dark:text-amber-300"
               />
-              {productRows.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-sm">
-                  No product data available.
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={Math.max(220, productRows.length * 36)}>
-                  <BarChart
-                    data={productRows}
-                    layout="vertical"
-                    margin={{ top: 0, right: 60, left: 8, bottom: 0 }}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/60 text-xs text-muted-foreground">
+                      <th className="text-left py-2.5 w-8 font-semibold">#</th>
+                      <th className="text-left py-2.5 pr-4 font-semibold">Product</th>
+                      <th className="text-right py-2.5 px-3 font-semibold">Confirmed</th>
+                      <th className="text-right py-2.5 px-3 font-semibold">Delivered</th>
+                      <th className="text-right py-2.5 px-3 font-semibold">Failed</th>
+                      <th className="text-right py-2.5 pl-3 font-semibold min-w-[180px]">Delivery Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleProductRows.map((row, i) => (
+                      <tr
+                        key={row.name}
+                        className="border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors group"
+                      >
+                        <td className="py-2.5 text-xs text-muted-foreground font-medium w-8">{i + 1}</td>
+                        <td className="py-2.5 pr-4">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: rateColor(row.rate) }}
+                            />
+                            <span className="font-medium text-sm leading-tight">{row.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">
+                          {row.confirmed.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
+                          {row.delivered.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-medium text-amber-600 dark:text-amber-400">
+                          {row.failed.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 pl-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="flex-1 max-w-[100px] h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(row.rate, 100)}%`, backgroundColor: rateColor(row.rate) }}
+                              />
+                            </div>
+                            <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full min-w-[46px] text-center", rateBadgeClass(row.rate))}>
+                              {fmtPct(row.rate)}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {productRows.length > 12 && (
+                <div className="mt-4 flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs gap-1.5"
+                    onClick={() => setShowAllProducts((v) => !v)}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                    <XAxis
-                      type="number"
-                      domain={[0, 100]}
-                      tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                      axisLine={false}
-                      tickLine={false}
-                      unit="%"
-                    />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      tick={{ fontSize: 11, fill: "hsl(var(--foreground))" }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={130}
-                    />
-                    <Tooltip
-                      formatter={(v: number) => [`${fmtPct(v)}`, "Delivery Rate"]}
-                      contentStyle={{
-                        borderRadius: "12px",
-                        border: "1px solid hsl(var(--border))",
-                        fontSize: "12px",
-                        background: "hsl(var(--card))",
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                      }}
-                    />
-                    <Bar dataKey="rate" radius={[0, 6, 6, 0]} name="Delivery Rate" maxBarSize={20}>
-                      {productRows.map((entry) => (
-                        <Cell key={entry.name} fill={rateColor(entry.rate)} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                    {showAllProducts ? (
+                      <><ChevronUp className="h-3.5 w-3.5" /> Show Less</>
+                    ) : (
+                      <><ArrowRight className="h-3.5 w-3.5" /> Show All {productRows.length} Products</>
+                    )}
+                  </Button>
+                </div>
               )}
             </div>
           )}
@@ -1133,8 +1171,8 @@ export default function DeliveryAnalytics() {
             >
               <SectionHeader
                 icon={Users}
-                title="Agent / Seller Performance"
-                subtitle="Delivery outcomes broken down by seller"
+                title="Delivery by Agent"
+                subtitle="Delivery outcomes & WhatsApp confirmation performance per agent"
                 iconBg="bg-indigo-100 dark:bg-indigo-900/30"
                 iconColor="text-indigo-600 dark:text-indigo-300"
               />
@@ -1142,25 +1180,34 @@ export default function DeliveryAnalytics() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border/60 text-xs text-muted-foreground">
-                      <th className="text-left py-2.5 pr-3 w-12 font-semibold">Rank</th>
+                      <th className="text-left py-2.5 pr-3 w-10 font-semibold">#</th>
                       {(
                         [
-                          { key: "name", label: "Agent", align: "left" },
-                          { key: "confirmed", label: "Confirmed", align: "right" },
-                          { key: "delivered", label: "Delivered", align: "right" },
-                          { key: "failed", label: "Failed", align: "right" },
-                          { key: "rate", label: "Del. Rate", align: "right" },
-                        ] as { key: AgentSortField; label: string; align: string }[]
-                      ).map(({ key, label, align }) => (
+                          { key: "name",        label: "Agent",           align: "left",  group: "" },
+                          { key: "confirmed",   label: "Confirmed",       align: "right", group: "overall" },
+                          { key: "delivered",   label: "Delivered",       align: "right", group: "overall" },
+                          { key: "failed",      label: "Failed",          align: "right", group: "overall" },
+                          { key: "rate",        label: "Del. Rate",       align: "right", group: "overall" },
+                          { key: "waConfirmed", label: "WA Confirmed",    align: "right", group: "wa" },
+                          { key: "waRate",      label: "WA Del. Rate",    align: "right", group: "wa" },
+                        ] as { key: AgentSortField; label: string; align: string; group: string }[]
+                      ).map(({ key, label, align, group }) => (
                         <th
                           key={key}
                           className={cn(
                             "py-2.5 font-semibold cursor-pointer hover:text-foreground select-none",
                             align === "left" ? "text-left pr-4" : "text-right px-3",
-                            key === "rate" && "min-w-[140px]"
+                            (key === "rate" || key === "waRate") && "min-w-[150px]",
+                            group === "wa" && "text-emerald-600 dark:text-emerald-400"
                           )}
                           onClick={() => toggleAgentSort(key)}
                         >
+                          {group === "wa" && (
+                            <svg viewBox="0 0 24 24" className="inline w-3 h-3 mr-1 fill-current" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                              <path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.127 1.529 5.875L.057 23.97l6.256-1.635A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.8 9.8 0 01-5.028-1.378l-.36-.214-3.718.972.995-3.622-.234-.373A9.817 9.817 0 012.182 12C2.182 6.573 6.573 2.182 12 2.182S21.818 6.573 21.818 12 17.427 21.818 12 21.818z"/>
+                            </svg>
+                          )}
                           {label} <SortIcon field={key} active={agentSort} dir={agentSortDir} />
                         </th>
                       ))}
@@ -1189,11 +1236,7 @@ export default function DeliveryAnalytics() {
                                 rankBadge
                               )}
                             >
-                              {rank <= 3 ? (
-                                <Award className="h-3 w-3" />
-                              ) : (
-                                rank
-                              )}
+                              {rank <= 3 ? <Award className="h-3 w-3" /> : rank}
                             </span>
                           </td>
                           <td className="py-3 pr-4 font-medium">{row.name}</td>
@@ -1204,18 +1247,53 @@ export default function DeliveryAnalytics() {
                           <td className="py-3 px-3 text-right tabular-nums text-amber-600 dark:text-amber-400 font-medium">
                             {row.failed.toLocaleString()}
                           </td>
-                          <td className="py-3 pl-3">
+                          {/* Overall delivery rate */}
+                          <td className="py-3 pl-3 pr-4">
                             <div className="flex items-center justify-end gap-2">
-                              <div className="w-14 h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
                                 <div
                                   className="h-full rounded-full transition-all duration-500"
                                   style={{ width: `${Math.min(row.rate, 100)}%`, backgroundColor: rateColor(row.rate) }}
                                 />
                               </div>
-                              <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", rateBadgeClass(row.rate))}>
+                              <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full min-w-[46px] text-center", rateBadgeClass(row.rate))}>
                                 {fmtPct(row.rate)}
                               </span>
                             </div>
+                          </td>
+                          {/* WhatsApp confirmed */}
+                          <td className="py-3 px-3 text-right tabular-nums">
+                            {row.waConfirmed > 0 ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-medium">
+                                  <svg viewBox="0 0 24 24" className="w-2.5 h-2.5 fill-current" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                                    <path d="M12 0C5.374 0 0 5.373 0 12c0 2.117.554 4.127 1.529 5.875L.057 23.97l6.256-1.635A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.8 9.8 0 01-5.028-1.378l-.36-.214-3.718.972.995-3.622-.234-.373A9.817 9.817 0 012.182 12C2.182 6.573 6.573 2.182 12 2.182S21.818 6.573 21.818 12 17.427 21.818 12 21.818z"/>
+                                  </svg>
+                                  {row.waConfirmed.toLocaleString()}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </td>
+                          {/* WhatsApp delivery rate */}
+                          <td className="py-3 pl-3">
+                            {row.waConfirmed > 0 ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.min(row.waRate, 100)}%`, backgroundColor: rateColor(row.waRate) }}
+                                  />
+                                </div>
+                                <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full min-w-[46px] text-center", rateBadgeClass(row.waRate))}>
+                                  {fmtPct(row.waRate)}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-right block text-muted-foreground text-xs">—</span>
+                            )}
                           </td>
                         </tr>
                       );
