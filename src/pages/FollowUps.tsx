@@ -259,7 +259,7 @@ export default function FollowUps() {
   const [filterFollowUp, setFilterFollowUp]     = useState<string>("all");
   const [dateField, setDateField]       = useState<DateField>("created");
   const [dateRange, setDateRange]       = useState<DateRange | undefined>();
-  const [pageSize, setPageSize]         = useState<number>(50);
+  const [pageSize, setPageSize]         = useState<number>(100);
   const [page, setPage]                 = useState<number>(1);
   const [savingId, setSavingId]         = useState<string | null>(null);
   const [historyOrder, setHistoryOrder] = useState<{ id: string; customer: string } | null>(null);
@@ -431,20 +431,18 @@ export default function FollowUps() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-4 max-w-[1600px] animate-fade-in">
+      <div className="space-y-2 max-w-[1600px] animate-fade-in">
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-primary/10 border border-primary/20 flex-shrink-0">
-              <ClipboardCheck className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold leading-tight tracking-tight">Follow Ups</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {isLoading ? "Loading…" : `${enriched.length.toLocaleString()} orders tracked in real-time`}
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-primary flex-shrink-0" />
+            <h1 className="text-base font-bold leading-tight tracking-tight">Follow Ups</h1>
+            {!isLoading && (
+              <span className="text-xs text-muted-foreground">
+                — {enriched.length.toLocaleString()} orders
+              </span>
+            )}
           </div>
           {isFetching && !isLoading && (
             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -697,7 +695,7 @@ export default function FollowUps() {
             </div>
           )}
 
-          <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: "calc(100vh - 17rem)" }}>
+          <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: "calc(100vh - 12rem)" }}>
             <table className="w-full text-sm table-fixed border-collapse">
               <thead className="sticky top-0 z-[5]">
                 <tr className="bg-muted/90 backdrop-blur-sm border-b border-border">
@@ -708,7 +706,7 @@ export default function FollowUps() {
                       <th
                         key={col.key}
                         style={{ width: columnWidths[col.key] }}
-                        className={`text-left py-2.5 px-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-widest whitespace-nowrap overflow-hidden ${isCenter ? "text-center" : ""}`}
+                        className={`text-left py-2 px-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-widest whitespace-nowrap overflow-hidden ${isCenter ? "text-center" : ""}`}
                       >
                         {meta.label}
                       </th>
@@ -721,7 +719,7 @@ export default function FollowUps() {
                   Array.from({ length: 7 }).map((_, i) => (
                     <tr key={i} className="border-b border-border/50">
                       {visibleColumns.map((c, ci) => (
-                        <td key={c.key} className="py-3 px-3">
+                        <td key={c.key} className="py-1.5 px-3">
                           <Skeleton className={`h-3.5 rounded ${ci % 3 === 0 ? "w-3/4" : ci % 3 === 1 ? "w-1/2" : "w-2/3"}`} />
                         </td>
                       ))}
@@ -760,7 +758,7 @@ export default function FollowUps() {
                         {visibleColumns.map((col) => (
                           <td
                             key={col.key}
-                            className={`py-2.5 overflow-hidden ${cellClassFor(col.key)}`}
+                            className={`py-1.5 overflow-hidden ${cellClassFor(col.key)}`}
                           >
                             {renderCell(col.key, row, segMeta, savingId, handleStatusChange, handleNoteSave, navigate, setHistoryOrder, setTrackingTarget, openNoteDialog)}
                           </td>
