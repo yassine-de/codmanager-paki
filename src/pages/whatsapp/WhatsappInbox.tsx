@@ -37,6 +37,7 @@ import {
   AlertCircle,
   Languages,
   ArrowLeft,
+  MapPin,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -679,12 +680,11 @@ export default function WhatsappInbox() {
     }
   }, [messages.length, selected]);
 
-  // Auto-translate inbound non-English messages (staff-only, never sent to customer)
+  // Auto-translate non-English messages (inbound + outbound AI) — staff-only, never sent to customer
   const autoTranslatedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!messages.length) return;
     const toTranslate = messages.filter((m) => {
-      if (m.direction !== "in" && m.direction !== "inbound") return false;
       if (!m.body) return false;
       if (translations[m.id]) return false;
       if ((m.payload as any)?._translation_en) return false;
@@ -1776,13 +1776,37 @@ export default function WhatsappInbox() {
                                 </div>
                               );
                             })()}
+                            {/* Location message — show map link */}
+                            {m.message_type === "location" && m.body?.startsWith("📍") && (() => {
+                              const coords = (m.payload as any)?.location;
+                              const lat = coords?.latitude;
+                              const lng = coords?.longitude;
+                              if (!lat || !lng) return null;
+                              return (
+                                <a
+                                  href={`https://maps.google.com/?q=${lat},${lng}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={cn(
+                                    "mt-1.5 inline-flex items-center gap-1 text-[11px] underline underline-offset-2",
+                                    isOut ? "text-white/80 hover:text-white" : "text-primary hover:text-primary/80"
+                                  )}
+                                >
+                                  <MapPin className="h-3 w-3 shrink-0" />
+                                  Open in Google Maps
+                                </a>
+                              );
+                            })()}
                             {/* Internal English translation (staff-only, never sent to customer) */}
-                            {!isOut && !isTemplate && m.body && (() => {
+                            {!isTemplate && m.body && (() => {
                               const cached = m.payload?._translation_en as string | undefined;
                               const shown = translations[m.id] || cached;
                               if (shown) {
                                 return (
-                                  <div className="mt-1.5 pt-1.5 border-t border-border/60 text-[12px] italic text-muted-foreground flex gap-1.5">
+                                  <div className={cn(
+                                    "mt-1.5 pt-1.5 border-t text-[12px] italic flex gap-1.5",
+                                    isOut ? "border-white/20 text-white/70" : "border-border/60 text-muted-foreground"
+                                  )}>
                                     <Languages className="h-3 w-3 mt-0.5 shrink-0 opacity-70" />
                                     <span className="whitespace-pre-wrap break-words">{shown}</span>
                                   </div>
@@ -1795,7 +1819,10 @@ export default function WhatsappInbox() {
                                     type="button"
                                     onClick={() => handleTranslate(m)}
                                     disabled={isLoading}
-                                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60"
+                                    className={cn(
+                                      "mt-1.5 inline-flex items-center gap-1 text-[11px] transition-colors disabled:opacity-60",
+                                      isOut ? "text-white/60 hover:text-white/90" : "text-muted-foreground hover:text-foreground"
+                                    )}
                                   >
                                     {isLoading ? (
                                       <Loader2 className="h-3 w-3 animate-spin" />

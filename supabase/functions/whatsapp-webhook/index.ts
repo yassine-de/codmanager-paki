@@ -679,6 +679,40 @@ async function handleIncoming(value: any) {
         } else {
           bodyText = "[audio]";
         }
+      } else if (m.type === "location" && m.location) {
+        // Customer shared their live/pin location.
+        // 1) Build a readable string from whatever WhatsApp already provides
+        //    (name / address fields set when customer pins a place in Maps).
+        // 2) Attempt free reverse-geocoding via OpenStreetMap Nominatim
+        //    so the AI receives a real human-readable address it can save.
+        const lat: number = m.location.latitude;
+        const lng: number = m.location.longitude;
+        const locName: string = m.location.name ?? "";
+        const locAddr: string = m.location.address ?? "";
+
+        let locationText = "📍 ";
+        if (locName) locationText += locName + (locAddr ? ` — ${locAddr}` : "");
+        else if (locAddr) locationText += locAddr;
+        else locationText += `${lat}, ${lng}`;
+
+        // Reverse-geocode — best effort, silent fallback
+        try {
+          const geoResp = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`,
+            { headers: { "User-Agent": "CRM-WhatsApp/1.0" } }
+          );
+          if (geoResp.ok) {
+            const geoJson = await geoResp.json().catch(() => null);
+            if (geoJson?.display_name) {
+              locationText = `📍 ${geoJson.display_name}`;
+            }
+          }
+        } catch {
+          // silent — fallback to WhatsApp-provided fields above
+        }
+
+        bodyText = locationText;
+        messageType = "location";
       } else if (m.type === "reaction" && m.reaction) {
         // Customer reacted with an emoji to one of our messages.
         // Store the emoji as the body and reference the original message
@@ -907,6 +941,10 @@ async function handleIncoming(value: any) {
             // Customer sent an image — let the AI look at it and reply
             // (e.g. screenshot of address, photo of CNIC, picture of issue).
             m.type === "image" && imageAnalysisOn && !outcome
+          ) || (
+            // Customer pinned/shared their location — treat like a text address
+            // so the AI can extract it, save it, and confirm the order.
+            messageType === "location" && !outcome
           ) || (
             messageType === "button_reply" &&
             !resumedRun
@@ -1334,11 +1372,12 @@ async function aiContinueReply(args: {
     ? `\n\nPENDING CUSTOMER INTENT (from a button they clicked):\n- The customer pressed "${pendingIntent.button_text}" which means they want to: ${pendingIntent.intent === "confirm" ? `CONFIRM the order. \n  CRITICAL ADDRESS GATING: The order is NOT yet finalized. The system will only mark it confirmed once we have a COMPLETE & DELIVERABLE address (city + at least one usable locator like house/street/area/landmark). \n  - If the stored address is already detailed enough → reply with a short warm thank-you, briefly read back the address, and the system will auto-confirm. \n  - If the address is missing, vague (e.g. just "Karachi", "Lahore center", "home", a single landmark with no street/area), fake, or too short → THANK them for confirming the order, then in the SAME short message ask politely (in their language) for the FULL address: house/flat #, street, area/block, nearest landmark, + city. \n  - DO NOT say "your order is being processed", "your order is confirmed", "we will ship now", or anything that implies the order is already finalized. Use phrasing like "to ship your order we just need your full address" instead.\n  - Once the customer sends a real complete address, the system will auto-confirm in the background; THEN you can thank them and say the courier will call on arrival.` : pendingIntent.intent === "cancel" ? "CANCEL the order. Follow the CANCELLATION HANDLING rules above — try to understand WHY and rescue the sale. Do NOT acknowledge the cancellation as final yourself." : "request more INFO. Answer their questions accurately."}`
     : "";
 
+  const locationRule = `\n\nLOCATION SHARING: If the customer's message starts with "📍" (they shared their GPS location), treat the full text as their delivery address. Extract the most useful part (street, area, city) and use it as-is — do NOT ask for another address. Acknowledge it warmly (e.g. "Thanks for sharing your location! We'll deliver to [address].") and the system will auto-save it.`;
   const baseSys = aiSettings.system_prompt || "You are a helpful WhatsApp sales assistant.";
   const inspectionRule = `\n\nPARCEL INSPECTION POLICY (Pakistan COD — CRITICAL):\n- This is Cash on Delivery. The customer IS allowed to OPEN and INSPECT the parcel BEFORE paying the courier.\n- If the customer asks (in any language: "open parcel", "check before pay", "parcel khol kr dekh sakte hain", "khol ke check karna hai", "before payment open", "kya main parcel khol sakta hun", "inspect karna", "dekhna hai pehle", etc.) → reply YES, confirm clearly that they CAN open and check the product before paying, since it's Cash on Delivery.\n- Reassure them: if not satisfied with quality, they can REFUSE the parcel and not pay anything.\n- NEVER say "you cannot open before payment" or "payment first then check". That is WRONG for COD in Pakistan.\n- Keep the reply short, warm, and confident.`;
   const handoffRule = `\n\nHUMAN HANDOFF POLICY (CRITICAL — NO STALLING):\n- You are FORBIDDEN from sending stalling messages like "let me check", "please hold on", "I'll get back to you shortly", "let me confirm and revert", "give me a moment", "خليني نشوف", "ek minute", "ruko zara", or any equivalent in any language.\n- Whenever you would say something like that — OR the customer asks for a brochure / detailed spec sheet / warranty document / OEM info / something not in your product context — you MUST call the tool \`handoff_to_agent\` with a short reason.\n- When you call \`handoff_to_agent\`, your text reply to the customer MUST clearly tell them you are transferring them to a human agent who will contact them shortly. Use the customer's language. Examples:\n  • English: "I'm transferring you to one of our human agents who will assist you shortly 🙏"\n  • Roman Urdu: "Main aap ko hamare human agent ke pass transfer kar raha hoon, wo jaldi aap se contact karenge 🙏"\n  • Urdu: "میں آپ کو ہمارے انسانی ایجنٹ کے پاس منتقل کر رہا ہوں، وہ جلد آپ سے رابطہ کریں گے 🙏"\n- After calling \`handoff_to_agent\`, do NOT continue the conversation yourself. The agent takes over.`;
   const sysPrompt =
-    `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${productContext}${addressRule}${imageRule}${cancelRule}${pendingIntentRule}${inspectionRule}${handoffRule}`;
+    `${baseSys}\n\nBrand tone: ${aiSettings.brand_tone || "friendly"}.\nLanguage rules: ${aiSettings.language_rules || ""}\n\nKeep replies short (about ${aiSettings.response_lines ?? 3} line(s)). Do not invent facts.${orderCtx}${productContext}${addressRule}${imageRule}${cancelRule}${pendingIntentRule}${locationRule}${inspectionRule}${handoffRule}`;
 
   const rawModel = aiSettings.model || "gpt-4o-mini";
   // Always OpenAI: strip provider prefix; map gemini → gpt-4o-mini.
