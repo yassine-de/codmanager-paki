@@ -1859,7 +1859,7 @@ export default function WhatsappInbox() {
                                 );
                               }
                               const showBtn = isOut
-                                ? containsNonLatin(m.body)       // outbound: only real Urdu/Arabic script
+                                ? true                           // outbound: always show button (AI may reply in Roman Urdu)
                                 : needsTranslation(m.body);      // inbound: full heuristic
                               if (showBtn) {
                                 const isLoading = translatingId === m.id;
