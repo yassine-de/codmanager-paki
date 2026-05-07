@@ -54,7 +54,6 @@ export interface DashboardKPIs {
 
 const DASHBOARD_ORDER_SELECT = "id, order_id, confirmation_status, delivery_status, total_amount, price, quantity, product_name, seller_id, created_at, confirmed_at, delivered_at, last_attempt_at, last_activity_at, updated_at";
 const DASHBOARD_PAGE_SIZE = 1000;
-const POST_CONFIRM_DELIVERY_STATUSES = ['booked', 'shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'];
 
 function isInDay(date: Date, start: Date, nextDay: Date): boolean {
   return date >= start && date < nextDay;
@@ -83,9 +82,10 @@ async function fetchAllDashboardOrders(): Promise<DashboardOrder[]> {
 }
 
 function reachedConfirmedStage(o: DashboardOrder): boolean {
-  return Boolean(o.confirmed_at) ||
-    o.confirmation_status === 'confirmed' ||
-    POST_CONFIRM_DELIVERY_STATUSES.includes(o.delivery_status || '');
+  // Strict: only count orders currently in "confirmed" status.
+  // Using confirmed_at or delivery_status fallbacks inflates the count
+  // and causes discrepancy with ConfirmationAnalytics page.
+  return o.confirmation_status === 'confirmed';
 }
 
 function getConfirmationEventDate(o: DashboardOrder): Date {
@@ -288,7 +288,7 @@ export function useDashboardData(dateRange?: DateRange) {
   }), [last7]);
 
   // Top products by delivery rate — system-wide standard: delivered / confirmed
-  // Confirmed includes all orders that reached confirmed stage (confirmed, shipped, in_transit, with_courier, delivered, paid, returned)
+  // Confirmed = strict confirmation_status === 'confirmed' (matches ConfirmationAnalytics)
   const topProducts = useMemo(() => {
     const map: Record<string, { total: number; delivered: number; shipped: number; confirmed: number }> = {};
     orders.forEach(o => {
@@ -296,7 +296,7 @@ export function useDashboardData(dateRange?: DateRange) {
       map[o.product_name].total += o.quantity;
       if (['delivered', 'paid'].includes(o.delivery_status || '')) map[o.product_name].delivered += o.quantity;
       if (['shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'].includes(o.delivery_status || '')) map[o.product_name].shipped += o.quantity;
-      // Confirmed = any order that was confirmed (regardless of current delivery status)
+      // Confirmed = strict confirmation_status === 'confirmed'
       if (reachedConfirmedStage(o)) {
         map[o.product_name].confirmed += o.quantity;
       }
