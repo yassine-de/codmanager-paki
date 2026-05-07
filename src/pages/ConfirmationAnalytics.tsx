@@ -218,25 +218,16 @@ export default function ConfirmationAnalytics() {
     return filtered;
   }, [orders, statusActionsInPeriod, sellerFilter, productFilter, dateRange, dateField]);
 
-  // Statuses that indicate an order reached (and passed through) the confirmed stage.
-  // Mirrors the dashboard's reachedConfirmedStage logic so both pages agree on the count.
-  const POST_CONFIRM_STATUSES = ['booked', 'shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'];
-
   // Stats — filteredOrders already has confirmation_status overridden to the in-period action,
   // so counts directly reflect "what happened in the selected period (and by the selected agent)".
   const stats = useMemo(() => {
     const total = filteredOrders.length;
     const delivered = filteredOrders.filter(o => o.delivery_status === "delivered" || o.delivery_status === "paid").length;
 
-    // When statusActionsInPeriod is active, confirmation_status was overridden per-history-event
-    // so we only check that field. When null (maximum/no filter), we also count orders that
-    // "passed through" confirmed stage via confirmed_at or delivery progression — same as dashboard.
+    // Strict: only count orders whose confirmation_status is exactly "confirmed".
+    // Matches the Orders table filter so both pages show the same number.
     const confirmed = filteredOrders.filter(o =>
-      o.confirmation_status === "confirmed" ||
-      (!statusActionsInPeriod && (
-        Boolean((o as any).confirmed_at) ||
-        POST_CONFIRM_STATUSES.includes(o.delivery_status || "")
-      ))
+      o.confirmation_status === "confirmed"
     ).length;
     const cancelled = filteredOrders.filter(o => o.confirmation_status === "cancelled").length;
     const postponed = filteredOrders.filter(o => o.confirmation_status === "postponed").length;
@@ -283,16 +274,11 @@ export default function ConfirmationAnalytics() {
   // (order originally confirmed before the period, then re-confirmed within it).
   // Using confirmed_at (set once at first confirmation) eliminates that problem.
   const confirmedForDisplay = useMemo(() => {
-    const reachedConfirmed = (o: typeof orders[0]) =>
-      o.confirmation_status === "confirmed" ||
-      Boolean((o as any).confirmed_at) ||
-      POST_CONFIRM_STATUSES.includes(o.delivery_status || "");
-
     if (dateRange?.from && dateField === "updated") {
       const from = startOfDay(dateRange.from);
       const to   = endOfDay(dateRange.to ?? dateRange.from);
       const confirmed = orders.filter(o => {
-        if (!reachedConfirmed(o)) return false;
+        if (o.confirmation_status !== "confirmed") return false;
         if (agentFilter   !== "all" && o.agent_id !== agentFilter && (o as any).original_agent_id !== agentFilter) return false;
         if (sellerFilter  !== "all" && o.seller_id !== sellerFilter) return false;
         if (productFilter !== "all" && o.product_name !== productFilter) return false;
@@ -305,14 +291,8 @@ export default function ConfirmationAnalytics() {
       };
     }
 
-    // Maximum / "created" mode — use filteredOrders with reachedConfirmedStage normalisation
-    const confirmed = filteredOrders.filter(o =>
-      o.confirmation_status === "confirmed" ||
-      (!statusActionsInPeriod && (
-        Boolean((o as any).confirmed_at) ||
-        POST_CONFIRM_STATUSES.includes(o.delivery_status || "")
-      ))
-    );
+    // Strict: only confirmation_status === "confirmed" — matches Orders table
+    const confirmed = filteredOrders.filter(o => o.confirmation_status === "confirmed");
     return {
       total:      confirmed.length,
       byWhatsApp: confirmed.filter(o => (o as any).confirmation_channel === "whatsapp").length,
@@ -612,18 +592,10 @@ export default function ConfirmationAnalytics() {
       {/* Daily Confirmation Report (includes merged Agent Performance Breakdown) */}
       <DailyConfirmationReport
         orders={filteredOrders.map(o => {
-          // When no period/agent filter is active (statusActionsInPeriod null), normalize
-          // orders that passed through confirmed stage so DailyConfirmationReport counts them.
-          const effectiveStatus = (
-            !statusActionsInPeriod && o.confirmation_status !== "confirmed" && (
-              Boolean((o as any).confirmed_at) ||
-              POST_CONFIRM_STATUSES.includes(o.delivery_status || "")
-            )
-          ) ? "confirmed" : o.confirmation_status;
           return {
             agent_id: o.agent_id,
             original_agent_id: o.original_agent_id,
-            confirmation_status: effectiveStatus,
+            confirmation_status: o.confirmation_status,
             confirmation_channel: (o as any).confirmation_channel ?? null,
             postpone_date: o.postpone_date,
           };
