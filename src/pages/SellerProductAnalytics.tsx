@@ -45,10 +45,6 @@ const PAGE_SIZE = 1000;
 const CONFIRMED_STATUSES = ["confirmed"];
 const CANCELLED_STATUSES = ["cancelled"];
 const DELIVERED_STATUSES = ["delivered", "paid"];
-const CONFIRMED_DELIVERY_STATUSES = [
-  "booked", "shipped", "in_transit", "with_courier", "out_for_delivery",
-  "delivered", "paid", "failed_attempt", "returned", "ready_for_return",
-];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -219,8 +215,7 @@ export default function SellerProductAnalytics() {
   const kpis = useMemo(() => {
     const total = filteredOrders.length;
     const confirmed = filteredOrders.filter(
-      (o) => CONFIRMED_STATUSES.includes(o.confirmation_status) ||
-             CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "")
+      (o) => CONFIRMED_STATUSES.includes(o.confirmation_status)
     ).length;
     const cancelled = filteredOrders.filter((o) => CANCELLED_STATUSES.includes(o.confirmation_status)).length;
     const delivered = filteredOrders.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "")).length;
@@ -250,8 +245,7 @@ export default function SellerProductAnalytics() {
       if (!map[name]) map[name] = { total: 0, confirmed: 0, delivered: 0, cancelled: 0, wrongNumber: 0, reasons: {} };
       map[name].total++;
       if (
-        CONFIRMED_STATUSES.includes(o.confirmation_status) ||
-        CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "")
+        CONFIRMED_STATUSES.includes(o.confirmation_status)
       ) map[name].confirmed++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[name].delivered++;
       if (CANCELLED_STATUSES.includes(o.confirmation_status)) {
