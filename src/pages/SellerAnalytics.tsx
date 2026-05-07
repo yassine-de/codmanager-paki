@@ -50,10 +50,6 @@ type SellerSortField = "orders" | "confirmed" | "confPct" | "shipped" | "deliver
 const ORDER_SELECT =
   "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, price, quantity, created_at, confirmed_at, delivered_at, updated_at";
 const PAGE_SIZE = 1000;
-const CONFIRMED_DELIVERY_STATUSES = [
-  "booked", "shipped", "in_transit", "with_courier",
-  "delivered", "paid", "returned",
-];
 const DELIVERED_STATUSES = ["delivered", "paid"];
 const SHIPPED_STATUSES = ["shipped", "in_transit", "with_courier", "out_for_delivery"];
 
@@ -80,11 +76,7 @@ async function fetchAllOrders(): Promise<Order[]> {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function reachedConfirmedStage(o: Order): boolean {
-  return (
-    Boolean(o.confirmed_at) ||
-    o.confirmation_status === "confirmed" ||
-    CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "")
-  );
+  return o.confirmation_status === "confirmed";
 }
 
 function isWithinRange(date: Date, range: DateRange | undefined): boolean {
