@@ -695,10 +695,8 @@ export default function WhatsappInbox() {
       if (translations[m.id]) return false;
       if ((m.payload as any)?._translation_en) return false;
       if (autoTranslatedRef.current.has(m.id)) return false;
-      // Outbound (AI): only translate if actual non-Latin script detected
-      if (m.direction === "out" && !containsNonLatin(m.body)) return false;
-      // Inbound: full heuristic (Roman Urdu hints + non-Latin)
-      if (m.direction !== "out" && !needsTranslation(m.body)) return false;
+      // Both directions: use full heuristic (non-Latin script + Roman Urdu hints)
+      if (!containsNonLatin(m.body) && !needsTranslation(m.body)) return false;
       return true;
     });
     if (!toTranslate.length) return;
@@ -1859,8 +1857,8 @@ export default function WhatsappInbox() {
                                 );
                               }
                               const showBtn = isOut
-                                ? true                           // outbound: always show button (AI may reply in Roman Urdu)
-                                : needsTranslation(m.body);      // inbound: full heuristic
+                                ? containsNonLatin(m.body) || needsTranslation(m.body)
+                                : needsTranslation(m.body);
                               if (showBtn) {
                                 const isLoading = translatingId === m.id;
                                 return (
