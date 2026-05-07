@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
 import { isWithinInterval } from "date-fns";
-import { formatPKT, startOfDayPKT, endOfDayPKT, subDaysPKT, eachDayOfIntervalPKT, toPKT } from "@/lib/timezone";
+import { formatPKT, startOfDayPKT, endOfDayPKT } from "@/lib/timezone";
 import type { DateRange } from "react-day-picker";
 
 export interface DashboardOrder {
@@ -202,42 +202,48 @@ function reachedDeliveredStage(o: DashboardOrder): boolean {
 const SHIPPED_DELIVERY_STATUSES = ['shipped', 'booked', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'];
 
 function computeDailyData(orders: DashboardOrder[], numDays: number) {
-  const now = new Date();
-  // Use PKT day boundaries so "today" matches midnight in Karachi, not the server timezone
-  const days = eachDayOfIntervalPKT(
-    startOfDayPKT(subDaysPKT(now, numDays - 1)),
-    startOfDayPKT(now),
-  );
+  // Use startOfDayPKT(now) as the true UTC timestamp for midnight PKT today.
+  // PKT = UTC+5, no DST → exactly 86 400 000 ms per calendar day.
+  // We avoid eachDayOfIntervalPKT / toPKT here because those return "zoned"
+  // Date objects whose internal UTC value is shifted for display purposes;
+  // comparing them directly against real UTC timestamps (o.created_at etc.)
+  // would give wrong results.
+  const todayStart = startOfDayPKT(new Date()); // real UTC ≡ midnight PKT today
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-  return days.map((date) => {
-    // date here is already in PKT wall-clock; compute the next PKT day start
-    const nextDay = startOfDayPKT(new Date(toPKT(date).getTime() + 24 * 60 * 60 * 1000));
+  const buckets = Array.from({ length: numDays }, (_, i) => {
+    const daysBack = numDays - 1 - i;
+    const start   = new Date(todayStart.getTime() - daysBack * MS_PER_DAY);
+    const nextDay = new Date(start.getTime() + MS_PER_DAY);
+    return { start, nextDay };
+  });
 
+  return buckets.map(({ start, nextDay }) => {
     // Dropped = orders CREATED on this day (created_at)
     const dropped = orders.filter((o) =>
-      isInDay(new Date(o.created_at), date, nextDay)
+      isInDay(new Date(o.created_at), start, nextDay)
     ).length;
 
     // Confirmed = orders whose confirmation EVENT happened on this day (confirmed_at)
     const confirmed = orders.filter((o) => {
       if (!reachedConfirmedStage(o)) return false;
-      return isInDay(getConfirmationEventDate(o), date, nextDay);
+      return isInDay(getConfirmationEventDate(o), start, nextDay);
     }).length;
 
     // Delivered = orders that were actually DELIVERED on this day (delivered_at)
     const delivered = orders.filter((o) => {
       if (!reachedDeliveredStage(o)) return false;
-      return isInDay(getDeliveredEventDate(o), date, nextDay);
+      return isInDay(getDeliveredEventDate(o), start, nextDay);
     }).length;
 
     // Shipped = orders currently in/past shipping pipeline (uses treatment date for trend visualisation)
     const shipped = orders.filter((o) => {
       if (!o.delivery_status || !SHIPPED_DELIVERY_STATUSES.includes(o.delivery_status)) return false;
-      return isInDay(getTreatmentDate(o), date, nextDay);
+      return isInDay(getTreatmentDate(o), start, nextDay);
     }).length;
 
     return {
-      day: `${formatPKT(date, "EEE")}\n${formatPKT(date, "dd/MM")}`,
+      day: `${formatPKT(start, "EEE")}\n${formatPKT(start, "dd/MM")}`,
       orders: dropped,
       dropped,
       confirmed,
