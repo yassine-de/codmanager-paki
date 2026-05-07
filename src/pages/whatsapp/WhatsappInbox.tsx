@@ -690,8 +690,11 @@ export default function WhatsappInbox() {
   const autoTranslatedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!messages.length) return;
+    const MEDIA_TYPES = ["image", "video", "audio", "voice", "document", "sticker", "location"];
     const toTranslate = messages.filter((m) => {
       if (!m.body) return false;
+      if (MEDIA_TYPES.includes(m.message_type)) return false; // never translate media payloads
+      if (m.body.trimStart().startsWith("{")) return false;   // skip raw JSON fallback bodies
       if (translations[m.id]) return false;
       if ((m.payload as any)?._translation_en) return false;
       if (autoTranslatedRef.current.has(m.id)) return false;
@@ -1842,7 +1845,7 @@ export default function WhatsappInbox() {
                               );
                             })()}
                             {/* Internal English translation (staff-only, never sent to customer) */}
-                            {!isTemplate && m.body && (() => {
+                            {!isTemplate && m.body && !["image","video","audio","voice","document","sticker","location"].includes(m.message_type) && !m.body.trimStart().startsWith("{") && (() => {
                               const cached = m.payload?._translation_en as string | undefined;
                               const shown = translations[m.id] || cached;
                               if (shown) {
