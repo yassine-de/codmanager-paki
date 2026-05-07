@@ -609,18 +609,11 @@ async function handleIncoming(value: any) {
       const phone = `+${from}`;
       const metaMessageId: string | null = m.id ?? null;
 
-      // Duplicate protection — skip if we already saved this Meta message id.
-      if (metaMessageId) {
-        const { data: existing } = await admin
-          .from("whatsapp_messages")
-          .select("id")
-          .eq("meta_message_id", metaMessageId)
-          .maybeSingle();
-        if (existing) {
-          log("duplicate ignored", metaMessageId);
-          continue;
-        }
-      }
+      // Duplicate protection is enforced at INSERT time via the DB unique index
+      // on meta_message_id (see migration unique_meta_message_id).
+      // We no longer do a pre-check SELECT — that pattern has a race condition
+      // when two webhook invocations arrive simultaneously (both read 0 rows,
+      // both proceed). The INSERT itself is now the atomic gate.
 
       let parsedOrderId: string | null = null;
       let replyToMetaMessageId: string | null =
@@ -735,7 +728,10 @@ async function handleIncoming(value: any) {
 
       log("message", { phone, type: messageType, orderMatched: !!order, outcome });
 
-      // Insert the message — never fails the request loop.
+      // Insert the message.
+      // If meta_message_id already exists (Meta retry / duplicate webhook),
+      // the DB unique index raises error code 23505 → we skip AI for this
+      // invocation. This is the atomic dedup gate — no pre-check needed.
       const { error: msgErr } = await admin.from("whatsapp_messages").insert({
         conversation_id: conv.id,
         order_id: order?.order_id ?? null,
@@ -746,7 +742,13 @@ async function handleIncoming(value: any) {
         meta_message_id: metaMessageId,
         status: "received",
       });
-      if (msgErr) errLog("message insert failed", msgErr);
+      if (msgErr) {
+        if ((msgErr as any).code === "23505") {
+          log("duplicate meta_message_id — skipping AI", metaMessageId);
+          continue; // Meta retry: message already processed, nothing to do
+        }
+        errLog("message insert failed", msgErr);
+      }
 
       // Mark any recent campaign recipient on this conversation as "replied".
       try {

@@ -680,6 +680,12 @@ export default function WhatsappInbox() {
     }
   }, [messages.length, selected]);
 
+  // Strict check: outbound (AI) messages only translated if they contain actual
+  // non-Latin script (Urdu/Arabic). Roman-Urdu hints are NOT enough for outbound
+  // to avoid false positives on English AI replies like "Your order is confirmed".
+  const containsNonLatin = (text: string) =>
+    /[؀-ۿऀ-ॿঀ-৿一-鿿ݐ-ݿﭐ-﷿ﹰ-﻿]/.test(text);
+
   // Auto-translate non-English messages (inbound + outbound AI) — staff-only, never sent to customer
   const autoTranslatedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -689,7 +695,10 @@ export default function WhatsappInbox() {
       if (translations[m.id]) return false;
       if ((m.payload as any)?._translation_en) return false;
       if (autoTranslatedRef.current.has(m.id)) return false;
-      if (!needsTranslation(m.body)) return false;
+      // Outbound (AI): only translate if actual non-Latin script detected
+      if (m.direction === "out" && !containsNonLatin(m.body)) return false;
+      // Inbound: full heuristic (Roman Urdu hints + non-Latin)
+      if (m.direction !== "out" && !needsTranslation(m.body)) return false;
       return true;
     });
     if (!toTranslate.length) return;
@@ -1812,7 +1821,10 @@ export default function WhatsappInbox() {
                                   </div>
                                 );
                               }
-                              if (needsTranslation(m.body)) {
+                              const showBtn = isOut
+                                ? containsNonLatin(m.body)       // outbound: only real Urdu/Arabic script
+                                : needsTranslation(m.body);      // inbound: full heuristic
+                              if (showBtn) {
                                 const isLoading = translatingId === m.id;
                                 return (
                                   <button
