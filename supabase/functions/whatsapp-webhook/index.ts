@@ -969,7 +969,7 @@ async function handleIncoming(value: any) {
               .select("ai_batch_wait_seconds, ai_dedup_window_seconds")
               .eq("singleton", true)
               .maybeSingle();
-            const batchWaitMs = Math.max(0, (aiCfg?.ai_batch_wait_seconds ?? 20)) * 1000;
+            const batchWaitMs = Math.max(0, (aiCfg?.ai_batch_wait_seconds ?? 5)) * 1000;
             const dedupWindowMs = Math.max(0, (aiCfg?.ai_dedup_window_seconds ?? 30)) * 1000;
 
             if (resumedRun) await new Promise((r) => setTimeout(r, 1500));
@@ -2038,7 +2038,7 @@ Rules:
 // ---------------------------------------------------------------------------
 async function sweepUnansweredConversations(opts?: { limit?: number; minSilenceSec?: number }) {
   const limit = Math.max(1, Math.min(50, opts?.limit ?? 20));
-  const minSilenceSec = Math.max(30, opts?.minSilenceSec ?? 90);
+  const minSilenceSec = Math.max(15, opts?.minSilenceSec ?? 25);
   const cutoffIso = new Date(Date.now() - minSilenceSec * 1000).toISOString();
 
   // Candidate convs: AI enabled, had a recent inbound (last 24h) and the
