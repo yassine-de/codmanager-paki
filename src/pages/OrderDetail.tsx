@@ -95,6 +95,15 @@ export default function OrderDetail() {
     orioSyncStatus, orioSyncError, orioSyncedAt,
   } = order;
 
+  // Safe date formatter — returns null for invalid/missing dates so we never
+  // crash the whole component by calling format(new Date(undefined), ...).
+  const safeFormat = (d: string | null | undefined, fmt: string): string | null => {
+    if (!d) return null;
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return null;
+    try { return format(dt, fmt); } catch { return null; }
+  };
+
   return (
     <div className="max-w-3xl space-y-6">
       <div className="animate-fade-in">
@@ -139,7 +148,7 @@ export default function OrderDetail() {
             <MapPin className="w-4 h-4" /> {address ? `${address}, ` : ''}{city}
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="w-4 h-4" /> Ordered {format(new Date(createdAt), 'dd MMM yyyy, HH:mm')}
+            <Calendar className="w-4 h-4" /> Ordered {safeFormat(createdAt, 'dd MMM yyyy, HH:mm') ?? '—'}
           </div>
           {notes && authUser?.role !== 'seller' && (
             <div className="flex items-start gap-2 text-sm">
@@ -184,7 +193,7 @@ export default function OrderDetail() {
           {postponeDate && authUser?.role !== 'seller' && (
             <div className="rounded-lg border bg-warning/10 border-warning/20 p-3 text-center">
               <p className="text-[10px] text-warning uppercase tracking-wider">Postponed To</p>
-              <p className="text-sm font-semibold mt-0.5">{format(new Date(postponeDate), 'dd MMM yyyy')}</p>
+              <p className="text-sm font-semibold mt-0.5">{safeFormat(postponeDate, 'dd MMM yyyy') ?? '—'}</p>
             </div>
           )}
         </div>
@@ -256,7 +265,7 @@ export default function OrderDetail() {
             {orioSyncedAt && (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Synced At</p>
-                <p className="text-sm font-semibold mt-0.5">{format(new Date(orioSyncedAt), 'dd MMM yyyy, HH:mm')}</p>
+                <p className="text-sm font-semibold mt-0.5">{safeFormat(orioSyncedAt, 'dd MMM yyyy, HH:mm') ?? '—'}</p>
               </div>
             )}
           </div>
@@ -283,12 +292,15 @@ export default function OrderDetail() {
   );
 }
 
-function TimelineItem({ label, date }: { label: string; date: string }) {
+function TimelineItem({ label, date }: { label: string; date: string | null | undefined }) {
+  if (!date) return null;
+  const dt = new Date(date);
+  if (isNaN(dt.getTime())) return null;
   return (
     <div className="flex items-center gap-3">
       <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
       <span className="text-sm font-medium w-24">{label}</span>
-      <span className="text-sm text-muted-foreground">{format(new Date(date), 'dd MMM yyyy, HH:mm')}</span>
+      <span className="text-sm text-muted-foreground">{format(dt, 'dd MMM yyyy, HH:mm')}</span>
     </div>
   );
 }
