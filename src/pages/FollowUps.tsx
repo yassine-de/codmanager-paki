@@ -285,7 +285,7 @@ export default function FollowUps() {
   const [noteDialog, setNoteDialog]     = useState<{ orderId: string; currentNote: string; fromStatusChange?: boolean } | null>(null);
   const [noteText, setNoteText]         = useState("");
   const [columns, setColumns]           = useState<ColumnConfig[]>(() => loadColumnConfig());
-  const [sortKey, setSortKey]   = useState<"days" | "created" | "updated" | null>(null);
+  const [sortKey, setSortKey]   = useState<"days" | "created" | "updated" | "follow_up" | null>(null);
   const [sortDir, setSortDir]   = useState<"asc" | "desc">("asc");
   const [filterDays, setFilterDays] = useState<string>("all");
 
@@ -412,6 +412,9 @@ export default function FollowUps() {
       } else if (sortKey === "created") {
         av = new Date(a.order_created_at).getTime();
         bv = new Date(b.order_created_at).getTime();
+      } else if (sortKey === "follow_up") {
+        av = a.follow_up_updated_at ? new Date(a.follow_up_updated_at).getTime() : 0;
+        bv = b.follow_up_updated_at ? new Date(b.follow_up_updated_at).getTime() : 0;
       } else {
         av = new Date(a.order_updated_at).getTime();
         bv = new Date(b.order_updated_at).getTime();
@@ -435,7 +438,7 @@ export default function FollowUps() {
     setFilterAgent("all"); setFilterFollowUp("all"); setFilterDays("all"); setSearch(""); setDateRange(undefined);
   }
 
-  function toggleSort(key: "days" | "created" | "updated") {
+  function toggleSort(key: "days" | "created" | "updated" | "follow_up") {
     if (sortKey === key) {
       if (sortDir === "asc") {
         setSortDir("desc");
@@ -794,13 +797,13 @@ export default function FollowUps() {
                         style={{ width: columnWidths[col.key] }}
                         className={`text-left py-2 px-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-widest whitespace-nowrap overflow-hidden ${isCenter ? "text-center" : ""}`}
                       >
-                        {col.key === "days" ? (
+                        {(col.key === "days" || col.key === "follow_up") ? (
                           <button
-                            onClick={() => toggleSort("days")}
-                            className={`inline-flex items-center gap-1 hover:text-foreground transition-colors justify-center w-full ${sortKey === "days" ? "text-foreground" : "text-muted-foreground"}`}
+                            onClick={() => toggleSort(col.key as "days" | "follow_up")}
+                            className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${col.key === "days" ? "justify-center w-full" : ""} ${sortKey === col.key ? "text-foreground" : "text-muted-foreground"}`}
                           >
                             {meta.label}
-                            {sortKey === "days"
+                            {sortKey === col.key
                               ? sortDir === "asc"
                                 ? <ArrowUp className="w-3 h-3" />
                                 : <ArrowDown className="w-3 h-3" />
