@@ -3,7 +3,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { eachDayOfInterval, isAfter } from "date-fns";
-import { startOfDayPKT as startOfDay, endOfDayPKT, subDaysPKT as subDays, formatPKT as fmtDate } from "@/lib/timezone";
+import { startOfDayPKT as startOfDay, subDaysPKT as subDays, formatPKT as fmtDate } from "@/lib/timezone";
 import { Search, SlidersHorizontal, X, Columns3, CalendarIcon, Filter, Pencil, History, MessageCircle, Download, RefreshCw, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Copy, Check } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -206,33 +206,19 @@ export default function Orders() {
   const { authUser } = useAuth();
   const isAdmin = authUser?.role === 'admin';
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setDebouncedSearch(search);
-      setCurrentPage(1);
-    }, 350);
-    return () => clearTimeout(t);
-  }, [search]);
   const [showFilters, setShowFilters] = useState(false);
-
+  
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [trackingTarget, setTrackingTarget] = useState<{ orioId: number; systemId?: number | null; sellerId?: string | null } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [profileMap, setProfileMap] = useState<Map<string, string>>(new Map());
-  const [nameToSellerId, setNameToSellerId] = useState<Record<string, string>>({});
-  const [nameToAgentId, setNameToAgentId] = useState<Record<string, string>>({});
   const [sellerNames, setSellerNames] = useState<string[]>([]);
   const [agentNames, setAgentNames] = useState<string[]>([]);
   const [productNames, setProductNames] = useState<string[]>([]);
-  const [subStatusOptions, setSubStatusOptions] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
@@ -327,171 +313,107 @@ export default function Orders() {
     setRefreshKey(k => k + 1);
   };
 
-  // Effect A — fetch metadata once (profiles + products + sub-statuses)
+  // Fetch orders from database
   useEffect(() => {
-    const loadMeta = async () => {
-      // Profiles
+    const fetchOrders = async () => {
+      // Paginate using `.range()` to bypass PostgREST's `db-max-rows` cap
+      // (commonly 1000). Page size is intentionally kept below that cap so
+      // each request returns a full page when more rows exist — otherwise
+      // the loop would stop one page early and the UI would freeze at e.g.
+      // 999/1000 even when the database has more rows.
+      //
+      // Order by a stable, unique secondary key (`id`) so pagination is
+      // deterministic. Without it, rows that share the same `created_at`
+      // can shift between offset windows and we lose count (e.g. 1,050 → 999).
+      // We also de-duplicate by `id` as a final safety net in case a row
+      // is re-inserted between fetches.
+      const PAGE = 500;
+      let from = 0;
+      const seen = new Set<string>();
+      const all: any[] = [];
+      // Hard ceiling to prevent runaway loops — bump if the system grows past this.
+      const MAX_ROWS = 200000;
+
+      while (from < MAX_ROWS) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, from + PAGE - 1);
+
+        if (error) {
+          console.error("Error fetching orders:", error);
+          return;
+        }
+
+        const batch = data || [];
+        for (const row of batch) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            all.push(row);
+          }
+        }
+        if (batch.length < PAGE) break;
+        from += PAGE;
+      }
+
+      const data = all;
+
+      // Fetch seller & agent names for display
+      const sellerIds = [...new Set((data || []).map(o => o.seller_id))];
+      const agentIdsSet = new Set<string>();
+      (data || []).forEach(o => {
+        if (o.agent_id) agentIdsSet.add(o.agent_id);
+        if (o.original_agent_id) agentIdsSet.add(o.original_agent_id);
+      });
+      const allUserIds = [...new Set([...sellerIds, ...agentIdsSet])];
+
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("user_id, name, role");
-      if (profiles) {
-        const map = new Map(profiles.map((p: any) => [p.user_id, p.name as string]));
-        const n2s: Record<string, string> = {};
-        const n2a: Record<string, string> = {};
-        const sNames: string[] = [];
-        const aNames: string[] = [];
-        profiles.forEach((p: any) => {
-          if (!p.name) return;
-          n2a[p.name] = p.user_id;
-          if (p.role === 'seller') { n2s[p.name] = p.user_id; sNames.push(p.name); }
-          else aNames.push(p.name);
-        });
-        setProfileMap(map);
-        setNameToSellerId(n2s);
-        setNameToAgentId(n2a);
-        setSellerNames(sNames.sort());
-        setAgentNames(aNames.sort());
-      }
-      // Distinct product names
-      const { data: prods } = await supabase
-        .from("orders")
-        .select("product_name")
-        .not("product_name", "is", null)
-        .limit(5000);
-      if (prods) {
-        setProductNames([...new Set((prods as any[]).map((p) => p.product_name))].sort());
-      }
-      // Distinct ORIO sub-statuses
-      const { data: subs } = await supabase
-        .from("orders")
-        .select("orio_shipping_status")
-        .not("orio_shipping_status", "is", null)
-        .limit(2000);
-      if (subs) {
-        setSubStatusOptions([...new Set((subs as any[]).map((s) => s.orio_shipping_status))].sort());
-      }
+        .select("user_id, name")
+        .in("user_id", allUserIds);
+
+      const profileMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
+
+      const mapped: Order[] = (data || []).map(o => ({
+        id: o.order_id,
+        systemId: o.system_id || undefined,
+        customer: o.customer_name,
+        phone: o.customer_phone,
+        city: o.customer_city,
+        address: o.customer_address || "",
+        products: [{ name: o.product_name, qty: o.quantity, price: Number(o.price) }],
+        total: Number(o.total_amount),
+        paidAmount: 0,
+        status: (o.confirmation_status === "confirmed" ? o.delivery_status : o.confirmation_status) as any,
+        confirmationStatus: o.confirmation_status as ConfirmationStatus,
+        deliveryStatus: (o.delivery_status || "pending") as DeliveryStatus,
+        createdAt: o.created_at,
+        updatedAt: o.updated_at,
+        confirmedAt: o.confirmed_at || undefined,
+        deliveredAt: o.delivered_at || undefined,
+        notes: o.note || undefined,
+        seller: profileMap.get(o.seller_id) || "Unknown",
+        agentName: o.agent_id ? (profileMap.get(o.agent_id) || undefined) : (o.original_agent_id ? (profileMap.get(o.original_agent_id) || undefined) : undefined),
+        upsell: false,
+        warehouseState: "in_stock" as const,
+        history: [],
+        attemptCount: o.attempt_count || 0,
+        orioOrderId: o.orio_order_id || null,
+        orioShippingStatus: o.orio_shipping_status || null,
+        confirmationChannel: o.confirmation_channel || 'agent',
+        whatsappStatus: o.whatsapp_status || null,
+      }));
+
+      setOrders(mapped);
+      setSellerNames([...new Set(mapped.map(o => o.seller))]);
+      setProductNames([...new Set(mapped.flatMap(o => o.products.map(p => p.name)))]);
+      setAgentNames([...new Set(mapped.map(o => o.agentName).filter(Boolean) as string[])]);
     };
-    loadMeta();
-  }, []);
 
-  // Effect B — fetch paginated orders (re-runs on filter/sort/page changes)
-  useEffect(() => {
-    if (profileMap.size === 0) return; // wait for profiles to load first
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        const COLS = [
-          "id", "order_id", "system_id", "customer_name", "customer_phone", "customer_city",
-          "customer_address", "product_name", "quantity", "price", "total_amount",
-          "confirmation_status", "delivery_status", "confirmation_channel",
-          "created_at", "updated_at", "confirmed_at", "delivered_at",
-          "note", "seller_id", "agent_id", "original_agent_id",
-          "attempt_count", "orio_order_id", "orio_shipping_status", "whatsapp_status",
-        ].join(", ");
-
-        let query = supabase
-          .from("orders")
-          .select(COLS, { count: "exact" }) as any;
-
-        // Date filter
-        if (appliedFilters.dateRange?.from) {
-          query = query.gte("created_at", startOfDay(appliedFilters.dateRange.from).toISOString());
-          if (appliedFilters.dateRange.to) {
-            query = query.lte("created_at", endOfDayPKT(appliedFilters.dateRange.to).toISOString());
-          }
-        }
-        // Status filters
-        if (appliedFilters.confirmation !== "all") {
-          if (!isAdmin && appliedFilters.confirmation === "new") {
-            query = query.in("confirmation_status", ["new", "new_wts"]);
-          } else {
-            query = query.eq("confirmation_status", appliedFilters.confirmation);
-          }
-        }
-        if (appliedFilters.delivery !== "all") query = query.eq("delivery_status", appliedFilters.delivery);
-        if (appliedFilters.channel !== "all") query = query.eq("confirmation_channel", appliedFilters.channel);
-        if (appliedFilters.product !== "all") query = query.eq("product_name", appliedFilters.product);
-        if (appliedFilters.subStatus !== "all") query = query.eq("orio_shipping_status", appliedFilters.subStatus);
-
-        // Seller / agent (by ID)
-        if (appliedFilters.seller !== "all") {
-          const sid = nameToSellerId[appliedFilters.seller];
-          if (sid) query = query.eq("seller_id", sid);
-        }
-        if (appliedFilters.agent !== "all") {
-          const aid = nameToAgentId[appliedFilters.agent];
-          if (aid) query = query.or(`agent_id.eq.${aid},original_agent_id.eq.${aid}`);
-        }
-
-        // Search (DB-level ilike)
-        if (debouncedSearch.trim()) {
-          const s = debouncedSearch.trim();
-          query = query.or(
-            `order_id.ilike.%${s}%,customer_name.ilike.%${s}%,customer_phone.ilike.%${s}%,customer_city.ilike.%${s}%`,
-          );
-        }
-
-        // Sort
-        const sortCol =
-          sortKey === "systemId" ? "system_id" :
-          sortKey === "updatedAt" ? "updated_at" : "created_at";
-        query = query
-          .order(sortCol, { ascending: sortDir === "asc" })
-          .order("id", { ascending: false });
-
-        // Pagination
-        const from = (currentPage - 1) * pageSize;
-        query = query.range(from, from + pageSize - 1);
-
-        const { data, count, error } = await query;
-        if (error) throw error;
-
-        const mapped: Order[] = ((data as any[]) || []).map((o) => ({
-          id: o.order_id,
-          dbId: o.id, // UUID primary key — used for URL navigation
-          systemId: o.system_id || undefined,
-          customer: o.customer_name,
-          phone: o.customer_phone,
-          city: o.customer_city,
-          address: o.customer_address || "",
-          products: [{ name: o.product_name, qty: o.quantity, price: Number(o.price) }],
-          total: Number(o.total_amount),
-          paidAmount: 0,
-          status: (o.confirmation_status === "confirmed" ? o.delivery_status : o.confirmation_status) as any,
-          confirmationStatus: o.confirmation_status as ConfirmationStatus,
-          deliveryStatus: (o.delivery_status || "pending") as DeliveryStatus,
-          createdAt: o.created_at,
-          updatedAt: o.updated_at,
-          confirmedAt: o.confirmed_at || undefined,
-          deliveredAt: o.delivered_at || undefined,
-          notes: o.note || undefined,
-          seller: profileMap.get(o.seller_id) || "Unknown",
-          agentName: o.agent_id
-            ? profileMap.get(o.agent_id) || undefined
-            : o.original_agent_id
-            ? profileMap.get(o.original_agent_id) || undefined
-            : undefined,
-          upsell: false,
-          warehouseState: "in_stock" as const,
-          history: [],
-          attemptCount: o.attempt_count || 0,
-          orioOrderId: o.orio_order_id || null,
-          orioShippingStatus: o.orio_shipping_status || null,
-          confirmationChannel: o.confirmation_channel || "agent",
-          whatsappStatus: o.whatsapp_status || null,
-        }));
-
-        setOrders(mapped);
-        setTotalCount(count ?? 0);
-      } catch (e) {
-        console.error("Error fetching orders:", e);
-        toast.error("Failed to load orders");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, [appliedFilters, sortKey, sortDir, currentPage, pageSize, debouncedSearch, refreshKey, profileMap, isAdmin, nameToSellerId, nameToAgentId]);
+    fetchOrders();
+  }, [refreshKey]);
 
   // Filters state
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
@@ -565,6 +487,13 @@ export default function Orders() {
     new Set(allColumns.filter(c => c.defaultVisible).map(c => c.key))
   );
 
+  // Unique sub-statuses present in current orders (for filter dropdown)
+  const subStatusOptions = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach(o => { if (o.orioShippingStatus) set.add(o.orioShippingStatus); });
+    return Array.from(set).sort();
+  }, [orders]);
+
   const applyFilters = useCallback(() => {
     setAppliedFilters({
       dateRange, product: filterProduct, seller: filterSeller, agent: filterAgent,
@@ -573,7 +502,6 @@ export default function Orders() {
       channel: filterChannel,
       upsell: filterUpsell,
     });
-    setCurrentPage(1);
   }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell]);
 
   const clearFilters = useCallback(() => {
@@ -587,7 +515,6 @@ export default function Orders() {
       dateRange: undefined, product: 'all', seller: 'all', agent: 'all',
       confirmation: 'all', delivery: 'all', subStatus: 'all', channel: 'all', upsell: 'all',
     });
-    setCurrentPage(1);
   }, []);
 
   const activeFilterCount = useMemo(() => {
@@ -604,11 +531,63 @@ export default function Orders() {
     return count;
   }, [appliedFilters]);
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const paginatedOrders = orders; // already paginated server-side
+  const filtered = useMemo(() => {
+    const f = appliedFilters;
+    return orders
+      .filter(o => {
+        if (f.dateRange?.from) {
+          const d = new Date(o.createdAt);
+          if (d < f.dateRange.from) return false;
+          if (f.dateRange.to && d > new Date(f.dateRange.to.getTime() + 86400000)) return false;
+        }
+        if (f.product !== 'all' && !o.products.some(p => p.name === f.product)) return false;
+        if (f.seller !== 'all' && o.seller !== f.seller) return false;
+        if (f.agent !== 'all' && o.agentName !== f.agent) return false;
+        if (f.confirmation !== 'all') {
+          // For sellers, "new" filter also matches new_wts (WhatsApp pipeline is hidden as plain New)
+          const effective = (!isAdmin && o.confirmationStatus === 'new_wts') ? 'new' : o.confirmationStatus;
+          if (effective !== f.confirmation) return false;
+        }
+        if (f.delivery !== 'all' && o.deliveryStatus !== f.delivery) return false;
+        if (f.subStatus !== 'all' && (o.orioShippingStatus || '') !== f.subStatus) return false;
+        if (f.channel !== 'all' && (o.confirmationChannel || 'agent') !== f.channel) return false;
+        if (f.upsell !== 'all') {
+          if (f.upsell === 'yes' && !o.upsell) return false;
+          if (f.upsell === 'no' && o.upsell) return false;
+        }
+        
+        if (search) {
+          const s = search.toLowerCase();
+          return o.id.toLowerCase().includes(s) || o.customer.toLowerCase().includes(s) ||
+            o.phone.includes(s) || o.city.toLowerCase().includes(s);
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        let valA: number, valB: number;
+        if (sortKey === 'systemId') {
+          valA = a.systemId ?? 0;
+          valB = b.systemId ?? 0;
+        } else if (sortKey === 'updatedAt') {
+          valA = new Date(a.updatedAt).getTime();
+          valB = new Date(b.updatedAt).getTime();
+        } else {
+          valA = new Date(a.createdAt).getTime();
+          valB = new Date(b.createdAt).getTime();
+        }
+        return sortDir === 'asc' ? valA - valB : valB - valA;
+      });
+  }, [search, appliedFilters, orders, sortKey, sortDir]);
 
-  // Reset to page 1 when sort changes
-  useEffect(() => { setCurrentPage(1); }, [sortKey, sortDir]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
+
+  // Reset to page 1 when filters/search change
+  const prevFilteredLen = filtered.length;
+  useMemo(() => { setCurrentPage(1); }, [search, appliedFilters, pageSize]);
 
   const toggleColumn = (key: ColumnKey) => {
     setVisibleColumns(prev => {
@@ -636,6 +615,9 @@ export default function Orders() {
           </Button>
         )}
       </div>
+
+      {/* Mini Sparkline KPIs */}
+      <OrderSparklineCards orders={orders} />
 
       {/* Search & Filters */}
       <div className="flex items-center justify-end gap-2">
@@ -847,7 +829,7 @@ export default function Orders() {
         <div className="flex items-center justify-between px-4 py-2.5 border-b">
           <div className="flex items-center gap-3">
             <p className="text-sm font-medium">
-              {totalCount} <span className="text-muted-foreground font-normal">order{totalCount !== 1 ? 's' : ''}</span>
+              {filtered.length} <span className="text-muted-foreground font-normal">order{filtered.length !== 1 ? 's' : ''}</span>
             </p>
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Show</span>
@@ -925,26 +907,14 @@ export default function Orders() {
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
-                <tr><td colSpan={99} className="py-16 text-center text-sm text-muted-foreground">
-                  <div className="flex items-center justify-center gap-2">
-                    <RefreshCw className="w-4 h-4 animate-spin" /> Loading orders…
-                  </div>
-                </td></tr>
-              ) : paginatedOrders.length === 0 ? (
-                <tr>
-                  <td colSpan={visibleColumns.size + (isAdmin ? 2 : 1)} className="py-16 text-center text-muted-foreground text-sm">
-                    No orders found matching your criteria
-                  </td>
-                </tr>
-              ) : paginatedOrders.map((order) => (
+              {paginatedOrders.map((order) => (
                 <tr
                   key={order.id}
                   className={cn(
                     "border-b last:border-0 hover:bg-muted/40 cursor-pointer transition-colors duration-150",
                     selectedOrders.has(order.id) && "bg-primary/[0.04]"
                   )}
-                  onClick={() => navigate(`/orders/${(order as any).dbId || order.id}`)}
+                  onClick={() => navigate(`/orders/${order.id}`)}
                 >
                   {isAdmin && (
                     <td className="py-2.5 px-3 w-10" onClick={(e) => e.stopPropagation()}>
@@ -1075,6 +1045,13 @@ export default function Orders() {
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={visibleColumns.size + (isAdmin ? 2 : 1)} className="py-16 text-center text-muted-foreground text-sm">
+                    No orders found matching your criteria
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1085,7 +1062,7 @@ export default function Orders() {
             <div
               key={order.id}
               className="p-4 hover:bg-muted/30 cursor-pointer transition-colors active:scale-[0.98]"
-              onClick={() => navigate(`/orders/${(order as any).dbId || order.id}`)}
+              onClick={() => navigate(`/orders/${order.id}`)}
             >
               <div className="flex items-center justify-between mb-2">
                 <span className="font-medium text-sm">{order.id}</span>
@@ -1115,14 +1092,7 @@ export default function Orders() {
               </div>
             </div>
           ))}
-          {isLoading && (
-            <div className="py-16 text-center text-sm text-muted-foreground">
-              <div className="flex items-center justify-center gap-2">
-                <RefreshCw className="w-4 h-4 animate-spin" /> Loading orders…
-              </div>
-            </div>
-          )}
-          {!isLoading && orders.length === 0 && (
+          {filtered.length === 0 && (
             <div className="py-16 text-center text-muted-foreground text-sm">No orders found</div>
           )}
         </div>
@@ -1131,7 +1101,7 @@ export default function Orders() {
         <div className="flex items-center justify-end px-4 py-2.5 border-t">
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground tabular-nums mr-2">
-              {totalCount === 0 ? '0' : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, totalCount)}`} of {totalCount}
+              {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length}
             </span>
             <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}>
               <span className="text-xs">«</span>

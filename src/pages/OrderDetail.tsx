@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Phone, MapPin, Calendar, StickyNote, Loader2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
+import { mockOrders } from "@/lib/data";
 import { formatPKT as format } from "@/lib/timezone";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,14 +13,17 @@ export default function OrderDetail() {
   const navigate = useNavigate();
   const { authUser } = useAuth();
 
-  // Always fetch from DB — never use mock data in production
-  const { data: order, isLoading } = useQuery({
+  // Try mock orders first
+  const mockOrder = mockOrders.find(o => o.id === id);
+
+  // Fetch from DB if not in mock (match by order_id)
+  const { data: dbOrder, isLoading } = useQuery({
     queryKey: ["order-detail", id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
         .select("*")
-        .eq("id", id!)
+        .eq("order_id", id!)
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
@@ -46,6 +50,7 @@ export default function OrderDetail() {
         total: Number(data.total_amount),
         confirmationStatus: data.confirmation_status,
         deliveryStatus: data.delivery_status || "pending",
+        shippingStatus: data.shipping_status,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
         confirmedAt: data.confirmed_at,
@@ -66,10 +71,12 @@ export default function OrderDetail() {
         orioSyncedAt: (data as any).orio_synced_at,
       };
     },
-    enabled: !!id,
+    enabled: !mockOrder && !!id,
   });
 
-  if (isLoading) {
+  const order = mockOrder || dbOrder;
+
+  if (isLoading && !mockOrder) {
     return (
       <div className="flex items-center justify-center py-24">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -86,23 +93,33 @@ export default function OrderDetail() {
     );
   }
 
-  const {
-    customer, phone, city, address, products, total,
-    createdAt, confirmedAt, deliveredAt, notes, seller,
-    confirmationStatus, deliveryStatus, shippingCost,
-    cancelReason, postponeDate, attemptCount, fragile, offers,
-    orioOrderId, orioConsignmentNo, orioShippingStatus,
-    orioSyncStatus, orioSyncError, orioSyncedAt,
-  } = order;
-
-  // Safe date formatter — returns null for invalid/missing dates so we never
-  // crash the whole component by calling format(new Date(undefined), ...).
-  const safeFormat = (d: string | null | undefined, fmt: string): string | null => {
-    if (!d) return null;
-    const dt = new Date(d);
-    if (isNaN(dt.getTime())) return null;
-    try { return format(dt, fmt); } catch { return null; }
-  };
+  // Normalize for both mock and DB orders
+  const isDbOrder = !mockOrder && !!dbOrder;
+  const customer = isDbOrder ? dbOrder.customer : order.customer;
+  const phone = isDbOrder ? dbOrder.phone : (order as any).phone;
+  const city = isDbOrder ? dbOrder.city : (order as any).city;
+  const address = isDbOrder ? dbOrder.address : (order as any).address;
+  const products = isDbOrder ? dbOrder.products : (order as any).products;
+  const total = isDbOrder ? dbOrder.total : (order as any).total;
+  const createdAt = isDbOrder ? dbOrder.createdAt : (order as any).createdAt;
+  const confirmedAt = isDbOrder ? dbOrder.confirmedAt : (order as any).confirmedAt;
+  const deliveredAt = isDbOrder ? dbOrder.deliveredAt : (order as any).deliveredAt;
+  const notes = isDbOrder ? dbOrder.notes : (order as any).notes;
+  const seller = isDbOrder ? dbOrder.seller : (order as any).seller;
+  const confirmationStatus = isDbOrder ? dbOrder.confirmationStatus : (order as any).confirmationStatus || (order as any).status;
+  const deliveryStatus = isDbOrder ? dbOrder.deliveryStatus : (order as any).deliveryStatus;
+  const shippingCost = isDbOrder ? dbOrder.shippingCost : 0;
+  const cancelReason = isDbOrder ? dbOrder.cancelReason : undefined;
+  const postponeDate = isDbOrder ? dbOrder.postponeDate : undefined;
+  const attemptCount = isDbOrder ? dbOrder.attemptCount : 0;
+  const fragile = isDbOrder ? dbOrder.fragile : false;
+  const offers = isDbOrder ? dbOrder.offers : undefined;
+  const orioOrderId = isDbOrder ? dbOrder.orioOrderId : undefined;
+  const orioConsignmentNo = isDbOrder ? dbOrder.orioConsignmentNo : undefined;
+  const orioShippingStatus = isDbOrder ? dbOrder.orioShippingStatus : undefined;
+  const orioSyncStatus = isDbOrder ? dbOrder.orioSyncStatus : undefined;
+  const orioSyncError = isDbOrder ? dbOrder.orioSyncError : undefined;
+  const orioSyncedAt = isDbOrder ? dbOrder.orioSyncedAt : undefined;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -148,7 +165,7 @@ export default function OrderDetail() {
             <MapPin className="w-4 h-4" /> {address ? `${address}, ` : ''}{city}
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Calendar className="w-4 h-4" /> Ordered {safeFormat(createdAt, 'dd MMM yyyy, HH:mm') ?? '—'}
+            <Calendar className="w-4 h-4" /> Ordered {format(new Date(createdAt), 'dd MMM yyyy, HH:mm')}
           </div>
           {notes && authUser?.role !== 'seller' && (
             <div className="flex items-start gap-2 text-sm">
@@ -193,7 +210,7 @@ export default function OrderDetail() {
           {postponeDate && authUser?.role !== 'seller' && (
             <div className="rounded-lg border bg-warning/10 border-warning/20 p-3 text-center">
               <p className="text-[10px] text-warning uppercase tracking-wider">Postponed To</p>
-              <p className="text-sm font-semibold mt-0.5">{safeFormat(postponeDate, 'dd MMM yyyy') ?? '—'}</p>
+              <p className="text-sm font-semibold mt-0.5">{format(new Date(postponeDate), 'dd MMM yyyy')}</p>
             </div>
           )}
         </div>
@@ -227,7 +244,7 @@ export default function OrderDetail() {
       </div>
 
       {/* ORIO Shipping - Admin only */}
-      {(orioSyncStatus || orioOrderId) && authUser?.role === 'admin' && (
+      {isDbOrder && (orioSyncStatus || orioOrderId) && authUser?.role === 'admin' && (
         <div className="bg-card rounded-lg border p-5 space-y-4 animate-slide-up" style={{ animationDelay: '200ms' }}>
           <div className="flex items-center gap-2">
             <Truck className="w-4 h-4 text-primary" />
@@ -265,7 +282,7 @@ export default function OrderDetail() {
             {orioSyncedAt && (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Synced At</p>
-                <p className="text-sm font-semibold mt-0.5">{safeFormat(orioSyncedAt, 'dd MMM yyyy, HH:mm') ?? '—'}</p>
+                <p className="text-sm font-semibold mt-0.5">{format(new Date(orioSyncedAt), 'dd MMM yyyy, HH:mm')}</p>
               </div>
             )}
           </div>
@@ -292,15 +309,12 @@ export default function OrderDetail() {
   );
 }
 
-function TimelineItem({ label, date }: { label: string; date: string | null | undefined }) {
-  if (!date) return null;
-  const dt = new Date(date);
-  if (isNaN(dt.getTime())) return null;
+function TimelineItem({ label, date }: { label: string; date: string }) {
   return (
     <div className="flex items-center gap-3">
       <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
       <span className="text-sm font-medium w-24">{label}</span>
-      <span className="text-sm text-muted-foreground">{format(dt, 'dd MMM yyyy, HH:mm')}</span>
+      <span className="text-sm text-muted-foreground">{format(new Date(date), 'dd MMM yyyy, HH:mm')}</span>
     </div>
   );
 }
