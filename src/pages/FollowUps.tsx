@@ -47,6 +47,9 @@ import {
   Check,
   ChevronDown,
   PhoneOff,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   Dialog,
@@ -278,6 +281,8 @@ export default function FollowUps() {
   const [noteDialog, setNoteDialog]     = useState<{ orderId: string; currentNote: string; fromStatusChange?: boolean } | null>(null);
   const [noteText, setNoteText]         = useState("");
   const [columns, setColumns]           = useState<ColumnConfig[]>(() => loadColumnConfig());
+  const [sortKey, setSortKey]   = useState<"days" | "created" | "updated" | null>(null);
+  const [sortDir, setSortDir]   = useState<"asc" | "desc">("asc");
 
   const saveColumns = useCallback((next: ColumnConfig[]) => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
@@ -381,8 +386,26 @@ export default function FollowUps() {
   // Reset to page 1 whenever filtered result set changes
   useEffect(() => { setPage(1); }, [filtered]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered;
+    return [...filtered].sort((a, b) => {
+      let av: number, bv: number;
+      if (sortKey === "days") {
+        av = a.days_since_shipped ?? -1;
+        bv = b.days_since_shipped ?? -1;
+      } else if (sortKey === "created") {
+        av = new Date(a.order_created_at).getTime();
+        bv = new Date(b.order_created_at).getTime();
+      } else {
+        av = new Date(a.order_updated_at).getTime();
+        bv = new Date(b.order_updated_at).getTime();
+      }
+      return sortDir === "asc" ? av - bv : bv - av;
+    });
+  }, [filtered, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const activeFilterCount =
     (segment !== "all" ? 1 : 0) + (filterDelivery !== "all" ? 1 : 0) +
@@ -393,6 +416,15 @@ export default function FollowUps() {
   function clearFilters() {
     setSegment("all"); setFilterDelivery("all"); setFilterSubStatus("all"); setFilterSeller("all");
     setFilterAgent("all"); setFilterFollowUp("all"); setSearch(""); setDateRange(undefined);
+  }
+
+  function toggleSort(key: "days" | "created" | "updated") {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
   }
 
   async function handleStatusChange(orderId: string, newStatus: string, noAnswerAttempt?: number, note?: string) {
@@ -721,7 +753,19 @@ export default function FollowUps() {
                         style={{ width: columnWidths[col.key] }}
                         className={`text-left py-2 px-3 font-semibold text-[10px] text-muted-foreground uppercase tracking-widest whitespace-nowrap overflow-hidden ${isCenter ? "text-center" : ""}`}
                       >
-                        {meta.label}
+                        {(col.key === "days" || col.key === "created" || col.key === "updated") ? (
+                          <button
+                            onClick={() => toggleSort(col.key as "days" | "created" | "updated")}
+                            className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${isCenter ? "justify-center w-full" : ""} ${sortKey === col.key ? "text-foreground" : ""}`}
+                          >
+                            {meta.label}
+                            {sortKey === col.key ? (
+                              sortDir === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            ) : (
+                              <ArrowUpDown className="w-3 h-3 opacity-40" />
+                            )}
+                          </button>
+                        ) : meta.label}
                       </th>
                     );
                   })}
