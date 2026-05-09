@@ -29,6 +29,7 @@ import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetF
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import OrioTrackingModal from "@/components/OrioTrackingModal";
+import { FinancialIndicators } from "@/components/FinancialIndicators";
 
 /* ── Status badge configs ── */
 const confirmationConfig: Record<ConfirmationStatus, { label: string; cls: string }> = {
@@ -104,7 +105,7 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'channel' | 'deliveryStatus' | 'subStatus' | 'attempts';
+type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'channel' | 'deliveryStatus' | 'subStatus' | 'attempts' | 'financial';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
@@ -122,6 +123,7 @@ const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; admi
   { key: 'attempts', label: 'Attempts', defaultVisible: true },
   { key: 'deliveryStatus', label: 'Delivery', defaultVisible: true },
   { key: 'subStatus', label: 'Sub Status', defaultVisible: true, adminOnly: true },
+  { key: 'financial', label: 'Invoice', defaultVisible: true, adminOnly: true },
 ];
 
 const channelConfig: Record<string, { label: string; cls: string }> = {
@@ -376,6 +378,17 @@ export default function Orders() {
 
       const profileMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
 
+      // Fetch invoice statuses for all orders that have an invoice_id
+      const invoiceIds = [...new Set((data || []).map(o => o.invoice_id).filter(Boolean))];
+      const invoiceMap = new Map<string, string>();
+      if (invoiceIds.length > 0) {
+        const { data: invoices } = await supabase
+          .from("invoices")
+          .select("id, status")
+          .in("id", invoiceIds);
+        (invoices || []).forEach(inv => invoiceMap.set(inv.id, inv.status));
+      }
+
       const mapped: Order[] = (data || []).map(o => ({
         id: o.order_id,
         systemId: o.system_id || undefined,
@@ -404,6 +417,8 @@ export default function Orders() {
         orioShippingStatus: o.orio_shipping_status || null,
         confirmationChannel: o.confirmation_channel || 'agent',
         whatsappStatus: o.whatsapp_status || null,
+        invoiceId: o.invoice_id || null,
+        invoiceStatus: o.invoice_id ? (invoiceMap.get(o.invoice_id) || null) : null,
       }));
 
       setOrders(mapped);
@@ -902,7 +917,7 @@ export default function Orders() {
                 
                 {isCol('deliveryStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
                 {isAdmin && isCol('subStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Sub Status</th>}
-                
+                {isAdmin && isCol('financial') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Invoice</th>}
                 <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -995,6 +1010,16 @@ export default function Orders() {
                     </td>
                   )}
                   
+                  {isAdmin && isCol('financial') && (
+                    <td className="py-2.5 px-4" onClick={(e) => e.stopPropagation()}>
+                      <FinancialIndicators
+                        confirmationStatus={order.confirmationStatus}
+                        deliveryStatus={order.deliveryStatus}
+                        invoiceId={order.invoiceId}
+                        invoiceStatus={order.invoiceStatus}
+                      />
+                    </td>
+                  )}
                   <td className="py-2.5 px-4">
                     <div className="flex items-center gap-1.5">
                       {/* Edit: admin always, seller only when new */}
