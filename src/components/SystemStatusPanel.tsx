@@ -187,6 +187,14 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
       onClick: () => setSyncModalOpen(true),
     },
     {
+      id: "stale-orio-sync",
+      label: "Stale ORIO Sync (>30m)",
+      count: staleSyncCount,
+      severity: staleSyncCount > 50 ? "error" : staleSyncCount > 10 ? "warning" : "ok",
+      icon: <Activity className="w-4 h-4" />,
+      onClick: () => setSyncModalOpen(true),
+    },
+    {
       id: "pending-adjustments",
       label: "Pending Adjustments",
       count: pendingAdjustments,
