@@ -182,11 +182,18 @@ function detectCourier(consignmentNo: string | null): string | null {
 
 function computeSegment(row: FollowUpRow): "failed_attempt" | "delayed" | "on_going" | null {
   const ds = row.delivery_status;
-  const days = row.days_since_shipped ?? 0;
+  const inTransit = ["shipped", "in_transit", "out_for_delivery", "with_courier"].includes(ds ?? "");
   if (ds === "failed_attempt") return "failed_attempt";
-  if (["shipped", "in_transit", "out_for_delivery", "with_courier"].includes(ds ?? "") && days >= 3) return "delayed";
-  if (["shipped", "in_transit", "out_for_delivery", "with_courier"].includes(ds ?? "") && days < 3)  return "on_going";
-  return null;
+  if (!inTransit) return null;
+  // Use days_since_shipped if available, otherwise fall back to days since order_updated_at
+  let days: number;
+  if (row.days_since_shipped != null) {
+    days = row.days_since_shipped;
+  } else {
+    days = Math.floor((Date.now() - new Date(row.order_updated_at).getTime()) / 86_400_000);
+  }
+  if (days >= 3) return "delayed";
+  return "on_going";
 }
 
 const segmentMeta: Record<
@@ -297,7 +304,7 @@ export default function FollowUps() {
   const { data: rows = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: ["follow-ups-data"],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_follow_ups_data");
+      const { data, error } = await supabase.rpc("get_follow_ups_data").limit(10000);
       if (error) throw error;
       return (data ?? []) as FollowUpRow[];
     },
