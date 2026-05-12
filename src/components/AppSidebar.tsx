@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Headphones, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Zap, Sparkles, Send } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NavLink } from "@/components/NavLink";
@@ -306,97 +307,99 @@ export function AppSidebar() {
                   ? location.pathname === '/'
                   : location.pathname.startsWith(item.url);
                 return (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild isActive={isActive} className="h-9 text-[13px] rounded-lg transition-all duration-150">
-                      <NavLink
-                        to={item.url}
-                        end={item.url === '/'}
-                        className="hover:bg-sidebar-accent/70"
-                        activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                      >
-                        <item.icon className="mr-2 h-4 w-4 opacity-70" />
-                        {!collapsed && <span className="flex-1">{t(item.title)}</span>}
-                        {!collapsed && item.badge != null && (
-                          <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
-                            {item.badge.toLocaleString()}
-                          </span>
-                        )}
-                        {!collapsed && (item as any).beta && (
-                          <span className="ml-auto inline-flex items-center justify-center rounded-md bg-violet-500/20 text-violet-500 px-1.5 py-0.5 text-[9px] font-bold leading-none tracking-wide border border-violet-500/30">
-                            BETA
-                          </span>
-                        )}
-                        {collapsed && item.badge != null && (
-                          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center ring-2 ring-sidebar">
-                            {item.badge > 9 ? "9+" : item.badge}
-                          </span>
-                        )}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-
-              {/* WhatsApp Automation dropdown — admin only */}
-              {isAdmin && (
-                <Collapsible defaultOpen={location.pathname.startsWith("/whatsapp")} className="group/whatsapp">
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton
-                        isActive={location.pathname.startsWith("/whatsapp")}
-                        className="h-9 text-[13px] cursor-pointer rounded-lg"
-                      >
-                        <MessageSquare className="mr-2 h-4 w-4 opacity-70" />
-                        {!collapsed && (
-                          <>
-                            <span className="flex-1">WhatsApp</span>
-                            {whatsappInboxUnread > 0 && (
-                              <span className="ml-1 inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
-                                {whatsappInboxUnread.toLocaleString()}
-                              </span>
-                            )}
-                            <ChevronDown className="ml-2 h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/whatsapp:rotate-180 opacity-50" />
-                          </>
-                        )}
-                        {collapsed && whatsappInboxUnread > 0 && (
-                          <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[18px]">
-                            {whatsappInboxUnread > 9 ? "9+" : whatsappInboxUnread}
-                          </span>
-                        )}
+                  <Fragment key={item.url}>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={isActive} className="h-9 text-[13px] rounded-lg transition-all duration-150">
+                        <NavLink
+                          to={item.url}
+                          end={item.url === '/'}
+                          className="hover:bg-sidebar-accent/70"
+                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                        >
+                          <item.icon className="mr-2 h-4 w-4 opacity-70" />
+                          {!collapsed && <span className="flex-1">{t(item.title)}</span>}
+                          {!collapsed && item.badge != null && (
+                            <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
+                              {item.badge.toLocaleString()}
+                            </span>
+                          )}
+                          {!collapsed && (item as any).beta && (
+                            <span className="ml-auto inline-flex items-center justify-center rounded-md bg-violet-500/20 text-violet-500 px-1.5 py-0.5 text-[9px] font-bold leading-none tracking-wide border border-violet-500/30">
+                              BETA
+                            </span>
+                          )}
+                          {collapsed && item.badge != null && (
+                            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary text-[9px] font-bold text-primary-foreground flex items-center justify-center ring-2 ring-sidebar">
+                              {item.badge > 9 ? "9+" : item.badge}
+                            </span>
+                          )}
+                        </NavLink>
                       </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        {whatsappSubItems.map((sub) => {
-                          const isSubActive = sub.end
-                            ? location.pathname === sub.url
-                            : location.pathname.startsWith(sub.url);
-                          return (
-                            <SidebarMenuSubItem key={sub.url}>
-                              <SidebarMenuSubButton asChild isActive={isSubActive} className="text-[13px] h-8 rounded-lg">
-                                <NavLink
-                                  to={sub.url}
-                                  end={sub.end}
-                                  className="hover:bg-sidebar-accent/70"
-                                  activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                                >
-                                  <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
-                                  <span className="flex-1">{sub.title}</span>
-                                  {(sub as any).badge != null && (
-                                    <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
-                                      {(sub as any).badge.toLocaleString()}
+                    </SidebarMenuItem>
+
+                    {/* WhatsApp Automation dropdown — injected right after Follow Ups */}
+                    {item.url === '/follow-ups' && isAdmin && (
+                      <Collapsible defaultOpen={location.pathname.startsWith("/whatsapp")} className="group/whatsapp">
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton
+                              isActive={location.pathname.startsWith("/whatsapp")}
+                              className="h-9 text-[13px] cursor-pointer rounded-lg"
+                            >
+                              <MessageSquare className="mr-2 h-4 w-4 opacity-70" />
+                              {!collapsed && (
+                                <>
+                                  <span className="flex-1">WhatsApp</span>
+                                  {whatsappInboxUnread > 0 && (
+                                    <span className="ml-1 inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
+                                      {whatsappInboxUnread.toLocaleString()}
                                     </span>
                                   )}
-                                </NavLink>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          );
-                        })}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
-              )}
+                                  <ChevronDown className="ml-2 h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/whatsapp:rotate-180 opacity-50" />
+                                </>
+                              )}
+                              {collapsed && whatsappInboxUnread > 0 && (
+                                <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[18px]">
+                                  {whatsappInboxUnread > 9 ? "9+" : whatsappInboxUnread}
+                                </span>
+                              )}
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              {whatsappSubItems.map((sub) => {
+                                const isSubActive = sub.end
+                                  ? location.pathname === sub.url
+                                  : location.pathname.startsWith(sub.url);
+                                return (
+                                  <SidebarMenuSubItem key={sub.url}>
+                                    <SidebarMenuSubButton asChild isActive={isSubActive} className="text-[13px] h-8 rounded-lg">
+                                      <NavLink
+                                        to={sub.url}
+                                        end={sub.end}
+                                        className="hover:bg-sidebar-accent/70"
+                                        activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                      >
+                                        <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
+                                        <span className="flex-1">{sub.title}</span>
+                                        {(sub as any).badge != null && (
+                                          <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
+                                            {(sub as any).badge.toLocaleString()}
+                                          </span>
+                                        )}
+                                      </NavLink>
+                                    </SidebarMenuSubButton>
+                                  </SidebarMenuSubItem>
+                                );
+                              })}
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </SidebarMenuItem>
+                      </Collapsible>
+                    )}
+                  </Fragment>
+                );
+              })}
 
               {/* Analytics dropdown */}
               {showAnalytics && (
