@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ExternalLink, Loader2, MapPin, Ship, ImageIcon, PackageCheck, Layers, Package, Info } from "lucide-react";
+import { ExternalLink, Loader2, MapPin, Ship, ImageIcon, PackageCheck, Layers, Package, Info, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import type { DbSourcingRequest } from "@/pages/Sourcing";
 
 const statusOptions: { value: string; label: string }[] = [
@@ -30,6 +31,8 @@ interface EditSourcingModalProps {
 
 export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingModalProps) {
   const queryClient = useQueryClient();
+  const { authUser } = useAuth();
+  const isAdmin = authUser?.role === "admin";
 
   // Fetch source product info if this sourcing came from an existing product
   const sourceProductId = (request as any)?.source_product_id;
@@ -75,6 +78,8 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   const [paymentStatus, setPaymentStatus] = useState("unpaid");
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
   const [productWeight, setProductWeight] = useState<string | null>(null);
+  const [freightForwarder, setFreightForwarder] = useState<string>("");
+  const [trackingId, setTrackingId] = useState<string>("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showProductConfirm, setShowProductConfirm] = useState(false);
 
@@ -91,6 +96,8 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     setPaymentStatus(request.payment_status ?? "unpaid");
     setPaymentMethod(request.payment_method ?? null);
     setProductWeight((request as any).product_weight ?? null);
+    setFreightForwarder(request.freight_forwarder ?? "");
+    setTrackingId(request.tracking_id ?? "");
     setErrors({});
   }
 
@@ -136,7 +143,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     const newPayMethod = paymentStatus === "paid" ? paymentMethod : null;
     if (newPayMethod !== (request.payment_method || null)) changes.push({ field: "payment_method", oldV: request.payment_method || null, newV: newPayMethod });
 
-    const updateData = {
+    const updateData: Record<string, unknown> = {
       unit_price: 0,
       shipping_cost: shippingCost as number,
       landed_price: landedPrice as number,
@@ -153,9 +160,14 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       seller_seen: false,
       ...(productCreated !== undefined ? { product_created: productCreated } : {}),
     };
+    // Admin-only fields
+    if (isAdmin) {
+      updateData.freight_forwarder = freightForwarder.trim() || null;
+      updateData.tracking_id = trackingId.trim() || null;
+    }
     const { error } = await supabase
       .from("sourcing_requests")
-      .update(updateData)
+      .update(updateData as any)
       .eq("id", request.id);
     if (error) throw error;
 
@@ -658,6 +670,37 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
               <Label className="text-xs">Notes</Label>
               <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add any notes..." className="text-sm min-h-[70px] resize-none" maxLength={500} />
             </div>
+
+            {/* Shipping — Admin only */}
+            {isAdmin && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-4 rounded-full bg-primary" />
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Shipping (Admin only)</span>
+                  <Truck className="h-3.5 w-3.5 text-muted-foreground" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Freight Forwarder</Label>
+                    <Input
+                      value={freightForwarder}
+                      onChange={e => setFreightForwarder(e.target.value)}
+                      placeholder="e.g. DHL, FedEx..."
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Tracking ID</Label>
+                    <Input
+                      value={trackingId}
+                      onChange={e => setTrackingId(e.target.value)}
+                      placeholder="Tracking number"
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter className="gap-2">

@@ -65,6 +65,8 @@ export interface DbSourcingRequest {
   payment_status: string;
   payment_method: string | null;
   payment_date: string | null;
+  freight_forwarder: string | null;
+  tracking_id: string | null;
   created_at: string;
   updated_at: string;
   variants: any[] | null;
