@@ -77,7 +77,7 @@ export default function Sourcing() {
   const [sellerFilter, setSellerFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [validationFilter, setValidationFilter] = useState("all");
-  const [kpiFilter, setKpiFilter] = useState<"all" | "awaiting_validation" | "in_transit" | "arrived_not_created">("all");
+  const [kpiFilter, setKpiFilter] = useState<"all" | "awaiting_validation" | "in_transit" | "arrived_not_created" | "paid" | "unpaid">("all");
 
   // Realtime notifications
   type SourcingNotif = { id: string; type: "new_request" | "validated" | "cancelled"; productName: string; sellerId: string; at: Date };
@@ -180,12 +180,24 @@ export default function Sourcing() {
     })).sort((a, b) => a.label.localeCompare(b.label));
   }, [sellerIds, sellerNameMap]);
 
-  const kpis = useMemo(() => ({
-    total:               requests.length,
-    awaitingValidation:  requests.filter(r => r.status === "quoted" && !r.seller_validated).length,
-    inTransit:           requests.filter(r => r.status === "shipped").length,
-    arrivedNotCreated:   requests.filter(r => r.status === "received" && !r.product_created).length,
-  }), [requests]);
+  const ACTIVE_STATUSES = ["ordered", "shipped", "received"];
+  const rowAmount = (r: DbSourcingRequest) => r.total_price ?? ((r.seller_price ?? 0) * r.quantity);
+  const fmtAmt = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}K` : `$${n.toFixed(0)}`;
+
+  const kpis = useMemo(() => {
+    const activeReqs = requests.filter(r => ACTIVE_STATUSES.includes(r.status));
+    return {
+      total:               requests.length,
+      awaitingValidation:  requests.filter(r => r.status === "quoted" && !r.seller_validated).length,
+      inTransit:           requests.filter(r => r.status === "shipped").length,
+      arrivedNotCreated:   requests.filter(r => r.status === "received" && !r.product_created).length,
+      paidCount:           activeReqs.filter(r => r.payment_status === "paid").length,
+      unpaidCount:         activeReqs.filter(r => r.payment_status === "unpaid").length,
+      amountPaid:          activeReqs.filter(r => r.payment_status === "paid").reduce((s, r) => s + rowAmount(r), 0),
+      amountUnpaid:        activeReqs.filter(r => r.payment_status === "unpaid").reduce((s, r) => s + rowAmount(r), 0),
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requests]);
 
   const applyKpi = (key: typeof kpiFilter) => {
     setKpiFilter(key);
@@ -194,6 +206,8 @@ export default function Sourcing() {
     if (key === "awaiting_validation")  { setStatusFilter("quoted");   setValidationFilter("pending"); }
     if (key === "in_transit")           { setStatusFilter("shipped");  setValidationFilter("all"); }
     if (key === "arrived_not_created")  { setStatusFilter("received"); setValidationFilter("all"); }
+    if (key === "paid")                 { setStatusFilter("all");      setValidationFilter("all"); }
+    if (key === "unpaid")               { setStatusFilter("all");      setValidationFilter("all"); }
   };
 
   const filtered = useMemo(() => {
@@ -204,6 +218,8 @@ export default function Sourcing() {
       if (validationFilter === "cancelled" && r.seller_validated !== false) return false;
       if (validationFilter === "pending" && r.seller_validated !== null) return false;
       if (kpiFilter === "arrived_not_created" && r.product_created === true) return false;
+      if (kpiFilter === "paid"   && !(ACTIVE_STATUSES.includes(r.status) && r.payment_status === "paid"))   return false;
+      if (kpiFilter === "unpaid" && !(ACTIVE_STATUSES.includes(r.status) && r.payment_status === "unpaid")) return false;
       return true;
     });
   }, [requests, sellerFilter, statusFilter, validationFilter, kpiFilter]);
@@ -281,7 +297,7 @@ export default function Sourcing() {
       )}
 
       {/* KPI Banners */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Total */}
         <button onClick={() => applyKpi("all")} className={`text-left rounded-lg border p-3 transition-all hover:shadow-sm ${kpiFilter === "all" ? "border-primary bg-primary/5 ring-1 ring-primary/30" : "bg-card border-border hover:border-primary/40"}`}>
           <div className="flex items-center gap-2 mb-1">
@@ -319,6 +335,26 @@ export default function Sourcing() {
           </div>
           <div className="text-2xl font-bold text-emerald-600">{kpis.arrivedNotCreated}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">Received — product not added</div>
+        </button>
+
+        {/* Amount Paid */}
+        <button onClick={() => applyKpi("paid")} className={`text-left rounded-lg border p-3 transition-all hover:shadow-sm ${kpiFilter === "paid" ? "border-emerald-500 bg-emerald-500/5 ring-1 ring-emerald-500/30" : "bg-card border-border hover:border-emerald-400/40"}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount Paid</span>
+          </div>
+          <div className="text-2xl font-bold text-emerald-600">{fmtAmt(kpis.amountPaid)}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">{kpis.paidCount} request{kpis.paidCount !== 1 ? "s" : ""}</div>
+        </button>
+
+        {/* Amount Unpaid */}
+        <button onClick={() => applyKpi("unpaid")} className={`text-left rounded-lg border p-3 transition-all hover:shadow-sm ${kpiFilter === "unpaid" ? "border-red-500 bg-red-500/5 ring-1 ring-red-500/30" : "bg-card border-border hover:border-red-400/40"}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <XCircle className="h-3.5 w-3.5 text-red-500" />
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Amount Unpaid</span>
+          </div>
+          <div className="text-2xl font-bold text-red-600">{fmtAmt(kpis.amountUnpaid)}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">{kpis.unpaidCount} request{kpis.unpaidCount !== 1 ? "s" : ""}</div>
         </button>
       </div>
 
