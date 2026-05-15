@@ -29,50 +29,6 @@ export function downloadInvoicePDF(summary: InvoiceSummaryResponse, sellerName: 
         </tr>`).join("")
     : `<tr><td colspan="6" class="empty">No delivered orders</td></tr>`;
 
-  /* ── Shipping rows ── */
-  const shippingRows = summary.shipping_breakdown.length
-    ? summary.shipping_breakdown.map(s => `
-        <tr><td>${s.bracket}</td><td class="r muted">${s.count} orders</td><td class="r r-val">−${usd(s.fee)}</td></tr>`).join("")
-    : `<tr><td colspan="3" class="empty">No shipping fees</td></tr>`;
-
-  /* ── Addons section ── */
-  const addonHtml = summary.addons.length ? `
-  <div class="section">
-    <div class="sh" style="background:#fff7ed;color:#c2410c;border-left:4px solid #f97316">
-      Addons &amp; Deductions <span class="badge">${summary.addons.length}</span>
-    </div>
-    <table>
-      <thead><tr><th>Description</th><th class="r">Amount</th></tr></thead>
-      <tbody>${summary.addons.map((a,i) => `
-        <tr class="${i%2?"s":""}">
-          <td>${a.reason || (a.type==="in"?"Bonus":"Deduction")}</td>
-          <td class="r ${a.type==="in"?"g":"r-val"}">${a.type==="in"?"+":"−"}${usd(a.amount)}</td>
-        </tr>`).join("")}
-      </tbody>
-    </table>
-  </div>` : "";
-
-  /* ── Adjustments section ── */
-  const adjHtml = summary.adjustments.length ? `
-  <div class="section">
-    <div class="sh" style="background:#f5f3ff;color:#6d28d9;border-left:4px solid #8b5cf6">
-      Adjustments <span class="badge">${summary.adjustments.length}</span>
-    </div>
-    <table>
-      <thead><tr><th>Order</th><th>Change</th><th>Reason</th><th class="r">Rev Δ</th><th class="r">Ship Δ</th><th class="r">Total</th></tr></thead>
-      <tbody>${summary.adjustments.map((a,i)=>{
-        const total=(a.difference_usd??0)+(a.shipping_difference_usd??0);
-        return `<tr class="${i%2?"s":""}">
-          <td class="mono">${a.order_id}</td>
-          <td><span class="pill">${a.old_status}</span>→<span class="pill">${a.new_status}</span></td>
-          <td class="muted">${a.reason.replace(/_/g," ")}</td>
-          <td class="r ${(a.difference_usd??0)>=0?"g":"r-val"}">${sign(a.difference_usd??0)}</td>
-          <td class="r ${(a.shipping_difference_usd??0)>=0?"g":"r-val"}">${sign(a.shipping_difference_usd??0)}</td>
-          <td class="r bold ${total>=0?"g":"r-val"}">${sign(total)}</td>
-        </tr>`;}).join("")}
-      </tbody>
-    </table>
-  </div>` : "";
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -170,10 +126,9 @@ tfoot tr td.r-ft{background:#fef2f2;color:#dc2626}
   <div class="stat"><div class="stat-n" style="color:#15803d">${cnt?.delivered_count??0}</div><div class="stat-l">Delivered</div></div>
   <div class="stat"><div class="stat-n" style="color:#1d4ed8">${cnt?.shipped_count??0}</div><div class="stat-l">Shipped</div></div>
   <div class="stat"><div class="stat-n" style="color:#dc2626">${cnt?.dropped_count??0}</div><div class="stat-l">Dropped</div></div>
-  <div class="stat"><div class="stat-n" style="color:#7c3aed">${summary.adjustments.length}</div><div class="stat-l">Adjustments</div></div>
 </div>
 
-<!-- ═══════════════════ DETAIL TABLES ═══════════════════════════════ -->
+<!-- DELIVERED ORDERS TABLE -->
 <div class="detail-wrap">
   <div class="section">
     <div class="sh" style="background:#dcfce7;color:#15803d;border-left:4px solid #16a34a">
@@ -195,74 +150,6 @@ tfoot tr td.r-ft{background:#fef2f2;color:#dc2626}
       </tfoot>
     </table>
   </div>
-
-  <!-- SHIPPING FEES -->
-  <div class="section">
-    <div class="sh" style="background:#dbeafe;color:#1d4ed8;border-left:4px solid #2563eb">
-      Shipping Fees Breakdown
-      <span class="badge">${cnt?.shipped_count??0} shipped</span>
-    </div>
-    <table>
-      <thead><tr><th>Weight Bracket</th><th class="r">Orders</th><th class="r">Total Fee</th></tr></thead>
-      <tbody>${shippingRows}</tbody>
-      <tfoot>
-        <tr>
-          <td colspan="2" style="text-align:right;padding-right:10px;color:#555">Total Shipping</td>
-          <td class="r r-val r-ft">−${usd(tot?.shipping_fees??0)}</td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-
-  <!-- CALL CENTER FEES -->
-  <div class="section">
-    <div class="sh" style="background:#fef9c3;color:#92400e;border-left:4px solid #d97706">
-      Call Center Fees
-      <span class="badge">${cnt?.total_orders_count??0} handled</span>
-    </div>
-    <table>
-      <thead><tr><th>Type</th><th class="r">Count</th><th class="r">Rate / Order</th><th class="r">Total</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>Confirmed orders</td>
-          <td class="r">${cc?.confirmed_count??0}</td>
-          <td class="r muted">${usd(cc?.confirmed_rate??0)}</td>
-          <td class="r r-val">−${usd(cc?.confirmed_fees??0)}</td>
-        </tr>
-        <tr class="s">
-          <td>Dropped orders</td>
-          <td class="r">${cc?.dropped_count??0}</td>
-          <td class="r muted">${usd(cc?.dropped_rate??0)}</td>
-          <td class="r r-val">−${usd(cc?.dropped_fees??0)}</td>
-        </tr>
-      </tbody>
-      <tfoot>
-        <tr>
-          <td colspan="3" style="text-align:right;padding-right:10px;color:#555">Total Call Center</td>
-          <td class="r r-val r-ft">−${usd(tot?.call_center_fees??0)}</td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-
-  <!-- COD FEES -->
-  <div class="section">
-    <div class="sh" style="background:#ffedd5;color:#c2410c;border-left:4px solid #f97316">
-      COD Fees — ${summary.rates?.cod_fee_percentage??0}% of Delivered Revenue
-    </div>
-    <table>
-      <thead><tr><th>Calculation</th><th class="r">Amount</th></tr></thead>
-      <tbody>
-        <tr>
-          <td>${summary.rates?.cod_fee_percentage??0}% × ${usd(tot?.delivered_revenue_usd??0)} delivered revenue</td>
-          <td class="r r-val">−${usd(tot?.cod_fees??0)}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  ${addonHtml}
-  ${adjHtml}
 </div>
 
 <!-- FINAL SUMMARY -->
