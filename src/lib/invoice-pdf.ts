@@ -197,11 +197,10 @@ tfoot tr td.r-ft{background:#fef2f2;color:#dc2626}
   <span>Generated ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"long",year:"numeric"})}</span>
 </div>
 
-<script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
 </body>
 </html>`;
 
-  const w = window.open("", "_blank", "width=960,height=800");
+  const w = window.open("", "_blank");
   if (!w) return;
   w.document.write(html);
   w.document.close();
