@@ -22,14 +22,13 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- Find already-confirmed orders for the same phone + product (excluding this row)
+  -- Find any existing order for the same phone + product (any status, excluding this row)
   SELECT array_agg(order_id ORDER BY created_at DESC)
   INTO   v_dup_ids
   FROM   public.orders
-  WHERE  customer_phone      = NEW.customer_phone
-    AND  product_name        = NEW.product_name
-    AND  confirmation_status = 'confirmed'
-    AND  id                 != NEW.id;
+  WHERE  customer_phone = NEW.customer_phone
+    AND  product_name   = NEW.product_name
+    AND  id            != NEW.id;
 
   -- Nothing found → no alert needed
   IF v_dup_ids IS NULL OR array_length(v_dup_ids, 1) = 0 THEN
@@ -37,7 +36,7 @@ BEGIN
   END IF;
 
   -- Build the alert message
-  v_msg := '⚠️ Duplicate order detected. This customer already has a confirmed order for the same product: '
+  v_msg := '⚠️ Duplicate order detected. This customer already has an existing order for the same product: '
            || array_to_string(v_dup_ids, ', ')
            || '. Please verify before proceeding.';
 
