@@ -368,8 +368,8 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <Tabs defaultValue="all" className="flex flex-col flex-1 min-h-0">
-            <div className="px-4 pt-3">
+          <Tabs defaultValue="all" className="flex flex-col flex-1 overflow-hidden">
+            <div className="px-4 pt-3 flex-shrink-0">
               <TabsList className="w-full h-8">
                 <TabsTrigger value="all" className="text-[11px] flex-1">
                   All ({allItems.length})
@@ -386,7 +386,7 @@ export default function InvoiceHistoryModal({ open, onOpenChange, invoiceId, inv
               </TabsList>
             </div>
 
-            <ScrollArea className="flex-1" style={{ maxHeight: "calc(85vh - 130px)" }}>
+            <ScrollArea className="flex-1 overflow-auto">
               <div className="px-4 py-3">
                 <TabsContent value="all" className="mt-0">
                   {allItems.length === 0 ? (
