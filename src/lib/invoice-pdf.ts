@@ -92,13 +92,6 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#111;backgroun
 .dates{margin-top:6px;font-size:10px;color:#777;text-align:right}
 .dates span{display:block}
 
-/* ── INFO CARDS ── */
-.cards{display:flex;gap:14px;margin-bottom:18px}
-.card{flex:1;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px}
-.card-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#aaa;margin-bottom:3px}
-.card-val{font-size:15px;font-weight:800;color:#111}
-.card-sub{font-size:10px;color:#888;margin-top:2px}
-
 /* ── STATS ── */
 .stats{display:flex;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:22px}
 .stat{flex:1;padding:10px 8px;text-align:center;border-right:1px solid #e5e7eb;background:#fafafa}
@@ -175,29 +168,6 @@ tfoot tr td.r-ft{background:#fef2f2;color:#dc2626}
       ${inv.finalized_at ? `<span>Finalized: ${fmtDate(inv.finalized_at)}</span>` : ""}
       ${inv.paid_at ? `<span style="color:#16a34a;font-weight:700">Paid: ${fmtDate(inv.paid_at)}</span>` : ""}
     </div>
-  </div>
-</div>
-
-<!-- INFO CARDS -->
-<div class="cards">
-  <div class="card">
-    <div class="card-lbl">Seller</div>
-    <div class="card-val">${sellerName}</div>
-  </div>
-  <div class="card" style="border-color:${(tot?.net_payable??0)>=0?"#86efac":"#fca5a5"}">
-    <div class="card-lbl">Net Payable</div>
-    <div class="card-val ${(tot?.net_payable??0)>=0?"g":"r-val"}">${usd(tot?.net_payable??0)}</div>
-    <div class="card-sub">After all fees &amp; deductions</div>
-  </div>
-  <div class="card" style="border-color:#86efac">
-    <div class="card-lbl">Delivered Revenue</div>
-    <div class="card-val g">${usd(tot?.delivered_revenue_usd??0)}</div>
-    <div class="card-sub">${cnt?.delivered_count??0} delivered orders</div>
-  </div>
-  <div class="card">
-    <div class="card-lbl">Total Fees</div>
-    <div class="card-val r-val">−${usd((tot?.shipping_fees??0)+(tot?.call_center_fees??0)+(tot?.cod_fees??0))}</div>
-    <div class="card-sub">Shipping + Call Center + COD</div>
   </div>
 </div>
 
