@@ -5,7 +5,7 @@ const sign = (n: number) => (n >= 0 ? `+$${n.toFixed(2)}` : `-$${Math.abs(n).toF
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
 
-export function downloadInvoicePDF(summary: InvoiceSummaryResponse, sellerName: string) {
+export function downloadInvoicePDF(summary: InvoiceSummaryResponse, sellerName: string, autoPrint = false) {
   const inv = summary.invoice;
   const tot = summary.totals;
   const cc  = summary.call_center_breakdown;
@@ -198,6 +198,7 @@ tfoot tr td.r-ft{background:#fef2f2;color:#dc2626}
 </div>
 
 <script>window.onload=function(){setTimeout(function(){window.print();},300);};</script>
+${autoPrint ? `<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>` : ""}
 </body>
 </html>`;
 

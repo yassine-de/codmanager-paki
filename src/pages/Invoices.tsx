@@ -365,6 +365,7 @@ export default function Invoices() {
   };
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [printingId, setPrintingId] = useState<string | null>(null);
   const handleDownload = async (inv: typeof invoiceSummaries[0]) => {
     setDownloadingId(inv.id);
     try {
@@ -373,6 +374,16 @@ export default function Invoices() {
       downloadInvoicePDF(summary, name);
     } finally {
       setDownloadingId(null);
+    }
+  };
+  const handlePrint = async (inv: typeof invoiceSummaries[0]) => {
+    setPrintingId(inv.id);
+    try {
+      const summary = await fetchInvoiceSummary(inv.id);
+      const name = sellerNameMap[inv.seller_id] || "Seller";
+      downloadInvoicePDF(summary, name, true);
+    } finally {
+      setPrintingId(null);
     }
   };
 
@@ -680,11 +691,8 @@ export default function Invoices() {
                               )}
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" onClick={() => {
-                                    openDetail(inv);
-                                    setTimeout(() => window.print(), 500);
-                                  }}>
-                                    <Printer className="h-3.5 w-3.5" />
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/10" onClick={() => handlePrint(inv)} disabled={printingId === inv.id}>
+                                    {printingId === inv.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent className="text-[10px]">Print</TooltipContent>
