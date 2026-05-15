@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatPKT as format } from "@/lib/timezone";
-import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2, ImageIcon, History, LayoutList, Clock, Plane, PackageCheck } from "lucide-react";
+import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2, ImageIcon, History, LayoutList, Clock, Plane, PackageCheck, Bell, X, CheckCircle2, XCircle, PlusCircle } from "lucide-react";
 import { SourcingVariantsBadge } from "@/components/SourcingVariantsBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { EditSourcingModal } from "@/components/EditSourcingModal";
@@ -78,6 +78,12 @@ export default function Sourcing() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [validationFilter, setValidationFilter] = useState("all");
   const [kpiFilter, setKpiFilter] = useState<"all" | "awaiting_validation" | "in_transit" | "arrived_not_created">("all");
+
+  // Realtime notifications
+  type SourcingNotif = { id: string; type: "new_request" | "validated" | "cancelled"; productName: string; sellerId: string; at: Date };
+  const [notifications, setNotifications] = useState<SourcingNotif[]>([]);
+  const dismissNotif = (id: string) => setNotifications(n => n.filter(x => x.id !== id));
+  const dismissAll  = () => setNotifications([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [editRequest, setEditRequest] = useState<DbSourcingRequest | null>(null);
@@ -110,6 +116,41 @@ export default function Sourcing() {
     };
     markSeen();
   }, [requests, queryClient]);
+
+  // Realtime subscription — listen for seller-driven changes
+  useEffect(() => {
+    const channel = supabase
+      .channel("sourcing-admin-watch")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "sourcing_requests" }, payload => {
+        const row = payload.new as DbSourcingRequest;
+        setNotifications(n => [...n, {
+          id: crypto.randomUUID(),
+          type: "new_request",
+          productName: row.product_name,
+          sellerId: row.seller_id,
+          at: new Date(),
+        }]);
+        queryClient.invalidateQueries({ queryKey: ["admin-sourcing"] });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "sourcing_requests" }, payload => {
+        const row = payload.new as DbSourcingRequest;
+        // Only notify on seller_validated changes (seller action)
+        const old = payload.old as Partial<DbSourcingRequest>;
+        if (old.seller_validated === row.seller_validated) return; // no change
+        const type = row.seller_validated === true ? "validated" : "cancelled";
+        setNotifications(n => [...n, {
+          id: crypto.randomUUID(),
+          type,
+          productName: row.product_name,
+          sellerId: row.seller_id,
+          at: new Date(),
+        }]);
+        queryClient.invalidateQueries({ queryKey: ["admin-sourcing"] });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
 
   const sellerIds = useMemo(() => [...new Set(requests.map(r => r.seller_id))], [requests]);
   const { data: sellerProfiles = [] } = useQuery({
@@ -192,6 +233,52 @@ export default function Sourcing() {
           New Request
         </Button>
       </div>
+
+      {/* Realtime notifications */}
+      {notifications.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+              <Bell className="h-3.5 w-3.5" />
+              {notifications.length} new update{notifications.length > 1 ? "s" : ""}
+            </div>
+            {notifications.length > 1 && (
+              <button onClick={dismissAll} className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2">Dismiss all</button>
+            )}
+          </div>
+          {notifications.map(n => {
+            const isNew       = n.type === "new_request";
+            const isValidated = n.type === "validated";
+            const isCancelled = n.type === "cancelled";
+            const sellerName  = sellerNameMap[n.sellerId] || "A seller";
+            const mins = Math.floor((Date.now() - n.at.getTime()) / 60000);
+            const timeLabel = mins < 1 ? "just now" : `${mins}m ago`;
+            return (
+              <div key={n.id} className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-sm ${
+                isNew       ? "bg-primary/5 border-primary/30 text-primary"      :
+                isValidated ? "bg-emerald-500/5 border-emerald-400/30 text-emerald-700 dark:text-emerald-400" :
+                              "bg-red-500/5 border-red-400/30 text-red-700 dark:text-red-400"
+              }`}>
+                <div className="mt-0.5 shrink-0">
+                  {isNew       && <PlusCircle  className="h-4 w-4" />}
+                  {isValidated && <CheckCircle2 className="h-4 w-4" />}
+                  {isCancelled && <XCircle      className="h-4 w-4" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold">{sellerName}</span>
+                  {isNew       && <> added a new sourcing request for <span className="font-semibold">{n.productName}</span></>}
+                  {isValidated && <> validated the quote for <span className="font-semibold">{n.productName}</span></>}
+                  {isCancelled && <> cancelled the quote for <span className="font-semibold">{n.productName}</span></>}
+                  <span className="ml-2 text-[11px] opacity-60">{timeLabel}</span>
+                </div>
+                <button onClick={() => dismissNotif(n.id)} className="shrink-0 opacity-50 hover:opacity-100 transition-opacity">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* KPI Banners */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
