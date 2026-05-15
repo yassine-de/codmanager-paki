@@ -283,9 +283,45 @@ export function useDashboardData(dateRange?: DateRange) {
     const to = dateRange.to ? endOfDayPKT(dateRange.to) : endOfDayPKT(dateRange.from);
     return computeKPIs(orders, allOrders, { from, to });
   }, [orders, allOrders, dateRange]);
-  // Daily charts use ALL orders so each metric is bucketed by its own event date
-  // (created_at for dropped, confirmed_at for confirmed, delivered_at for delivered).
-  const last7 = useMemo(() => computeDailyData(allOrders, 7), [allOrders]);
+  // Daily charts: when a date range is active, bucket each day in the range by event date.
+  // Otherwise fall back to last-7-days view.
+  const last7 = useMemo(() => {
+    if (dateRange?.from) {
+      const from = startOfDayPKT(dateRange.from);
+      const to   = dateRange.to ? startOfDayPKT(dateRange.to) : from;
+      const MS_PER_DAY = 24 * 60 * 60 * 1000;
+      const numDays = Math.round((to.getTime() - from.getTime()) / MS_PER_DAY) + 1;
+      // Cap at 60 days to avoid unreadable charts
+      const cappedDays = Math.min(numDays, 60);
+      const startOffset = numDays > 60 ? numDays - 60 : 0;
+      return Array.from({ length: cappedDays }, (_, i) => {
+        const start   = new Date(from.getTime() + (startOffset + i) * MS_PER_DAY);
+        const nextDay = new Date(start.getTime() + MS_PER_DAY);
+        const dropped   = allOrders.filter(o => isInDay(new Date(o.created_at), start, nextDay)).length;
+        const confirmed = allOrders.filter(o => {
+          if (!reachedConfirmedStage(o)) return false;
+          const d = getConfirmationEventDate(o);
+          return d != null && isInDay(d, start, nextDay);
+        }).length;
+        const delivered = allOrders.filter(o => {
+          if (!reachedDeliveredStage(o)) return false;
+          const d = getDeliveredEventDate(o);
+          return d != null && isInDay(d, start, nextDay);
+        }).length;
+        const shipped = allOrders.filter(o => {
+          if (!o.delivery_status || !SHIPPED_DELIVERY_STATUSES.includes(o.delivery_status)) return false;
+          return isInDay(getTreatmentDate(o), start, nextDay);
+        }).length;
+        return {
+          day: `${formatPKT(start, "EEE")}\n${formatPKT(start, "dd/MM")}`,
+          orders: dropped, dropped, confirmed, shipped, delivered,
+          confirmationRate: dropped > 0 ? Math.round((confirmed / dropped) * 100) : 0,
+          deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
+        };
+      });
+    }
+    return computeDailyData(allOrders, 7);
+  }, [allOrders, dateRange]);
 
   const totals7 = useMemo(() => ({
     orders: last7.reduce((s, d) => s + d.orders, 0),

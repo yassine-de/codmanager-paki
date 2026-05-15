@@ -25,6 +25,7 @@ interface AgentScore {
 interface DailyConfirmationReportProps {
   orders: Order[];
   profileNameMap: Record<string, string>;
+  profilePhoneMap?: Record<string, string>;
   agentIds: string[];
   agentScores?: AgentScore[];
   treatedOrders?: number;
@@ -152,7 +153,7 @@ function ConfRatePill({ rate }: { rate: number }) {
 /* ── Main component ── */
 
 export function DailyConfirmationReport({
-  orders, profileNameMap, agentIds, agentScores = [], treatedOrders, firstCallAvg, handlingTime,
+  orders, profileNameMap, profilePhoneMap = {}, agentIds, agentScores = [], treatedOrders, firstCallAvg, handlingTime,
   totalConfirmed, totalByWhatsApp,
 }: DailyConfirmationReportProps) {
 
@@ -229,6 +230,17 @@ export function DailyConfirmationReport({
   const avgWorkload = agentRows.length > 0 ? 100 / agentRows.length : 100;
   const insights    = useMemo(() => getInsights(agentRows, avgWorkload), [agentRows, avgWorkload]);
   const maxTotal    = Math.max(...agentRows.map(a => a.total), 1);
+
+  // WhatsApp row — orders confirmed via WhatsApp channel
+  const whatsappRow = useMemo(() => {
+    const waOrders = orders.filter(o => o.confirmation_channel === "whatsapp");
+    const confirmed = waOrders.filter(o => o.confirmation_status === "confirmed").length;
+    const noAnswer  = waOrders.filter(o => o.confirmation_status === "no_answer").length;
+    const postponed = waOrders.filter(o => o.postpone_date !== null || o.confirmation_status === "postponed").length;
+    const cancelled = waOrders.filter(o => o.confirmation_status === "cancelled").length;
+    const total     = waOrders.length;
+    return { total, confirmed, noAnswer, postponed, cancelled, confirmRate: total > 0 ? Math.round((confirmed / total) * 100) : 0 };
+  }, [orders]);
 
   const scoresMap = useMemo(() => {
     const m: Record<string, AgentScore> = {};
@@ -446,8 +458,23 @@ export function DailyConfirmationReport({
                         </span>
                       </td>
 
-                      {/* Agent name */}
-                      <td className="py-3.5 px-3 font-semibold text-sm whitespace-nowrap">{a.name}</td>
+                      {/* Agent name + WhatsApp link */}
+                      <td className="py-3.5 px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm">{a.name}</span>
+                          {profilePhoneMap[a.id] && (
+                            <a
+                              href={`https://wa.me/${profilePhoneMap[a.id].replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[hsl(142,60%,42%)]/10 hover:bg-[hsl(142,60%,42%)]/20 text-[hsl(142,60%,42%)] transition-colors"
+                              title={`WhatsApp ${a.name}`}
+                            >
+                              <MessageCircle className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </td>
 
                       {/* Handled with mini bar */}
                       <td className="py-3.5 px-3">
@@ -509,6 +536,62 @@ export function DailyConfirmationReport({
                     </tr>
                   );
                 })}
+                {/* WhatsApp row */}
+                {whatsappRow.total > 0 && (
+                  <tr className="bg-[hsl(142,60%,42%)]/5 border-t-2 border-[hsl(142,60%,42%)]/20">
+                    {/* Rank */}
+                    <td className="py-3.5 pl-6 pr-3">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[hsl(142,60%,42%)]/15 text-[hsl(142,60%,42%)]">
+                        <MessageCircle className="h-3.5 w-3.5" />
+                      </span>
+                    </td>
+                    {/* Name */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <span className="font-semibold text-sm text-[hsl(142,60%,42%)]">WhatsApp</span>
+                    </td>
+                    {/* Handled */}
+                    <td className="py-3.5 px-3">
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-sm font-semibold tabular-nums">{whatsappRow.total}</span>
+                        <RateBar value={whatsappRow.total} max={maxTotal} color="hsl(142,60%,42%)" bg="bg-[hsl(142,60%,42%)]/15" />
+                      </div>
+                    </td>
+                    {/* Confirmed */}
+                    <td className="py-3.5 px-3 text-right">
+                      <span className="text-sm font-bold tabular-nums text-[hsl(155,50%,38%)]">{whatsappRow.confirmed}</span>
+                    </td>
+                    {/* WhatsApp col — N/A for this row */}
+                    <td className="py-3.5 px-3 text-center">
+                      <span className="text-muted-foreground/40 text-xs">—</span>
+                    </td>
+                    {/* No Answer */}
+                    <td className="py-3.5 px-3 text-right">
+                      <span className={cn("text-sm tabular-nums", whatsappRow.noAnswer > 0 ? "text-warning font-semibold" : "text-muted-foreground")}>
+                        {whatsappRow.noAnswer || "—"}
+                      </span>
+                    </td>
+                    {/* Postponed */}
+                    <td className="py-3.5 px-3 text-right tabular-nums text-muted-foreground text-sm">{whatsappRow.postponed || "—"}</td>
+                    {/* Cancelled */}
+                    <td className="py-3.5 px-3 text-right">
+                      <span className={cn("text-sm tabular-nums", whatsappRow.cancelled > 0 ? "text-destructive/80" : "text-muted-foreground")}>
+                        {whatsappRow.cancelled || "—"}
+                      </span>
+                    </td>
+                    {/* Conf Rate */}
+                    <td className="py-3.5 px-3 text-right"><ConfRatePill rate={whatsappRow.confirmRate} /></td>
+                    {/* Delivered — N/A */}
+                    <td className="py-3.5 px-3 text-right tabular-nums text-muted-foreground text-sm">—</td>
+                    {/* Del Rate — N/A */}
+                    <td className="py-3.5 px-3 text-right"><span className="text-muted-foreground/40 text-xs">—</span></td>
+                    {/* Status */}
+                    <td className="py-3.5 pl-3 pr-6">
+                      <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border bg-[hsl(142,60%,42%)]/10 text-[hsl(142,60%,42%)] border-[hsl(142,60%,42%)]/20">
+                        WhatsApp Bot
+                      </span>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

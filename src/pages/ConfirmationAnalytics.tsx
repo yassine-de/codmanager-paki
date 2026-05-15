@@ -58,7 +58,7 @@ export default function ConfirmationAnalytics() {
   const { data: profiles = [] } = useQuery({
     queryKey: ["profiles-for-analytics"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("user_id, name");
+      const { data, error } = await supabase.from("profiles").select("user_id, name, phone");
       if (error) throw error;
       return data;
     },
@@ -115,6 +115,12 @@ export default function ConfirmationAnalytics() {
   const profileNameMap = useMemo(() => {
     const map: Record<string, string> = {};
     profiles.forEach(p => { map[p.user_id] = p.name; });
+    return map;
+  }, [profiles]);
+
+  const profilePhoneMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    profiles.forEach(p => { if (p.phone) map[p.user_id] = p.phone; });
     return map;
   }, [profiles]);
 
@@ -608,6 +614,7 @@ export default function ConfirmationAnalytics() {
           };
         })}
         profileNameMap={profileNameMap}
+        profilePhoneMap={profilePhoneMap}
         agentIds={agentIds}
         totalConfirmed={confirmedForDisplay.total}
         totalByWhatsApp={confirmedForDisplay.byWhatsApp}
