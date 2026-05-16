@@ -20,12 +20,13 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const supabase = createClient(
+    // Use service role to validate the JWT — more reliable than anon-key getUser()
+    const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const { data: userData } = await supabase.auth.getUser();
+    const jwt = authHeader.slice(7); // strip "Bearer "
+    const { data: userData } = await admin.auth.getUser(jwt);
     if (!userData?.user) {
       return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
         status: 401,
@@ -40,11 +41,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     let body = text as string | undefined;
     let existingPayload: any = {};
