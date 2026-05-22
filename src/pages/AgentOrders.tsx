@@ -157,7 +157,6 @@ const AgentOrders = () => {
       .select("order_id, confirmation_status, delivery_status")
       .eq("customer_phone", phone)
       .eq("product_name", product)
-      .eq("confirmation_status", "confirmed")
       .neq("id", orderId)
       .limit(5)
       .then(({ data }) => setDuplicateWarnings(data ?? []));
