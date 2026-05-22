@@ -48,30 +48,26 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
+    // Use service role to validate JWT — more reliable than anon-key getUser()
+    const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData?.user) {
+    const jwt = authHeader.slice(7); // strip "Bearer "
+    const { data: userData } = await admin.auth.getUser(jwt);
+    if (!userData?.user) {
       return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     const userId = userData.user.id;
-    const { data: isAdmin } = await supabase.rpc("is_admin", { _user_id: userId });
-    if (!isAdmin) {
+    const { data: profile } = await admin.from("profiles").select("role").eq("user_id", userId).maybeSingle();
+    if (profile?.role !== "admin") {
       return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     const body = (await req.json()) as SendBody;
     const mode = body.mode ?? "order";
