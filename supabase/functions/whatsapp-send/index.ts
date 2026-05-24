@@ -48,25 +48,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Use service role to validate JWT — more reliable than anon-key getUser()
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
     const jwt = authHeader.slice(7); // strip "Bearer "
-    const { data: userData } = await admin.auth.getUser(jwt);
-    if (!userData?.user) {
-      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const userId = userData.user.id;
-    const { data: profile } = await admin.from("profiles").select("role").eq("user_id", userId).maybeSingle();
-    if (profile?.role !== "admin") {
-      return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
-        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey        = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const isInternalCall = jwt === serviceRoleKey || jwt === anonKey;
+
+    if (!isInternalCall) {
+      // Regular user call — validate JWT and confirm admin role
+      const { data: userData } = await admin.auth.getUser(jwt);
+      if (!userData?.user) {
+        return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: profile } = await admin.from("profiles").select("role").eq("user_id", userData.user.id).maybeSingle();
+      if (profile?.role !== "admin") {
+        return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const body = (await req.json()) as SendBody;
