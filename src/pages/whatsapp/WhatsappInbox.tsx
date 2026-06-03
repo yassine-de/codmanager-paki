@@ -510,6 +510,8 @@ export default function WhatsappInbox() {
   const navigate = useNavigate();
   const [selected, setSelected] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [dbSearchResults, setDbSearchResults] = useState<Conv[]>([]);
+  const [dbSearching, setDbSearching] = useState(false);
   const [filter, setFilter] = useState<
     "all" | "unread" | "needs_review" | "ai_on" | "ai_off" | "with_order" | "no_order" | "window_open"
   >("all");
@@ -552,7 +554,7 @@ export default function WhatsappInbox() {
         .from("whatsapp_conversations")
         .select("*")
         .order("updated_at", { ascending: false })
-        .limit(300);
+        .limit(1000);
       if (error) throw error;
       return (data ?? []) as Conv[];
     },
@@ -778,6 +780,32 @@ export default function WhatsappInbox() {
     });
     return list;
   }, [convos, search, filter, sortDesc, unreadMap]);
+
+  // DB search: fires when search has text but local filteredConvos is empty
+  useEffect(() => {
+    const q = search.trim();
+    if (!q || filteredConvos.length > 0) {
+      setDbSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setDbSearching(true);
+      try {
+        const { data } = await supabase
+          .from("whatsapp_conversations")
+          .select("*")
+          .or(`customer_name.ilike.%${q}%,customer_phone.ilike.%${q}%,order_id.ilike.%${q}%`)
+          .order("updated_at", { ascending: false })
+          .limit(50);
+        setDbSearchResults((data ?? []) as Conv[]);
+      } finally {
+        setDbSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search, filteredConvos.length]);
+
+  const displayedConvos = search.trim() && filteredConvos.length === 0 ? dbSearchResults : filteredConvos;
 
   // Count CONVERSATIONS (contacts) with unread — not total unread messages.
   const totalUnread = useMemo(
@@ -1306,12 +1334,13 @@ export default function WhatsappInbox() {
 
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
             {isLoading && <div className="p-4 text-sm text-muted-foreground">Loading…</div>}
-            {!isLoading && filteredConvos.length === 0 && (
+            {dbSearching && <div className="p-4 text-sm text-muted-foreground">Searching…</div>}
+            {!isLoading && !dbSearching && displayedConvos.length === 0 && (
               <div className="p-6 text-center text-sm text-muted-foreground">
                 No conversations.
               </div>
             )}
-            {filteredConvos.map((c) => {
+            {displayedConvos.map((c) => {
               const unreadCount = unreadMap[c.id] ?? 0;
               const unread = unreadCount > 0;
               const needsReview = c.status === "manual_review_needed";
