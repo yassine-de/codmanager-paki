@@ -8,8 +8,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0?no-che
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 interface SendBody {
@@ -44,18 +43,16 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const jwt = authHeader.slice(7); // strip "Bearer "
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey        = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const isInternalCall = jwt === serviceRoleKey || jwt === anonKey;
 
     if (!isInternalCall) {
@@ -63,7 +60,8 @@ Deno.serve(async (req) => {
       const { data: userData } = await admin.auth.getUser(jwt);
       if (!userData?.user) {
         return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
-          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
@@ -75,7 +73,8 @@ Deno.serve(async (req) => {
     if (!settings) throw new Error("WhatsApp settings missing");
     if (!settings.integration_enabled || !settings.sending_enabled) {
       return new Response(JSON.stringify({ ok: false, error: "Sending disabled in settings" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     if (!settings.phone_number_id) throw new Error("phone_number_id missing");
@@ -87,7 +86,11 @@ Deno.serve(async (req) => {
     let order: any = null;
 
     if (body.conversation_id) {
-      const { data } = await admin.from("whatsapp_conversations").select("*").eq("id", body.conversation_id).maybeSingle();
+      const { data } = await admin
+        .from("whatsapp_conversations")
+        .select("*")
+        .eq("id", body.conversation_id)
+        .maybeSingle();
       conv = data;
       if (conv?.order_id) {
         const { data: o } = await admin.from("orders").select("*").eq("order_id", conv.order_id).maybeSingle();
@@ -97,20 +100,18 @@ Deno.serve(async (req) => {
       const { data: o } = await admin.from("orders").select("*").eq("order_id", body.order_id).maybeSingle();
       order = o;
       if (!order) throw new Error("Order not found");
-      const { data: c } = await admin.from("whatsapp_conversations").select("*").eq("order_id", body.order_id).maybeSingle();
+      const { data: c } = await admin
+        .from("whatsapp_conversations")
+        .select("*")
+        .eq("order_id", body.order_id)
+        .maybeSingle();
       conv = c;
 
-      // If no conversation yet for this order, look for a prior conversation from
-      // this phone — but ONLY reuse it if its linked order is for the SAME product.
-      // Different product on the same phone → start a fresh thread so the AI
-      // doesn't mix products in the same conversation.
       if (!conv && order.customer_phone) {
         const digits = order.customer_phone.replace(/\D/g, "");
         const withPlus = digits ? `+${digits}` : "";
         const localZero = digits.startsWith("92") ? `0${digits.slice(2)}` : digits;
-        const variants = Array.from(
-          new Set([order.customer_phone, digits, withPlus, localZero].filter(Boolean)),
-        );
+        const variants = Array.from(new Set([order.customer_phone, digits, withPlus, localZero].filter(Boolean)));
         const { data: candidates } = await admin
           .from("whatsapp_conversations")
           .select("*")
@@ -121,7 +122,6 @@ Deno.serve(async (req) => {
         const list = candidates ?? [];
         for (const cand of list) {
           if (!cand.order_id) {
-            // Unlinked thread — safe to claim for this order.
             await admin
               .from("whatsapp_conversations")
               .update({
@@ -138,8 +138,11 @@ Deno.serve(async (req) => {
             .select("product_name")
             .eq("order_id", cand.order_id)
             .maybeSingle();
-          if (prevOrder?.product_name && order.product_name &&
-              prevOrder.product_name.trim().toLowerCase() === order.product_name.trim().toLowerCase()) {
+          if (
+            prevOrder?.product_name &&
+            order.product_name &&
+            prevOrder.product_name.trim().toLowerCase() === order.product_name.trim().toLowerCase()
+          ) {
             await admin
               .from("whatsapp_conversations")
               .update({
@@ -152,17 +155,12 @@ Deno.serve(async (req) => {
             break;
           }
         }
-        // If no same-product match was found, conv stays null → a fresh
-        // conversation will be created below.
       }
     } else {
       throw new Error("conversation_id or order_id required");
     }
 
-    const to = normalizePhone(
-      conv?.customer_phone || order?.customer_phone || "",
-      settings.default_country_code,
-    );
+    const to = normalizePhone(conv?.customer_phone || order?.customer_phone || "", settings.default_country_code);
     if (!to) throw new Error("Customer phone invalid");
 
     // ── note mode: internal-only message, no Meta API call ──────────────────
@@ -170,14 +168,17 @@ Deno.serve(async (req) => {
       const noteText = body.body ?? "";
       if (!noteText.trim()) throw new Error("Empty note");
 
-      // Ensure conversation exists
       if (!conv) {
-        const ins = await admin.from("whatsapp_conversations").insert({
-          order_id: order?.order_id ?? null,
-          customer_phone: normalizePhone(order?.customer_phone ?? "", settings.default_country_code),
-          customer_name: order?.customer_name ?? null,
-          status: "pending",
-        }).select().single();
+        const ins = await admin
+          .from("whatsapp_conversations")
+          .insert({
+            order_id: order?.order_id ?? null,
+            customer_phone: normalizePhone(order?.customer_phone ?? "", settings.default_country_code),
+            customer_name: order?.customer_name ?? null,
+            status: "pending",
+          })
+          .select()
+          .single();
         conv = ins.data;
       }
 
@@ -217,17 +218,11 @@ Deno.serve(async (req) => {
       if (!body.media_url) throw new Error("media_url required");
       const mediaObj: any = {};
 
-      // For audio (voice notes) we MUST upload the binary to Meta first and reference it
-      // by media `id`. When using a public `link`, Meta sniffs the file's magic bytes and
-      // rejects WebM/OGG voice files as application/octet-stream.
-      // For images/documents the `link` flow is fine.
       if (mode === "audio") {
-        // Force the proper voice-note MIME so Meta accepts it.
         const audioMime = "audio/ogg";
         const fileResp = await fetch(body.media_url);
         if (!fileResp.ok) throw new Error(`Failed to fetch media: ${fileResp.status}`);
         const audioBlob = await fileResp.blob();
-        // Re-wrap with the correct MIME (the storage bucket may serve octet-stream).
         const fixedBlob = new Blob([await audioBlob.arrayBuffer()], { type: audioMime });
 
         const fd = new FormData();
@@ -248,9 +243,6 @@ Deno.serve(async (req) => {
         mediaObj.id = upJson.id;
         mediaObj.voice = true;
       } else if (mode === "image") {
-        // WhatsApp Cloud only accepts image/jpeg and image/png. For unsafe
-        // formats (e.g. .webp, .avif) route through wsrv.nl which serves a
-        // re-encoded JPEG with the correct Content-Type.
         const lowerUrl = body.media_url.toLowerCase().split("?")[0];
         const safeForLink = /\.(jpe?g|png)$/.test(lowerUrl);
         mediaObj.link = safeForLink
@@ -274,13 +266,8 @@ Deno.serve(async (req) => {
       };
       if (!bodyText) bodyText = body.media_filename || `[${mode}]`;
     } else if (mode === "template") {
-      // Send approved Meta template (carries its own buttons; works outside 24h window).
       if (!body.template_id) throw new Error("template_id required for template mode");
-      const { data: tpl } = await admin
-        .from("whatsapp_templates")
-        .select("*")
-        .eq("id", body.template_id)
-        .maybeSingle();
+      const { data: tpl } = await admin.from("whatsapp_templates").select("*").eq("id", body.template_id).maybeSingle();
       if (!tpl) throw new Error("Template not found");
 
       const templateName = tpl.meta_template_name || tpl.name;
@@ -316,8 +303,6 @@ Deno.serve(async (req) => {
       let mm: RegExpExecArray | null;
       while ((mm = re.exec(tplBody)) !== null) placeholders.push(mm[1]);
 
-      // Meta-imported templates are stored locally as {{var_1}}, {{var_2}}, ...
-      // Resolve those to real order fields both for the Meta payload AND the inbox preview.
       const positionalFallback = [
         (order?.customer_name && String(order.customer_name).trim()) || "",
         (order?.product_name && String(order.product_name).trim()) || "",
@@ -354,7 +339,10 @@ Deno.serve(async (req) => {
       if (placeholders.length > 0) {
         components.push({
           type: "body",
-          parameters: placeholders.map((name, idx) => ({ type: "text", text: resolvedVars[name] || resolvePlaceholder(name, idx) })),
+          parameters: placeholders.map((name, idx) => ({
+            type: "text",
+            text: resolvedVars[name] || resolvePlaceholder(name, idx),
+          })),
         });
       }
 
@@ -371,11 +359,15 @@ Deno.serve(async (req) => {
       };
       bodyText = render(tplBody, { ...vars, ...resolvedVars });
     } else {
-      // order: legacy interactive confirmation buttons (free-form, requires 24h window)
+      // order mode
       if (!order) throw new Error("Order required for order mode");
       let text = bodyText;
       if (!text && body.template_id) {
-        const { data: tpl } = await admin.from("whatsapp_templates").select("*").eq("id", body.template_id).maybeSingle();
+        const { data: tpl } = await admin
+          .from("whatsapp_templates")
+          .select("*")
+          .eq("id", body.template_id)
+          .maybeSingle();
         if (tpl) {
           text = render(tpl.body, {
             customer_name: order.customer_name,
@@ -410,12 +402,16 @@ Deno.serve(async (req) => {
 
     // Ensure conversation row exists
     if (!conv) {
-      const ins = await admin.from("whatsapp_conversations").insert({
-        order_id: order?.order_id ?? null,
-        customer_phone: to,
-        customer_name: order?.customer_name ?? null,
-        status: "pending",
-      }).select().single();
+      const ins = await admin
+        .from("whatsapp_conversations")
+        .insert({
+          order_id: order?.order_id ?? null,
+          customer_phone: to,
+          customer_name: order?.customer_name ?? null,
+          status: "pending",
+        })
+        .select()
+        .single();
       conv = ins.data;
     }
 
@@ -433,7 +429,7 @@ Deno.serve(async (req) => {
       conversation_id: conv!.id,
       order_id: order?.order_id ?? null,
       direction: "out",
-      message_type: ["template","text","image","document","audio"].includes(mode) ? mode : "interactive",
+      message_type: ["template", "text", "image", "document", "audio"].includes(mode) ? mode : "interactive",
       body: bodyText,
       payload: sentTemplateId
         ? { ...payload, _template_id: sentTemplateId, _template_name: sentTemplateName }
@@ -444,29 +440,43 @@ Deno.serve(async (req) => {
     });
 
     if (ok) {
-      await admin.from("whatsapp_conversations").update({
-        status: conv.status === "pending" ? "awaiting_reply" : conv.status,
-        last_message_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq("id", conv!.id);
+      await admin
+        .from("whatsapp_conversations")
+        .update({
+          status: conv.status === "pending" ? "awaiting_reply" : conv.status,
+          last_message_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", conv!.id);
       if (order) {
-        await admin.from("orders").update({
-          whatsapp_status: "awaiting_reply",
-          whatsapp_last_sent_at: new Date().toISOString(),
-          whatsapp_retry_count: (order.whatsapp_retry_count ?? 0) + 1,
-        }).eq("order_id", order.order_id);
+        await admin
+          .from("orders")
+          .update({
+            whatsapp_status: "awaiting_reply",
+            whatsapp_last_sent_at: new Date().toISOString(),
+            whatsapp_retry_count: (order.whatsapp_retry_count ?? 0) + 1,
+          })
+          .eq("order_id", order.order_id);
       }
     }
 
     // Always return 200 so the Supabase SDK can read the body.
     // The caller checks `data.ok` to know if Meta accepted the message.
-    return new Response(JSON.stringify({ ok, response: respJson, error: ok ? undefined : (respJson?.error?.message || JSON.stringify(respJson)) }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        ok,
+        response: respJson,
+        error: ok ? undefined : respJson?.error?.message || JSON.stringify(respJson),
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
