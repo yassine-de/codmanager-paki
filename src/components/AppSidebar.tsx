@@ -41,6 +41,7 @@ const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUn
   { title: "My Dashboard", url: "/agent-dashboard", icon: LayoutDashboard, agentOnly: true },
   { title: "Process Orders", url: "/agent-orders", icon: Play, agentOnly: true, badge: agentNewOrders > 0 ? agentNewOrders : undefined },
   { title: "Confirmed Orders", url: "/agent-confirmed", icon: ListChecks, agentOnly: true },
+  { title: "WhatsApp Inbox", url: "/agent-whatsapp", icon: MessageSquare, permission: "access_to_whatsapp_inbox" },
   { title: "Dashboard", url: "/follow-up/dashboard", icon: LayoutDashboard, followUpOnly: true },
   { title: "Follow Ups", url: "/follow-up/queue", icon: ClipboardCheck, followUpOnly: true, badge: followUpPending > 0 ? followUpPending : undefined },
   { title: "Control", url: "/follow-up/control", icon: ListChecks, followUpOnly: true },

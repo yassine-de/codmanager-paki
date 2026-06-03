@@ -167,6 +167,7 @@ function AppRoutes() {
         <Route path="/agent-dashboard" element={<ProtectedRoute><AgentDashboard /></ProtectedRoute>} />
         <Route path="/agent-orders" element={<ProtectedRoute><AgentOrders /></ProtectedRoute>} />
         <Route path="/agent-confirmed" element={<ProtectedRoute><AgentConfirmedOrders /></ProtectedRoute>} />
+        <Route path="/agent-whatsapp" element={<ProtectedRoute permission="access_to_whatsapp_inbox"><WhatsappInbox /></ProtectedRoute>} />
         <Route path="/support" element={<ProtectedRoute permission="access_to_settings"><Support /></ProtectedRoute>} />
         <Route path="/alerts" element={<ProtectedRoute permission="access_to_settings"><Alerts /></ProtectedRoute>} />
         <Route path="/adjustments" element={<ProtectedRoute permission="access_to_settings"><Adjustments /></ProtectedRoute>} />
