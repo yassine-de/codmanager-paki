@@ -602,6 +602,8 @@ export type Database = {
           product_url: string | null
           quantity: number
           seller_id: string
+          shipped_at: string | null
+          shipping_company: string | null
           shipping_cost: number | null
           shipping_status: string | null
           source_sheet_id: string | null
@@ -663,6 +665,8 @@ export type Database = {
           product_url?: string | null
           quantity?: number
           seller_id: string
+          shipped_at?: string | null
+          shipping_company?: string | null
           shipping_cost?: number | null
           shipping_status?: string | null
           source_sheet_id?: string | null
@@ -724,6 +728,8 @@ export type Database = {
           product_url?: string | null
           quantity?: number
           seller_id?: string
+          shipped_at?: string | null
+          shipping_company?: string | null
           shipping_cost?: number | null
           shipping_status?: string | null
           source_sheet_id?: string | null
@@ -1192,6 +1198,7 @@ export type Database = {
           created_at: string
           destination_country: string
           display_id: string | null
+          freight_forwarder: string | null
           id: string
           landed_price: number | null
           notes: string | null
@@ -1213,6 +1220,7 @@ export type Database = {
           source_product_id: string | null
           status: string
           total_price: number | null
+          tracking_id: string | null
           unit_price: number | null
           updated_at: string
           variants: Json | null
@@ -1222,6 +1230,7 @@ export type Database = {
           created_at?: string
           destination_country?: string
           display_id?: string | null
+          freight_forwarder?: string | null
           id?: string
           landed_price?: number | null
           notes?: string | null
@@ -1243,6 +1252,7 @@ export type Database = {
           source_product_id?: string | null
           status?: string
           total_price?: number | null
+          tracking_id?: string | null
           unit_price?: number | null
           updated_at?: string
           variants?: Json | null
@@ -1252,6 +1262,7 @@ export type Database = {
           created_at?: string
           destination_country?: string
           display_id?: string | null
+          freight_forwarder?: string | null
           id?: string
           landed_price?: number | null
           notes?: string | null
@@ -1273,6 +1284,7 @@ export type Database = {
           source_product_id?: string | null
           status?: string
           total_price?: number | null
+          tracking_id?: string | null
           unit_price?: number | null
           updated_at?: string
           variants?: Json | null
@@ -2146,6 +2158,104 @@ export type Database = {
         Args: { _order_id: string; _user_id: string }
         Returns: boolean
       }
+      agent_submit_order: {
+        Args: {
+          p_agent_id: string
+          p_assigned_at: string
+          p_attempt_count: number
+          p_attempts_today?: number
+          p_cancel_reason?: string
+          p_confirmation_status: string
+          p_confirmed_at?: string
+          p_customer_address: string
+          p_customer_city: string
+          p_customer_name: string
+          p_customer_phone: string
+          p_delivery_status?: string
+          p_is_manual_price: boolean
+          p_last_activity_at: string
+          p_last_attempt_at?: string
+          p_last_attempt_date?: string
+          p_note: string
+          p_order_id: string
+          p_original_agent_id?: string
+          p_postpone_date?: string
+          p_postpone_note?: string
+          p_price: number
+          p_product_name: string
+          p_quantity: number
+          p_total_amount: number
+        }
+        Returns: {
+          agent_id: string | null
+          agent_switch_scheduled_at: string | null
+          agent_switched_at: string | null
+          assigned_at: string | null
+          attempt_count: number
+          attempts_today: number
+          cancel_reason: string | null
+          confirmation_channel: string
+          confirmation_status: string
+          confirmed_at: string | null
+          created_at: string
+          customer_address: string | null
+          customer_city: string
+          customer_name: string
+          customer_phone: string
+          delivered_at: string | null
+          delivery_status: string | null
+          follow_up_assigned_at: string | null
+          follow_up_assigned_to: string | null
+          follow_up_note: string | null
+          fragile: boolean | null
+          id: string
+          invoice_id: string | null
+          is_manual_price: boolean
+          last_activity_at: string | null
+          last_attempt_at: string | null
+          last_attempt_date: string | null
+          last_price: number | null
+          note: string | null
+          offers: string | null
+          order_id: string
+          original_agent_id: string | null
+          orio_consignment_no: string | null
+          orio_order_id: number | null
+          orio_shipping_status: string | null
+          orio_sync_error: string | null
+          orio_sync_status: string | null
+          orio_synced_at: string | null
+          postpone_date: string | null
+          postpone_note: string | null
+          price: number
+          product_name: string
+          product_url: string | null
+          quantity: number
+          seller_id: string
+          shipped_at: string | null
+          shipping_company: string | null
+          shipping_cost: number | null
+          shipping_status: string | null
+          source_sheet_id: string | null
+          store_url: string | null
+          system_id: number | null
+          total_amount: number
+          updated_at: string
+          video_url: string | null
+          weight: number | null
+          whatsapp_last_reply_at: string | null
+          whatsapp_last_sent_at: string | null
+          whatsapp_note: string | null
+          whatsapp_retry_count: number
+          whatsapp_status: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       approve_invoice_adjustment: {
         Args: { p_adjustment_id: string }
         Returns: Json
@@ -2202,6 +2312,8 @@ export type Database = {
           product_url: string | null
           quantity: number
           seller_id: string
+          shipped_at: string | null
+          shipping_company: string | null
           shipping_cost: number | null
           shipping_status: string | null
           source_sheet_id: string | null
@@ -2244,6 +2356,7 @@ export type Database = {
           confirmed_count: number
         }[]
       }
+      get_follow_ups_count: { Args: never; Returns: number }
       get_follow_ups_data: {
         Args: never
         Returns: {
@@ -2269,6 +2382,7 @@ export type Database = {
           seller_id: string
           seller_name: string
           shipped_at: string
+          shipping_company: string
           shipping_status: string
           total_amount: number
         }[]
@@ -2288,6 +2402,78 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       process_agent_switch_timeouts: { Args: never; Returns: number }
+      reclaim_no_answer_order: {
+        Args: { p_order_id: string }
+        Returns: {
+          agent_id: string | null
+          agent_switch_scheduled_at: string | null
+          agent_switched_at: string | null
+          assigned_at: string | null
+          attempt_count: number
+          attempts_today: number
+          cancel_reason: string | null
+          confirmation_channel: string
+          confirmation_status: string
+          confirmed_at: string | null
+          created_at: string
+          customer_address: string | null
+          customer_city: string
+          customer_name: string
+          customer_phone: string
+          delivered_at: string | null
+          delivery_status: string | null
+          follow_up_assigned_at: string | null
+          follow_up_assigned_to: string | null
+          follow_up_note: string | null
+          fragile: boolean | null
+          id: string
+          invoice_id: string | null
+          is_manual_price: boolean
+          last_activity_at: string | null
+          last_attempt_at: string | null
+          last_attempt_date: string | null
+          last_price: number | null
+          note: string | null
+          offers: string | null
+          order_id: string
+          original_agent_id: string | null
+          orio_consignment_no: string | null
+          orio_order_id: number | null
+          orio_shipping_status: string | null
+          orio_sync_error: string | null
+          orio_sync_status: string | null
+          orio_synced_at: string | null
+          postpone_date: string | null
+          postpone_note: string | null
+          price: number
+          product_name: string
+          product_url: string | null
+          quantity: number
+          seller_id: string
+          shipped_at: string | null
+          shipping_company: string | null
+          shipping_cost: number | null
+          shipping_status: string | null
+          source_sheet_id: string | null
+          store_url: string | null
+          system_id: number | null
+          total_amount: number
+          updated_at: string
+          video_url: string | null
+          weight: number | null
+          whatsapp_last_reply_at: string | null
+          whatsapp_last_sent_at: string | null
+          whatsapp_note: string | null
+          whatsapp_retry_count: number
+          whatsapp_status: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       reject_invoice_adjustment: {
         Args: { p_adjustment_id: string }
         Returns: Json
