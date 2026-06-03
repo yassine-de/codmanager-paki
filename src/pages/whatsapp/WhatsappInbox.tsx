@@ -505,6 +505,8 @@ function dayLabel(d: Date) {
 export default function WhatsappInbox() {
   const { authUser, hasPermission } = useAuth();
   const isAdmin = authUser?.role === "admin";
+  const WHATSAPP_ALLOWED_EMAILS = ["eshaehsan@gmail.com"];
+  const hasWhatsappAccess = isAdmin || hasPermission("access_to_whatsapp_inbox") || WHATSAPP_ALLOWED_EMAILS.includes(authUser?.email ?? "");
 
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -1207,7 +1209,7 @@ export default function WhatsappInbox() {
     }
   };
 
-  if (!isAdmin && !hasPermission("access_to_whatsapp_inbox")) return <Navigate to="/" replace />;
+  if (!hasWhatsappAccess) return <Navigate to="/" replace />;
 
   // Group messages by day
   const grouped: Array<{ key: string; label: string; items: Msg[] }> = [];

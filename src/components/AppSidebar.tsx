@@ -239,6 +239,9 @@ export function AppSidebar() {
   const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments, followUpPending);
   const whatsappSubItems = getWhatsappSubItems(whatsappInboxUnread);
 
+  const WHATSAPP_ALLOWED_EMAILS = ["eshaehsan@gmail.com"];
+  const hasWhatsappException = WHATSAPP_ALLOWED_EMAILS.includes(authUser?.email ?? "");
+
   const visibleItems = navItems.filter((item: any) => {
     if (item.followUpOnly) return isFollowUp;
     if (item.agentOnly) return isAgent;
@@ -246,7 +249,7 @@ export function AppSidebar() {
     if (item.adminOnly) return isAdmin;
     if (item.adminAgentOnly) return isAdmin || isAgent;
     if (isFollowUp) return false;
-    if (isAgent) return false;
+    if (isAgent) return item.permission === "access_to_whatsapp_inbox" && hasWhatsappException;
     if (isSeller) return !item.permission || item.sellerVisible;
     return !item.permission || hasPermission(item.permission);
   });
