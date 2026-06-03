@@ -458,8 +458,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok, response: respJson }), {
-      status: ok ? 200 : 502,
+    // Always return 200 so the Supabase SDK can read the body.
+    // The caller checks `data.ok` to know if Meta accepted the message.
+    return new Response(JSON.stringify({ ok, response: respJson, error: ok ? undefined : (respJson?.error?.message || JSON.stringify(respJson)) }), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
