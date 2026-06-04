@@ -803,6 +803,7 @@ async function handleIncoming(value: any) {
         .from("whatsapp_conversations")
         .update({
           last_message_at: nowIso,
+          last_inbound_at: nowIso,
           updated_at: nowIso,
           status: nextStatus,
         })

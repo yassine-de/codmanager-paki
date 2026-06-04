@@ -66,6 +66,7 @@ type Conv = {
   customer_phone: string;
   status: string;
   last_message_at: string | null;
+  last_inbound_at: string | null;
   last_reply_at: string | null;
   last_read_at: string | null;
   updated_at: string;
@@ -577,39 +578,25 @@ export default function WhatsappInbox() {
     enabled: !!selected,
   });
 
-  // Per-conversation unread counts (WhatsApp-style green badge).
-  // Counts inbound messages newer than `last_read_at` (the moment the user
-  // opened the thread). We deliberately don't use `last_message_at` because
-  // outbound sends bump it too, which would silently clear the badge.
-  const convoIdsKey = convos.map((c) => c.id).join(",");
-  const { data: unreadMap = {} } = useQuery<Record<string, number>>({
-    queryKey: ["wts-unread-counts", convoIdsKey],
-    queryFn: async () => {
-      if (!convos.length) return {};
-      const ids = convos.map((c) => c.id);
-      const { data, error } = await supabase
-        .from("whatsapp_messages")
-        .select("conversation_id, created_at")
-        .eq("direction", "in")
-        .in("conversation_id", ids)
-        .order("created_at", { ascending: false })
-        .limit(2000);
-      if (error) throw error;
-      const lastRead = new Map<string, number>(
-        convos.map((c) => [c.id, c.last_read_at ? new Date(c.last_read_at).getTime() : 0]),
-      );
-      const map: Record<string, number> = {};
-      for (const row of (data ?? []) as { conversation_id: string; created_at: string }[]) {
-        const seen = lastRead.get(row.conversation_id) ?? 0;
-        if (new Date(row.created_at).getTime() > seen) {
-          map[row.conversation_id] = (map[row.conversation_id] ?? 0) + 1;
-        }
+  // Per-conversation unread indicator.
+  // Uses last_inbound_at (set by webhook on every customer message) vs
+  // last_read_at (set when the user opens the thread).
+  // This avoids a heavy .in(1000 UUIDs) query on whatsapp_messages which
+  // exceeds PostgREST URL limits and silently returns empty results.
+  const unreadMap = useMemo<Record<string, number>>(() => {
+    const map: Record<string, number> = {};
+    for (const c of convos) {
+      if (!c.last_inbound_at) continue;
+      const inboundTs = new Date(c.last_inbound_at).getTime();
+      const readTs = c.last_read_at ? new Date(c.last_read_at).getTime() : 0;
+      if (inboundTs > readTs) {
+        // We don't have the exact count without a messages query, so use 1
+        // as a sentinel — enough to show the badge and trigger the filter.
+        map[c.id] = 1;
       }
-      return map;
-    },
-    enabled: convos.length > 0,
-    staleTime: 10_000,
-  });
+    }
+    return map;
+  }, [convos]);
 
   // Load templates so we can render the buttons (quick replies / URL / phone) below template messages
   const { data: templates = [] } = useQuery<any[]>({
@@ -728,6 +715,8 @@ export default function WhatsappInbox() {
   // Mark conversation read on open. We update `last_read_at` only — touching
   // `last_message_at` would re-sort the list and jump this thread to the top
   // (because of the `update_updated_at_column` trigger).
+  // Invalidate wts-convos so the updated last_read_at is reflected immediately
+  // in the unreadMap (which is now computed from conv fields, not a separate query).
   useEffect(() => {
     if (!selected) return;
     void supabase
@@ -735,7 +724,7 @@ export default function WhatsappInbox() {
       .update({ last_read_at: new Date().toISOString() })
       .eq("id", selected)
       .then(() => {
-        qc.invalidateQueries({ queryKey: ["wts-unread-counts"] });
+        qc.invalidateQueries({ queryKey: ["wts-convos"] });
       });
   }, [selected, qc]);
 
@@ -835,7 +824,6 @@ export default function WhatsappInbox() {
         .in("id", unreadIds);
       if (error) throw error;
       toast.success(`Marked ${unreadIds.length} conversation${unreadIds.length > 1 ? "s" : ""} as read`);
-      qc.invalidateQueries({ queryKey: ["wts-unread-counts"] });
       qc.invalidateQueries({ queryKey: ["wts-convos"] });
     } catch (e: any) {
       toast.error(e?.message || "Failed to mark as read");
@@ -1350,7 +1338,7 @@ export default function WhatsappInbox() {
               const tooltip = needsReview
                 ? "⚠️ Needs human review — AI flagged this conversation"
                 : unread
-                ? `${unreadCount} unread message${unreadCount > 1 ? "s" : ""}${
+                ? `New message${c.last_inbound_at ? ` • ${formatDistanceToNowStrict(new Date(c.last_inbound_at), { addSuffix: true })}` : ""}${
                     c.last_reply_at
                       ? ` • last reply ${formatDistanceToNowStrict(new Date(c.last_reply_at), { addSuffix: true })}`
                       : ""
@@ -1431,11 +1419,9 @@ export default function WhatsappInbox() {
                       )}
                       {unread && (
                         <span
-                          className="min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[11px] font-bold grid place-items-center shrink-0"
-                          aria-label={`${unreadCount} unread messages`}
-                        >
-                          {unreadCount > 99 ? "99+" : unreadCount}
-                        </span>
+                          className="h-3 w-3 rounded-full bg-emerald-500 shrink-0"
+                          aria-label="Unread messages"
+                        />
                       )}
                     </div>
                   </div>
