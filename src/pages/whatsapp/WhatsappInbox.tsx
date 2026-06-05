@@ -579,19 +579,23 @@ export default function WhatsappInbox() {
   });
 
   // Per-conversation unread indicator.
-  // Uses last_inbound_at (set by webhook on every customer message) vs
-  // last_read_at (set when the user opens the thread).
-  // This avoids a heavy .in(1000 UUIDs) query on whatsapp_messages which
-  // exceeds PostgREST URL limits and silently returns empty results.
+  // Primary: uses last_inbound_at (set by webhook on every customer message).
+  // Fallback: when last_inbound_at is NULL (webhook not yet deployed for this
+  //   conv), falls back to last_message_at as a proxy. This may produce minor
+  //   false-positives on outbound-only convos but is far better than missing
+  //   real unread indicators. Once the webhook is deployed, all convos get
+  //   last_inbound_at and the fallback becomes a no-op.
+  // Both paths compare against last_read_at (set when the user opens a thread).
   const unreadMap = useMemo<Record<string, number>>(() => {
     const map: Record<string, number> = {};
     for (const c of convos) {
-      if (!c.last_inbound_at) continue;
-      const inboundTs = new Date(c.last_inbound_at).getTime();
       const readTs = c.last_read_at ? new Date(c.last_read_at).getTime() : 0;
-      if (inboundTs > readTs) {
-        // We don't have the exact count without a messages query, so use 1
-        // as a sentinel — enough to show the badge and trigger the filter.
+      const activityTs = c.last_inbound_at
+        ? new Date(c.last_inbound_at).getTime()
+        : c.last_message_at
+        ? new Date(c.last_message_at).getTime()
+        : 0;
+      if (activityTs > readTs) {
         map[c.id] = 1;
       }
     }
