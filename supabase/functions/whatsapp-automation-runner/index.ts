@@ -531,6 +531,36 @@ async function executeFlow(args: {
           }
         }
 
+        // ── Atomic reply-slot claim (duplicate-send prevention) ────────────
+        // Multiple concurrent runner invocations (e.g. resume + from_template
+        // + webhook AI continuation) can all reach this ai_step at the same
+        // time. Without a DB-level lock each one would generate and send its
+        // own AI reply → customer sees the same message 2-3 times.
+        // PostgreSQL row-level locking guarantees only ONE conditional UPDATE
+        // wins: the first sets last_reply_at = now(), subsequent ones find
+        // the WHERE clause false → 0 rows → we bail out.
+        if (conversation?.id) {
+          const claimWindowMs = 60 * 1000; // 60s claim window
+          const sinceIso = new Date(Date.now() - claimWindowMs).toISOString();
+          const claimTs = new Date().toISOString();
+          const { data: claimed } = await admin
+            .from("whatsapp_conversations")
+            .update({ last_reply_at: claimTs, updated_at: claimTs })
+            .eq("id", conversation.id)
+            .or(`last_reply_at.is.null,last_reply_at.lt.${sinceIso}`)
+            .select("id")
+            .maybeSingle();
+          if (!claimed) {
+            await appendLog(runId, {
+              type: "ai_step",
+              node_id: node.id,
+              skipped: "reply_slot_already_claimed",
+            });
+            currentId = findNextNode(edges, node.id)?.target ?? null;
+            continue;
+          }
+        }
+
         // Load AI settings + key + history for context
         const { data: aiSettings } = await admin
           .from("whatsapp_ai_settings")
