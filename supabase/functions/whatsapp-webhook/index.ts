@@ -1454,6 +1454,33 @@ async function aiContinueReply(args: {
     return;
   }
 
+  // ── Atomic reply-slot claim (duplicate-send prevention) ─────────────────────
+  // Two concurrent invocations (e.g. normal webhook + sweep) can both reach
+  // this point before either has written an outbound message to the DB.
+  // PostgreSQL row-level locking guarantees only ONE UPDATE wins: the first
+  // invocation sets last_reply_at = now(), and the second finds the condition
+  // false (last_reply_at is already recent) → returns 0 rows → we bail out.
+  // This is safe to skip if the customer sent a NEW message AFTER the last
+  // reply (last_reply_at < latestInboundTs), which the dedup window handles.
+  {
+    const claimTs = new Date().toISOString();
+    // Allow a claim if the last reply was > dedupWindowMs ago OR if there's no
+    // prior reply at all.  dedupWindowMs comes from aiSettings; fall back 30s.
+    const dedupWindowMs = Math.max(0, (aiSettings.ai_dedup_window_seconds ?? 30)) * 1000;
+    const sinceIso = new Date(Date.now() - dedupWindowMs).toISOString();
+    const { data: claimed } = await admin
+      .from("whatsapp_conversations")
+      .update({ last_reply_at: claimTs, updated_at: claimTs })
+      .eq("id", conv.id)
+      .or(`last_reply_at.is.null,last_reply_at.lt.${sinceIso}`)
+      .select("id")
+      .maybeSingle();
+    if (!claimed) {
+      log("ai-continue: dedup — reply slot already claimed, skipping", conv.id);
+      return;
+    }
+  }
+
   const aiBody: any = {
     model,
     messages: [{ role: "system", content: sysPrompt }, ...history],
@@ -1661,9 +1688,10 @@ async function aiContinueReply(args: {
   });
 
   if (ok) {
+    const replyTs = new Date().toISOString();
     await admin
       .from("whatsapp_conversations")
-      .update({ status: "ai_active", updated_at: new Date().toISOString() })
+      .update({ status: "ai_active", last_reply_at: replyTs, updated_at: replyTs })
       .eq("id", conv.id);
     log("ai-continue: replied", { conv: conv.id, len: reply.length });
 
