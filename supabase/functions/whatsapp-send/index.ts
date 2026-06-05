@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
     if (!settings) throw new Error("WhatsApp settings missing");
     if (!settings.integration_enabled || !settings.sending_enabled) {
       return new Response(JSON.stringify({ ok: false, error: "Sending disabled in settings" }), {
-        status: 400,
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -474,8 +474,9 @@ Deno.serve(async (req) => {
       },
     );
   } catch (e) {
+    // Return 200 so the SDK can read the error — caller checks data.ok
     return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), {
-      status: 500,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
