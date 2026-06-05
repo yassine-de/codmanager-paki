@@ -1911,6 +1911,7 @@ export type Database = {
           customer_phone: string
           id: string
           labels: string[]
+          last_inbound_at: string | null
           last_message_at: string | null
           last_read_at: string | null
           last_reply_at: string | null
@@ -1930,6 +1931,7 @@ export type Database = {
           customer_phone: string
           id?: string
           labels?: string[]
+          last_inbound_at?: string | null
           last_message_at?: string | null
           last_read_at?: string | null
           last_reply_at?: string | null
@@ -1949,6 +1951,7 @@ export type Database = {
           customer_phone?: string
           id?: string
           labels?: string[]
+          last_inbound_at?: string | null
           last_message_at?: string | null
           last_read_at?: string | null
           last_reply_at?: string | null
