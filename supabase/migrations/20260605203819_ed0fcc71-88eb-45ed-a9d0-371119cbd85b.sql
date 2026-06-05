@@ -1,0 +1,1 @@
+CREATE POLICY "Authenticated can read whatsapp_templates" ON public.whatsapp_templates FOR SELECT TO authenticated USING (true);
