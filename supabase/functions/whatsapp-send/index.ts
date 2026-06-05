@@ -42,8 +42,8 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
-        status: 401,
+      return new Response(JSON.stringify({ ok: false, error: "Unauthorized: missing bearer token" }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -56,13 +56,27 @@ Deno.serve(async (req) => {
     const isInternalCall = jwt === serviceRoleKey || jwt === anonKey;
 
     if (!isInternalCall) {
-      // Regular user call — validate JWT (any authenticated user may send)
-      const { data: userData } = await admin.auth.getUser(jwt);
-      if (!userData?.user) {
-        return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      // Regular user call — validate JWT using getClaims (compatible with new signing-keys system).
+      // Fall back to getUser if getClaims is unavailable.
+      let validUser = false;
+      try {
+        const anyAuth = admin.auth as any;
+        if (typeof anyAuth.getClaims === "function") {
+          const { data: claimsData, error: claimsErr } = await anyAuth.getClaims(jwt);
+          if (!claimsErr && claimsData?.claims?.sub) validUser = true;
+        }
+        if (!validUser) {
+          const { data: userData } = await admin.auth.getUser(jwt);
+          if (userData?.user) validUser = true;
+        }
+      } catch (authErr) {
+        console.error("[whatsapp-send] auth validation error:", (authErr as Error).message);
+      }
+      if (!validUser) {
+        return new Response(
+          JSON.stringify({ ok: false, error: "Session expired — please sign out and sign in again." }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
     }
 
