@@ -2492,6 +2492,39 @@ export default function WhatsappInbox() {
                           }
                         }
                         await supabase.from("orders").update(updates).eq("order_id", order.order_id);
+
+                        // Log to order_history so the action counts on the agent dashboard
+                        // (the dashboard derives all its stats from order_history, not the orders table).
+                        if (authUser?.id) {
+                          const role = isAdmin ? "admin" : "agent";
+                          const histEntries: any[] = [];
+                          if (updates.confirmation_status) {
+                            histEntries.push({
+                              order_id: order.order_id,
+                              changed_by: authUser.id,
+                              changed_by_role: role,
+                              field_changed: "confirmation_status",
+                              old_value: order.confirmation_status || "new",
+                              new_value: updates.confirmation_status,
+                              action_type: "status_change",
+                            });
+                          }
+                          if (updates.delivery_status) {
+                            histEntries.push({
+                              order_id: order.order_id,
+                              changed_by: authUser.id,
+                              changed_by_role: role,
+                              field_changed: "delivery_status",
+                              old_value: order.delivery_status || "pending",
+                              new_value: updates.delivery_status,
+                              action_type: "status_change",
+                            });
+                          }
+                          if (histEntries.length > 0) {
+                            await supabase.from("order_history").insert(histEntries);
+                          }
+                        }
+
                         qc.invalidateQueries({ queryKey: ["wts-order", order.order_id] });
                         toast.success("Status updated");
                         setUpdatingStatus(false);
