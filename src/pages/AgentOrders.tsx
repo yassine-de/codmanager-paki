@@ -35,6 +35,22 @@ const CANCEL_REASONS = [
 
 const NO_ANSWER_MAX_ATTEMPTS = 12;
 const RETRY_COOLDOWN_MS = 30 * 60 * 1000; // 30 min
+
+// Normalized phone key = last 10 digits (subscriber number, format-agnostic).
+// Matches DB normalize_phone_key() so duplicate detection is consistent across
+// "+923001234567", "923001234567" and "03001234567".
+const phoneKey = (raw: string | null | undefined): string =>
+  (raw || "").replace(/\D/g, "").slice(-10);
+
+// Build the common phone formats so we can match duplicates stored in any source format.
+const phoneVariants = (raw: string | null | undefined): string[] => {
+  const digits = (raw || "").replace(/\D/g, "");
+  const last10 = digits.slice(-10);
+  if (!last10) return [];
+  return Array.from(
+    new Set([raw || "", digits, `+${digits}`, `92${last10}`, `+92${last10}`, `0${last10}`, last10]),
+  ).filter(Boolean);
+};
 const RETRY_AGING_MS = 2 * 60 * 60 * 1000; // 2 hours → urgent
 const NEW_TO_RETRY_RATIO = 3; // 3 new then 1 retry
 
@@ -155,7 +171,7 @@ const AgentOrders = () => {
     supabase
       .from("orders")
       .select("order_id, confirmation_status, delivery_status")
-      .eq("customer_phone", phone)
+      .in("customer_phone", phoneVariants(phone))
       .eq("product_name", product)
       .neq("id", orderId)
       .limit(5)
@@ -254,7 +270,7 @@ const AgentOrders = () => {
 
     const duplicateGroups = new Map<string, number>();
     normalizedNewOrders.forEach((order) => {
-      const key = `${String(order.customer_phone).replace(/\s/g, "")}::${order.product_name}`;
+      const key = `${phoneKey(order.customer_phone)}::${order.product_name}`;
       duplicateGroups.set(key, (duplicateGroups.get(key) || 0) + 1);
     });
     setDuplicateCount(Array.from(duplicateGroups.values()).filter((count) => count > 1).length);
@@ -350,7 +366,7 @@ const AgentOrders = () => {
         .from("orders")
         .select("*")
         .eq("agent_id", authUser.id)
-        .eq("customer_phone", resolvedOrder.customer_phone)
+        .in("customer_phone", phoneVariants(resolvedOrder.customer_phone))
         .eq("product_name", resolvedOrder.product_name)
         .eq("confirmation_status", "new");
       duplicateGroup = (groupOrders as DbOrder[]) || [];
