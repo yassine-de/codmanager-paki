@@ -142,8 +142,12 @@ const AgentDashboard = () => {
     refetchOnWindowFocus: true,
   });
 
-  const statusActionsInPeriod = useMemo(() => {
-    const map = new Map<string, { lastStatus: string; lastAt: string }>();
+  // Filter the agent's orders by date directly from the orders table (the source of
+  // truth the ranking also uses). We DON'T rely on order_history here because status
+  // changes made outside AgentOrders (e.g. the WhatsApp inbox, imports) never wrote
+  // history rows — which left the dashboard cards stuck at 0 even when the agent had
+  // hundreds of confirmed orders.
+  const filteredOrders = useMemo(() => {
     const from = dateRange?.from ? startOfDay(dateRange.from) : null;
     const to = dateRange?.to
       ? endOfDay(dateRange.to)
@@ -151,65 +155,31 @@ const AgentDashboard = () => {
         ? endOfDay(dateRange.from)
         : null;
 
-    orderHistory.forEach((entry) => {
-      const changedAt = new Date(entry.created_at);
-      if (from && changedAt < from) return;
-      if (to && changedAt > to) return;
+    if (!from && !to) return agentOrders;
 
-      const previous = map.get(entry.order_id);
-      if (!previous || changedAt > new Date(previous.lastAt)) {
-        map.set(entry.order_id, {
-          lastStatus: entry.new_value || "",
-          lastAt: entry.created_at,
-        });
-      }
-    });
-
-    return map;
-  }, [orderHistory, dateRange]);
-
-  const statusActionRowsInPeriod = useMemo(() => {
-    const from = dateRange?.from ? startOfDay(dateRange.from) : null;
-    const to = dateRange?.to
-      ? endOfDay(dateRange.to)
-      : dateRange?.from
-        ? endOfDay(dateRange.from)
-        : null;
-
-    return orderHistory.filter((entry) => {
-      const changedAt = new Date(entry.created_at);
-      if (from && changedAt < from) return false;
-      if (to && changedAt > to) return false;
+    return agentOrders.filter((o: any) => {
+      // Pick the most relevant "worked on" timestamp available for this order.
+      const tsRaw =
+        o.confirmation_status === "confirmed" && o.confirmed_at
+          ? o.confirmed_at
+          : o.last_activity_at || o.last_attempt_at || o.updated_at || o.created_at;
+      if (!tsRaw) return false;
+      const ts = new Date(tsRaw);
+      if (from && ts < from) return false;
+      if (to && ts > to) return false;
       return true;
     });
-  }, [orderHistory, dateRange]);
-
-  // Filter by status update date from order_history so Today/Cancelled matches the system logs
-  const filteredOrders = useMemo(() => {
-    if (!dateRange?.from) return agentOrders;
-
-    return agentOrders
-      .filter((o: any) => statusActionsInPeriod.has(o.order_id))
-      .map((o: any) => {
-        const action = statusActionsInPeriod.get(o.order_id)!;
-        return {
-          ...o,
-          confirmation_status: action.lastStatus || o.confirmation_status,
-          treated_at: action.lastAt,
-        };
-      });
-  }, [agentOrders, dateRange, statusActionsInPeriod]);
+  }, [agentOrders, dateRange]);
 
   const stats = useMemo(() => {
-    const total = statusActionRowsInPeriod.length;
-    const confirmed = statusActionRowsInPeriod.filter((o) => o.new_value === "confirmed").length;
-    const postponed = statusActionRowsInPeriod.filter((o) => o.new_value === "postponed").length;
-    const noAnswer = statusActionRowsInPeriod.filter((o) => o.new_value === "no_answer").length;
-    const cancelled = statusActionRowsInPeriod.filter((o) => o.new_value === "cancelled").length;
-    const doubleOrders = statusActionRowsInPeriod.filter((o) => o.new_value === "double").length;
-    const wrongNumber = statusActionRowsInPeriod.filter((o) => o.new_value === "wrong_number").length;
-    const other = doubleOrders + wrongNumber;
-    // Claimed Orders counts every status action, including retry/no-answer attempts on the same order.
+    const total = filteredOrders.length;
+    const byStatus = (s: string) => filteredOrders.filter((o: any) => o.confirmation_status === s).length;
+    const confirmed = byStatus("confirmed");
+    const postponed = byStatus("postponed");
+    const noAnswer = byStatus("no_answer");
+    const cancelled = byStatus("cancelled");
+    const other = byStatus("double") + byStatus("wrong_number");
+    // Claimed Orders = distinct orders this agent worked on in the period.
     return {
       total,
       confirmed,
@@ -222,7 +192,7 @@ const AgentDashboard = () => {
       cancelledPct: total ? Math.round((cancelled / total) * 100) : 0,
       other,
     };
-  }, [statusActionRowsInPeriod]);
+  }, [filteredOrders]);
 
   // Pie chart data
   const pieData = [
