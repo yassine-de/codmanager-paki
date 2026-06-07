@@ -2460,8 +2460,13 @@ export default function WhatsappInbox() {
                       <Select value={editDelStatus || order.delivery_status || "pending"} onValueChange={setEditDelStatus}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {["pending","booked","shipped","in_transit","with_courier","delivered","returned","cancelled","no_answer","postponed","failed_attempt","ready_for_return","rejected","return"].map(s => (
-                            <SelectItem key={s} value={s} className="text-xs">{s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</SelectItem>
+                          {(isAdmin
+                            ? ["pending","booked","shipped","in_transit","with_courier","delivered","returned","cancelled","no_answer","postponed","failed_attempt","ready_for_return","rejected","return"]
+                            : ["pending","booked","new"]
+                          ).map(s => (
+                            <SelectItem key={s} value={s} className="text-xs">
+                              {s === "new" ? "New (force to agent)" : s.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -2474,9 +2479,18 @@ export default function WhatsappInbox() {
                       disabled={updatingStatus}
                       onClick={async () => {
                         setUpdatingStatus(true);
-                        const updates: { updated_at: string; confirmation_status?: string; delivery_status?: string } = { updated_at: new Date().toISOString() };
+                        const updates: { updated_at: string; confirmation_status?: string; delivery_status?: string; agent_id?: null; assigned_at?: null } = { updated_at: new Date().toISOString() };
                         if (editConfStatus && editConfStatus !== (order.confirmation_status || "new")) updates.confirmation_status = editConfStatus;
-                        if (editDelStatus && editDelStatus !== (order.delivery_status || "pending")) updates.delivery_status = editDelStatus;
+                        if (editDelStatus && editDelStatus !== (order.delivery_status || "pending")) {
+                          if (editDelStatus === "new") {
+                            // "New (force to agent)" — push the order back to the agent queue
+                            updates.confirmation_status = "new";
+                            updates.agent_id = null;
+                            updates.assigned_at = null;
+                          } else {
+                            updates.delivery_status = editDelStatus;
+                          }
+                        }
                         await supabase.from("orders").update(updates).eq("order_id", order.order_id);
                         qc.invalidateQueries({ queryKey: ["wts-order", order.order_id] });
                         toast.success("Status updated");
