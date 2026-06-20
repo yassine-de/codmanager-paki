@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Package, CheckCircle2, XCircle, Truck, BarChart2,
   ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight,
-  TrendingUp, TrendingDown, AlertCircle, PhoneMissed,
+  TrendingUp, TrendingDown, AlertCircle, PhoneMissed, PhoneOff,
 } from "lucide-react";
 import {
   startOfDayPKT as startOfDay,
@@ -29,7 +29,14 @@ type Order = {
   created_at: string;
   confirmed_at: string | null;
   delivered_at: string | null;
+  updated_at: string;
 };
+
+// Date basis (same logic as the seller Dashboard & admin Seller Analytics):
+//   created → cohort view, every metric filtered by created_at.
+//   updated → event view, each metric filtered by its own event date
+//             (confirmed_at for confirmed, delivered_at for delivered, else updated_at).
+type DateBasis = "created" | "updated";
 
 type SortDir = "asc" | "desc";
 type ProductSortField = "name" | "total" | "confirmed" | "confRate" | "delivered" | "delRate" | "cancelled" | "wrongNumber";
@@ -38,7 +45,7 @@ type ProductSortField = "name" | "total" | "confirmed" | "confRate" | "delivered
 
 // Only safe fields — no agent, no channel, no ORIO, no seller_id leaks
 const ORDER_SELECT =
-  "id, confirmation_status, delivery_status, product_name, cancel_reason, created_at, confirmed_at, delivered_at";
+  "id, confirmation_status, delivery_status, product_name, cancel_reason, created_at, confirmed_at, delivered_at, updated_at";
 
 const PAGE_SIZE = 1000;
 
@@ -177,6 +184,7 @@ export default function SellerProductAnalytics() {
   const [productFilter, setProductFilter] = useState("all");
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [dateBasis, setDateBasis] = useState<DateBasis>("created");
 
   const [productSort, setProductSort] = useState<ProductSortField>("total");
   const [productSortDir, setProductSortDir] = useState<SortDir>("desc");
@@ -200,38 +208,51 @@ export default function SellerProductAnalytics() {
     return names.sort().map((n) => ({ value: n, label: n }));
   }, [orders]);
 
-  // ── Filtered Orders ───────────────────────────────────────────────────────
+  // ── Basis-aware date predicate ────────────────────────────────────────────
+  // created → check created_at; updated → check the given event date (fallback updated_at).
+  const inRangeByEvent = useCallback((o: Order, eventIso: string | null) => {
+    if (!dateRange?.from) return true;
+    const d = dateBasis === "created" ? o.created_at : (eventIso ?? o.updated_at);
+    return isWithinRange(new Date(d), dateRange);
+  }, [dateBasis, dateRange]);
 
-  const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      if (productFilter !== "all" && o.product_name !== productFilter) return false;
-      if (!isWithinRange(new Date(o.created_at), dateRange)) return false;
-      return true;
-    });
-  }, [orders, productFilter, dateRange]);
+  // Product-filtered base (NOT date-filtered — each metric applies its own event date).
+  const base = useMemo(
+    () => orders.filter((o) => productFilter === "all" || o.product_name === productFilter),
+    [orders, productFilter],
+  );
+
+  // ── Filtered Orders (generic basis — used for total / empty-state) ─────────
+  const filteredOrders = useMemo(
+    () => base.filter((o) => inRangeByEvent(o, o.updated_at)),
+    [base, inRangeByEvent],
+  );
 
   // ── Global KPIs ──────────────────────────────────────────────────────────
 
   const kpis = useMemo(() => {
-    const total = filteredOrders.length;
-    const confirmed = filteredOrders.filter(
-      (o) => CONFIRMED_STATUSES.includes(o.confirmation_status)
+    const total = base.filter((o) => inRangeByEvent(o, o.updated_at)).length;
+    const confirmed = base.filter(
+      (o) => CONFIRMED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.confirmed_at)
     ).length;
-    const cancelled = filteredOrders.filter((o) => CANCELLED_STATUSES.includes(o.confirmation_status)).length;
-    const delivered = filteredOrders.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "")).length;
-    const wrongNumber = filteredOrders.filter((o) => o.confirmation_status === "wrong_number").length;
+    const cancelled = base.filter((o) => CANCELLED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.updated_at)).length;
+    const delivered = base.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
+    const wrongNumber = base.filter((o) => o.confirmation_status === "wrong_number" && inRangeByEvent(o, o.updated_at)).length;
+    const unreachable = base.filter((o) => o.confirmation_status === "unreachable" && inRangeByEvent(o, o.updated_at)).length;
     return {
       total,
       confirmed,
       cancelled,
       delivered,
       wrongNumber,
+      unreachable,
       confRate: pct(confirmed, total),
       delRate: pct(delivered, confirmed),
       cancelRate: pct(cancelled, total),
       wrongNumberRate: pct(wrongNumber, total),
+      unreachableRate: pct(unreachable, total),
     };
-  }, [filteredOrders]);
+  }, [base, inRangeByEvent]);
 
   // ── Per-Product Rows ──────────────────────────────────────────────────────
 
@@ -240,20 +261,18 @@ export default function SellerProductAnalytics() {
       total: number; confirmed: number; delivered: number; cancelled: number; wrongNumber: number;
       reasons: Record<string, number>;
     }> = {};
-    filteredOrders.forEach((o) => {
+    base.forEach((o) => {
       const name = o.product_name || "Unknown";
       if (!map[name]) map[name] = { total: 0, confirmed: 0, delivered: 0, cancelled: 0, wrongNumber: 0, reasons: {} };
-      map[name].total++;
-      if (
-        CONFIRMED_STATUSES.includes(o.confirmation_status)
-      ) map[name].confirmed++;
-      if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[name].delivered++;
-      if (CANCELLED_STATUSES.includes(o.confirmation_status)) {
+      if (inRangeByEvent(o, o.updated_at)) map[name].total++;
+      if (CONFIRMED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.confirmed_at)) map[name].confirmed++;
+      if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) map[name].delivered++;
+      if (CANCELLED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.updated_at)) {
         map[name].cancelled++;
         const reason = o.cancel_reason?.trim() || "Not specified";
         map[name].reasons[reason] = (map[name].reasons[reason] || 0) + 1;
       }
-      if (o.confirmation_status === "wrong_number") map[name].wrongNumber++;
+      if (o.confirmation_status === "wrong_number" && inRangeByEvent(o, o.updated_at)) map[name].wrongNumber++;
     });
     return Object.entries(map).map(([name, d]) => ({
       name,
@@ -269,7 +288,7 @@ export default function SellerProductAnalytics() {
         .map(([reason, count]) => ({ reason, count, pct: pct(count, d.cancelled) }))
         .sort((a, b) => b.count - a.count),
     }));
-  }, [filteredOrders]);
+  }, [base, inRangeByEvent]);
 
   const sortedProductRows = useMemo(() => {
     return [...productRows].sort((a, b) => {
@@ -288,8 +307,9 @@ export default function SellerProductAnalytics() {
 
   const globalReasons = useMemo(() => {
     const map: Record<string, number> = {};
-    filteredOrders.forEach((o) => {
+    base.forEach((o) => {
       if (!CANCELLED_STATUSES.includes(o.confirmation_status)) return;
+      if (!inRangeByEvent(o, o.updated_at)) return;
       const reason = o.cancel_reason?.trim() || "Not specified";
       map[reason] = (map[reason] || 0) + 1;
     });
@@ -297,7 +317,7 @@ export default function SellerProductAnalytics() {
     return Object.entries(map)
       .map(([reason, count]) => ({ reason, count, pct: pct(count, total) }))
       .sort((a, b) => b.count - a.count);
-  }, [filteredOrders]);
+  }, [base, inRangeByEvent]);
 
   // ── Sort toggle ───────────────────────────────────────────────────────────
 
@@ -341,12 +361,34 @@ export default function SellerProductAnalytics() {
             allLabel="All Products"
             className="w-48"
           />
-          {(productFilter !== "all" || !!dateRange) && (
+          {/* Date basis: filter every metric by created_at (cohort) or by each
+              metric's own event date (confirmed_at / delivered_at) */}
+          <div className="inline-flex items-center rounded-lg border bg-background p-0.5 text-xs">
+            {([
+              { value: "created", label: "Created" },
+              { value: "updated", label: "Updated" },
+            ] as { value: DateBasis; label: string }[]).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDateBasis(opt.value)}
+                className={
+                  "px-3 py-1.5 rounded-md font-medium transition-colors " +
+                  (dateBasis === opt.value
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {(productFilter !== "all" || !!dateRange || dateBasis !== "created") && (
             <Button
               variant="ghost"
               size="sm"
               className="h-8 text-xs text-muted-foreground"
-              onClick={() => { setProductFilter("all"); setDateRange(undefined); setDatePreset("maximum"); }}
+              onClick={() => { setProductFilter("all"); setDateRange(undefined); setDatePreset("maximum"); setDateBasis("created"); }}
             >
               Clear filters
             </Button>
@@ -377,7 +419,7 @@ export default function SellerProductAnalytics() {
       ) : (
         <>
           {/* ── Section 1: KPI Cards ─────────────────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <KPICard
               title="Total Orders"
               value={kpis.total}
@@ -429,6 +471,17 @@ export default function SellerProductAnalytics() {
               colorIcon="text-slate-500 dark:text-slate-400"
               gradient="from-slate-500 to-slate-400"
               delay={200}
+              pool={kpis.total}
+            />
+            <KPICard
+              title="Unreachable"
+              value={kpis.unreachable}
+              subtitle={fmtPct(kpis.unreachableRate) + " rate"}
+              icon={PhoneOff}
+              colorBg="bg-gray-100 dark:bg-gray-800/60"
+              colorIcon="text-gray-500 dark:text-gray-400"
+              gradient="from-gray-500 to-gray-400"
+              delay={250}
               pool={kpis.total}
             />
           </div>

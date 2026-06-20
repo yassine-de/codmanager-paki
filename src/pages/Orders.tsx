@@ -37,6 +37,7 @@ const confirmationConfig: Record<ConfirmationStatus, { label: string; cls: strin
   new_wts: { label: 'New WTS', cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
   confirmed: { label: 'Confirmed', cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
   no_answer: { label: 'No Answer', cls: 'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20' },
+  unreachable: { label: 'Unreachable', cls: 'bg-[hsl(0,0%,45%)]/12 text-[hsl(0,0%,45%)] border-[hsl(0,0%,45%)]/20' },
   postponed: { label: 'Postponed', cls: 'bg-[hsl(25,85%,55%)]/12 text-[hsl(25,85%,55%)] border-[hsl(25,85%,55%)]/20' },
   cancelled: { label: 'Cancelled', cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
   wrong_number: { label: 'Wrong Number', cls: 'bg-[hsl(30,6%,50%)]/12 text-[hsl(30,6%,50%)] border-[hsl(30,6%,50%)]/20' },

@@ -237,6 +237,7 @@ export default function ConfirmationAnalytics() {
     ).length;
     const cancelled = filteredOrders.filter(o => o.confirmation_status === "cancelled").length;
     const postponed = filteredOrders.filter(o => o.confirmation_status === "postponed").length;
+    const unreachable = filteredOrders.filter(o => o.confirmation_status === "unreachable").length;
 
     // Treated = distinct orders that had at least one status-change action within filters.
     // We count distinct order_ids (not raw event count) so an order touched 3x counts once.
@@ -269,6 +270,8 @@ export default function ConfirmationAnalytics() {
       cancelledRate: claimed > 0 ? Math.round((cancelled / claimed) * 100) : 0,
       postponed,
       postponedRate: claimed > 0 ? Math.round((postponed / claimed) * 100) : 0,
+      unreachable,
+      unreachableRate: claimed > 0 ? Math.round((unreachable / claimed) * 100) : 0,
       delivered,
       deliveredRate: deliveryRate,
     };
@@ -440,6 +443,13 @@ export default function ConfirmationAnalytics() {
       buckets[n] = (buckets[n] || 0) + 1;
     });
     const total = noAnswerOrders.length;
+    // Unreachable = orders that exhausted all call attempts (terminal state of no_answer).
+    const unreachable = orders.filter(o => {
+      if (o.confirmation_status !== "unreachable") return false;
+      if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
+      if (productFilter !== "all" && o.product_name !== productFilter) return false;
+      return true;
+    }).length;
     const maxAttempt = Object.keys(buckets).length > 0 ? Math.max(...Object.keys(buckets).map(Number)) : 0;
     const rows = [];
     for (let i = 1; i <= maxAttempt; i++) {
@@ -450,7 +460,7 @@ export default function ConfirmationAnalytics() {
         rate: total > 0 ? Math.round((count / total) * 100) : 0,
       });
     }
-    return { rows, total };
+    return { rows, total, unreachable };
   }, [orders, sellerFilter, productFilter]);
 
   // Cancel reasons
@@ -657,7 +667,12 @@ export default function ConfirmationAnalytics() {
             <PhoneCall className="h-4 w-4 text-warning" />
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">No Answer — Attempts Breakdown</h2>
           </div>
-          <span className="text-xs text-muted-foreground tabular-nums">{noAnswerAttempts.total} orders</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">
+              {noAnswerAttempts.unreachable} unreachable
+            </span>
+            <span className="text-xs text-muted-foreground tabular-nums">{noAnswerAttempts.total} orders</span>
+          </div>
         </div>
         {noAnswerAttempts.rows.length === 0 ? (
           <p className="text-muted-foreground text-sm">No "No Answer" orders in selected period</p>

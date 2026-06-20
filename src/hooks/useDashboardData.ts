@@ -28,6 +28,7 @@ export interface DashboardKPIs {
   newOrders: number;
   confirmed: number;
   noAnswer: number;
+  unreachable: number;
   postponed: number;
   cancelled: number;
   doubleOrders: number;
@@ -141,6 +142,7 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
     ? source.filter(o => reachedConfirmedStage(o) && inRangeFor(o, "confirmed")).length
     : orders.filter(reachedConfirmedStage).length;
   const noAnswer = orders.filter(o => o.confirmation_status === 'no_answer').length;
+  const unreachable = orders.filter(o => o.confirmation_status === 'unreachable').length;
   const postponed = orders.filter(o => o.confirmation_status === 'postponed').length;
   const cancelled = orders.filter(o => o.confirmation_status === 'cancelled').length;
   const doubleOrders = orders.filter(o => o.confirmation_status === 'double').length;
@@ -196,7 +198,7 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
         .reduce((s, o) => s + Number(o.total_amount), 0);
 
   return {
-    total, newOrders, confirmed, noAnswer, postponed, cancelled, doubleOrders, wrongNumber,
+    total, newOrders, confirmed, noAnswer, unreachable, postponed, cancelled, doubleOrders, wrongNumber,
     pending, shipped, inTransit, withCourier, delivered, paid, returned,
     deliveryCancelled, deliveryNoAnswer, deliveryPostponed,
     confirmationRate, deliveryRate,

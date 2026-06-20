@@ -3,7 +3,7 @@ import {
   ShoppingCart, CheckCircle2, Truck, DollarSign, XCircle, RotateCcw,
   Sparkles, PhoneOff, CalendarClock, TrendingUp, TrendingDown,
   Package, Copy, PhoneForwarded, Navigation, UserCheck, Banknote,
-  Clock, Store, Award, Activity, PackageCheck, Hourglass,
+  Clock, Store, Award, Activity, PackageCheck, Hourglass, PhoneMissed,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, LabelList,
@@ -543,6 +543,9 @@ export default function Dashboard() {
             <SectionKPI title="No Answer" value={kpis.noAnswer} percentage={pct(kpis.noAnswer, kpis.total)}
               percentLabel="of total" icon={PhoneOff} color="text-warning" iconBg="bg-warning/10" change={-3} delay={230}
               onClick={() => navigate("/orders?confirmation=no_answer")} />
+            <SectionKPI title="Unreachable" value={kpis.unreachable} percentage={pct(kpis.unreachable, kpis.total)}
+              percentLabel="of total" icon={PhoneMissed} color="text-muted-foreground" iconBg="bg-muted" delay={235}
+              onClick={() => navigate("/orders?confirmation=unreachable")} />
             <SectionKPI title="Postponed" value={kpis.postponed} percentage={pct(kpis.postponed, kpis.total)}
               percentLabel="of total" icon={CalendarClock} color="text-warning" iconBg="bg-warning/10" change={8} delay={240}
               onClick={() => navigate("/orders?confirmation=postponed")} />

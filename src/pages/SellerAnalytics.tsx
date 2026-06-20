@@ -319,32 +319,56 @@ export default function SellerAnalytics() {
   // ── Delivery KPIs ────────────────────────────────────────────────────────────
 
   const deliveryKPIs = useMemo(() => {
-    const pool = filteredOrders.filter(reachedConfirmedStage);
-    const poolCount = pool.length;
-    const booked = pool.filter((o) => o.delivery_status === "booked").length;
-    const shipped = pool.filter((o) => SHIPPED_STATUSES.includes(o.delivery_status || "")).length;
-    const delivered = pool.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "")).length;
-    const failedAttempt = pool.filter((o) => o.delivery_status === "failed_attempt").length;
-    const returned = pool.filter((o) => o.delivery_status === "returned").length;
-    const inReturnProcess = pool.filter((o) => o.delivery_status === "ready_for_return").length;
+    const matchesFilters = (o: Order) =>
+      (sellerFilter === "all" || o.seller_id === sellerFilter) &&
+      (productFilter === "all" || o.product_name === productFilter);
+    // Basis-aware date check (must match the seller Dashboard):
+    //   created → created_at (cohort); updated → the event timestamp for that metric
+    //   (delivered_at for delivered, else updated_at as a proxy).
+    const inRangeByEvent = (o: Order, eventIso: string | null) => {
+      if (!dateRange?.from) return true;
+      const d = dateFieldMode === "created" ? o.created_at : (eventIso ?? o.updated_at);
+      return isWithinRange(new Date(d), dateRange);
+    };
+    const base = orders.filter(matchesFilters);
+    // Delivered = orders actually delivered in the period (delivered_at in Updated mode).
+    const delivered = base.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
+    // Returned uses delivered_at as its closest event proxy; the rest have no event
+    // timestamp, so fall back to updated_at (when the status was last set).
+    const booked = base.filter((o) => o.delivery_status === "booked" && inRangeByEvent(o, o.updated_at)).length;
+    const shipped = base.filter((o) => SHIPPED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.updated_at)).length;
+    const failedAttempt = base.filter((o) => o.delivery_status === "failed_attempt" && inRangeByEvent(o, o.updated_at)).length;
+    const returned = base.filter((o) => o.delivery_status === "returned" && inRangeByEvent(o, o.delivered_at)).length;
+    const inReturnProcess = base.filter((o) => o.delivery_status === "ready_for_return" && inRangeByEvent(o, o.updated_at)).length;
+    // Delivery rate denominator = confirmed orders in the period (matches the Confirmed card).
+    const poolCount = confirmationKPIs.confirmedCount;
     const delRate = pct(delivered, poolCount);
     return { poolCount, booked, shipped, delivered, failedAttempt, returned, inReturnProcess, delRate };
-  }, [filteredOrders]);
+  }, [orders, sellerFilter, productFilter, dateFieldMode, dateRange, confirmationKPIs]);
 
   // ── Product Performance ──────────────────────────────────────────────────────
 
   const productRows = useMemo(() => {
+    const matchesFilters = (o: Order) =>
+      (sellerFilter === "all" || o.seller_id === sellerFilter) &&
+      (productFilter === "all" || o.product_name === productFilter);
+    // Same basis-aware date rule as the KPI cards so per-product counts match the totals.
+    const inRangeByEvent = (o: Order, eventIso: string | null) => {
+      if (!dateRange?.from) return true;
+      const d = dateFieldMode === "created" ? o.created_at : (eventIso ?? o.updated_at);
+      return isWithinRange(new Date(d), dateRange);
+    };
     const map: Record<string, {
       orders: number; confirmed: number; shipped: number; delivered: number;
     }> = {};
 
-    filteredOrders.forEach((o) => {
+    orders.filter(matchesFilters).forEach((o) => {
       const name = o.product_name || "Unknown";
       if (!map[name]) map[name] = { orders: 0, confirmed: 0, shipped: 0, delivered: 0 };
-      map[name].orders++;
-      if (reachedConfirmedStage(o)) map[name].confirmed++;
-      if (SHIPPED_STATUSES.includes(o.delivery_status || "")) map[name].shipped++;
-      if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[name].delivered++;
+      if (inRangeByEvent(o, o.updated_at)) map[name].orders++;
+      if (reachedConfirmedStage(o) && inRangeByEvent(o, o.confirmed_at)) map[name].confirmed++;
+      if (SHIPPED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.updated_at)) map[name].shipped++;
+      if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) map[name].delivered++;
     });
 
     return Object.entries(map).map(([name, d]) => ({
@@ -356,7 +380,7 @@ export default function SellerAnalytics() {
       delivered: d.delivered,
       delRate: pct(d.delivered, d.confirmed),
     }));
-  }, [filteredOrders]);
+  }, [orders, sellerFilter, productFilter, dateFieldMode, dateRange]);
 
   const sortedProductRows = useMemo(() => {
     return [...productRows].sort((a, b) => {
@@ -370,17 +394,24 @@ export default function SellerAnalytics() {
   // ── Seller Leaderboard ───────────────────────────────────────────────────────
 
   const sellerRows = useMemo(() => {
+    const matchesProduct = (o: Order) => productFilter === "all" || o.product_name === productFilter;
+    // Same basis-aware date rule as the KPI cards.
+    const inRangeByEvent = (o: Order, eventIso: string | null) => {
+      if (!dateRange?.from) return true;
+      const d = dateFieldMode === "created" ? o.created_at : (eventIso ?? o.updated_at);
+      return isWithinRange(new Date(d), dateRange);
+    };
     const map: Record<string, {
       orders: number; confirmed: number; shipped: number; delivered: number; revenue: number;
     }> = {};
 
-    filteredOrders.forEach((o) => {
+    orders.filter(matchesProduct).forEach((o) => {
       const id = o.seller_id;
       if (!map[id]) map[id] = { orders: 0, confirmed: 0, shipped: 0, delivered: 0, revenue: 0 };
-      map[id].orders++;
-      if (reachedConfirmedStage(o)) map[id].confirmed++;
-      if (SHIPPED_STATUSES.includes(o.delivery_status || "")) map[id].shipped++;
-      if (DELIVERED_STATUSES.includes(o.delivery_status || "")) {
+      if (inRangeByEvent(o, o.updated_at)) map[id].orders++;
+      if (reachedConfirmedStage(o) && inRangeByEvent(o, o.confirmed_at)) map[id].confirmed++;
+      if (SHIPPED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.updated_at)) map[id].shipped++;
+      if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) {
         map[id].delivered++;
         map[id].revenue += (o.price || 0) * (o.quantity || 1);
       }
@@ -397,7 +428,7 @@ export default function SellerAnalytics() {
       delPct: pct(d.delivered, d.confirmed),
       revenue: d.revenue,
     }));
-  }, [filteredOrders, profileMap]);
+  }, [orders, productFilter, dateFieldMode, dateRange, profileMap]);
 
   const sortedSellerRows = useMemo(() => {
     return [...sellerRows].sort((a, b) => {
@@ -423,18 +454,30 @@ export default function SellerAnalytics() {
     const map: Record<string, { orders: number; confirmed: number; delivered: number }> = {};
     days.forEach(({ label }) => { map[label] = { orders: 0, confirmed: 0, delivered: 0 }; });
 
-    filteredOrders.forEach((o) => {
-      const d = format(new Date(o.created_at), "MMM d");
-      if (map[d]) {
-        map[d].orders++;
-        if (reachedConfirmedStage(o)) map[d].confirmed++;
-        if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[d].delivered++;
+    const matchesFilters = (o: Order) =>
+      (sellerFilter === "all" || o.seller_id === sellerFilter) &&
+      (productFilter === "all" || o.product_name === productFilter);
+    // Bucket each metric by its own event date (per chosen basis) so the trend
+    // matches the KPI cards: created → created_at; updated → confirmed_at / delivered_at.
+    const eventDay = (o: Order, eventIso: string | null) =>
+      format(new Date(dateFieldMode === "created" ? o.created_at : (eventIso ?? o.updated_at)), "MMM d");
+
+    orders.filter(matchesFilters).forEach((o) => {
+      const od = eventDay(o, o.updated_at);
+      if (map[od]) map[od].orders++;
+      if (reachedConfirmedStage(o)) {
+        const cd = eventDay(o, o.confirmed_at);
+        if (map[cd]) map[cd].confirmed++;
+      }
+      if (DELIVERED_STATUSES.includes(o.delivery_status || "")) {
+        const dd = eventDay(o, o.delivered_at);
+        if (map[dd]) map[dd].delivered++;
       }
     });
 
     // Show at most 30 days
     return days.slice(-30).map(({ label }) => ({ label, ...map[label] }));
-  }, [filteredOrders, dateRange]);
+  }, [orders, sellerFilter, productFilter, dateFieldMode, dateRange]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
