@@ -288,16 +288,19 @@ export default function SellerAnalytics() {
 
   const confirmationKPIs = useMemo(() => {
     const total = filteredOrders.length;
-    // Use confirmed_at for date-accurate count — avoids inflating count when
-    // dateFieldMode="updated" picks up old confirmed orders recently touched by delivery updates
+    // Basis semantics (must match the seller Dashboard):
+    //   created → cohort view: of the orders CREATED in this range, how many are confirmed
+    //             (count confirmed orders by created_at — same date field as `total`).
+    //   updated → event view: how many orders were CONFIRMED in this range, regardless of
+    //             when created (count by confirmed_at, fallback updated_at).
     const confirmed = (dateRange?.from
       ? orders.filter((o) => {
           if (!reachedConfirmedStage(o)) return false;
           if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
           if (productFilter !== "all" && o.product_name !== productFilter) return false;
-          // If confirmed_at available, use it; otherwise fall back to updated_at
-          // (orders confirmed today but missing confirmed_at still have updated_at = today)
-          const dateToCheck = o.confirmed_at ?? o.updated_at;
+          const dateToCheck = dateFieldMode === "created"
+            ? o.created_at
+            : (o.confirmed_at ?? o.updated_at);
           return isWithinRange(new Date(dateToCheck), dateRange);
         })
       : filteredOrders.filter(reachedConfirmedStage)
@@ -311,7 +314,7 @@ export default function SellerAnalytics() {
     const cancelled = filteredOrders.filter((o) => o.confirmation_status === "cancelled").length;
     const confRate = pct(confirmedCount, total);
     return { total, confirmedCount, whatsapp, agent, newOrders, noAnswer, postponed, cancelled, confRate };
-  }, [filteredOrders]);
+  }, [filteredOrders, orders, dateRange, sellerFilter, productFilter, dateFieldMode]);
 
   // ── Delivery KPIs ────────────────────────────────────────────────────────────
 

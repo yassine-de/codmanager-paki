@@ -55,6 +55,31 @@ export interface DashboardKPIs {
 const DASHBOARD_ORDER_SELECT = "id, order_id, confirmation_status, delivery_status, total_amount, price, quantity, product_name, seller_id, created_at, confirmed_at, delivered_at, last_attempt_at, last_activity_at, updated_at";
 const DASHBOARD_PAGE_SIZE = 1000;
 
+// The date basis the user chose to filter the dashboard by.
+//   "created" → cohort view: every metric is filtered by orders.created_at
+//               (of the orders CREATED in this range, how many confirmed / delivered…)
+//   "updated" → event view: each metric is filtered by WHEN that event happened
+//               (how many orders were CONFIRMED / DELIVERED in this range, no matter
+//                when they were created) → confirmed_at / delivered_at, else updated_at.
+export type DateBasis = "created" | "updated";
+
+type MetricKind = "generic" | "confirmed" | "delivered";
+
+// Returns the date used to decide whether order `o` falls in the selected range,
+// given the chosen basis and which metric is being counted.
+function eventDate(o: DashboardOrder, basis: DateBasis, kind: MetricKind = "generic"): Date {
+  if (basis === "created") return new Date(o.created_at);
+  // "updated" basis → use the real event timestamp for that metric.
+  if (kind === "confirmed") return new Date(o.confirmed_at ?? o.updated_at);
+  if (kind === "delivered") return new Date(o.delivered_at ?? o.updated_at);
+  return new Date(o.updated_at);
+}
+
+// Generic basis date for filtering the order LIST (status breakdown, top products/sellers).
+function getBasisDate(o: DashboardOrder, basis: DateBasis): Date {
+  return new Date(basis === "updated" ? o.updated_at : o.created_at);
+}
+
 function isInDay(date: Date, start: Date, nextDay: Date): boolean {
   return date >= start && date < nextDay;
 }
@@ -92,22 +117,28 @@ function getConfirmationEventDate(o: DashboardOrder): Date | null {
   return o.confirmed_at ? new Date(o.confirmed_at) : null;
 }
 
-function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dateRange?: { from: Date; to: Date }): DashboardKPIs {
-  // If date range provided, recompute each metric using its own event date from allOrders.
-  // Otherwise fall back to the pre-filtered orders list (no date filter).
+function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dateRange?: { from: Date; to: Date }, basis: DateBasis = "created"): DashboardKPIs {
+  // If a date range is provided, every metric is filtered by the SAME chosen date
+  // basis (created_at or updated_at) so the numbers are internally consistent and
+  // match what the user selected. Otherwise fall back to the pre-filtered orders list.
   const source = allOrders && dateRange ? allOrders : orders;
   const inRange = (d: Date) => !dateRange || (d >= dateRange.from && d <= dateRange.to);
+  // Per-metric range test: under "created" basis every metric uses created_at
+  // (cohort view); under "updated" basis each metric uses its own event date
+  // (confirmed_at for confirmed, delivered_at for delivered, updated_at otherwise).
+  const inRangeFor = (o: DashboardOrder, kind: MetricKind) => inRange(eventDate(o, basis, kind));
 
-  // Total Orders = orders CREATED in this period (created_at)
+  // Total Orders = orders whose chosen date falls in this period
   const total = dateRange
-    ? source.filter(o => inRange(new Date(o.created_at))).length
+    ? source.filter(o => inRangeFor(o, "generic")).length
     : orders.length;
 
   // Confirmation status counts — use treatment-filtered orders for status breakdown
   const newOrders = orders.filter(o => o.confirmation_status === 'new').length;
-  // Confirmed = orders whose confirmation EVENT happened in this period (confirmed_at)
+  // Confirmed = orders currently confirmed whose chosen date falls in this period.
+  //   created → confirmed orders CREATED in range; updated → confirmed in range (confirmed_at)
   const confirmed = dateRange
-    ? source.filter(o => { const d = getConfirmationEventDate(o); return reachedConfirmedStage(o) && d != null && inRange(d); }).length
+    ? source.filter(o => reachedConfirmedStage(o) && inRangeFor(o, "confirmed")).length
     : orders.filter(reachedConfirmedStage).length;
   const noAnswer = orders.filter(o => o.confirmation_status === 'no_answer').length;
   const postponed = orders.filter(o => o.confirmation_status === 'postponed').length;
@@ -121,9 +152,9 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
   const shipped = orders.filter(o => ['shipped', 'booked'].includes(o.delivery_status || '')).length;
   const inTransit = orders.filter(o => o.delivery_status === 'in_transit').length;
   const withCourier = orders.filter(o => o.delivery_status === 'with_courier').length;
-  // Delivered = orders DELIVERED in this period (delivered_at event date)
+  // Delivered = orders currently delivered/paid whose chosen date falls in this period
   const delivered = dateRange
-    ? source.filter(o => { const d = getDeliveredEventDate(o); return reachedDeliveredStage(o) && d != null && inRange(d); }).length
+    ? source.filter(o => reachedDeliveredStage(o) && inRangeFor(o, "delivered")).length
     : orders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
   const paid = orders.filter(o => o.delivery_status === 'paid').length;
   // Returned = 'return' (current) OR 'returned' (legacy) OR 'ready_for_return'
@@ -142,23 +173,23 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
   // Revenue (Delivered Amount) = total of orders delivered/paid in this period
   const revenue = dateRange
     ? source
-        .filter(o => { const d = getDeliveredEventDate(o); return reachedDeliveredStage(o) && d != null && inRange(d); })
+        .filter(o => reachedDeliveredStage(o) && inRangeFor(o, "delivered"))
         .reduce((s, o) => s + Number(o.total_amount), 0)
     : orders
         .filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid')
         .reduce((s, o) => s + Number(o.total_amount), 0);
-  // Paid Amount = total of orders with delivery_status 'paid' in this period (by delivered_at event)
+  // Paid Amount = total of orders with delivery_status 'paid' whose chosen date is in this period
   const paidAmount = dateRange
     ? source
-        .filter(o => { const d = getDeliveredEventDate(o); return o.delivery_status === 'paid' && d != null && inRange(d); })
+        .filter(o => o.delivery_status === 'paid' && inRangeFor(o, "delivered"))
         .reduce((s, o) => s + Number(o.total_amount), 0)
     : orders
         .filter(o => o.delivery_status === 'paid')
         .reduce((s, o) => s + Number(o.total_amount), 0);
-  // Pending Amount = delivered (not yet paid) in this period
+  // Pending Amount = delivered (not yet paid) whose chosen date is in this period
   const pendingAmount = dateRange
     ? source
-        .filter(o => { const d = getDeliveredEventDate(o); return o.delivery_status === 'delivered' && d != null && inRange(d); })
+        .filter(o => o.delivery_status === 'delivered' && inRangeFor(o, "delivered"))
         .reduce((s, o) => s + Number(o.total_amount), 0)
     : orders
         .filter(o => o.delivery_status === 'delivered')
@@ -256,7 +287,7 @@ function computeDailyData(orders: DashboardOrder[], numDays: number) {
   });
 }
 
-export function useDashboardData(dateRange?: DateRange) {
+export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "created") {
   const { data: allOrders = [], isLoading, error } = useQuery({
     queryKey: ["dashboard-orders"],
     queryFn: fetchAllDashboardOrders,
@@ -264,25 +295,22 @@ export function useDashboardData(dateRange?: DateRange) {
     refetchOnWindowFocus: true,
   });
 
-  // Filter by date range on treatment date
-
-  // Filter by date range on treatment date
+  // Filter by date range on the chosen basis date (created_at or updated_at)
   const orders = useMemo(() => {
     if (!dateRange?.from) return allOrders;
     const from = startOfDayPKT(dateRange.from);
     const to = dateRange.to ? endOfDayPKT(dateRange.to) : endOfDayPKT(dateRange.from);
-    return allOrders.filter(o => {
-      const treatDate = getTreatmentDate(o);
-      return isWithinInterval(treatDate, { start: from, end: to });
-    });
-  }, [allOrders, dateRange]);
+    return allOrders.filter(o =>
+      isWithinInterval(getBasisDate(o, dateBasis), { start: from, end: to }),
+    );
+  }, [allOrders, dateRange, dateBasis]);
 
   const kpis = useMemo(() => {
     if (!dateRange?.from) return computeKPIs(orders);
     const from = startOfDayPKT(dateRange.from);
     const to = dateRange.to ? endOfDayPKT(dateRange.to) : endOfDayPKT(dateRange.from);
-    return computeKPIs(orders, allOrders, { from, to });
-  }, [orders, allOrders, dateRange]);
+    return computeKPIs(orders, allOrders, { from, to }, dateBasis);
+  }, [orders, allOrders, dateRange, dateBasis]);
   // Daily charts: when a date range is active, bucket each day in the range by event date.
   // Otherwise fall back to last-7-days view.
   const last7 = useMemo(() => {
@@ -297,20 +325,20 @@ export function useDashboardData(dateRange?: DateRange) {
       return Array.from({ length: cappedDays }, (_, i) => {
         const start   = new Date(from.getTime() + (startOffset + i) * MS_PER_DAY);
         const nextDay = new Date(start.getTime() + MS_PER_DAY);
-        const dropped   = allOrders.filter(o => isInDay(new Date(o.created_at), start, nextDay)).length;
+        // Bucket each line by its own event date (per chosen basis) so the trend
+        // matches the KPI cards: created → created_at; updated → confirmed_at / delivered_at.
+        const dropped   = allOrders.filter(o => isInDay(eventDate(o, dateBasis, "generic"), start, nextDay)).length;
         const confirmed = allOrders.filter(o => {
           if (!reachedConfirmedStage(o)) return false;
-          const d = getConfirmationEventDate(o);
-          return d != null && isInDay(d, start, nextDay);
+          return isInDay(eventDate(o, dateBasis, "confirmed"), start, nextDay);
         }).length;
         const delivered = allOrders.filter(o => {
           if (!reachedDeliveredStage(o)) return false;
-          const d = getDeliveredEventDate(o);
-          return d != null && isInDay(d, start, nextDay);
+          return isInDay(eventDate(o, dateBasis, "delivered"), start, nextDay);
         }).length;
         const shipped = allOrders.filter(o => {
           if (!o.delivery_status || !SHIPPED_DELIVERY_STATUSES.includes(o.delivery_status)) return false;
-          return isInDay(getTreatmentDate(o), start, nextDay);
+          return isInDay(eventDate(o, dateBasis, "delivered"), start, nextDay);
         }).length;
         return {
           day: `${formatPKT(start, "EEE")}\n${formatPKT(start, "dd/MM")}`,
@@ -321,7 +349,7 @@ export function useDashboardData(dateRange?: DateRange) {
       });
     }
     return computeDailyData(allOrders, 7);
-  }, [allOrders, dateRange]);
+  }, [allOrders, dateRange, dateBasis]);
 
   const totals7 = useMemo(() => ({
     orders: last7.reduce((s, d) => s + d.orders, 0),

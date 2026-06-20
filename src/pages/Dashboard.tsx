@@ -16,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 import { formatPKT as format } from "@/lib/timezone";
 import type { LucideIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
-import { useDashboardData } from "@/hooks/useDashboardData";
+import { useDashboardData, type DateBasis } from "@/hooks/useDashboardData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import OnlineStatusPanel from "@/components/OnlineStatusPanel";
@@ -331,7 +331,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const { kpis, last7, totals7, topProducts, topSellers, isLoading } = useDashboardData(dateRange);
+  const [dateBasis, setDateBasis] = useState<DateBasis>("created");
+  const { kpis, last7, totals7, topProducts, topSellers, isLoading } = useDashboardData(dateRange, dateBasis);
 
   // Resolve seller IDs to names
   const sellerIds = useMemo(() => topSellers.map(s => s.sellerId), [topSellers]);
@@ -383,13 +384,34 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-[1400px]">
-      <div className="sticky top-0 z-30 -mx-5 lg:-mx-6 px-5 lg:px-6 py-3 bg-background/80 glass border-b mb-1">
+      <div className="sticky top-0 z-30 -mx-5 lg:-mx-6 px-5 lg:px-6 py-3 bg-background/80 glass border-b mb-1 flex flex-wrap items-center gap-3">
         <DatePresetFilter
           dateRange={dateRange}
           onDateRangeChange={setDateRange}
           preset={datePreset}
           onPresetChange={setDatePreset}
         />
+        {/* Date basis: filter the whole dashboard by created_at or updated_at */}
+        <div className="inline-flex items-center rounded-lg border bg-background p-0.5 text-xs">
+          {([
+            { value: "created", label: "Created" },
+            { value: "updated", label: "Updated" },
+          ] as { value: DateBasis; label: string }[]).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setDateBasis(opt.value)}
+              className={
+                "px-3 py-1.5 rounded-md font-medium transition-colors " +
+                (dateBasis === opt.value
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground")
+              }
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-8 mt-5">
