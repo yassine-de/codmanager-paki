@@ -12,9 +12,11 @@ interface CitySelectProps {
   className?: string;
   triggerClassName?: string;
   highlightInvalid?: boolean;
+  /** Set true when rendered inside a Dialog so the popover gets its own focus/pointer layer. */
+  modal?: boolean;
 }
 
-export function CitySelect({ value, onValueChange, className, triggerClassName, highlightInvalid }: CitySelectProps) {
+export function CitySelect({ value, onValueChange, className, triggerClassName, highlightInvalid, modal }: CitySelectProps) {
   const [open, setOpen] = React.useState(false);
   const { data: cities = [], isLoading } = useOrioCities();
 
@@ -25,7 +27,7 @@ export function CitySelect({ value, onValueChange, className, triggerClassName, 
   }, [highlightInvalid, value, cities, isLoading]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={modal}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"

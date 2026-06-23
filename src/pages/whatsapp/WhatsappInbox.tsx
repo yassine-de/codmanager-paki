@@ -38,6 +38,7 @@ import {
   Languages,
   ArrowLeft,
   MapPin,
+  Pencil,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -58,6 +59,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { SendTemplateModal } from "@/components/whatsapp/SendTemplateModal";
+import { useOrioCities } from "@/hooks/useOrioCities";
+import { CitySelect } from "@/components/CitySelect";
 
 type Conv = {
   id: string;
@@ -531,11 +534,24 @@ export default function WhatsappInbox() {
   const [recording, setRecording] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [orderInfoOpen, setOrderInfoOpen] = useState(false);
+  // Valid ORIO cities — used to flag a wrong/unrecognized order city in red.
+  const { data: orioCities = [], isLoading: orioCitiesLoading } = useOrioCities();
+  const validCityKeys = useMemo(
+    () => new Set(orioCities.map((c) => (c.city_name || "").trim().toLowerCase().replace(/\s+/g, ""))),
+    [orioCities],
+  );
+  const isCityInvalid = (city?: string | null) => {
+    if (!city || orioCitiesLoading || validCityKeys.size === 0) return false;
+    return !validCityKeys.has(city.trim().toLowerCase().replace(/\s+/g, ""));
+  };
   const [editConfStatus, setEditConfStatus] = useState("");
   const [editDelStatus, setEditDelStatus] = useState("");
   const [editingAddress, setEditingAddress] = useState(false);
   const [addressDraft, setAddressDraft] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
+  const [editingCity, setEditingCity] = useState(false);
+  const [cityDraft, setCityDraft] = useState("");
+  const [savingCity, setSavingCity] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveNote, setResolveNote] = useState("");
@@ -2277,6 +2293,10 @@ export default function WhatsappInbox() {
           setEditConfStatus(order.confirmation_status || "new");
           setEditDelStatus(order.delivery_status || "pending");
         }
+        if (!o) {
+          setEditingCity(false);
+          setEditingAddress(false);
+        }
       }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -2362,8 +2382,78 @@ export default function WhatsappInbox() {
                     <div className="font-semibold">Rs {Number(order.total_amount || 0).toLocaleString()}</div>
                   </div>
                   <div>
-                    <div className="text-[11px] text-muted-foreground">City</div>
-                    <div>{order.customer_city || "—"}</div>
+                    <div className="text-[11px] text-muted-foreground mb-0.5">City</div>
+                    {editingCity ? (
+                      <div className="space-y-2">
+                        <CitySelect
+                          value={cityDraft}
+                          onValueChange={setCityDraft}
+                          highlightInvalid
+                          modal
+                          triggerClassName="h-8 text-sm w-full"
+                          className="w-[240px]"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs"
+                            disabled={savingCity || !cityDraft.trim()}
+                            onClick={async () => {
+                              setSavingCity(true);
+                              const { error } = await supabase
+                                .from("orders")
+                                .update({ customer_city: cityDraft.trim(), updated_at: new Date().toISOString() })
+                                .eq("order_id", order.order_id);
+                              setSavingCity(false);
+                              if (error) {
+                                toast.error("Failed to update city");
+                                return;
+                              }
+                              qc.invalidateQueries({ queryKey: ["wts-order", order.order_id] });
+                              toast.success("City updated");
+                              setEditingCity(false);
+                            }}
+                          >
+                            {savingCity ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            disabled={savingCity}
+                            onClick={() => setEditingCity(false)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span
+                          className={cn(
+                            isCityInvalid(order.customer_city) && "text-destructive font-semibold",
+                          )}
+                          title={isCityInvalid(order.customer_city) ? `"${order.customer_city}" is not a valid ORIO city` : undefined}
+                        >
+                          {order.customer_city || "—"}
+                          {isCityInvalid(order.customer_city) && (
+                            <span className="ml-1 text-[10px] font-normal">(wrong city)</span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          title="Edit city"
+                          onClick={() => {
+                            setCityDraft(order.customer_city || "");
+                            setEditingCity(true);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="text-[11px] text-muted-foreground">Created</div>
