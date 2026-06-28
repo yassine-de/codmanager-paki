@@ -2404,6 +2404,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      normalize_phone_key: { Args: { p: string }; Returns: string }
       process_agent_switch_timeouts: { Args: never; Returns: number }
       reclaim_no_answer_order: {
         Args: { p_order_id: string }
