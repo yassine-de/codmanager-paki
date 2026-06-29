@@ -4,13 +4,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatPKT as format } from "@/lib/timezone";
+import { formatPKT as format, PKT } from "@/lib/timezone";
 import type { DateRange } from "react-day-picker";
+import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import {
-  startOfDayPKT, endOfDayPKT,
-  startOfMonthPKT, endOfMonthPKT,
-  subDaysPKT, subMonthsPKT,
-} from "@/lib/timezone";
+  startOfDay, endOfDay, startOfMonth, endOfMonth, subDays, subMonths,
+} from "date-fns";
 
 export type DatePresetValue = "today" | "yesterday" | "7d" | "this_month" | "last_month" | "maximum" | "custom";
 
@@ -24,26 +23,30 @@ const datePresets: { label: string; value: DatePresetValue }[] = [
 ];
 
 export function getDateRangeFromPreset(preset: DatePresetValue): DateRange | undefined {
-  const now = new Date();
+  // Work entirely in PKT wall-clock (single conversion), then map back to UTC
+  // instants once. Composing the *PKT helpers (e.g. startOfDayPKT(subDaysPKT()))
+  // double-converts and shifts the day by the +5h offset, which is the bug that
+  // made "Yesterday" resolve to today.
+  const nowZ = toZonedTime(new Date(), PKT);
+  const dayRange = (d: Date): DateRange => ({
+    from: fromZonedTime(startOfDay(d), PKT),
+    to: fromZonedTime(endOfDay(d), PKT),
+  });
   switch (preset) {
     case "today":
-      return { from: startOfDayPKT(now), to: endOfDayPKT(now) };
-    case "yesterday": {
-      const y = subDaysPKT(now, 1);
-      return { from: startOfDayPKT(y), to: endOfDayPKT(y) };
-    }
+      return dayRange(nowZ);
+    case "yesterday":
+      return dayRange(subDays(nowZ, 1));
     case "7d":
-      return { from: startOfDayPKT(subDaysPKT(now, 6)), to: endOfDayPKT(now) };
+      return { from: fromZonedTime(startOfDay(subDays(nowZ, 6)), PKT), to: fromZonedTime(endOfDay(nowZ), PKT) };
     case "this_month":
-      return { from: startOfMonthPKT(now), to: endOfDayPKT(now) };
+      return { from: fromZonedTime(startOfMonth(nowZ), PKT), to: fromZonedTime(endOfDay(nowZ), PKT) };
     case "last_month": {
-      const lm = subMonthsPKT(now, 1);
-      return { from: startOfMonthPKT(lm), to: endOfMonthPKT(lm) };
+      const lm = subMonths(nowZ, 1);
+      return { from: fromZonedTime(startOfMonth(lm), PKT), to: fromZonedTime(endOfMonth(lm), PKT) };
     }
     case "maximum":
-      return undefined;
     case "custom":
-      return undefined;
     default:
       return undefined;
   }

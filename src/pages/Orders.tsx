@@ -3,8 +3,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { eachDayOfInterval, isAfter } from "date-fns";
-import { startOfDayPKT as startOfDay, subDaysPKT as subDays, formatPKT as fmtDate } from "@/lib/timezone";
-import { Search, SlidersHorizontal, X, Columns3, CalendarIcon, Filter, Pencil, History, MessageCircle, Download, RefreshCw, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Copy, Check } from "lucide-react";
+import { startOfDayPKT as startOfDay, endOfDayPKT, subDaysPKT as subDays, formatPKT as fmtDate } from "@/lib/timezone";
+import { Search, SlidersHorizontal, X, Columns3, CalendarIcon, Filter, Pencil, History, MessageCircle, Download, RefreshCw, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Copy, Check, PackageCheck } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
@@ -434,6 +434,8 @@ export default function Orders() {
   // Filters state
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [deliveredDatePreset, setDeliveredDatePreset] = useState<DatePresetValue>("maximum");
+  const [deliveredDateRange, setDeliveredDateRange] = useState<DateRange | undefined>();
   const [filterProduct, setFilterProduct] = useState('all');
   const [filterSeller, setFilterSeller] = useState('all');
   const [filterAgent, setFilterAgent] = useState('all');
@@ -475,6 +477,7 @@ export default function Orders() {
     const del = new URLSearchParams(window.location.search).get('delivery');
     return {
       dateRange: undefined as DateRange | undefined,
+      deliveredRange: undefined as DateRange | undefined,
       product: 'all', seller: 'all', agent: 'all',
       confirmation: conf || 'all',
       delivery: del || 'all',
@@ -512,23 +515,25 @@ export default function Orders() {
 
   const applyFilters = useCallback(() => {
     setAppliedFilters({
-      dateRange, product: filterProduct, seller: filterSeller, agent: filterAgent,
+      dateRange, deliveredRange: deliveredDateRange,
+      product: filterProduct, seller: filterSeller, agent: filterAgent,
       confirmation: filterConfirmation, delivery: filterDelivery,
       subStatus: filterSubStatus,
       channel: filterChannel,
       upsell: filterUpsell,
     });
-  }, [dateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell]);
+  }, [dateRange, deliveredDateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
+    setDeliveredDateRange(undefined); setDeliveredDatePreset('maximum');
     setFilterProduct('all'); setFilterSeller('all'); setFilterAgent('all');
     setFilterConfirmation('all'); setFilterDelivery('all');
     setFilterSubStatus('all');
     setFilterChannel('all');
     setFilterUpsell('all');
     setAppliedFilters({
-      dateRange: undefined, product: 'all', seller: 'all', agent: 'all',
+      dateRange: undefined, deliveredRange: undefined, product: 'all', seller: 'all', agent: 'all',
       confirmation: 'all', delivery: 'all', subStatus: 'all', channel: 'all', upsell: 'all',
     });
   }, []);
@@ -536,6 +541,7 @@ export default function Orders() {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (appliedFilters.dateRange?.from) count++;
+    if (appliedFilters.deliveredRange?.from) count++;
     if (appliedFilters.product !== 'all') count++;
     if (appliedFilters.seller !== 'all') count++;
     if (appliedFilters.agent !== 'all') count++;
@@ -547,14 +553,33 @@ export default function Orders() {
     return count;
   }, [appliedFilters]);
 
+  // Count of orders actually delivered within the selected "Delivered At" range (admin filter).
+  const deliveredInRangeCount = useMemo(() => {
+    const r = appliedFilters.deliveredRange;
+    if (!r?.from) return null;
+    return orders.filter(o => {
+      if (!o.deliveredAt) return false;
+      const d = new Date(o.deliveredAt);
+      if (d < startOfDay(r.from!)) return false;
+      if (d > endOfDayPKT(r.to ?? r.from!)) return false;
+      return true;
+    }).length;
+  }, [orders, appliedFilters.deliveredRange]);
+
   const filtered = useMemo(() => {
     const f = appliedFilters;
     return orders
       .filter(o => {
         if (f.dateRange?.from) {
           const d = new Date(o.createdAt);
-          if (d < f.dateRange.from) return false;
-          if (f.dateRange.to && d > new Date(f.dateRange.to.getTime() + 86400000)) return false;
+          if (d < startOfDay(f.dateRange.from)) return false;
+          if (d > endOfDayPKT(f.dateRange.to ?? f.dateRange.from)) return false;
+        }
+        if (f.deliveredRange?.from) {
+          if (!o.deliveredAt) return false;
+          const d = new Date(o.deliveredAt);
+          if (d < startOfDay(f.deliveredRange.from)) return false;
+          if (d > endOfDayPKT(f.deliveredRange.to ?? f.deliveredRange.from)) return false;
         }
         if (f.product !== 'all' && !o.products.some(p => p.name === f.product)) return false;
         if (f.seller !== 'all' && o.seller !== f.seller) return false;
@@ -668,7 +693,11 @@ export default function Orders() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {/* Date Range */}
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Date Range</label>
+              <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <CalendarIcon className="h-3.5 w-3.5 text-primary" />
+                Date Range
+                <span className="text-[10px] font-normal text-muted-foreground/60">(created)</span>
+              </label>
               <DatePresetFilter
                 dateRange={dateRange}
                 onDateRangeChange={setDateRange}
@@ -676,6 +705,30 @@ export default function Orders() {
                 onPresetChange={setDatePreset}
               />
             </div>
+            {/* Delivered At - admin only */}
+            {isAdmin && (
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <PackageCheck className="h-3.5 w-3.5 text-[hsl(155,50%,42%)]" />
+                Delivered At
+              </label>
+              <DatePresetFilter
+                dateRange={deliveredDateRange}
+                onDateRangeChange={setDeliveredDateRange}
+                preset={deliveredDatePreset}
+                onPresetChange={setDeliveredDatePreset}
+              />
+              {deliveredInRangeCount !== null && (
+                <div className="inline-flex items-center gap-1.5 rounded-md bg-[hsl(155,50%,42%)]/10 px-2 py-1 ring-1 ring-inset ring-[hsl(155,50%,42%)]/20">
+                  <PackageCheck className="h-3.5 w-3.5 text-[hsl(155,50%,42%)]" />
+                  <span className="text-xs font-bold tabular-nums text-[hsl(155,50%,42%)]">
+                    {deliveredInRangeCount.toLocaleString()}
+                  </span>
+                  <span className="text-[11px] font-medium text-[hsl(155,50%,42%)]/80">delivered</span>
+                </div>
+              )}
+            </div>
+            )}
             {/* Product */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Product</label>
