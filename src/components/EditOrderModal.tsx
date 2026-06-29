@@ -54,6 +54,7 @@ interface Props {
 export default function EditOrderModal({ open, onOpenChange, order, onSave }: Props) {
   const { authUser } = useAuth();
   const isSeller = authUser?.role === 'seller';
+  const isAdmin = authUser?.role === 'admin';
 
   // Fetch seller's own products for the dropdown
   const { data: sellerProducts } = useQuery({
@@ -276,14 +277,14 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                     Delivery
                     {order.orioShippingStatus && (
                       <span className="ml-2 text-[10px] text-muted-foreground font-normal">
-                        (auto from ORIO Sub Status)
+                        {isAdmin ? "(auto from ORIO — admin can override)" : "(auto from ORIO Sub Status)"}
                       </span>
                     )}
                   </Label>
                   <Select
                     value={deliveryStatus}
                     onValueChange={v => setDeliveryStatus(v as DeliveryStatus)}
-                    disabled={!!order.orioShippingStatus}
+                    disabled={!!order.orioShippingStatus && !isAdmin}
                   >
                     <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
