@@ -733,6 +733,336 @@ AS $$
   ORDER BY count(*) DESC;
 $$;
 
+CREATE OR REPLACE FUNCTION public.generate_seller_display_id(p_name text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_clean_name text := regexp_replace(coalesce(trim(p_name), ''), '\s+', ' ', 'g');
+  v_parts text[];
+  v_first text;
+  v_last text;
+  v_prefix text;
+  v_counter integer;
+BEGIN
+  IF v_clean_name = '' THEN
+    v_prefix := 'SE';
+  ELSE
+    v_parts := string_to_array(v_clean_name, ' ');
+    v_first := v_parts[1];
+    v_last := COALESCE(v_parts[array_length(v_parts, 1)], v_first);
+    v_prefix := upper(left(regexp_replace(v_first, '[^A-Za-z]', '', 'g'), 1) || left(regexp_replace(v_last, '[^A-Za-z]', '', 'g'), 1));
+    IF length(v_prefix) < 2 THEN
+      v_prefix := upper(left(regexp_replace(v_clean_name, '[^A-Za-z]', '', 'g') || 'SE', 2));
+    END IF;
+  END IF;
+
+  INSERT INTO public.seller_display_id_counters (prefix, current_counter)
+  VALUES (v_prefix, 1)
+  ON CONFLICT (prefix)
+  DO UPDATE SET current_counter = public.seller_display_id_counters.current_counter + 1
+  RETURNING current_counter INTO v_counter;
+
+  RETURN v_prefix || '-' || lpad(v_counter::text, 2, '0');
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.release_expired_order_locks()
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  UPDATE public.orders
+  SET agent_id = NULL,
+      assigned_at = NULL,
+      last_activity_at = NULL,
+      updated_at = now()
+  WHERE agent_id IS NOT NULL
+    AND confirmation_status IN ('new', 'no_answer', 'postponed')
+    AND last_activity_at IS NOT NULL
+    AND last_activity_at < now() - interval '6 minutes';
+$$;
+
+CREATE OR REPLACE FUNCTION public.cleanup_agent_activity_log()
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  DELETE FROM public.agent_activity_log
+  WHERE created_at < now() - interval '30 days';
+$$;
+
+CREATE OR REPLACE FUNCTION public.process_agent_switch_timeouts()
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_count integer;
+BEGIN
+  UPDATE public.orders
+  SET agent_id = NULL,
+      assigned_at = NULL,
+      agent_switched_at = now(),
+      updated_at = now()
+  WHERE agent_id IS NOT NULL
+    AND confirmation_status IN ('new', 'no_answer', 'postponed')
+    AND agent_switch_scheduled_at IS NOT NULL
+    AND agent_switch_scheduled_at <= now();
+
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.agent_submit_order(
+  p_order_id uuid,
+  p_confirmation_status text,
+  p_agent_id uuid,
+  p_assigned_at timestamptz,
+  p_last_activity_at timestamptz,
+  p_customer_name text,
+  p_customer_phone text,
+  p_customer_city text,
+  p_customer_address text,
+  p_product_name text,
+  p_quantity integer,
+  p_price numeric,
+  p_total_amount numeric,
+  p_is_manual_price boolean,
+  p_note text,
+  p_attempt_count integer,
+  p_original_agent_id uuid DEFAULT NULL,
+  p_last_attempt_at timestamptz DEFAULT NULL,
+  p_attempts_today integer DEFAULT NULL,
+  p_last_attempt_date date DEFAULT NULL,
+  p_postpone_date timestamptz DEFAULT NULL,
+  p_postpone_note text DEFAULT NULL,
+  p_confirmed_at timestamptz DEFAULT NULL,
+  p_delivery_status text DEFAULT NULL,
+  p_cancel_reason text DEFAULT NULL
+)
+RETURNS SETOF public.orders
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE public.orders
+  SET confirmation_status = p_confirmation_status,
+      agent_id = p_agent_id,
+      assigned_at = p_assigned_at,
+      last_activity_at = p_last_activity_at,
+      customer_name = p_customer_name,
+      customer_phone = p_customer_phone,
+      customer_city = p_customer_city,
+      customer_address = p_customer_address,
+      product_name = p_product_name,
+      quantity = p_quantity,
+      price = p_price,
+      total_amount = p_total_amount,
+      is_manual_price = p_is_manual_price,
+      note = p_note,
+      attempt_count = p_attempt_count,
+      original_agent_id = COALESCE(p_original_agent_id, original_agent_id),
+      last_attempt_at = COALESCE(p_last_attempt_at, last_attempt_at),
+      attempts_today = COALESCE(p_attempts_today, attempts_today),
+      last_attempt_date = COALESCE(p_last_attempt_date, last_attempt_date),
+      postpone_date = COALESCE(p_postpone_date, postpone_date),
+      postpone_note = COALESCE(p_postpone_note, postpone_note),
+      confirmed_at = COALESCE(p_confirmed_at, confirmed_at),
+      delivery_status = COALESCE(p_delivery_status, delivery_status),
+      cancel_reason = COALESCE(p_cancel_reason, cancel_reason),
+      updated_at = now()
+  WHERE id = p_order_id
+    AND (agent_id = auth.uid() OR public.is_staff(auth.uid()))
+  RETURNING *;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_invoice_summary(p_invoice_id uuid)
+RETURNS json
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_invoice record;
+  v_rates record;
+  v_rate_settings record;
+  v_pkr_rate numeric := 290.0;
+  v_total_orders_count integer := 0;
+  v_delivered_count integer := 0;
+  v_shipped_count integer := 0;
+  v_confirmed_count integer := 0;
+  v_dropped_count integer := 0;
+  v_delivered_revenue_usd numeric := 0;
+  v_shipping_fees numeric := 0;
+  v_call_center_fees numeric := 0;
+  v_cod_fees numeric := 0;
+  v_addon_net numeric := 0;
+  v_adjustment_net numeric := 0;
+  v_delivered_orders jsonb := '[]'::jsonb;
+  v_all_orders jsonb := '[]'::jsonb;
+  v_shipping_breakdown jsonb := '[]'::jsonb;
+  v_addons jsonb := '[]'::jsonb;
+  v_adjustments jsonb := '[]'::jsonb;
+BEGIN
+  SELECT * INTO v_invoice FROM public.invoices WHERE id = p_invoice_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Invoice not found';
+  END IF;
+
+  SELECT * INTO v_rates FROM public.seller_rates WHERE user_id = v_invoice.seller_id LIMIT 1;
+  SELECT * INTO v_rate_settings
+  FROM public.rate_settings
+  WHERE (seller_id = v_invoice.seller_id AND is_custom = true)
+     OR (seller_id IS NULL AND is_global = true)
+  ORDER BY is_custom DESC, is_global DESC
+  LIMIT 1;
+
+  SELECT
+    count(*)::integer,
+    count(*) FILTER (WHERE delivery_status = 'delivered')::integer,
+    count(*) FILTER (WHERE delivery_status IN ('shipped','in_transit','out_for_delivery','delivered'))::integer,
+    count(*) FILTER (WHERE confirmation_status = 'confirmed')::integer,
+    count(*) FILTER (WHERE confirmation_status IN ('cancelled','dropped','unreachable'))::integer,
+    COALESCE(sum(total_amount) FILTER (WHERE delivery_status = 'delivered'), 0) / v_pkr_rate
+  INTO v_total_orders_count, v_delivered_count, v_shipped_count, v_confirmed_count, v_dropped_count, v_delivered_revenue_usd
+  FROM public.orders
+  WHERE invoice_id = p_invoice_id;
+
+  v_call_center_fees :=
+    v_confirmed_count * COALESCE(v_rate_settings.confirmed_order_rate, 0) +
+    v_dropped_count * COALESCE(v_rate_settings.dropped_order_rate, 0);
+  v_cod_fees := v_delivered_revenue_usd * COALESCE(v_rate_settings.cod_fee_per_delivery, 0) / 100;
+
+  WITH order_weights AS (
+    SELECT
+      o.*,
+      COALESCE(p.weight_kg, CASE
+        WHEN p.weight = 'up_to_1kg' THEN 0.5
+        WHEN p.weight = 'up_to_2kg' THEN 1.5
+        WHEN p.weight = 'up_to_3kg' THEN 2.5
+        WHEN p.weight = 'above_3kg' THEN 3.5
+        ELSE 0.5
+      END) AS weight_kg
+    FROM public.orders o
+    LEFT JOIN public.products p ON p.seller_id = o.seller_id AND p.name = o.product_name
+    WHERE o.invoice_id = p_invoice_id
+  )
+  SELECT
+    COALESCE(jsonb_agg(jsonb_build_object(
+      'id', id,
+      'order_id', order_id,
+      'customer_name', customer_name,
+      'customer_phone', customer_phone,
+      'product_name', product_name,
+      'quantity', quantity,
+      'price', price,
+      'total_amount', total_amount,
+      'created_at', created_at,
+      'weight_kg', weight_kg,
+      'total_weight_kg', weight_kg * quantity,
+      'amount_usd', round(total_amount / v_pkr_rate, 2),
+      'confirmation_status', confirmation_status,
+      'delivery_status', COALESCE(delivery_status, 'none'),
+      'has_adjustment', false,
+      'adjustment_invoice_id', NULL,
+      'adjustment_invoice_number', NULL,
+      'was_delivered', delivery_status = 'delivered'
+    ) ORDER BY created_at DESC), '[]'::jsonb),
+    COALESCE(jsonb_agg(jsonb_build_object(
+      'id', id,
+      'order_id', order_id,
+      'customer_name', customer_name,
+      'customer_phone', customer_phone,
+      'product_name', product_name,
+      'quantity', quantity,
+      'price', price,
+      'total_amount', total_amount,
+      'created_at', created_at,
+      'weight_kg', weight_kg,
+      'total_weight_kg', weight_kg * quantity,
+      'amount_usd', round(total_amount / v_pkr_rate, 2)
+    ) ORDER BY created_at DESC) FILTER (WHERE delivery_status = 'delivered'), '[]'::jsonb)
+  INTO v_all_orders, v_delivered_orders
+  FROM order_weights;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY a.created_at DESC), '[]'::jsonb),
+         COALESCE(sum(CASE WHEN a.type = 'deduction' THEN -abs(a.amount) ELSE a.amount END), 0)
+  INTO v_addons, v_addon_net
+  FROM public.invoice_addons a
+  WHERE a.invoice_id = p_invoice_id;
+
+  SELECT COALESCE(jsonb_agg(to_jsonb(adj) ORDER BY adj.created_at DESC), '[]'::jsonb),
+         COALESCE(sum(adj.difference_usd + COALESCE(adj.shipping_difference_usd, 0)), 0)
+  INTO v_adjustments, v_adjustment_net
+  FROM public.invoice_adjustments adj
+  WHERE adj.applied_invoice_id = p_invoice_id OR adj.invoice_id = p_invoice_id;
+
+  v_shipping_fees := v_delivered_count * COALESCE(v_rates.rate_1kg, 0);
+  v_shipping_breakdown := jsonb_build_array(jsonb_build_object('bracket', 'standard', 'count', v_delivered_count, 'fee', v_shipping_fees));
+
+  RETURN json_build_object(
+    'invoice', to_jsonb(v_invoice),
+    'rates', jsonb_build_object(
+      'shipping', jsonb_build_object(
+        'rate_1kg', COALESCE(v_rates.rate_1kg, 0),
+        'rate_2kg', COALESCE(v_rates.rate_2kg, 0),
+        'rate_3kg', COALESCE(v_rates.rate_3kg, 0),
+        'rate_3kg_plus', COALESCE(v_rates.rate_3kg_plus, 0)
+      ),
+      'call_center', jsonb_build_object(
+        'confirmed_rate', COALESCE(v_rate_settings.confirmed_order_rate, 0),
+        'dropped_rate', COALESCE(v_rate_settings.dropped_order_rate, 0)
+      ),
+      'cod_fee_percentage', COALESCE(v_rate_settings.cod_fee_per_delivery, 0)
+    ),
+    'counts', jsonb_build_object(
+      'total_orders_count', v_total_orders_count,
+      'delivered_count', v_delivered_count,
+      'shipped_count', v_shipped_count,
+      'confirmed_count', v_confirmed_count,
+      'dropped_count', v_dropped_count,
+      'cross_shipped_count', 0,
+      'cross_delivered_count', 0,
+      'cross_confirmed_count', 0
+    ),
+    'call_center_breakdown', jsonb_build_object(
+      'confirmed_count', v_confirmed_count,
+      'confirmed_rate', COALESCE(v_rate_settings.confirmed_order_rate, 0),
+      'confirmed_fees', v_confirmed_count * COALESCE(v_rate_settings.confirmed_order_rate, 0),
+      'dropped_count', v_dropped_count,
+      'dropped_rate', COALESCE(v_rate_settings.dropped_order_rate, 0),
+      'dropped_fees', v_dropped_count * COALESCE(v_rate_settings.dropped_order_rate, 0)
+    ),
+    'delivered_orders', v_delivered_orders,
+    'all_orders', v_all_orders,
+    'shipping_breakdown', v_shipping_breakdown,
+    'addons', v_addons,
+    'adjustments', v_adjustments,
+    'totals', jsonb_build_object(
+      'delivered_revenue_usd', round(v_delivered_revenue_usd, 2),
+      'shipping_fees', v_shipping_fees,
+      'call_center_fees', v_call_center_fees,
+      'cod_fees', v_cod_fees,
+      'addon_net', v_addon_net,
+      'adjustment_net', v_adjustment_net,
+      'previous_balance', COALESCE(v_invoice.previous_balance, 0),
+      'net_payable', round(v_delivered_revenue_usd - v_shipping_fees - v_call_center_fees - v_cod_fees + v_addon_net + v_adjustment_net + COALESCE(v_invoice.previous_balance, 0), 2)
+    )
+  );
+END;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Google Sheets import
 -- ---------------------------------------------------------------------------
@@ -2067,29 +2397,70 @@ CREATE INDEX idx_orders_created_cursor ON public.orders(created_at DESC, id DESC
 CREATE INDEX idx_orders_seller_created ON public.orders(seller_id, created_at DESC, id DESC);
 CREATE INDEX idx_orders_confirmation_created ON public.orders(confirmation_status, created_at DESC, id DESC);
 CREATE INDEX idx_orders_delivery_created ON public.orders(delivery_status, created_at DESC, id DESC);
+CREATE INDEX idx_orders_confirm_delivery_created ON public.orders(confirmation_status, delivery_status, created_at DESC, id DESC);
+CREATE INDEX idx_orders_seller_confirm_created ON public.orders(seller_id, confirmation_status, created_at DESC, id DESC);
+CREATE INDEX idx_orders_seller_delivery_created ON public.orders(seller_id, delivery_status, created_at DESC, id DESC);
+CREATE INDEX idx_orders_fulfillment_created ON public.orders(fulfillment_status, created_at DESC, id DESC);
+CREATE INDEX idx_orders_invoice_created ON public.orders(invoice_id, created_at DESC) WHERE invoice_id IS NOT NULL;
+CREATE INDEX idx_orders_confirmed_at ON public.orders(confirmed_at DESC) WHERE confirmed_at IS NOT NULL;
+CREATE INDEX idx_orders_delivered_at ON public.orders(delivered_at DESC) WHERE delivered_at IS NOT NULL;
+CREATE INDEX idx_orders_agent_queue ON public.orders(confirmation_status, created_at ASC, id ASC) WHERE agent_id IS NULL;
+CREATE INDEX idx_orders_agent_lock_timeout ON public.orders(last_activity_at) WHERE agent_id IS NOT NULL AND confirmation_status IN ('new','no_answer','postponed');
+CREATE INDEX idx_orders_follow_up_queue ON public.orders(follow_up_assigned_to, shipped_at DESC, id DESC) WHERE follow_up_assigned_to IS NOT NULL;
+CREATE INDEX idx_orders_city_created ON public.orders(customer_city, created_at DESC);
+CREATE INDEX idx_orders_system_id ON public.orders(system_id);
 CREATE INDEX idx_orders_agent_created ON public.orders(agent_id, created_at DESC) WHERE agent_id IS NOT NULL;
 CREATE INDEX idx_orders_phone_normalized ON public.orders(customer_phone_normalized);
+CREATE INDEX idx_orders_order_id_trgm ON public.orders USING gin (order_id gin_trgm_ops);
 CREATE INDEX idx_orders_customer_name_trgm ON public.orders USING gin (customer_name gin_trgm_ops);
+CREATE INDEX idx_orders_customer_phone_trgm ON public.orders USING gin (customer_phone gin_trgm_ops);
 CREATE INDEX idx_order_items_order ON public.order_items(order_id);
 CREATE INDEX idx_order_items_variant ON public.order_items(product_variant_id);
+CREATE INDEX idx_order_items_product_order ON public.order_items(product_id, order_id);
 CREATE INDEX idx_order_history_order_created ON public.order_history(order_id, created_at DESC);
+CREATE INDEX idx_order_history_field_value_created ON public.order_history(field_changed, new_value, created_at DESC);
+CREATE INDEX idx_order_status_events_order_created ON public.order_status_events(order_uuid, created_at DESC);
 CREATE INDEX idx_order_follow_ups_status ON public.order_follow_ups(follow_up_status, updated_at DESC);
+CREATE INDEX idx_order_follow_ups_updated ON public.order_follow_ups(updated_at DESC);
 CREATE INDEX idx_calls_agent_created ON public.calls(agent_id, created_at DESC);
+CREATE INDEX idx_calls_order_created ON public.calls(order_id, created_at DESC);
+CREATE INDEX idx_agent_activity_agent_created ON public.agent_activity_log(agent_id, created_at DESC);
 CREATE INDEX idx_integration_sheets_seller ON public.integration_sheets(seller_id);
+CREATE INDEX idx_integration_errors_sheet_created ON public.integration_errors(sheet_id, created_at DESC);
+CREATE INDEX idx_carriers_enabled_priority ON public.carriers(enabled, priority, code);
+CREATE INDEX idx_carrier_city_cache_name_trgm ON public.carrier_city_cache USING gin (city_name gin_trgm_ops);
+CREATE INDEX idx_shipping_rules_active_priority ON public.shipping_rules(enabled, priority);
 CREATE INDEX idx_shipments_order_created ON public.shipments(order_uuid, created_at DESC);
 CREATE INDEX idx_shipments_carrier_created ON public.shipments(carrier_id, created_at DESC);
+CREATE INDEX idx_shipments_order_id ON public.shipments(order_id);
+CREATE INDEX idx_shipments_carrier_status_created ON public.shipments(carrier_id, normalized_status, created_at DESC);
+CREATE INDEX idx_shipments_tracking_trgm ON public.shipments USING gin (tracking_number gin_trgm_ops);
 CREATE UNIQUE INDEX idx_shipments_tracking_unique ON public.shipments(tracking_number) WHERE tracking_number IS NOT NULL;
 CREATE INDEX idx_shipments_sync_created ON public.shipments(sync_status, created_at DESC);
 CREATE INDEX idx_shipments_status_synced ON public.shipments(normalized_status, last_synced_at);
+CREATE INDEX idx_shipments_sync_retry ON public.shipments(sync_status, last_synced_at, created_at) WHERE sync_status IN ('pending','failed');
+CREATE INDEX idx_shipment_events_shipment_created ON public.shipment_events(shipment_id, created_at DESC);
+CREATE INDEX idx_shipment_labels_shipment_created ON public.shipment_labels(shipment_id, created_at DESC);
+CREATE INDEX idx_shipment_payments_shipment_created ON public.shipment_payments(shipment_id, created_at DESC);
+CREATE INDEX idx_fulfillment_batches_status_created ON public.fulfillment_batches(status, created_at DESC);
 CREATE INDEX idx_fulfillment_items_status_created ON public.fulfillment_items(status, created_at DESC, id DESC);
+CREATE INDEX idx_fulfillment_items_shipment ON public.fulfillment_items(shipment_id);
+CREATE INDEX idx_fulfillment_items_order ON public.fulfillment_items(order_uuid);
 CREATE INDEX idx_scan_events_tracking_scanned ON public.scan_events(tracking_number, scanned_at DESC);
+CREATE INDEX idx_scan_events_type_scanned ON public.scan_events(scan_type, scanned_at DESC);
 CREATE INDEX idx_inventory_balances_variant_location ON public.inventory_balances(product_variant_id, location_id);
+CREATE INDEX idx_inventory_balances_location ON public.inventory_balances(location_id, product_variant_id);
 CREATE INDEX idx_inventory_movements_variant_created ON public.inventory_movements(product_variant_id, created_at DESC);
+CREATE INDEX idx_inventory_movements_order_created ON public.inventory_movements(order_uuid, created_at DESC);
+CREATE INDEX idx_inventory_movements_shipment_created ON public.inventory_movements(shipment_id, created_at DESC);
+CREATE INDEX idx_return_receipts_status_received ON public.return_receipts(status, received_at DESC);
+CREATE INDEX idx_return_receipts_shipment ON public.return_receipts(shipment_id);
 CREATE INDEX idx_whatsapp_conversations_status_last ON public.whatsapp_conversations(status, last_message_at DESC);
 CREATE INDEX idx_whatsapp_conversations_phone ON public.whatsapp_conversations(customer_phone_normalized);
 CREATE INDEX idx_whatsapp_conversations_order ON public.whatsapp_conversations(order_id);
 CREATE INDEX idx_whatsapp_messages_conversation_created ON public.whatsapp_messages(conversation_id, created_at DESC);
 CREATE INDEX idx_whatsapp_messages_order_created ON public.whatsapp_messages(order_id, created_at DESC);
+CREATE INDEX idx_whatsapp_messages_direction_created ON public.whatsapp_messages(direction, created_at DESC);
 CREATE UNIQUE INDEX whatsapp_messages_meta_message_id_unique ON public.whatsapp_messages(meta_message_id) WHERE meta_message_id IS NOT NULL;
 CREATE INDEX idx_whatsapp_automations_status ON public.whatsapp_automations(status);
 CREATE INDEX idx_whatsapp_automations_trigger ON public.whatsapp_automations(trigger_type);
@@ -2103,9 +2474,17 @@ CREATE INDEX idx_wts_camp_recip_status ON public.whatsapp_campaign_recipients(ca
 CREATE INDEX idx_ai_memory_phone ON public.whatsapp_ai_memory(customer_phone);
 CREATE INDEX idx_ai_suggestions_conv ON public.whatsapp_ai_suggestions(conversation_id, created_at DESC);
 CREATE INDEX idx_sourcing_requests_seller_created ON public.sourcing_requests(seller_id, created_at DESC);
+CREATE INDEX idx_sourcing_requests_status_created ON public.sourcing_requests(status, created_at DESC);
 CREATE INDEX idx_support_tickets_seller_status ON public.support_tickets(seller_id, status);
+CREATE INDEX idx_support_tickets_status_created ON public.support_tickets(status, created_at DESC);
+CREATE INDEX idx_support_messages_ticket_created ON public.support_messages(ticket_id, created_at DESC);
+CREATE INDEX idx_invoices_seller_status_created ON public.invoices(seller_id, status, created_at DESC);
+CREATE INDEX idx_invoice_items_invoice ON public.invoice_items(invoice_id);
+CREATE INDEX idx_invoice_adjustments_applied_invoice ON public.invoice_adjustments(applied_invoice_id, created_at DESC);
+CREATE INDEX idx_invoice_addons_invoice ON public.invoice_addons(invoice_id, created_at DESC);
 CREATE INDEX idx_daily_metrics_seller_date ON public.daily_order_metrics(seller_id, metric_date);
 CREATE INDEX idx_daily_metrics_carrier_date ON public.daily_order_metrics(carrier_id, metric_date);
+CREATE INDEX idx_daily_metrics_date ON public.daily_order_metrics(metric_date);
 
 -- ---------------------------------------------------------------------------
 -- Triggers
