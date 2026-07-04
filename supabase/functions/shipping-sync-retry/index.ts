@@ -36,16 +36,16 @@ Deno.serve(async (req) => {
 
     const { data: orders, error } = await supabase
       .from("orders")
-      .select("id, order_id, shipments!left(id, sync_status, carrier_id)")
+      .select("id, order_id, shipments(id, sync_status, carrier_id)")
       .eq("confirmation_status", "confirmed")
-      .or(`shipments.id.is.null,shipments.sync_status.in.(pending,failed)`)
-      .limit(50);
+      .order("updated_at", { ascending: true, nullsFirst: true })
+      .limit(200);
     if (error) throw error;
 
     const candidates = (orders || []).filter((order: any) => {
       const shipments = order.shipments || [];
       return shipments.length === 0 || shipments.some((s: any) => s.carrier_id === carrier.id && ["pending", "failed"].includes(s.sync_status));
-    });
+    }).slice(0, 50);
 
     if (candidates.length === 0) {
       return new Response(JSON.stringify({ retried: 0, message: "No stuck orders" }), {
