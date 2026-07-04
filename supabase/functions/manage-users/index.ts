@@ -36,7 +36,7 @@ const agentPermissions = [
 ];
 
 const seedUsers = [
-  { email: "adil@codmanager.com", password: "Am!n2019", name: "Adil Hachmaoui", role: "admin" },
+  { email: "adil@codmanager.com", password: "CodManager2026", name: "Adil Hachmaoui", role: "admin" },
   { email: "bader@codmanager.com", password: "CodManager2026", name: "Badereddine Ait Boulouden", role: "admin" },
   { email: "anwar@codmanager.com", password: "CodManager2026", name: "Anwar Bounasser", role: "admin" },
   { email: "agent1@codmanager.com", password: "Agent2026", name: "Agent One", role: "agent" },

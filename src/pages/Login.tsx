@@ -61,7 +61,7 @@ const Login = () => {
 
       toast.success("Tous les utilisateurs ont été créés !");
       setEmail("adil@codmanager.com");
-      setPassword("Am!n2019");
+      setPassword("CodManager2026");
     } catch (err) {
       console.error(err);
       toast.error("Erreur lors de l'initialisation");
