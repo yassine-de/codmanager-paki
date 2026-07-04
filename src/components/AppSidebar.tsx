@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Headphones, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Zap, Sparkles, Send } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Zap, Sparkles, Send, Warehouse, Truck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -28,6 +28,7 @@ const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUn
   { title: "analytics", url: "/seller-analytics", icon: BarChart3, sellerOnly: true, beta: true },
   { title: "Follow Ups", url: "/follow-ups", icon: ClipboardCheck, adminOnly: true },
   { title: "products", url: "/products", icon: BoxIcon, permission: "access_to_products", sellerVisible: true, badge: productUnseen > 0 ? productUnseen : undefined },
+  { title: "Warehouse", url: "/warehouse", icon: Warehouse, warehouseVisible: true },
   
   { title: "sourcing", url: "/sourcing", icon: Package2, permission: "access_to_sourcing", badge: adminSourcingUnseen > 0 ? adminSourcingUnseen : undefined },
   { title: "Support", url: "/support", icon: MessageSquare, permission: "access_to_settings", badge: supportUnread > 0 ? supportUnread : undefined },
@@ -60,6 +61,7 @@ const settingsSubItems = [
   { title: "users", url: "/users", icon: Users, permission: "access_to_users" },
   { title: "Rates", url: "/rates", icon: BadgeDollarSign, permission: "access_to_settings" },
   { title: "integrations", url: "/integrations", icon: Link2, permission: "access_to_settings" },
+  { title: "Carriers", url: "/carriers", icon: Truck, permission: "access_to_settings" },
   { title: "System Health", url: "/system-health", icon: Activity, permission: "access_to_settings" },
 ];
 
@@ -83,6 +85,7 @@ export function AppSidebar() {
   const isSeller = authUser?.role === "seller";
   const isAgent = authUser?.role === "agent";
   const isFollowUp = authUser?.role === "follow_up";
+  const isWarehouse = authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager";
 
   const { data: orderCount = 0 } = useQuery({
     queryKey: ["sidebar-order-count"],
@@ -244,11 +247,13 @@ export function AppSidebar() {
 
   const visibleItems = navItems.filter((item: any) => {
     if (item.followUpOnly) return isFollowUp;
+    if (item.warehouseVisible) return isAdmin || isWarehouse;
     if (item.agentOnly) return isAgent;
     if (item.sellerOnly) return isSeller;
     if (item.adminOnly) return isAdmin;
     if (item.adminAgentOnly) return isAdmin || isAgent;
     if (isFollowUp) return false;
+    if (isWarehouse) return item.warehouseVisible;
     if (isAgent) return item.permission === "access_to_whatsapp_inbox" && hasWhatsappException;
     if (isSeller) return !item.permission || item.sellerVisible;
     return !item.permission || hasPermission(item.permission);

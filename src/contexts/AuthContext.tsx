@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
-type AppRole = Database["public"]["Enums"]["app_role"];
+type AppRole = Database["public"]["Enums"]["app_role"] | "warehouse_agent" | "warehouse_manager";
 
 interface AuthUser {
   id: string;

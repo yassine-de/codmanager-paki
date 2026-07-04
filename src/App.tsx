@@ -36,6 +36,8 @@ import Support from "./pages/Support";
 import Alerts from "./pages/Alerts";
 import Adjustments from "./pages/Adjustments";
 import SystemHealth from "./pages/SystemHealth";
+import CarrierManagement from "./pages/CarrierManagement";
+import Warehouse from "./pages/Warehouse";
 import FollowUps from "./pages/FollowUps";
 import FollowUpDashboard from "./pages/FollowUpDashboard";
 import FollowUpControl from "./pages/FollowUpControl";
@@ -172,6 +174,8 @@ function AppRoutes() {
         <Route path="/alerts" element={<ProtectedRoute permission="access_to_settings"><Alerts /></ProtectedRoute>} />
         <Route path="/adjustments" element={<ProtectedRoute permission="access_to_settings"><Adjustments /></ProtectedRoute>} />
         <Route path="/system-health" element={<ProtectedRoute permission="access_to_settings"><SystemHealth /></ProtectedRoute>} />
+        <Route path="/carriers" element={<ProtectedRoute permission="access_to_settings"><CarrierManagement /></ProtectedRoute>} />
+        <Route path="/warehouse" element={<ProtectedRoute><Warehouse /></ProtectedRoute>} />
         <Route path="/follow-ups" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />
         <Route path="/follow-up/dashboard" element={<ProtectedRoute><FollowUpDashboard /></ProtectedRoute>} />
         <Route path="/follow-up/queue" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />
