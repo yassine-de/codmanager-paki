@@ -7,8 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const DEFAULT_CARRIER_API_BASE = "https://apis.orio.digital/api";
-const DEFAULT_CARRIER_CODE = Deno.env.get("DEFAULT_CARRIER_CODE") || "orio";
+const POSTEX_API_BASE = Deno.env.get("POSTEX_API_BASE") || "https://api.postex.pk/services/integration/api/order";
+const DEFAULT_CARRIER_CODE = Deno.env.get("DEFAULT_CARRIER_CODE") || "postex";
 
 function getSupabaseAdmin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -21,7 +21,8 @@ async function getCarrier(supabase: ReturnType<typeof createClient>) {
     .eq("code", DEFAULT_CARRIER_CODE)
     .maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error("Default carrier is not configured");
+  if (!data) throw new Error(`Default carrier is not configured: ${DEFAULT_CARRIER_CODE}`);
+  if (!data.enabled) throw new Error(`Default carrier is disabled: ${DEFAULT_CARRIER_CODE}`);
   return data;
 }
 
@@ -29,38 +30,49 @@ async function getCarrierConfig(supabase: ReturnType<typeof createClient>) {
   const { data: settings } = await supabase
     .from("app_settings")
     .select("key,value")
-    .in("key", ["carrier_api_token", "carrier_account_number", "carrier_sync_enabled"]);
+    .in("key", [
+      "carrier_api_token",
+      "carrier_sync_enabled",
+      "carrier_pickup_address",
+      "carrier_pickup_address_code",
+      "postex_api_token",
+      "postex_pickup_address",
+      "postex_pickup_address_code",
+    ]);
 
   const byKey = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
-  const token = byKey.carrier_api_token || Deno.env.get("CARRIER_API_TOKEN");
-  if (!token) throw new Error("Carrier API token is not configured");
+  const token = byKey.postex_api_token || byKey.carrier_api_token || Deno.env.get("POSTEX_API_TOKEN") || Deno.env.get("CARRIER_API_TOKEN");
+  if (!token) throw new Error("PostEx API token is not configured");
 
   return {
     token,
-    acno: byKey.carrier_account_number || Deno.env.get("CARRIER_ACCOUNT_NUMBER") || "OR-04820",
     enabled: byKey.carrier_sync_enabled !== "false",
-    platformId: Number(Deno.env.get("CARRIER_PLATFORM_ID") || 7),
+    pickupAddress: byKey.postex_pickup_address || byKey.carrier_pickup_address || Deno.env.get("POSTEX_PICKUP_ADDRESS") || "",
+    pickupAddressCode: byKey.postex_pickup_address_code || byKey.carrier_pickup_address_code || Deno.env.get("POSTEX_PICKUP_ADDRESS_CODE") || "",
   };
 }
 
-function carrierHeaders(token: string) {
+function postexHeaders(token: string) {
   return {
-    Authorization: `Bearer ${token}`,
+    token,
     "Content-Type": "application/json",
     Accept: "application/json",
   };
 }
 
-function normalizeStatus(status?: string | null) {
+function normalizeStatus(status?: string | null, code?: string | null) {
   const value = (status || "").toLowerCase().trim();
-  if (!value) return "booked";
-  if (["delivered"].includes(value)) return "delivered";
-  if (["cancelled", "canceled"].includes(value)) return "cancelled";
-  if (["ready for return"].includes(value)) return "ready_for_return";
-  if (["return", "return to shipper", "returned"].includes(value)) return "returned";
-  if (["failed attempt", "customer not available", "customer not answering", "refused to accept", "incomplete address"].includes(value)) return "failed_attempt";
-  if (["new", "booked", "pickup ready"].includes(value)) return "booked";
-  return "shipped";
+  const messageCode = String(code || "").trim();
+  if (messageCode === "0005" || value === "delivered") return "delivered";
+  if (["0002", "0006", "0007"].includes(messageCode) || value === "returned") return "returned";
+  if (messageCode === "0013" || value === "attempted") return "failed_attempt";
+  if (value === "out for return") return "ready_for_return";
+  if (value === "out for delivery") return "out_for_delivery";
+  if (["postex warehouse", "picked by postex", "en-route to postex warehouse", "package on root", "package on route"].includes(value)) return "in_transit";
+  if (["unbooked", "booked", "at merchant's warehouse", "at merchant warehouse", "un-assigned by me"].includes(value)) return "booked";
+  if (value === "delivery under review") return "failed_attempt";
+  if (value === "expired") return "cancelled";
+  return value ? "shipped" : "booked";
 }
 
 function mapDeliveryStatus(normalizedStatus: string) {
@@ -69,8 +81,28 @@ function mapDeliveryStatus(normalizedStatus: string) {
   if (normalizedStatus === "ready_for_return") return "ready_for_return";
   if (normalizedStatus === "returned" || normalizedStatus === "return_received") return "return";
   if (normalizedStatus === "failed_attempt") return "failed_attempt";
+  if (normalizedStatus === "out_for_delivery") return "with_courier";
   if (normalizedStatus === "booked") return "booked";
   return "shipped";
+}
+
+function latestTrackingStatus(payload: any) {
+  const history = payload?.transactionStatusHistory;
+  if (Array.isArray(history) && history.length > 0) {
+    const last = history[history.length - 1];
+    return {
+      status: last.transactionStatusMessage || payload.transactionStatus,
+      code: last.transactionStatusMessageCode,
+    };
+  }
+  return { status: payload?.transactionStatus || payload?.orderStatus, code: null };
+}
+
+function buildOrderDetail(order: any) {
+  const parts = [];
+  if (order.product_name) parts.push(`${order.product_name} x ${order.quantity || 1}`);
+  if (order.order_id) parts.push(`Ref: ${order.order_id}`);
+  return parts.join(" | ") || "COD order";
 }
 
 async function getCities(supabase: ReturnType<typeof createClient>) {
@@ -103,26 +135,23 @@ async function getCities(supabase: ReturnType<typeof createClient>) {
   }
 
   const cfg = await getCarrierConfig(supabase);
-  const res = await fetch(`${DEFAULT_CARRIER_API_BASE}/cities`, {
-    method: "POST",
-    headers: carrierHeaders(cfg.token),
-    body: JSON.stringify({ acno: cfg.acno, country_id: 1 }),
+  const res = await fetch(`${POSTEX_API_BASE}/v2/get-operational-city?operationalCityType=Delivery`, {
+    method: "GET",
+    headers: postexHeaders(cfg.token),
   });
-
-  if (!res.ok) {
-    throw new Error(`Carrier cities API error: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  if (!res.ok || String(data?.statusCode || "") !== "200") {
+    throw new Error(`PostEx cities API error: ${res.status} ${JSON.stringify(data).substring(0, 500)}`);
   }
 
-  const cities = await res.json();
   await supabase.from("carrier_city_cache").delete().eq("carrier_id", carrier.id);
-
-  const rows = (Array.isArray(cities) ? cities : []).map((c: any) => ({
+  const rows = (Array.isArray(data.dist) ? data.dist : []).map((city: any) => ({
     carrier_id: carrier.id,
-    carrier_city_id: String(c.id ?? c.city_id ?? ""),
-    city_name: c.city_name || c.name,
-    province_name: c.province_name || (c.province_id ? String(c.province_id) : null),
-    is_pickup_city: true,
-    is_delivery_city: true,
+    carrier_city_id: city.operationalCityName,
+    city_name: city.operationalCityName,
+    province_name: city.countryName || "Pakistan",
+    is_pickup_city: String(city.isPickupCity).toLowerCase() === "true",
+    is_delivery_city: String(city.isDeliveryCity).toLowerCase() === "true",
     cached_at: new Date().toISOString(),
   })).filter((row: any) => row.city_name);
 
@@ -130,17 +159,16 @@ async function getCities(supabase: ReturnType<typeof createClient>) {
     const { error } = await supabase.from("carrier_city_cache").insert(rows.slice(i, i + 200));
     if (error) throw error;
   }
-
   return rows;
 }
 
-async function findShipmentByCarrierOrderId(supabase: ReturnType<typeof createClient>, carrierOrderId: string) {
+async function findShipmentByTracking(supabase: ReturnType<typeof createClient>, trackingNumber: string) {
   const carrier = await getCarrier(supabase);
   const { data, error } = await supabase
     .from("shipments")
     .select("*, carriers(*)")
     .eq("carrier_id", carrier.id)
-    .eq("carrier_order_id", String(carrierOrderId))
+    .or(`tracking_number.eq.${trackingNumber},carrier_order_id.eq.${trackingNumber}`)
     .maybeSingle();
   if (error) throw error;
   return data;
@@ -148,7 +176,6 @@ async function findShipmentByCarrierOrderId(supabase: ReturnType<typeof createCl
 
 async function createShipment(supabase: ReturnType<typeof createClient>, order: any) {
   const carrier = await getCarrier(supabase);
-
   const { data: existing } = await supabase
     .from("shipments")
     .select("*")
@@ -175,64 +202,33 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
       order_id: order.order_id,
       carrier_id: carrier.id,
       sync_status: "failed",
-      sync_error: `City not found: "${order.customer_city}"`,
+      sync_error: `PostEx city not found: "${order.customer_city}"`,
     };
     if (existing) await supabase.from("shipments").update(payload).eq("id", existing.id);
     else await supabase.from("shipments").insert(payload);
-    throw new Error(`City not found: "${order.customer_city}"`);
+    throw new Error(`PostEx city not found: "${order.customer_city}"`);
   }
 
-  const lahore = cities.find((c: any) => (c.city_name || "").toLowerCase() === "lahore");
-  const originCityId = Number(lahore?.carrier_city_id || 375);
-  const originProvinceId = Number(lahore?.province_name || 4);
-
-  const carrierOrder = {
-    acno: cfg.acno,
-    shipper_name: "COD Pakistani",
-    shipper_email: "Badereddine@gmail.com",
-    shipper_address: "Lahore",
-    shipper_contact: "03332259447",
-    billingperson_name: "COD Pakistani",
-    billingperson_email: "Badereddine@gmail.com",
-    billingperson_address: "Lahore",
-    billingperson_contact: "03332259447",
-    consignee_name: order.customer_name || "Customer",
-    consignee_address: order.customer_address || order.customer_city || "N/A",
-    consignee_email: "customer@na.com",
-    consignee_contact: order.customer_phone || "03000000000",
-    consignee_latitude: 0,
-    consignee_longitude: 0,
-    origin_country_id: 1,
-    origin_province_id: originProvinceId,
-    origin_city_id: originCityId,
-    destination_country_id: 1,
-    destination_province_id: Number(matchedCity.province_name || 1),
-    destination_city_id: Number(matchedCity.carrier_city_id),
-    cnic_number: "0000000000000",
-    order_ref: order.order_id,
-    platform_id: cfg.platformId,
-    customer_platform_id: 5120,
-    payment_method_id: 1,
-    shipping_charges: Number(order.shipping_cost || 0),
-    piece: order.quantity || 1,
-    weight: Number(order.weight || 0.5),
-    order_amount: Number(order.total_amount || 0),
-    detail: [{
-      product_name: order.product_name || "Product",
-      product_code: order.order_id || "N/A",
-      quantity: order.quantity || 1,
-      amount: Number(order.total_amount || 0),
-      image_url: order.product_url || "",
-    }],
-    remarks: order.note || "",
+  const postexOrder: Record<string, unknown> = {
+    cityName: matchedCity.city_name,
+    customerName: order.customer_name || "Customer",
+    customerPhone: order.customer_phone || "03000000000",
+    deliveryAddress: order.customer_address || order.customer_city || "N/A",
+    invoiceDivision: 1,
+    invoicePayment: Number(order.total_amount || 0),
+    items: Number(order.quantity || 1),
+    orderDetail: buildOrderDetail(order),
+    orderRefNumber: order.order_id,
+    orderType: "Normal",
+    transactionNotes: order.note || "",
   };
+  if (cfg.pickupAddressCode) postexOrder.pickupAddressCode = cfg.pickupAddressCode;
 
-  const res = await fetch(`${DEFAULT_CARRIER_API_BASE}/order`, {
+  const res = await fetch(`${POSTEX_API_BASE}/v3/create-order`, {
     method: "POST",
-    headers: carrierHeaders(cfg.token),
-    body: JSON.stringify([carrierOrder]),
+    headers: postexHeaders(cfg.token),
+    body: JSON.stringify(postexOrder),
   });
-
   const responseText = await res.text();
   let responseData: any;
   try {
@@ -241,33 +237,34 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
     responseData = { raw: responseText };
   }
 
-  if (!res.ok || responseData.status === 0) {
-    const errorMsg = responseData?.message || responseData?.payload?.error || responseText;
+  if (!res.ok || String(responseData?.statusCode || "") !== "200") {
+    const errorMsg = responseData?.statusMessage || responseData?.message || responseText;
     const payload = {
       order_uuid: order.id,
       order_id: order.order_id,
       carrier_id: carrier.id,
       sync_status: "failed",
-      sync_error: `Carrier error: ${JSON.stringify(errorMsg).substring(0, 500)}`,
+      sync_error: `PostEx error: ${JSON.stringify(errorMsg).substring(0, 500)}`,
       raw_create_response: responseData,
     };
     if (existing) await supabase.from("shipments").update(payload).eq("id", existing.id);
     else await supabase.from("shipments").insert(payload);
-    throw new Error(`Carrier create order failed: ${JSON.stringify(errorMsg).substring(0, 200)}`);
+    throw new Error(`PostEx create order failed: ${JSON.stringify(errorMsg).substring(0, 200)}`);
   }
 
-  const carrierOrderId = responseData?.payload?.[0]?.order_id || responseData?.data?.[0]?.order_id || responseData?.payload?.order_id;
-  const trackingNumber = responseData?.payload?.[0]?.consigment_no || responseData?.data?.[0]?.consigment_no || null;
-  if (!carrierOrderId) throw new Error("Carrier response missing order_id");
+  const trackingNumber = responseData?.dist?.trackingNumber;
+  if (!trackingNumber) throw new Error("PostEx response missing trackingNumber");
 
+  const carrierStatus = responseData?.dist?.orderStatus || "UnBooked";
+  const normalizedStatus = normalizeStatus(carrierStatus);
   const shipmentPayload = {
     order_uuid: order.id,
     order_id: order.order_id,
     carrier_id: carrier.id,
-    carrier_order_id: String(carrierOrderId),
-    tracking_number: trackingNumber,
-    carrier_status: "booked",
-    normalized_status: "booked",
+    carrier_order_id: String(trackingNumber),
+    tracking_number: String(trackingNumber),
+    carrier_status: carrierStatus,
+    normalized_status: normalizedStatus,
     sync_status: "synced",
     sync_error: null,
     booked_at: new Date().toISOString(),
@@ -287,11 +284,12 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
   }
 
   await supabase.from("orders").update({
-    delivery_status: "booked",
+    delivery_status: mapDeliveryStatus(normalizedStatus),
     fulfillment_status: carrier.fulfillment_mode === "self_fulfilled" ? "pending" : "carrier_managed",
     shipping_company: carrier.name,
-    shipping_status: "booked",
+    shipping_status: carrierStatus,
     shipped_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }).eq("id", order.id);
 
   if (carrier.fulfillment_mode === "self_fulfilled") {
@@ -303,7 +301,7 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
     }, { onConflict: "shipment_id" });
   }
 
-  return { success: true, shipment, carrier_order_id: String(carrierOrderId), tracking_number: trackingNumber, response: responseData };
+  return { success: true, shipment, carrier_order_id: String(trackingNumber), tracking_number: String(trackingNumber), response: responseData };
 }
 
 async function syncConfirmedOrder(supabase: ReturnType<typeof createClient>, orderIdOrDbId: string) {
@@ -317,41 +315,73 @@ async function syncConfirmedOrder(supabase: ReturnType<typeof createClient>, ord
   return createShipment(supabase, order);
 }
 
-async function trackByCarrierOrderId(supabase: ReturnType<typeof createClient>, carrierOrderId: string) {
+async function trackByTrackingNumber(supabase: ReturnType<typeof createClient>, trackingNumber: string) {
   const cfg = await getCarrierConfig(supabase);
-  const res = await fetch(`${DEFAULT_CARRIER_API_BASE}/track`, {
-    method: "POST",
-    headers: carrierHeaders(cfg.token),
-    body: JSON.stringify({ order_id: carrierOrderId, acno: cfg.acno }),
+  const res = await fetch(`${POSTEX_API_BASE}/v1/track-order/${encodeURIComponent(trackingNumber)}`, {
+    method: "GET",
+    headers: postexHeaders(cfg.token),
   });
   const data = await res.json();
-  const payload = Array.isArray(data) && data[0]?.payload ? data[0].payload : data?.payload || data;
+  if (!res.ok || String(data?.statusCode || "") !== "200") {
+    throw new Error(`PostEx tracking failed: ${JSON.stringify(data).substring(0, 300)}`);
+  }
 
-  const shipment = await findShipmentByCarrierOrderId(supabase, carrierOrderId);
-  if (shipment && payload?.status) {
-    const normalized = normalizeStatus(payload.status);
+  const payload = data?.dist || data;
+  const status = latestTrackingStatus(payload);
+  const normalized = normalizeStatus(status.status, status.code);
+  const shipment = await findShipmentByTracking(supabase, trackingNumber);
+
+  if (shipment) {
+    const now = new Date().toISOString();
     await supabase.from("shipments").update({
-      tracking_number: payload.consigment_no || shipment.tracking_number,
-      carrier_status: payload.status,
+      tracking_number: payload.trackingNumber || shipment.tracking_number,
+      carrier_status: status.status,
       normalized_status: normalized,
-      last_synced_at: new Date().toISOString(),
+      sync_status: "synced",
+      sync_error: null,
+      last_synced_at: now,
       raw_tracking_response: data,
     }).eq("id", shipment.id);
     await supabase.from("shipment_events").insert({
       shipment_id: shipment.id,
-      carrier_status: payload.status,
+      carrier_status: status.status,
       normalized_status: normalized,
       raw_event: payload,
+      occurred_at: now,
     });
     await supabase.from("orders").update({
       delivery_status: mapDeliveryStatus(normalized),
-      shipping_status: payload.status,
-      delivered_at: normalized === "delivered" ? new Date().toISOString() : undefined,
-      updated_at: new Date().toISOString(),
+      shipping_status: status.status,
+      delivered_at: normalized === "delivered" ? now : undefined,
+      updated_at: now,
     }).eq("id", shipment.order_uuid);
   }
 
   return payload;
+}
+
+async function generateLoadSheet(supabase: ReturnType<typeof createClient>, trackingNumbers: string[]) {
+  const cfg = await getCarrierConfig(supabase);
+  if (trackingNumbers.length === 0) throw new Error("tracking_numbers required");
+  const res = await fetch(`${POSTEX_API_BASE}/v2/generate-load-sheet`, {
+    method: "POST",
+    headers: postexHeaders(cfg.token),
+    body: JSON.stringify({
+      pickupAddress: cfg.pickupAddress || undefined,
+      trackingNumbers,
+    }),
+  });
+  const contentType = res.headers.get("content-type") || "";
+  const bytes = await res.arrayBuffer();
+  if (!res.ok) {
+    const text = new TextDecoder().decode(bytes);
+    throw new Error(`PostEx load sheet failed: ${text.substring(0, 300)}`);
+  }
+  return {
+    success: true,
+    content_type: contentType,
+    pdf_base64: btoa(String.fromCharCode(...new Uint8Array(bytes))),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -360,7 +390,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
-    const { action, order_id, carrier_order_id } = body;
+    const { action, order_id, carrier_order_id, tracking_number, tracking_numbers } = body;
     let result: any;
 
     switch (action) {
@@ -372,13 +402,12 @@ Deno.serve(async (req) => {
         result = await syncConfirmedOrder(supabase, order_id);
         break;
       case "track":
-        if (!order_id) throw new Error("order_id required");
-        result = await syncConfirmedOrder(supabase, order_id);
+      case "track-by-carrier-order-id": {
+        const tracking = tracking_number || carrier_order_id || order_id;
+        if (!tracking) throw new Error("tracking_number required");
+        result = await trackByTrackingNumber(supabase, String(tracking));
         break;
-      case "track-by-carrier-order-id":
-        if (!carrier_order_id) throw new Error("carrier_order_id required");
-        result = await trackByCarrierOrderId(supabase, String(carrier_order_id));
-        break;
+      }
       case "sync-all-pending": {
         const { data: pending, error } = await supabase
           .from("orders")
@@ -395,6 +424,10 @@ Deno.serve(async (req) => {
           }
         }
         result = { synced: results.length, results };
+        break;
+      }
+      case "generate-load-sheet": {
+        result = await generateLoadSheet(supabase, (tracking_numbers || []).map(String));
         break;
       }
       default:

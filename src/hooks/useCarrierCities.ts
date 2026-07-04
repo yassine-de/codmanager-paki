@@ -8,7 +8,7 @@ export interface CarrierCity {
   carrier_code?: string;
 }
 
-export function useCarrierCities(carrierCode = "orio") {
+export function useCarrierCities(carrierCode = "postex") {
   return useQuery({
     queryKey: ["carrier-cities", carrierCode],
     queryFn: async () => {

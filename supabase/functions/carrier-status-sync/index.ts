@@ -6,8 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DEFAULT_CARRIER_API_BASE = "https://apis.orio.digital/api";
-const DEFAULT_CARRIER_CODE = Deno.env.get("DEFAULT_CARRIER_CODE") || "orio";
+const POSTEX_API_BASE = Deno.env.get("POSTEX_API_BASE") || "https://api.postex.pk/services/integration/api/order";
+const DEFAULT_CARRIER_CODE = Deno.env.get("DEFAULT_CARRIER_CODE") || "postex";
 
 function getSupabaseAdmin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -17,27 +17,49 @@ async function getCarrierConfig(supabase: ReturnType<typeof createClient>) {
   const { data: settings } = await supabase
     .from("app_settings")
     .select("key,value")
-    .in("key", ["carrier_api_token", "carrier_account_number", "carrier_sync_enabled"]);
+    .in("key", ["carrier_api_token", "carrier_sync_enabled", "postex_api_token"]);
   const byKey = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
-  const token = byKey.carrier_api_token || Deno.env.get("CARRIER_API_TOKEN");
-  if (!token) throw new Error("Carrier API token is not configured");
+  const token = byKey.postex_api_token || byKey.carrier_api_token || Deno.env.get("POSTEX_API_TOKEN") || Deno.env.get("CARRIER_API_TOKEN");
+  if (!token) throw new Error("PostEx API token is not configured");
   return {
     token,
-    acno: byKey.carrier_account_number || Deno.env.get("CARRIER_ACCOUNT_NUMBER") || "OR-04820",
     enabled: byKey.carrier_sync_enabled !== "false",
   };
 }
 
-function normalizeStatus(status?: string | null) {
+function postexHeaders(token: string) {
+  return {
+    token,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+}
+
+function latestTrackingStatus(payload: any) {
+  const history = payload?.transactionStatusHistory;
+  if (Array.isArray(history) && history.length > 0) {
+    const last = history[history.length - 1];
+    return {
+      status: last.transactionStatusMessage || payload.transactionStatus,
+      code: last.transactionStatusMessageCode,
+    };
+  }
+  return { status: payload?.transactionStatus || payload?.orderStatus, code: null };
+}
+
+function normalizeStatus(status?: string | null, code?: string | null) {
   const value = (status || "").toLowerCase().trim();
-  if (!value) return "booked";
-  if (value === "delivered") return "delivered";
-  if (["cancelled", "canceled"].includes(value)) return "cancelled";
-  if (value === "ready for return") return "ready_for_return";
-  if (["return", "return to shipper", "returned"].includes(value)) return "returned";
-  if (["failed attempt", "customer not available", "customer not answering", "refused to accept", "incomplete address"].includes(value)) return "failed_attempt";
-  if (["new", "booked", "pickup ready"].includes(value)) return "booked";
-  return "shipped";
+  const messageCode = String(code || "").trim();
+  if (messageCode === "0005" || value === "delivered") return "delivered";
+  if (["0002", "0006", "0007"].includes(messageCode) || value === "returned") return "returned";
+  if (messageCode === "0013" || value === "attempted") return "failed_attempt";
+  if (value === "out for return") return "ready_for_return";
+  if (value === "out for delivery") return "out_for_delivery";
+  if (["postex warehouse", "picked by postex", "en-route to postex warehouse", "package on root", "package on route"].includes(value)) return "in_transit";
+  if (["unbooked", "booked", "at merchant's warehouse", "at merchant warehouse", "un-assigned by me"].includes(value)) return "booked";
+  if (value === "delivery under review") return "failed_attempt";
+  if (value === "expired") return "cancelled";
+  return value ? "shipped" : "booked";
 }
 
 function mapDeliveryStatus(normalizedStatus: string) {
@@ -46,6 +68,7 @@ function mapDeliveryStatus(normalizedStatus: string) {
   if (normalizedStatus === "ready_for_return") return "ready_for_return";
   if (normalizedStatus === "returned" || normalizedStatus === "return_received") return "return";
   if (normalizedStatus === "failed_attempt") return "failed_attempt";
+  if (normalizedStatus === "out_for_delivery") return "with_courier";
   if (normalizedStatus === "booked") return "booked";
   return "shipped";
 }
@@ -69,7 +92,7 @@ Deno.serve(async (req) => {
       .eq("code", DEFAULT_CARRIER_CODE)
       .maybeSingle();
     if (carrierError) throw carrierError;
-    if (!carrier) throw new Error("Default carrier is not configured");
+    if (!carrier) throw new Error(`Default carrier is not configured: ${DEFAULT_CARRIER_CODE}`);
 
     const staleBefore = new Date(Date.now() - 12 * 60 * 1000).toISOString();
     const terminal = ["delivered", "returned", "return_received", "cancelled"];
@@ -78,7 +101,7 @@ Deno.serve(async (req) => {
       .from("shipments")
       .select("*, orders(id, order_id, delivery_status)")
       .eq("carrier_id", carrier.id)
-      .not("carrier_order_id", "is", null)
+      .not("tracking_number", "is", null)
       .not("normalized_status", "in", `(${terminal.join(",")})`)
       .or(`last_synced_at.is.null,last_synced_at.lt.${staleBefore}`)
       .order("last_synced_at", { ascending: true, nullsFirst: true })
@@ -90,28 +113,25 @@ Deno.serve(async (req) => {
 
     async function processShipment(shipment: any) {
       try {
-        const res = await fetch(`${DEFAULT_CARRIER_API_BASE}/track`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${cfg.token}`,
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({ order_id: shipment.carrier_order_id, acno: cfg.acno }),
+        const tracking = shipment.tracking_number || shipment.carrier_order_id;
+        const res = await fetch(`${POSTEX_API_BASE}/v1/track-order/${encodeURIComponent(tracking)}`, {
+          method: "GET",
+          headers: postexHeaders(cfg.token),
         });
         const data = await res.json();
-        const payload = Array.isArray(data) && data[0]?.payload ? data[0].payload : data?.payload || data;
-        if (!payload?.status) {
-          return { shipment_id: shipment.id, order_id: shipment.order_id, skipped: true, reason: "No status in tracking response" };
+        if (!res.ok || String(data?.statusCode || "") !== "200") {
+          throw new Error(`PostEx tracking failed: ${JSON.stringify(data).substring(0, 300)}`);
         }
 
-        const normalized = normalizeStatus(payload.status);
+        const payload = data?.dist || data;
+        const status = latestTrackingStatus(payload);
+        const normalized = normalizeStatus(status.status, status.code);
         const deliveryStatus = mapDeliveryStatus(normalized);
         const now = new Date().toISOString();
 
         const { error: shipmentErr } = await supabase.from("shipments").update({
-          tracking_number: payload.consigment_no || shipment.tracking_number,
-          carrier_status: payload.status,
+          tracking_number: payload.trackingNumber || shipment.tracking_number,
+          carrier_status: status.status,
           normalized_status: normalized,
           sync_status: "synced",
           sync_error: null,
@@ -122,7 +142,7 @@ Deno.serve(async (req) => {
 
         await supabase.from("shipment_events").insert({
           shipment_id: shipment.id,
-          carrier_status: payload.status,
+          carrier_status: status.status,
           normalized_status: normalized,
           raw_event: payload,
           occurred_at: now,
@@ -131,7 +151,7 @@ Deno.serve(async (req) => {
         if (deliveryStatus !== shipment.orders?.delivery_status) {
           await supabase.from("orders").update({
             delivery_status: deliveryStatus,
-            shipping_status: payload.status,
+            shipping_status: status.status,
             delivered_at: deliveryStatus === "delivered" ? now : undefined,
             updated_at: now,
           }).eq("id", shipment.order_uuid);
@@ -148,7 +168,7 @@ Deno.serve(async (req) => {
           });
         }
 
-        return { shipment_id: shipment.id, order_id: shipment.order_id, carrier_status: payload.status, mapped_status: deliveryStatus, updated: true };
+        return { shipment_id: shipment.id, order_id: shipment.order_id, carrier_status: status.status, mapped_status: deliveryStatus, updated: true };
       } catch (e) {
         await supabase.from("shipments").update({
           sync_status: "failed",

@@ -2566,9 +2566,26 @@ INSERT INTO public.carriers (
   supports_payment_status, priority
 )
 VALUES
-  ('postex', 'PostEx', true, 'self_fulfilled', true, true, true, true, true, true, true, 90),
-  ('orio', 'ORIO', true, 'carrier_managed', true, true, false, false, false, false, false, 100)
+  ('postex', 'PostEx', true, 'self_fulfilled', true, true, true, true, true, true, true, 100),
+  ('orio', 'ORIO', false, 'carrier_managed', true, true, false, false, false, false, false, 10)
 ON CONFLICT (code) DO NOTHING;
+
+UPDATE public.carriers
+SET enabled = true,
+    fulfillment_mode = 'self_fulfilled',
+    supports_cod = true,
+    supports_tracking = true,
+    supports_labels = true,
+    supports_load_sheet = true,
+    supports_cancel = true,
+    supports_payment_status = true,
+    priority = 100
+WHERE code = 'postex';
+
+UPDATE public.carriers
+SET enabled = false,
+    priority = 10
+WHERE code = 'orio';
 
 INSERT INTO public.whatsapp_settings (singleton) VALUES (true)
 ON CONFLICT (singleton) DO NOTHING;

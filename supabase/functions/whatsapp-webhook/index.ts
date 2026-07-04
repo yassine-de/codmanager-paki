@@ -1846,10 +1846,11 @@ async function tryExtractAndConfirmAddress(args: {
 
   // Load carrier cities for matching (non-blocking: if cache is empty we still
   // confirm the order using the raw city text the AI extracted).
+  const defaultCarrierCode = Deno.env.get("DEFAULT_CARRIER_CODE") || "postex";
   const { data: defaultCarrier } = await admin
     .from("carriers")
     .select("id")
-    .eq("code", "orio")
+    .eq("code", defaultCarrierCode)
     .maybeSingle();
   const { data: cities } = await admin
     .from("carrier_city_cache")

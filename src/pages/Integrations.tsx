@@ -110,12 +110,12 @@ const Integrations = () => {
     const { data } = await supabase
       .from("app_settings")
       .select("key, value")
-      .in("key", ["carrier_sync_enabled", "carrier_api_token", "carrier_account_number", "carrier_sync_interval_minutes", "carrier_last_status_sync"]);
+      .in("key", ["carrier_sync_enabled", "carrier_api_token", "carrier_pickup_address_code", "carrier_sync_interval_minutes", "carrier_last_status_sync"]);
     if (data) {
       data.forEach((d) => {
         if (d.key === "carrier_sync_enabled") setApiEnabled(d.value === "true");
         if (d.key === "carrier_api_token") setApiKey(d.value);
-        if (d.key === "carrier_account_number") setApiAccountNumber(d.value);
+        if (d.key === "carrier_pickup_address_code") setApiAccountNumber(d.value);
         if (d.key === "carrier_sync_interval_minutes") setSyncInterval(d.value);
         if (d.key === "carrier_last_status_sync") setLastStatusSync(d.value);
       });
@@ -129,7 +129,7 @@ const Integrations = () => {
     const settings = [
       { key: "carrier_sync_enabled", value: String(apiEnabled), updated_at: now },
       { key: "carrier_api_token", value: apiKey, updated_at: now },
-      { key: "carrier_account_number", value: apiAccountNumber, updated_at: now },
+      { key: "carrier_pickup_address_code", value: apiAccountNumber, updated_at: now },
       { key: "carrier_sync_interval_minutes", value: syncInterval, updated_at: now },
     ];
     const { error } = await supabase
@@ -380,11 +380,11 @@ const Integrations = () => {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs flex items-center gap-1.5">
-                  <Hash className="w-3 h-3" /> Account Number
+                  <Hash className="w-3 h-3" /> Pickup Address Code
                 </Label>
                 <Input
                   className="h-9 text-xs font-mono"
-                  placeholder="Enter account number..."
+                  placeholder="Optional PostEx pickup address code..."
                   value={apiAccountNumber}
                   onChange={(e) => setApiAccountNumber(e.target.value)}
                 />
