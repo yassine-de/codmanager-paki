@@ -1,1 +1,0 @@
-ALTER TABLE public.whatsapp_settings ADD COLUMN IF NOT EXISTS access_token text;

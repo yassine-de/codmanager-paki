@@ -1,2 +1,0 @@
-UPDATE whatsapp_conversations SET pending_button_intent = NULL, status = 'confirmed', outcome = 'confirmed', updated_at = now() WHERE id = '048fe707-2ed2-4dc8-b65b-2a493a643738';
-UPDATE orders SET whatsapp_status = 'confirmed', whatsapp_note = 'Confirmed via WhatsApp (address validated by AI)' WHERE order_id = 'AB-348';

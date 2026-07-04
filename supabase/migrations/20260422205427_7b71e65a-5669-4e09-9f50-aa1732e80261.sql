@@ -1,1 +1,0 @@
-ALTER TABLE public.whatsapp_conversations ALTER COLUMN order_id DROP NOT NULL;

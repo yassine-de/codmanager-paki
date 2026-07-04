@@ -1,1 +1,0 @@
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_manual_price boolean NOT NULL DEFAULT false;

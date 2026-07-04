@@ -1,1 +1,0 @@
-ALTER TABLE public.orders ALTER COLUMN delivery_status SET DEFAULT NULL;

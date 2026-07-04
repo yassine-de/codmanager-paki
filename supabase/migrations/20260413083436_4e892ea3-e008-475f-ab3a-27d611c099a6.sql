@@ -1,1 +1,0 @@
-UPDATE orders SET orio_sync_status = 'pending', orio_sync_error = NULL WHERE order_id = 'AB-003';

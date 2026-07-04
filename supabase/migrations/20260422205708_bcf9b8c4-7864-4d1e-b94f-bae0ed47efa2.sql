@@ -1,1 +1,0 @@
-UPDATE public.whatsapp_settings SET integration_enabled = true WHERE singleton = true;
