@@ -2538,11 +2538,16 @@ CREATE POLICY "Authenticated read permissions" ON public.permissions FOR SELECT 
 CREATE POLICY "Authenticated read public app_settings" ON public.app_settings FOR SELECT TO authenticated USING (is_public OR public.is_staff(auth.uid()));
 
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
 GRANT SELECT ON public.order_list_view TO authenticated, service_role;
 GRANT SELECT ON public.fulfillment_queue_view TO authenticated, service_role;
 GRANT SELECT ON public.inventory_balance_view TO authenticated, service_role;
 GRANT SELECT ON public.returns_queue_view TO authenticated, service_role;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated, service_role;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- Seed
