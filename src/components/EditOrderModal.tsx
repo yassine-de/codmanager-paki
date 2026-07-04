@@ -275,25 +275,25 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                 <div>
                   <Label className={fieldLabel}>
                     Delivery
-                    {order.orioShippingStatus && (
+                    {order.carrierShippingStatus && (
                       <span className="ml-2 text-[10px] text-muted-foreground font-normal">
-                        {isAdmin ? "(auto from ORIO — admin can override)" : "(auto from ORIO Sub Status)"}
+                        {isAdmin ? "(auto from carrier — admin can override)" : "(auto from carrier sub status)"}
                       </span>
                     )}
                   </Label>
                   <Select
                     value={deliveryStatus}
                     onValueChange={v => setDeliveryStatus(v as DeliveryStatus)}
-                    disabled={!!order.orioShippingStatus && !isAdmin}
+                    disabled={!!order.carrierShippingStatus && !isAdmin}
                   >
                     <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {deliveryOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  {order.orioShippingStatus && (
+                  {order.carrierShippingStatus && (
                     <p className="mt-1 text-[10px] text-muted-foreground">
-                      Sub Status: <span className="font-medium text-foreground">{order.orioShippingStatus}</span>
+                      Sub Status: <span className="font-medium text-foreground">{order.carrierShippingStatus}</span>
                     </p>
                   )}
                 </div>

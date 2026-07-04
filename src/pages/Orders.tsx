@@ -28,7 +28,7 @@ import CreateOrderModal from "@/components/CreateOrderModal";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import OrioTrackingModal from "@/components/OrioTrackingModal";
+import CarrierTrackingModal from "@/components/CarrierTrackingModal";
 import { FinancialIndicators } from "@/components/FinancialIndicators";
 
 /* ── Status badge configs ── */
@@ -106,12 +106,12 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'channel' | 'deliveryStatus' | 'subStatus' | 'attempts' | 'financial';
+type ColumnKey = 'systemId' | 'id' | 'carrierId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'channel' | 'deliveryStatus' | 'subStatus' | 'attempts' | 'financial';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
   { key: 'id', label: 'Seller ID', defaultVisible: true },
-  { key: 'orioId', label: 'Carrier ID', defaultVisible: true, adminOnly: true },
+  { key: 'carrierId', label: 'Carrier ID', defaultVisible: true, adminOnly: true },
   { key: 'createdAt', label: 'Created', defaultVisible: true },
   { key: 'updatedAt', label: 'Updated', defaultVisible: true },
   { key: 'customer', label: 'Client', defaultVisible: true },
@@ -214,7 +214,7 @@ export default function Orders() {
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [trackingTarget, setTrackingTarget] = useState<{ orioId: string; systemId?: number | null; sellerId?: string | null } | null>(null);
+  const [trackingTarget, setTrackingTarget] = useState<{ carrierId: string; systemId?: number | null; sellerId?: string | null } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sellerNames, setSellerNames] = useState<string[]>([]);
@@ -418,8 +418,8 @@ export default function Orders() {
         warehouseState: "in_stock" as const,
         history: [],
         attemptCount: o.attempt_count || 0,
-        orioOrderId: latestShipment?.carrier_order_id || null,
-        orioShippingStatus: latestShipment?.carrier_status || latestShipment?.normalized_status || null,
+        carrierOrderId: latestShipment?.carrier_order_id || null,
+        carrierShippingStatus: latestShipment?.carrier_status || latestShipment?.normalized_status || null,
         trackingNumber: latestShipment?.tracking_number || null,
         carrierName: latestShipment?.carriers?.name || null,
         confirmationChannel: o.confirmation_channel || 'agent',
@@ -516,7 +516,7 @@ export default function Orders() {
   // Unique sub-statuses present in current orders (for filter dropdown)
   const subStatusOptions = useMemo(() => {
     const set = new Set<string>();
-    orders.forEach(o => { if (o.orioShippingStatus) set.add(o.orioShippingStatus); });
+    orders.forEach(o => { if (o.carrierShippingStatus) set.add(o.carrierShippingStatus); });
     return Array.from(set).sort();
   }, [orders]);
 
@@ -597,7 +597,7 @@ export default function Orders() {
           if (effective !== f.confirmation) return false;
         }
         if (f.delivery !== 'all' && o.deliveryStatus !== f.delivery) return false;
-        if (f.subStatus !== 'all' && (o.orioShippingStatus || '') !== f.subStatus) return false;
+        if (f.subStatus !== 'all' && (o.carrierShippingStatus || '') !== f.subStatus) return false;
         if (f.channel !== 'all' && (o.confirmationChannel || 'agent') !== f.channel) return false;
         if (f.upsell !== 'all') {
           if (f.upsell === 'yes' && !o.upsell) return false;
@@ -804,7 +804,7 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
-            {/* Sub Status (ORIO) - admin only */}
+            {/* Carrier sub status - admin only */}
             {isAdmin && (
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Sub Status</label>
@@ -960,7 +960,7 @@ export default function Orders() {
                   <span className="inline-flex items-center gap-1">System ID {sortKey === 'systemId' ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}</span>
                 </th>}
                 {isCol('id') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Seller ID</th>}
-                {isAdmin && isCol('orioId') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">ORIO ID</th>}
+                {isAdmin && isCol('carrierId') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Carrier ID</th>}
                 {isCol('createdAt') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('createdAt')}>
                   <span className="inline-flex items-center gap-1">Created {sortKey === 'createdAt' ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}</span>
                 </th>}
@@ -1023,14 +1023,14 @@ export default function Orders() {
                       </button>
                     </td>
                   )}
-                  {isAdmin && isCol('orioId') && (
+                  {isAdmin && isCol('carrierId') && (
                     <td className="py-2.5 px-4 text-xs" onClick={(e) => e.stopPropagation()}>
-                      {order.orioOrderId ? (
+                      {order.carrierOrderId ? (
                         <button
-                          onClick={() => setTrackingTarget({ orioId: order.orioOrderId!, systemId: (order as any).systemId ?? null, sellerId: order.id })}
+                          onClick={() => setTrackingTarget({ carrierId: order.carrierOrderId!, systemId: (order as any).systemId ?? null, sellerId: order.id })}
                           className="text-[hsl(210,60%,52%)] hover:underline font-medium"
                         >
-                          {order.orioOrderId}
+                          {order.carrierOrderId}
                         </button>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -1063,8 +1063,8 @@ export default function Orders() {
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
                   {isAdmin && isCol('subStatus') && (
                     <td className="py-2.5 px-4">
-                      {order.orioShippingStatus ? (
-                        <StatusBadge label={subStatusLabel(order.orioShippingStatus)!} cls={subStatusClass(order.orioShippingStatus)} />
+                      {order.carrierShippingStatus ? (
+                        <StatusBadge label={subStatusLabel(order.carrierShippingStatus)!} cls={subStatusClass(order.carrierShippingStatus)} />
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
@@ -1163,8 +1163,8 @@ export default function Orders() {
                 <div className="flex items-center gap-1.5">
                   <StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} />
                   <StatusBadge {...deliveryConfig[order.deliveryStatus]} />
-                  {order.orioShippingStatus && (
-                    <StatusBadge label={subStatusLabel(order.orioShippingStatus)!} cls={subStatusClass(order.orioShippingStatus)} />
+                  {order.carrierShippingStatus && (
+                    <StatusBadge label={subStatusLabel(order.carrierShippingStatus)!} cls={subStatusClass(order.carrierShippingStatus)} />
                   )}
                 </div>
                 {(isAdmin || order.confirmationStatus === 'new') && (
@@ -1208,10 +1208,10 @@ export default function Orders() {
         </div>
       </div>
 
-      {/* ORIO Tracking Modal */}
+      {/* Carrier Tracking Modal */}
       {trackingTarget && (
-        <OrioTrackingModal
-          orioOrderId={trackingTarget.orioId}
+        <CarrierTrackingModal
+          carrierOrderId={trackingTarget.carrierId}
           systemId={trackingTarget.systemId}
           sellerId={trackingTarget.sellerId}
           open={!!trackingTarget}

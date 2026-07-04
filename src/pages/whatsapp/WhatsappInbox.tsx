@@ -59,7 +59,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { SendTemplateModal } from "@/components/whatsapp/SendTemplateModal";
-import { useOrioCities } from "@/hooks/useOrioCities";
+import { useCarrierCities } from "@/hooks/useCarrierCities";
 import { CitySelect } from "@/components/CitySelect";
 
 type Conv = {
@@ -534,14 +534,14 @@ export default function WhatsappInbox() {
   const [recording, setRecording] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [orderInfoOpen, setOrderInfoOpen] = useState(false);
-  // Valid ORIO cities — used to flag a wrong/unrecognized order city in red.
-  const { data: orioCities = [], isLoading: orioCitiesLoading } = useOrioCities();
+  // Valid carrier cities are used to flag a wrong/unrecognized order city in red.
+  const { data: carrierCities = [], isLoading: carrierCitiesLoading } = useCarrierCities();
   const validCityKeys = useMemo(
-    () => new Set(orioCities.map((c) => (c.city_name || "").trim().toLowerCase().replace(/\s+/g, ""))),
-    [orioCities],
+    () => new Set(carrierCities.map((c) => (c.city_name || "").trim().toLowerCase().replace(/\s+/g, ""))),
+    [carrierCities],
   );
   const isCityInvalid = (city?: string | null) => {
-    if (!city || orioCitiesLoading || validCityKeys.size === 0) return false;
+    if (!city || carrierCitiesLoading || validCityKeys.size === 0) return false;
     return !validCityKeys.has(city.trim().toLowerCase().replace(/\s+/g, ""));
   };
   const [editConfStatus, setEditConfStatus] = useState("");
@@ -2434,7 +2434,7 @@ export default function WhatsappInbox() {
                           className={cn(
                             isCityInvalid(order.customer_city) && "text-destructive font-semibold",
                           )}
-                          title={isCityInvalid(order.customer_city) ? `"${order.customer_city}" is not a valid ORIO city` : undefined}
+                          title={isCityInvalid(order.customer_city) ? `"${order.customer_city}" is not a valid carrier city` : undefined}
                         >
                           {order.customer_city || "—"}
                           {isCityInvalid(order.customer_city) && (

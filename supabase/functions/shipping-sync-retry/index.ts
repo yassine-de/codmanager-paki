@@ -1,11 +1,13 @@
 // @ts-nocheck
-// Cron fallback: retries confirmed orders without a synced ORIO shipment.
+// Cron fallback: retries confirmed orders without a synced carrier shipment.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0?no-check";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const DEFAULT_CARRIER_CODE = Deno.env.get("DEFAULT_CARRIER_CODE") || "orio";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -16,10 +18,10 @@ Deno.serve(async (req) => {
     const { data: enabled } = await supabase
       .from("app_settings")
       .select("value")
-      .eq("key", "orio_api_enabled")
+      .eq("key", "carrier_sync_enabled")
       .maybeSingle();
     if (enabled?.value === "false") {
-      return new Response(JSON.stringify({ skipped: true, reason: "ORIO disabled" }), {
+      return new Response(JSON.stringify({ skipped: true, reason: "Carrier sync disabled" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -27,10 +29,10 @@ Deno.serve(async (req) => {
     const { data: carrier, error: carrierError } = await supabase
       .from("carriers")
       .select("id")
-      .eq("code", "orio")
+      .eq("code", DEFAULT_CARRIER_CODE)
       .maybeSingle();
     if (carrierError) throw carrierError;
-    if (!carrier) throw new Error("ORIO carrier is not configured");
+    if (!carrier) throw new Error("Default carrier is not configured");
 
     const { data: orders, error } = await supabase
       .from("orders")
@@ -51,7 +53,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/orio-sync`;
+    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/shipping-sync`;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const results: any[] = [];
 
@@ -73,7 +75,7 @@ Deno.serve(async (req) => {
     }
 
     await supabase.from("app_settings").upsert(
-      { key: "orio_last_retry_run", value: new Date().toISOString(), updated_at: new Date().toISOString() },
+      { key: "carrier_last_retry_run", value: new Date().toISOString(), updated_at: new Date().toISOString() },
       { onConflict: "key" },
     );
 
@@ -83,7 +85,7 @@ Deno.serve(async (req) => {
       results,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
-    console.error("orio-sync-retry error:", e);
+    console.error("shipping-sync-retry error:", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

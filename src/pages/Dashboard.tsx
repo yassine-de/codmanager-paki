@@ -598,7 +598,7 @@ export default function Dashboard() {
           <div className="space-y-3">
             <SectionHeader icon={Truck} title="Follow-Up Overview" color="text-primary" iconBg="bg-primary/10" delay={340} />
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <FuKPICard icon={Truck}       label="Total Orders"   value={fuKpis.total}      sub="Synced to ORIO"                      pct={100}                    tone="muted"   delay={345} />
+              <FuKPICard icon={Truck}       label="Total Orders"   value={fuKpis.total}      sub="Synced to carrier"                   pct={100}                    tone="muted"   delay={345} />
               <FuKPICard icon={Activity}    label="In Transit"     value={fuKpis.shipped}    sub={`${fuKpis.shippedPct}% of total`}    pct={fuKpis.shippedPct}     tone="info"    delay={350} />
               <FuKPICard icon={PackageCheck} label="Delivered"     value={fuKpis.delivered}  sub={`${fuKpis.deliveredPct}% of total`}  pct={fuKpis.deliveredPct}   tone="success" delay={355} />
               <FuKPICard icon={Hourglass}   label="Need Action"    value={fuKpis.needAction} sub={`${fuKpis.needActionPct}% pending`}  pct={fuKpis.needActionPct}  tone="warning" delay={360} />

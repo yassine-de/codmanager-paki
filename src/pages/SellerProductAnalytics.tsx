@@ -43,7 +43,7 @@ type ProductSortField = "name" | "total" | "confirmed" | "confRate" | "delivered
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Only safe fields — no agent, no channel, no ORIO, no seller_id leaks
+// Only safe fields: no agent, no channel, no carrier internals, no seller_id leaks
 const ORDER_SELECT =
   "id, confirmation_status, delivery_status, product_name, cancel_reason, created_at, confirmed_at, delivered_at, updated_at";
 

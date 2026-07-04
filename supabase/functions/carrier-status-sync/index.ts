@@ -6,24 +6,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const ORIO_BASE = "https://apis.orio.digital/api";
+const DEFAULT_CARRIER_API_BASE = "https://apis.orio.digital/api";
+const DEFAULT_CARRIER_CODE = Deno.env.get("DEFAULT_CARRIER_CODE") || "orio";
 
 function getSupabaseAdmin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
-async function getOrioConfig(supabase: ReturnType<typeof createClient>) {
+async function getCarrierConfig(supabase: ReturnType<typeof createClient>) {
   const { data: settings } = await supabase
     .from("app_settings")
     .select("key,value")
-    .in("key", ["orio_api_token", "orio_account_number", "orio_api_enabled"]);
+    .in("key", ["carrier_api_token", "carrier_account_number", "carrier_sync_enabled"]);
   const byKey = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
-  const token = byKey.orio_api_token || Deno.env.get("ORIO_API_TOKEN");
-  if (!token) throw new Error("ORIO API token is not configured");
+  const token = byKey.carrier_api_token || Deno.env.get("CARRIER_API_TOKEN");
+  if (!token) throw new Error("Carrier API token is not configured");
   return {
     token,
-    acno: byKey.orio_account_number || Deno.env.get("ORIO_ACCOUNT_NUMBER") || "OR-04820",
-    enabled: byKey.orio_api_enabled !== "false",
+    acno: byKey.carrier_account_number || Deno.env.get("CARRIER_ACCOUNT_NUMBER") || "OR-04820",
+    enabled: byKey.carrier_sync_enabled !== "false",
   };
 }
 
@@ -55,9 +56,9 @@ Deno.serve(async (req) => {
   const supabase = getSupabaseAdmin();
 
   try {
-    const cfg = await getOrioConfig(supabase);
+    const cfg = await getCarrierConfig(supabase);
     if (!cfg.enabled) {
-      return new Response(JSON.stringify({ skipped: true, reason: "ORIO API disabled" }), {
+      return new Response(JSON.stringify({ skipped: true, reason: "Carrier API disabled" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -65,10 +66,10 @@ Deno.serve(async (req) => {
     const { data: carrier, error: carrierError } = await supabase
       .from("carriers")
       .select("id")
-      .eq("code", "orio")
+      .eq("code", DEFAULT_CARRIER_CODE)
       .maybeSingle();
     if (carrierError) throw carrierError;
-    if (!carrier) throw new Error("ORIO carrier is not configured");
+    if (!carrier) throw new Error("Default carrier is not configured");
 
     const staleBefore = new Date(Date.now() - 12 * 60 * 1000).toISOString();
     const terminal = ["delivered", "returned", "return_received", "cancelled"];
@@ -89,7 +90,7 @@ Deno.serve(async (req) => {
 
     async function processShipment(shipment: any) {
       try {
-        const res = await fetch(`${ORIO_BASE}/track`, {
+        const res = await fetch(`${DEFAULT_CARRIER_API_BASE}/track`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${cfg.token}`,
@@ -163,7 +164,7 @@ Deno.serve(async (req) => {
     }
 
     await supabase.from("app_settings").upsert(
-      { key: "orio_last_status_sync", value: new Date().toISOString(), updated_at: new Date().toISOString() },
+      { key: "carrier_last_status_sync", value: new Date().toISOString(), updated_at: new Date().toISOString() },
       { onConflict: "key" },
     );
 
@@ -174,7 +175,7 @@ Deno.serve(async (req) => {
       results,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
-    console.error("orio-status-sync error:", e);
+    console.error("carrier-status-sync error:", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

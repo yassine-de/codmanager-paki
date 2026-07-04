@@ -685,7 +685,7 @@ const AgentOrders = () => {
       // The RPC enforces ownership (agent_id = auth.uid()) internally and
       // returns 0 rows if a race condition occurred (another agent took it).
       // We retry once after 400ms to handle transient lock contention (e.g.
-      // ORIO sync briefly holding a row lock causing the UPDATE to block and
+      // Carrier sync briefly holding a row lock causing the UPDATE to block and
       // time out on the first attempt).
       const rpcParams = {
           p_order_id:            currentOrder.id,

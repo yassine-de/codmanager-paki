@@ -110,14 +110,14 @@ const Integrations = () => {
     const { data } = await supabase
       .from("app_settings")
       .select("key, value")
-      .in("key", ["orio_api_enabled", "orio_api_token", "orio_account_number", "orio_sync_interval_minutes", "orio_last_status_sync"]);
+      .in("key", ["carrier_sync_enabled", "carrier_api_token", "carrier_account_number", "carrier_sync_interval_minutes", "carrier_last_status_sync"]);
     if (data) {
       data.forEach((d) => {
-        if (d.key === "orio_api_enabled") setApiEnabled(d.value === "true");
-        if (d.key === "orio_api_token") setApiKey(d.value);
-        if (d.key === "orio_account_number") setApiAccountNumber(d.value);
-        if (d.key === "orio_sync_interval_minutes") setSyncInterval(d.value);
-        if (d.key === "orio_last_status_sync") setLastStatusSync(d.value);
+        if (d.key === "carrier_sync_enabled") setApiEnabled(d.value === "true");
+        if (d.key === "carrier_api_token") setApiKey(d.value);
+        if (d.key === "carrier_account_number") setApiAccountNumber(d.value);
+        if (d.key === "carrier_sync_interval_minutes") setSyncInterval(d.value);
+        if (d.key === "carrier_last_status_sync") setLastStatusSync(d.value);
       });
     }
     setApiLoaded(true);
@@ -127,10 +127,10 @@ const Integrations = () => {
     setApiSaving(true);
     const now = new Date().toISOString();
     const settings = [
-      { key: "orio_api_enabled", value: String(apiEnabled), updated_at: now },
-      { key: "orio_api_token", value: apiKey, updated_at: now },
-      { key: "orio_account_number", value: apiAccountNumber, updated_at: now },
-      { key: "orio_sync_interval_minutes", value: syncInterval, updated_at: now },
+      { key: "carrier_sync_enabled", value: String(apiEnabled), updated_at: now },
+      { key: "carrier_api_token", value: apiKey, updated_at: now },
+      { key: "carrier_account_number", value: apiAccountNumber, updated_at: now },
+      { key: "carrier_sync_interval_minutes", value: syncInterval, updated_at: now },
     ];
     const { error } = await supabase
       .from("app_settings")
@@ -347,7 +347,7 @@ const Integrations = () => {
               </div>
               <div>
                 <p className="text-sm font-semibold">API Configuration</p>
-                <p className="text-xs text-muted-foreground">ORIO OMS API settings for order fulfillment</p>
+                <p className="text-xs text-muted-foreground">Carrier API settings for order fulfillment</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -358,8 +358,8 @@ const Integrations = () => {
                 const now = new Date().toISOString();
                 await supabase
                   .from("app_settings")
-                  .upsert({ key: "orio_api_enabled", value: String(checked), updated_at: now }, { onConflict: "key" });
-                toast.success(checked ? "ORIO API activated" : "ORIO API deactivated");
+                  .upsert({ key: "carrier_sync_enabled", value: String(checked), updated_at: now }, { onConflict: "key" });
+                toast.success(checked ? "Carrier API activated" : "Carrier API deactivated");
               }} />
             </div>
           </div>

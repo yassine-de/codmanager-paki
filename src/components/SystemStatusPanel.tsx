@@ -57,7 +57,7 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
     return q;
   };
 
-  // Failed ORIO syncs
+  // Failed carrier syncs
   const { data: failedSyncCount = 0 } = useQuery({
     queryKey: ["system-failed-syncs", rangeKey],
     queryFn: async () => {
@@ -88,9 +88,9 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
     refetchInterval: 30_000,
   });
 
-  // Stale ORIO sync — orders not synced in >30 min (excluding terminal statuses)
+  // Stale carrier sync: orders not synced in >30 min (excluding terminal statuses)
   const { data: staleSyncCount = 0 } = useQuery({
-    queryKey: ["system-stale-orio-sync"],
+    queryKey: ["system-stale-carrier-sync"],
     queryFn: async () => {
       const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -183,7 +183,7 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
       onClick: () => setSyncModalOpen(true),
     },
     {
-      id: "stale-orio-sync",
+      id: "stale-carrier-sync",
       label: "Stale OR Sync (>30m)",
       count: staleSyncCount,
       severity: staleSyncCount > 50 ? "error" : staleSyncCount > 10 ? "warning" : "ok",

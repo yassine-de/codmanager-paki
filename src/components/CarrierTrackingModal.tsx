@@ -3,8 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Package, MapPin, Calendar, User, DollarSign, Truck } from "lucide-react";
 
-interface OrioTrackingModalProps {
-  orioOrderId: string | number;
+interface CarrierTrackingModalProps {
+  carrierOrderId: string | number;
   systemId?: number | null;
   sellerId?: string | null;
   open: boolean;
@@ -29,7 +29,7 @@ interface TrackingPayload {
   detail: TrackingDetail[];
 }
 
-export default function OrioTrackingModal({ orioOrderId, systemId, sellerId, open, onClose }: OrioTrackingModalProps) {
+export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerId, open, onClose }: CarrierTrackingModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<TrackingPayload | null>(null);
@@ -41,8 +41,8 @@ export default function OrioTrackingModal({ orioOrderId, systemId, sellerId, ope
     setPayload(null);
 
     supabase.functions
-      .invoke("orio-sync", {
-        body: { action: "track-by-carrier-order-id", carrier_order_id: orioOrderId },
+      .invoke("shipping-sync", {
+        body: { action: "track-by-carrier-order-id", carrier_order_id: carrierOrderId },
       })
       .then(({ data, error: fnError }) => {
         if (fnError) {
@@ -55,7 +55,7 @@ export default function OrioTrackingModal({ orioOrderId, systemId, sellerId, ope
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [open, orioOrderId]);
+  }, [open, carrierOrderId]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -63,12 +63,12 @@ export default function OrioTrackingModal({ orioOrderId, systemId, sellerId, ope
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Package className="w-4 h-4" />
-            TRACK DETAIL {payload?.consigment_no ? `- ${payload.consigment_no}` : `- Carrier #${orioOrderId}`}
+            TRACK DETAIL {payload?.consigment_no ? `- ${payload.consigment_no}` : `- Carrier #${carrierOrderId}`}
           </DialogTitle>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             {systemId && <span className="text-[10px] font-semibold text-muted-foreground">SYSTEM ID: <span className="text-foreground">{systemId}</span></span>}
             {sellerId && <span className="text-[10px] font-semibold text-muted-foreground">SELLER ID: <span className="text-foreground">{sellerId}</span></span>}
-            <span className="text-[10px] font-semibold text-muted-foreground">CARRIER ID: <span className="text-foreground">{orioOrderId}</span></span>
+            <span className="text-[10px] font-semibold text-muted-foreground">CARRIER ID: <span className="text-foreground">{carrierOrderId}</span></span>
           </div>
         </DialogHeader>
 

@@ -1697,7 +1697,7 @@ async function aiContinueReply(args: {
 
     // After replying, attempt to extract a complete address from the customer's
     // latest message + history. If we get a deliverable address, update the
-    // order (mapping city to ORIO cache) and auto-confirm.
+    // order (mapping city to the carrier cache) and auto-confirm.
     if (order) {
       try {
         await tryExtractAndConfirmAddress({
@@ -1719,7 +1719,7 @@ async function aiContinueReply(args: {
 
 // ---------------------------------------------------------------------------
 // Extract a complete delivery address via OpenAI (JSON mode), match the city
-// to ORIO cities cache, then update + auto-confirm the order.
+// to the carrier cities cache, then update + auto-confirm the order.
 // ---------------------------------------------------------------------------
 async function tryExtractAndConfirmAddress(args: {
   order: any;
@@ -1844,9 +1844,9 @@ async function tryExtractAndConfirmAddress(args: {
     return;
   }
 
-  // Load ORIO cities for matching (non-blocking — if cache is empty we still
+  // Load carrier cities for matching (non-blocking: if cache is empty we still
   // confirm the order using the raw city text the AI extracted).
-  const { data: orioCarrier } = await admin
+  const { data: defaultCarrier } = await admin
     .from("carriers")
     .select("id")
     .eq("code", "orio")
@@ -1854,7 +1854,7 @@ async function tryExtractAndConfirmAddress(args: {
   const { data: cities } = await admin
     .from("carrier_city_cache")
     .select("city_name")
-    .eq("carrier_id", orioCarrier?.id || "00000000-0000-0000-0000-000000000000");
+    .eq("carrier_id", defaultCarrier?.id || "00000000-0000-0000-0000-000000000000");
   const cityNames = (cities ?? []).map((c: any) => c.city_name);
   if (cityNames.length === 0) {
     log("address-extract: carrier_city_cache empty — proceeding without city matching");
@@ -1941,7 +1941,7 @@ Rules:
     return;
   }
 
-  // Match city to ORIO cache (case-insensitive, trimmed). City matching is
+  // Match city to carrier cache (case-insensitive, trimmed). City matching is
   // NON-BLOCKING: if no match, we still confirm the order using the raw city
   // text the customer provided — admins can fix it later.
   const wanted = parsed.city.trim().toLowerCase();
@@ -1954,7 +1954,7 @@ Rules:
   }
   const finalCity = matchedCity || parsed.city.trim();
   if (!matchedCity) {
-    log("address-extract: city not in ORIO cache, using raw", parsed.city);
+    log("address-extract: city not in carrier cache, using raw", parsed.city);
   }
 
   // Snapshot before for history (capture original values BEFORE any update)
@@ -1969,7 +1969,7 @@ Rules:
   for (const f of trackedFields) before[f] = order[f] ?? null;
 
   // STEP 1: Update address + city FIRST and wait for it to commit.
-  // This guarantees that any downstream consumer (ORIO sync, triggers, etc.)
+  // This guarantees that any downstream consumer (carrier sync, triggers, etc.)
   // that reads the order after confirmation will see the new address — never
   // the stale one.
   const newAddress = parsed.full_address.trim();
@@ -1987,7 +1987,7 @@ Rules:
   }
 
   // STEP 2: Re-fetch to confirm the address is persisted, then confirm the
-  // order (and optionally trigger auto-book to ORIO). Doing this as a separate
+  // order (and optionally trigger auto-book to the carrier). Doing this as a separate
   // statement means the row's address column is already committed when the
   // booked status is set.
   const { data: refreshed } = await admin

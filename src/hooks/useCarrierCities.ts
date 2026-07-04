@@ -41,9 +41,3 @@ export function useCarrierCities(carrierCode = "orio") {
     staleTime: 24 * 60 * 60 * 1000, // 24h cache
   });
 }
-
-export type OrioCity = CarrierCity;
-
-export function useOrioCities() {
-  return useCarrierCities("orio");
-}

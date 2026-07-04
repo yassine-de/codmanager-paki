@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useOrioCities } from "@/hooks/useOrioCities";
+import { useCarrierCities } from "@/hooks/useCarrierCities";
 
 interface CitySelectProps {
   value: string;
@@ -18,7 +18,7 @@ interface CitySelectProps {
 
 export function CitySelect({ value, onValueChange, className, triggerClassName, highlightInvalid, modal }: CitySelectProps) {
   const [open, setOpen] = React.useState(false);
-  const { data: cities = [], isLoading } = useOrioCities();
+  const { data: cities = [], isLoading } = useCarrierCities();
 
   const isInvalid = React.useMemo(() => {
     if (!highlightInvalid || !value || isLoading || cities.length === 0) return false;
@@ -38,7 +38,7 @@ export function CitySelect({ value, onValueChange, className, triggerClassName, 
             triggerClassName || "h-9 text-sm",
             isInvalid && "border-destructive text-destructive"
           )}
-          title={isInvalid ? `"${value}" is not a valid ORIO city — pick one from the list` : undefined}
+          title={isInvalid ? `"${value}" is not a valid carrier city. Pick one from the list` : undefined}
         >
           <span className="truncate">{value || (isLoading ? "Loading cities..." : "Select city")}</span>
           <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 opacity-50" />

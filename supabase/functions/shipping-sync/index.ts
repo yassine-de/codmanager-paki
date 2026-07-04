@@ -7,8 +7,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const ORIO_BASE = "https://apis.orio.digital/api";
-const ORIO_CODE = "orio";
+const DEFAULT_CARRIER_API_BASE = "https://apis.orio.digital/api";
+const DEFAULT_CARRIER_CODE = Deno.env.get("DEFAULT_CARRIER_CODE") || "orio";
 
 function getSupabaseAdmin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -18,32 +18,32 @@ async function getCarrier(supabase: ReturnType<typeof createClient>) {
   const { data, error } = await supabase
     .from("carriers")
     .select("*")
-    .eq("code", ORIO_CODE)
+    .eq("code", DEFAULT_CARRIER_CODE)
     .maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error("ORIO carrier is not configured");
+  if (!data) throw new Error("Default carrier is not configured");
   return data;
 }
 
-async function getOrioConfig(supabase: ReturnType<typeof createClient>) {
+async function getCarrierConfig(supabase: ReturnType<typeof createClient>) {
   const { data: settings } = await supabase
     .from("app_settings")
     .select("key,value")
-    .in("key", ["orio_api_token", "orio_account_number", "orio_api_enabled"]);
+    .in("key", ["carrier_api_token", "carrier_account_number", "carrier_sync_enabled"]);
 
   const byKey = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
-  const token = byKey.orio_api_token || Deno.env.get("ORIO_API_TOKEN");
-  if (!token) throw new Error("ORIO API token is not configured");
+  const token = byKey.carrier_api_token || Deno.env.get("CARRIER_API_TOKEN");
+  if (!token) throw new Error("Carrier API token is not configured");
 
   return {
     token,
-    acno: byKey.orio_account_number || Deno.env.get("ORIO_ACCOUNT_NUMBER") || "OR-04820",
-    enabled: byKey.orio_api_enabled !== "false",
-    platformId: Number(Deno.env.get("ORIO_PLATFORM_ID") || 7),
+    acno: byKey.carrier_account_number || Deno.env.get("CARRIER_ACCOUNT_NUMBER") || "OR-04820",
+    enabled: byKey.carrier_sync_enabled !== "false",
+    platformId: Number(Deno.env.get("CARRIER_PLATFORM_ID") || 7),
   };
 }
 
-function orioHeaders(token: string) {
+function carrierHeaders(token: string) {
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
@@ -102,15 +102,15 @@ async function getCities(supabase: ReturnType<typeof createClient>) {
     return allCities;
   }
 
-  const cfg = await getOrioConfig(supabase);
-  const res = await fetch(`${ORIO_BASE}/cities`, {
+  const cfg = await getCarrierConfig(supabase);
+  const res = await fetch(`${DEFAULT_CARRIER_API_BASE}/cities`, {
     method: "POST",
-    headers: orioHeaders(cfg.token),
+    headers: carrierHeaders(cfg.token),
     body: JSON.stringify({ acno: cfg.acno, country_id: 1 }),
   });
 
   if (!res.ok) {
-    throw new Error(`ORIO cities API error: ${res.status} ${await res.text()}`);
+    throw new Error(`Carrier cities API error: ${res.status} ${await res.text()}`);
   }
 
   const cities = await res.json();
@@ -159,8 +159,8 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
     return { skipped: true, reason: "Already synced", shipment: existing };
   }
 
-  const cfg = await getOrioConfig(supabase);
-  if (!cfg.enabled) throw new Error("ORIO API is disabled");
+  const cfg = await getCarrierConfig(supabase);
+  if (!cfg.enabled) throw new Error("Carrier API is disabled");
 
   const cities = await getCities(supabase);
   const rawCity = (order.customer_city || "").trim().toLowerCase();
@@ -186,7 +186,7 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
   const originCityId = Number(lahore?.carrier_city_id || 375);
   const originProvinceId = Number(lahore?.province_name || 4);
 
-  const orioOrder = {
+  const carrierOrder = {
     acno: cfg.acno,
     shipper_name: "COD Pakistani",
     shipper_email: "Badereddine@gmail.com",
@@ -227,10 +227,10 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
     remarks: order.note || "",
   };
 
-  const res = await fetch(`${ORIO_BASE}/order`, {
+  const res = await fetch(`${DEFAULT_CARRIER_API_BASE}/order`, {
     method: "POST",
-    headers: orioHeaders(cfg.token),
-    body: JSON.stringify([orioOrder]),
+    headers: carrierHeaders(cfg.token),
+    body: JSON.stringify([carrierOrder]),
   });
 
   const responseText = await res.text();
@@ -248,17 +248,17 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
       order_id: order.order_id,
       carrier_id: carrier.id,
       sync_status: "failed",
-      sync_error: `ORIO error: ${JSON.stringify(errorMsg).substring(0, 500)}`,
+      sync_error: `Carrier error: ${JSON.stringify(errorMsg).substring(0, 500)}`,
       raw_create_response: responseData,
     };
     if (existing) await supabase.from("shipments").update(payload).eq("id", existing.id);
     else await supabase.from("shipments").insert(payload);
-    throw new Error(`ORIO create order failed: ${JSON.stringify(errorMsg).substring(0, 200)}`);
+    throw new Error(`Carrier create order failed: ${JSON.stringify(errorMsg).substring(0, 200)}`);
   }
 
   const carrierOrderId = responseData?.payload?.[0]?.order_id || responseData?.data?.[0]?.order_id || responseData?.payload?.order_id;
   const trackingNumber = responseData?.payload?.[0]?.consigment_no || responseData?.data?.[0]?.consigment_no || null;
-  if (!carrierOrderId) throw new Error("ORIO response missing order_id");
+  if (!carrierOrderId) throw new Error("Carrier response missing order_id");
 
   const shipmentPayload = {
     order_uuid: order.id,
@@ -318,10 +318,10 @@ async function syncConfirmedOrder(supabase: ReturnType<typeof createClient>, ord
 }
 
 async function trackByCarrierOrderId(supabase: ReturnType<typeof createClient>, carrierOrderId: string) {
-  const cfg = await getOrioConfig(supabase);
-  const res = await fetch(`${ORIO_BASE}/track`, {
+  const cfg = await getCarrierConfig(supabase);
+  const res = await fetch(`${DEFAULT_CARRIER_API_BASE}/track`, {
     method: "POST",
-    headers: orioHeaders(cfg.token),
+    headers: carrierHeaders(cfg.token),
     body: JSON.stringify({ order_id: carrierOrderId, acno: cfg.acno }),
   });
   const data = await res.json();
@@ -360,7 +360,7 @@ Deno.serve(async (req) => {
   try {
     const supabase = getSupabaseAdmin();
     const body = await req.json();
-    const { action, order_id, carrier_order_id, orio_order_id } = body;
+    const { action, order_id, carrier_order_id } = body;
     let result: any;
 
     switch (action) {
@@ -375,9 +375,9 @@ Deno.serve(async (req) => {
         if (!order_id) throw new Error("order_id required");
         result = await syncConfirmedOrder(supabase, order_id);
         break;
-      case "track-by-orio-id":
       case "track-by-carrier-order-id":
-        result = await trackByCarrierOrderId(supabase, String(carrier_order_id || orio_order_id));
+        if (!carrier_order_id) throw new Error("carrier_order_id required");
+        result = await trackByCarrierOrderId(supabase, String(carrier_order_id));
         break;
       case "sync-all-pending": {
         const { data: pending, error } = await supabase
@@ -403,7 +403,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
-    console.error("orio-sync error:", e);
+    console.error("shipping-sync error:", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

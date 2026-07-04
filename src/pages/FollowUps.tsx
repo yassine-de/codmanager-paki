@@ -220,13 +220,13 @@ function StatusPill({ value, styleMap }: { value: string | null; styleMap: Recor
 
 /* ── Column system ── */
 type ColumnKey =
-  | "order_id" | "orio_id" | "customer" | "phone" | "city"
+  | "order_id" | "tracking" | "customer" | "phone" | "city"
   | "product"  | "price"   | "delivery" | "segment" | "days"
   | "follow_up"| "note"    | "created"  | "updated" | "actions";
 
 const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "order_id",  label: "Order ID"   },
-  { key: "orio_id",   label: "Tracking"   },
+  { key: "tracking",  label: "Tracking"   },
   { key: "customer",  label: "Customer"   },
   { key: "phone",     label: "Phone"      },
   { key: "city",      label: "City"       },
@@ -934,7 +934,7 @@ export default function FollowUps() {
 /* ── Column widths ── */
 const columnWidths: Record<ColumnKey, string> = {
   order_id:  "94px",
-  orio_id:   "82px",
+  tracking:  "82px",
   customer:  "140px",
   phone:     "112px",
   city:      "88px",
@@ -953,7 +953,7 @@ const columnWidths: Record<ColumnKey, string> = {
 function cellClassFor(key: ColumnKey): string {
   switch (key) {
     case "order_id": return "px-3 font-mono text-xs font-medium";
-    case "orio_id":
+    case "tracking":
       return row.tracking_number ? (
         <div className="flex flex-col gap-0.5">
           <span className="text-[hsl(210,60%,52%)] font-semibold text-xs tabular-nums">
@@ -1474,7 +1474,7 @@ function renderCell(
         </span>
       );
 
-    case "orio_id":
+    case "tracking":
       return row.tracking_number ? (
         <div className="flex flex-col gap-0.5">
           <span className="text-[hsl(210,60%,52%)] font-semibold text-xs tabular-nums">

@@ -89,27 +89,27 @@ export default function SystemHealth() {
       const { data } = await supabase
         .from("app_settings")
         .select("value")
-        .eq("key", "orio_last_status_sync")
+        .eq("key", "carrier_last_status_sync")
         .maybeSingle();
       return data?.value || null;
     },
     refetchInterval: 30000,
   });
 
-  const { data: orioEnabled } = useQuery({
-    queryKey: ["system-health-orio-enabled"],
+  const { data: carrierSyncEnabled } = useQuery({
+    queryKey: ["system-health-carrier-sync-enabled"],
     queryFn: async () => {
       const { data } = await supabase
         .from("app_settings")
         .select("value")
-        .eq("key", "orio_api_enabled")
+        .eq("key", "carrier_sync_enabled")
         .maybeSingle();
       return data?.value === "true";
     },
   });
 
   const { data: totalCarrierShipments = 0 } = useQuery({
-    queryKey: ["system-health-total-orio"],
+    queryKey: ["system-health-total-carrier-shipments"],
     queryFn: async () => {
       const { count } = await supabase
         .from("shipments" as any)
@@ -139,7 +139,7 @@ export default function SystemHealth() {
         .update({ sync_status: "pending", sync_error: null })
         .eq("id", order.id);
 
-      const { error } = await supabase.functions.invoke("orio-sync", {
+      const { error } = await supabase.functions.invoke("shipping-sync", {
         body: { action: "sync-order", order_id: order.order_id },
       });
       if (error) throw error;
@@ -154,7 +154,7 @@ export default function SystemHealth() {
 
   const handleTriggerStatusSync = async () => {
     try {
-      const { error } = await supabase.functions.invoke("orio-status-sync");
+      const { error } = await supabase.functions.invoke("carrier-status-sync");
       if (error) throw error;
       toast.success("Status sync triggered");
     } catch (e: any) {
@@ -218,8 +218,8 @@ export default function SystemHealth() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <ServiceCard
           title="Shipping API"
-          status={orioEnabled ? "operational" : "disabled"}
-          detail={orioEnabled ? "Integration active" : "Integration disabled"}
+          status={carrierSyncEnabled ? "operational" : "disabled"}
+          detail={carrierSyncEnabled ? "Integration active" : "Integration disabled"}
         />
         <ServiceCard
           title="Status Sync (Cron)"
@@ -266,7 +266,7 @@ export default function SystemHealth() {
             orders={unmappedOrders}
             loading={loadingUnmapped}
             emptyMessage="No orders stuck in booked status with a carrier status."
-            showOrioStatus
+            showCarrierStatus
           />
         </TabsContent>
 
@@ -326,12 +326,12 @@ function ServiceCard({ title, status, detail }: {
   );
 }
 
-function IssueTable({ orders, loading, emptyMessage, showError, showOrioStatus, retrying, onRetry }: {
+function IssueTable({ orders, loading, emptyMessage, showError, showCarrierStatus, retrying, onRetry }: {
   orders: SyncIssueOrder[];
   loading: boolean;
   emptyMessage: string;
   showError?: boolean;
-  showOrioStatus?: boolean;
+  showCarrierStatus?: boolean;
   retrying?: string | null;
   onRetry?: (o: SyncIssueOrder) => void;
 }) {
@@ -365,7 +365,7 @@ function IssueTable({ orders, loading, emptyMessage, showError, showOrioStatus, 
                 <TableHead className="text-[11px] font-semibold h-9">System ID</TableHead>
                 <TableHead className="text-[11px] font-semibold h-9">Customer</TableHead>
                 <TableHead className="text-[11px] font-semibold h-9">Delivery Status</TableHead>
-                {showOrioStatus && <TableHead className="text-[11px] font-semibold h-9">Carrier Status</TableHead>}
+                {showCarrierStatus && <TableHead className="text-[11px] font-semibold h-9">Carrier Status</TableHead>}
                 {showError && <TableHead className="text-[11px] font-semibold h-9">Error</TableHead>}
                 <TableHead className="text-[11px] font-semibold h-9">Date</TableHead>
                 {onRetry && <TableHead className="text-[11px] font-semibold h-9 text-right">Action</TableHead>}
@@ -380,7 +380,7 @@ function IssueTable({ orders, loading, emptyMessage, showError, showOrioStatus, 
                   <TableCell className="py-2">
                     <Badge variant="secondary" className="text-[10px]">{(o as any).orders?.delivery_status || (o as any).normalized_status || "—"}</Badge>
                   </TableCell>
-                  {showOrioStatus && (
+                  {showCarrierStatus && (
                     <TableCell className="py-2">
                       <Badge variant="outline" className="text-[10px]">{o.carrier_status || "—"}</Badge>
                     </TableCell>
