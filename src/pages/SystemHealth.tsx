@@ -21,10 +21,10 @@ interface SyncIssueOrder {
   id: string;
   order_id: string;
   system_id: number | null;
-  orio_order_id: number | null;
-  orio_sync_status: string | null;
-  orio_sync_error: string | null;
-  orio_shipping_status: string | null;
+  carrier_order_id: string | null;
+  sync_status: string | null;
+  sync_error: string | null;
+  carrier_status: string | null;
   delivery_status: string | null;
   customer_name: string;
   created_at: string;
@@ -41,9 +41,9 @@ export default function SystemHealth() {
     queryKey: ["system-health-sync-errors"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("orders")
-        .select("id, order_id, system_id, orio_order_id, orio_sync_status, orio_sync_error, orio_shipping_status, delivery_status, customer_name, created_at")
-        .eq("orio_sync_status", "error")
+        .from("shipments" as any)
+        .select("id, order_id, carrier_order_id, sync_status, sync_error, carrier_status, normalized_status, created_at, orders(system_id, delivery_status, customer_name)")
+        .eq("sync_status", "failed")
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -56,11 +56,10 @@ export default function SystemHealth() {
     queryKey: ["system-health-unmapped"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("orders")
-        .select("id, order_id, system_id, orio_order_id, orio_sync_status, orio_sync_error, orio_shipping_status, delivery_status, customer_name, created_at")
-        .not("orio_order_id", "is", null)
-        .eq("delivery_status", "booked")
-        .not("orio_shipping_status", "is", null)
+        .from("shipments" as any)
+        .select("id, order_id, carrier_order_id, sync_status, sync_error, carrier_status, normalized_status, created_at, orders(system_id, delivery_status, customer_name)")
+        .eq("normalized_status", "booked")
+        .not("carrier_status", "is", null)
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -73,9 +72,9 @@ export default function SystemHealth() {
     queryKey: ["system-health-pending-sync"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("orders")
-        .select("id, order_id, system_id, orio_order_id, orio_sync_status, orio_sync_error, orio_shipping_status, delivery_status, customer_name, created_at")
-        .eq("orio_sync_status", "pending")
+        .from("shipments" as any)
+        .select("id, order_id, carrier_order_id, sync_status, sync_error, carrier_status, normalized_status, created_at, orders(system_id, delivery_status, customer_name)")
+        .eq("sync_status", "pending")
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -109,13 +108,12 @@ export default function SystemHealth() {
     },
   });
 
-  const { data: totalOrioOrders = 0 } = useQuery({
+  const { data: totalCarrierShipments = 0 } = useQuery({
     queryKey: ["system-health-total-orio"],
     queryFn: async () => {
       const { count } = await supabase
-        .from("orders")
+        .from("shipments" as any)
         .select("*", { count: "exact", head: true })
-        .not("orio_order_id", "is", null);
       return count || 0;
     },
     refetchInterval: 60000,
@@ -137,12 +135,12 @@ export default function SystemHealth() {
     setRetrying(order.id);
     try {
       await supabase
-        .from("orders")
-        .update({ orio_sync_status: "pending", orio_sync_error: null })
+        .from("shipments" as any)
+        .update({ sync_status: "pending", sync_error: null })
         .eq("id", order.id);
 
       const { error } = await supabase.functions.invoke("orio-sync", {
-        body: { action: "sync-single", order_id: order.id },
+        body: { action: "sync-order", order_id: order.order_id },
       });
       if (error) throw error;
       toast.success(`Retry triggered for ${order.order_id}`);
@@ -166,8 +164,8 @@ export default function SystemHealth() {
 
   // ---- Derived ----
   const isLoading = loadingSyncErrors || loadingUnmapped || loadingPending;
-  const healthScore = totalOrioOrders > 0
-    ? Math.round(((totalOrioOrders - syncErrors.length) / totalOrioOrders) * 100)
+  const healthScore = totalCarrierShipments > 0
+    ? Math.round(((totalCarrierShipments - syncErrors.length) / totalCarrierShipments) * 100)
     : 100;
 
   return (
@@ -195,7 +193,7 @@ export default function SystemHealth() {
           color={healthScore >= 95 ? "text-emerald-600" : healthScore >= 80 ? "text-amber-500" : "text-red-500"}
         />
         <KpiCard icon={<Database className="h-4 w-4" />} label="Total Orders" value={String(totalOrders)} />
-        <KpiCard icon={<Truck className="h-4 w-4" />} label="ORIO Synced" value={String(totalOrioOrders)} />
+        <KpiCard icon={<Truck className="h-4 w-4" />} label="Carrier Synced" value={String(totalCarrierShipments)} />
         <KpiCard
           icon={<XCircle className="h-4 w-4" />}
           label="Sync Errors"
@@ -219,7 +217,7 @@ export default function SystemHealth() {
       {/* Service Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <ServiceCard
-          title="ORIO API"
+          title="Shipping API"
           status={orioEnabled ? "operational" : "disabled"}
           detail={orioEnabled ? "Integration active" : "Integration disabled"}
         />
@@ -243,7 +241,7 @@ export default function SystemHealth() {
             {syncErrors.length > 0 && <Badge variant="destructive" className="ml-1 text-[9px] px-1.5 py-0">{syncErrors.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="unmapped" className="text-xs gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" /> Booked w/ ORIO Status
+            <AlertTriangle className="h-3.5 w-3.5" /> Booked w/ Carrier Status
             {unmappedOrders.length > 0 && <Badge variant="warning" className="ml-1 text-[9px] px-1.5 py-0">{unmappedOrders.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="pending" className="text-xs gap-1.5">
@@ -267,7 +265,7 @@ export default function SystemHealth() {
           <IssueTable
             orders={unmappedOrders}
             loading={loadingUnmapped}
-            emptyMessage="No orders stuck in booked status with an ORIO shipping status."
+            emptyMessage="No orders stuck in booked status with a carrier status."
             showOrioStatus
           />
         </TabsContent>
@@ -367,7 +365,7 @@ function IssueTable({ orders, loading, emptyMessage, showError, showOrioStatus, 
                 <TableHead className="text-[11px] font-semibold h-9">System ID</TableHead>
                 <TableHead className="text-[11px] font-semibold h-9">Customer</TableHead>
                 <TableHead className="text-[11px] font-semibold h-9">Delivery Status</TableHead>
-                {showOrioStatus && <TableHead className="text-[11px] font-semibold h-9">ORIO Status</TableHead>}
+                {showOrioStatus && <TableHead className="text-[11px] font-semibold h-9">Carrier Status</TableHead>}
                 {showError && <TableHead className="text-[11px] font-semibold h-9">Error</TableHead>}
                 <TableHead className="text-[11px] font-semibold h-9">Date</TableHead>
                 {onRetry && <TableHead className="text-[11px] font-semibold h-9 text-right">Action</TableHead>}
@@ -377,19 +375,19 @@ function IssueTable({ orders, loading, emptyMessage, showError, showOrioStatus, 
               {orders.map((o) => (
                 <TableRow key={o.id} className="hover:bg-muted/30">
                   <TableCell className="text-xs font-medium py-2">{o.order_id}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground py-2">{o.system_id || "—"}</TableCell>
-                  <TableCell className="text-xs py-2">{o.customer_name}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground py-2">{(o as any).orders?.system_id || "—"}</TableCell>
+                  <TableCell className="text-xs py-2">{(o as any).orders?.customer_name || ""}</TableCell>
                   <TableCell className="py-2">
-                    <Badge variant="secondary" className="text-[10px]">{o.delivery_status || "—"}</Badge>
+                    <Badge variant="secondary" className="text-[10px]">{(o as any).orders?.delivery_status || (o as any).normalized_status || "—"}</Badge>
                   </TableCell>
                   {showOrioStatus && (
                     <TableCell className="py-2">
-                      <Badge variant="outline" className="text-[10px]">{o.orio_shipping_status || "—"}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{o.carrier_status || "—"}</Badge>
                     </TableCell>
                   )}
                   {showError && (
-                    <TableCell className="text-xs text-destructive py-2 max-w-[250px] truncate" title={o.orio_sync_error || ""}>
-                      {o.orio_sync_error || "—"}
+                    <TableCell className="text-xs text-destructive py-2 max-w-[250px] truncate" title={o.sync_error || ""}>
+                      {o.sync_error || "—"}
                     </TableCell>
                   )}
                   <TableCell className="text-xs text-muted-foreground py-2">

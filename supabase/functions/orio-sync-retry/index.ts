@@ -1,6 +1,5 @@
 // @ts-nocheck
-// Cron-Fallback: retries orders stuck in pending/failed sync
-// Runs every 10 min. Calls orio-sync (sync-order action) for each candidate.
+// Cron fallback: retries confirmed orders without a synced ORIO shipment.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0?no-check";
 
 const corsHeaders = {
@@ -9,46 +8,54 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   try {
-    // Check ORIO enabled
     const { data: enabled } = await supabase
-      .from("app_settings").select("value").eq("key", "orio_api_enabled").maybeSingle();
-    if (!enabled || enabled.value !== "true") {
-      return new Response(JSON.stringify({ skipped: true, reason: "ORIO disabled" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      .from("app_settings")
+      .select("value")
+      .eq("key", "orio_api_enabled")
+      .maybeSingle();
+    if (enabled?.value === "false") {
+      return new Response(JSON.stringify({ skipped: true, reason: "ORIO disabled" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Find stuck orders: confirmed + booked + no orio_order_id + sync pending/failed
-    const { data: stuck } = await supabase
+    const { data: carrier, error: carrierError } = await supabase
+      .from("carriers")
+      .select("id")
+      .eq("code", "orio")
+      .maybeSingle();
+    if (carrierError) throw carrierError;
+    if (!carrier) throw new Error("ORIO carrier is not configured");
+
+    const { data: orders, error } = await supabase
       .from("orders")
-      .select("id, order_id, orio_sync_status")
+      .select("id, order_id, shipments!left(id, sync_status, carrier_id)")
       .eq("confirmation_status", "confirmed")
-      .eq("delivery_status", "booked")
-      .is("orio_order_id", null)
-      .or("orio_sync_status.is.null,orio_sync_status.eq.pending,orio_sync_status.eq.failed")
+      .or(`shipments.id.is.null,shipments.sync_status.in.(pending,failed)`)
       .limit(50);
+    if (error) throw error;
 
-    if (!stuck || stuck.length === 0) {
-      return new Response(JSON.stringify({ retried: 0, message: "No stuck orders" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const candidates = (orders || []).filter((order: any) => {
+      const shipments = order.shipments || [];
+      return shipments.length === 0 || shipments.some((s: any) => s.carrier_id === carrier.id && ["pending", "failed"].includes(s.sync_status));
+    });
+
+    if (candidates.length === 0) {
+      return new Response(JSON.stringify({ retried: 0, message: "No stuck orders" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    console.log(`Retrying ${stuck.length} stuck orders`);
-
-    const results: any[] = [];
     const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/orio-sync`;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const results: any[] = [];
 
-    for (const o of stuck) {
+    for (const order of candidates) {
       try {
         const res = await fetch(url, {
           method: "POST",
@@ -56,26 +63,30 @@ Deno.serve(async (req) => {
             Authorization: `Bearer ${serviceKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ action: "sync-order", order_id: o.order_id }),
+          body: JSON.stringify({ action: "sync-order", order_id: order.order_id }),
         });
         const data = await res.json();
-        results.push({ order_id: o.order_id, ok: res.ok, ...data });
+        results.push({ order_id: order.order_id, ok: res.ok, ...data });
       } catch (e) {
-        results.push({ order_id: o.order_id, error: (e as Error).message });
+        results.push({ order_id: order.order_id, error: (e as Error).message });
       }
     }
 
     await supabase.from("app_settings").upsert(
       { key: "orio_last_retry_run", value: new Date().toISOString(), updated_at: new Date().toISOString() },
-      { onConflict: "key" }
+      { onConflict: "key" },
     );
 
-    const ok = results.filter((r) => r.ok && !r.error && !r.skipped).length;
-    return new Response(JSON.stringify({ retried: stuck.length, succeeded: ok, results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({
+      retried: candidates.length,
+      succeeded: results.filter((r) => r.ok && !r.error && !r.skipped).length,
+      results,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("orio-sync-retry error:", e);
-    return new Response(JSON.stringify({ error: (e as Error).message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: (e as Error).message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

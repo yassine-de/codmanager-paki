@@ -24,12 +24,20 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
     queryKey: ["failed-sync-orders"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("orders")
-        .select("id, order_id, customer_name, customer_city, orio_sync_error, updated_at, confirmation_status")
-        .eq("orio_sync_status", "failed")
+        .from("shipments" as any)
+        .select("id, order_id, sync_error, updated_at, orders(id, order_id, customer_name, customer_city, confirmation_status)")
+        .eq("sync_status", "failed")
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      return data || [];
+      return (data || []).map((shipment: any) => ({
+        id: shipment.id,
+        order_id: shipment.order_id,
+        customer_name: shipment.orders?.customer_name || "",
+        customer_city: shipment.orders?.customer_city || "",
+        confirmation_status: shipment.orders?.confirmation_status || "",
+        sync_error: shipment.sync_error,
+        updated_at: shipment.updated_at,
+      }));
     },
     enabled: open,
     refetchInterval: open ? 15_000 : false,
@@ -40,10 +48,9 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
   const handleRetry = async (orderId: string, orderDbId: string) => {
     setRetryingId(orderId);
     try {
-      // Reset sync status first so the edge function doesn't skip it
       await supabase
-        .from("orders")
-        .update({ orio_sync_status: "pending", orio_sync_error: null })
+        .from("shipments" as any)
+        .update({ sync_status: "pending", sync_error: null })
         .eq("order_id", orderId);
 
       const { data, error } = await supabase.functions.invoke("orio-sync", {
@@ -143,8 +150,8 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
                         {order.confirmation_status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-destructive max-w-[200px] truncate" title={order.orio_sync_error || ""}>
-                      {order.orio_sync_error || "Unknown error"}
+                    <TableCell className="text-xs text-destructive max-w-[200px] truncate" title={order.sync_error || ""}>
+                      {order.sync_error || "Unknown error"}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                       {format(new Date(order.updated_at), "dd.MM.yy HH:mm")}

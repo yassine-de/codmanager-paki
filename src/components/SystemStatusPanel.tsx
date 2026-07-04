@@ -62,7 +62,7 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
     queryKey: ["system-failed-syncs", rangeKey],
     queryFn: async () => {
       const { count, error } = await applyRange(
-        supabase.from("orders").select("id", { count: "exact", head: true }).eq("orio_sync_status", "failed")
+        supabase.from("shipments" as any).select("id", { count: "exact", head: true }).eq("sync_status", "failed")
       );
       if (error) throw error;
       return count || 0;
@@ -70,19 +70,16 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
     refetchInterval: 30_000,
   });
 
-  // Stuck pending syncs (confirmed+booked, no orio_order_id, pending > 1h)
+  // Stuck pending shipment syncs
   const { data: stuckPendingCount = 0 } = useQuery({
     queryKey: ["system-stuck-pending-syncs", rangeKey],
     queryFn: async () => {
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       const { count, error } = await applyRange(
         supabase
-          .from("orders")
+          .from("shipments" as any)
           .select("id", { count: "exact", head: true })
-          .eq("confirmation_status", "confirmed")
-          .eq("delivery_status", "booked")
-          .is("orio_order_id", null)
-          .or("orio_sync_status.is.null,orio_sync_status.eq.pending")
+          .eq("sync_status", "pending")
           .lt("updated_at", oneHourAgo)
       );
       if (error) throw error;
@@ -98,12 +95,11 @@ export default function SystemStatusPanel({ dateRange }: { dateRange?: DateRange
       const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { count, error } = await supabase
-        .from("orders")
+        .from("shipments" as any)
         .select("id", { count: "exact", head: true })
-        .not("orio_order_id", "is", null)
-        .in("delivery_status", ["booked", "shipped", "failed_attempt", "ready_for_return"])
+        .in("normalized_status", ["booked", "shipped", "failed_attempt", "ready_for_return"])
         .gte("created_at", thirtyDaysAgo)
-        .or(`orio_synced_at.is.null,orio_synced_at.lt.${thirtyMinAgo}`);
+        .or(`last_synced_at.is.null,last_synced_at.lt.${thirtyMinAgo}`);
       if (error) throw error;
       return count || 0;
     },

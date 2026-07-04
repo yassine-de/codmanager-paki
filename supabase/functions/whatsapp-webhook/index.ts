@@ -1846,12 +1846,18 @@ async function tryExtractAndConfirmAddress(args: {
 
   // Load ORIO cities for matching (non-blocking — if cache is empty we still
   // confirm the order using the raw city text the AI extracted).
+  const { data: orioCarrier } = await admin
+    .from("carriers")
+    .select("id")
+    .eq("code", "orio")
+    .maybeSingle();
   const { data: cities } = await admin
-    .from("orio_cities_cache")
-    .select("city_name");
+    .from("carrier_city_cache")
+    .select("city_name")
+    .eq("carrier_id", orioCarrier?.id || "00000000-0000-0000-0000-000000000000");
   const cityNames = (cities ?? []).map((c: any) => c.city_name);
   if (cityNames.length === 0) {
-    log("address-extract: orio_cities_cache empty — proceeding without city matching");
+    log("address-extract: carrier_city_cache empty — proceeding without city matching");
   }
 
   const extractPrompt = `You are an address-extraction assistant for a courier in Pakistan. Your job is to ensure the address is DETAILED ENOUGH for a courier to find the exact location without calling the customer.

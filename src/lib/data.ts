@@ -40,8 +40,10 @@ export interface Order {
   attemptCount?: number;
   invoiceId?: string | null;
   invoiceStatus?: string | null;
-  orioOrderId?: number | null;
+  orioOrderId?: string | number | null;
   orioShippingStatus?: string | null;
+  trackingNumber?: string | null;
+  carrierName?: string | null;
   confirmationChannel?: string | null;
   whatsappStatus?: string | null;
 }

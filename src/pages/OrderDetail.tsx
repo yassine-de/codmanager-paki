@@ -22,11 +22,14 @@ export default function OrderDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*")
+        .select("*, shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, sync_status, sync_error, last_synced_at, created_at, carriers(code, name))")
         .eq("order_id", id!)
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
+      const latestShipment = [...((data as any).shipments || [])].sort((a, b) =>
+        String(b.created_at || "").localeCompare(String(a.created_at || ""))
+      )[0];
 
       // Get seller name
       let sellerName = authUser?.name || "Unknown";
@@ -63,12 +66,13 @@ export default function OrderDetail() {
         shippingCost: Number(data.shipping_cost || 0),
         attemptCount: data.attempt_count,
         fragile: data.fragile,
-        orioOrderId: (data as any).orio_order_id,
-        orioConsignmentNo: (data as any).orio_consignment_no,
-        orioShippingStatus: (data as any).orio_shipping_status,
-        orioSyncStatus: (data as any).orio_sync_status,
-        orioSyncError: (data as any).orio_sync_error,
-        orioSyncedAt: (data as any).orio_synced_at,
+        carrierName: latestShipment?.carriers?.name,
+        carrierOrderId: latestShipment?.carrier_order_id,
+        trackingNumber: latestShipment?.tracking_number,
+        carrierStatus: latestShipment?.carrier_status || latestShipment?.normalized_status,
+        shipmentSyncStatus: latestShipment?.sync_status,
+        shipmentSyncError: latestShipment?.sync_error,
+        shipmentSyncedAt: latestShipment?.last_synced_at,
       };
     },
     enabled: !mockOrder && !!id,
@@ -114,12 +118,13 @@ export default function OrderDetail() {
   const attemptCount = isDbOrder ? dbOrder.attemptCount : 0;
   const fragile = isDbOrder ? dbOrder.fragile : false;
   const offers = isDbOrder ? dbOrder.offers : undefined;
-  const orioOrderId = isDbOrder ? dbOrder.orioOrderId : undefined;
-  const orioConsignmentNo = isDbOrder ? dbOrder.orioConsignmentNo : undefined;
-  const orioShippingStatus = isDbOrder ? dbOrder.orioShippingStatus : undefined;
-  const orioSyncStatus = isDbOrder ? dbOrder.orioSyncStatus : undefined;
-  const orioSyncError = isDbOrder ? dbOrder.orioSyncError : undefined;
-  const orioSyncedAt = isDbOrder ? dbOrder.orioSyncedAt : undefined;
+  const carrierName = isDbOrder ? dbOrder.carrierName : undefined;
+  const carrierOrderId = isDbOrder ? dbOrder.carrierOrderId : undefined;
+  const trackingNumber = isDbOrder ? dbOrder.trackingNumber : undefined;
+  const carrierStatus = isDbOrder ? dbOrder.carrierStatus : undefined;
+  const shipmentSyncStatus = isDbOrder ? dbOrder.shipmentSyncStatus : undefined;
+  const shipmentSyncError = isDbOrder ? dbOrder.shipmentSyncError : undefined;
+  const shipmentSyncedAt = isDbOrder ? dbOrder.shipmentSyncedAt : undefined;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -243,53 +248,59 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      {/* ORIO Shipping - Admin only */}
-      {isDbOrder && (orioSyncStatus || orioOrderId) && authUser?.role === 'admin' && (
+      {/* Shipping - Admin only */}
+      {isDbOrder && (shipmentSyncStatus || carrierOrderId || trackingNumber) && authUser?.role === 'admin' && (
         <div className="bg-card rounded-lg border p-5 space-y-4 animate-slide-up" style={{ animationDelay: '200ms' }}>
           <div className="flex items-center gap-2">
             <Truck className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">ORIO Shipping</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Shipping</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div className="rounded-lg border bg-muted/30 p-3">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Sync Status</p>
               <p className={`text-sm font-semibold mt-0.5 ${
-                orioSyncStatus === 'synced' ? 'text-[hsl(155,50%,42%)]' :
-                orioSyncStatus === 'failed' ? 'text-destructive' :
+                shipmentSyncStatus === 'synced' ? 'text-[hsl(155,50%,42%)]' :
+                shipmentSyncStatus === 'failed' ? 'text-destructive' :
                 'text-[hsl(38,90%,55%)]'
               }`}>
-                {orioSyncStatus || 'pending'}
+                {shipmentSyncStatus || 'pending'}
               </p>
             </div>
-            {orioOrderId && (
+            {carrierName && (
               <div className="rounded-lg border bg-muted/30 p-3">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">ORIO Order ID</p>
-                <p className="text-sm font-semibold mt-0.5 tabular-nums">{orioOrderId}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Carrier</p>
+                <p className="text-sm font-semibold mt-0.5">{carrierName}</p>
               </div>
             )}
-            {orioConsignmentNo && (
+            {carrierOrderId && (
               <div className="rounded-lg border bg-muted/30 p-3">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Consignment No</p>
-                <p className="text-sm font-semibold mt-0.5 tabular-nums">{orioConsignmentNo}</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Carrier Order ID</p>
+                <p className="text-sm font-semibold mt-0.5 tabular-nums">{carrierOrderId}</p>
               </div>
             )}
-            {orioShippingStatus && (
+            {trackingNumber && (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tracking No</p>
+                <p className="text-sm font-semibold mt-0.5 tabular-nums">{trackingNumber}</p>
+              </div>
+            )}
+            {carrierStatus && (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Shipping Status</p>
-                <p className="text-sm font-semibold mt-0.5">{orioShippingStatus}</p>
+                <p className="text-sm font-semibold mt-0.5">{carrierStatus}</p>
               </div>
             )}
-            {orioSyncedAt && (
+            {shipmentSyncedAt && (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Synced At</p>
-                <p className="text-sm font-semibold mt-0.5">{format(new Date(orioSyncedAt), 'dd MMM yyyy, HH:mm')}</p>
+                <p className="text-sm font-semibold mt-0.5">{format(new Date(shipmentSyncedAt), 'dd MMM yyyy, HH:mm')}</p>
               </div>
             )}
           </div>
-          {orioSyncError && (
+          {shipmentSyncError && (
             <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
               <p className="text-[10px] text-destructive uppercase tracking-wider font-medium">Error</p>
-              <p className="text-sm text-destructive/80 mt-0.5">{orioSyncError}</p>
+              <p className="text-sm text-destructive/80 mt-0.5">{shipmentSyncError}</p>
             </div>
           )}
         </div>

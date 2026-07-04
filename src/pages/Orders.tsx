@@ -74,7 +74,7 @@ const deliveryConfig: Record<DeliveryStatus, { label: string; cls: string }> = {
   return: { label: 'Return', cls: 'bg-[hsl(340,65%,52%)]/12 text-[hsl(340,65%,52%)] border-[hsl(340,65%,52%)]/20' },
 };
 
-// Pretty label for ORIO sub-status (kept verbatim from API)
+// Pretty label for carrier sub-status (kept verbatim from carrier API)
 const subStatusLabel = (raw?: string | null) => {
   if (!raw) return null;
   return raw.replace(/\b\w/g, (c) => c.toUpperCase());
@@ -111,7 +111,7 @@ type ColumnKey = 'systemId' | 'id' | 'orioId' | 'createdAt' | 'updatedAt' | 'sel
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
   { key: 'id', label: 'Seller ID', defaultVisible: true },
-  { key: 'orioId', label: 'ORIO ID', defaultVisible: true, adminOnly: true },
+  { key: 'orioId', label: 'Carrier ID', defaultVisible: true, adminOnly: true },
   { key: 'createdAt', label: 'Created', defaultVisible: true },
   { key: 'updatedAt', label: 'Updated', defaultVisible: true },
   { key: 'customer', label: 'Client', defaultVisible: true },
@@ -214,7 +214,7 @@ export default function Orders() {
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [trackingTarget, setTrackingTarget] = useState<{ orioId: number; systemId?: number | null; sellerId?: string | null } | null>(null);
+  const [trackingTarget, setTrackingTarget] = useState<{ orioId: string; systemId?: number | null; sellerId?: string | null } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sellerNames, setSellerNames] = useState<string[]>([]);
@@ -340,7 +340,7 @@ export default function Orders() {
       while (from < MAX_ROWS) {
         const { data, error } = await supabase
           .from("orders")
-          .select("*")
+          .select("*, shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, created_at, carriers(code, name))")
           .order("created_at", { ascending: false })
           .order("id", { ascending: false })
           .range(from, from + PAGE - 1);
@@ -390,7 +390,11 @@ export default function Orders() {
         (invoices || []).forEach(inv => invoiceMap.set(inv.id, inv.status));
       }
 
-      const mapped: Order[] = (data || []).map(o => ({
+      const mapped: Order[] = (data || []).map(o => {
+        const latestShipment = [...((o as any).shipments || [])].sort((a, b) =>
+          String(b.created_at || "").localeCompare(String(a.created_at || ""))
+        )[0];
+        return {
         id: o.order_id,
         systemId: o.system_id || undefined,
         customer: o.customer_name,
@@ -414,13 +418,16 @@ export default function Orders() {
         warehouseState: "in_stock" as const,
         history: [],
         attemptCount: o.attempt_count || 0,
-        orioOrderId: o.orio_order_id || null,
-        orioShippingStatus: o.orio_shipping_status || null,
+        orioOrderId: latestShipment?.carrier_order_id || null,
+        orioShippingStatus: latestShipment?.carrier_status || latestShipment?.normalized_status || null,
+        trackingNumber: latestShipment?.tracking_number || null,
+        carrierName: latestShipment?.carriers?.name || null,
         confirmationChannel: o.confirmation_channel || 'agent',
         whatsappStatus: o.whatsapp_status || null,
         invoiceId: o.invoice_id || null,
         invoiceStatus: o.invoice_id ? (invoiceMap.get(o.invoice_id) || null) : null,
-      }));
+        };
+      });
 
       setOrders(mapped);
       setSellerNames([...new Set(mapped.map(o => o.seller))]);

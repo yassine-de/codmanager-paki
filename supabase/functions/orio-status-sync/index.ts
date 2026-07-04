@@ -12,300 +12,167 @@ function getSupabaseAdmin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
 
-// Status mapping: ORIO sub-status → our DELIVERY status
-// Source: user-provided ORIO status table (17 statuses)
-const STATUS_MAP: Record<string, string> = {
-  // Direct mappings
-  new: "booked",
-  shipped: "shipped",
-  cancelled: "cancelled",
-  delivered: "delivered",
-  // All in-flight courier states → shipped
-  "address closed": "shipped",
-  "arrived at courier facility": "shipped",
-  booked: "shipped",
-  "customer not available": "failed_attempt",
-  "hold on customer's request": "shipped",
-  "hold on customers request": "shipped", // tolerate missing apostrophe
-  "in transit": "shipped",
-  "out for delivery": "shipped",
-  "pickup ready": "shipped",
-  // Failed attempt group → failed_attempt (driver tried but couldn't deliver)
-  "failed attempt": "failed_attempt",
-  "incomplete address": "failed_attempt",
-  "refused to accept": "failed_attempt",
-  "customer not answering": "failed_attempt",
-  // Terminal / outcome statuses
-  "ready for return": "ready_for_return",
-  "return to shipper": "return",
-  return: "return",
-};
+async function getOrioConfig(supabase: ReturnType<typeof createClient>) {
+  const { data: settings } = await supabase
+    .from("app_settings")
+    .select("key,value")
+    .in("key", ["orio_api_token", "orio_account_number", "orio_api_enabled"]);
+  const byKey = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
+  const token = byKey.orio_api_token || Deno.env.get("ORIO_API_TOKEN");
+  if (!token) throw new Error("ORIO API token is not configured");
+  return {
+    token,
+    acno: byKey.orio_account_number || Deno.env.get("ORIO_ACCOUNT_NUMBER") || "OR-04820",
+    enabled: byKey.orio_api_enabled !== "false",
+  };
+}
 
-function mapOrioStatus(orioStatus: string): string | null {
-  return STATUS_MAP[orioStatus.toLowerCase().trim()] || null;
+function normalizeStatus(status?: string | null) {
+  const value = (status || "").toLowerCase().trim();
+  if (!value) return "booked";
+  if (value === "delivered") return "delivered";
+  if (["cancelled", "canceled"].includes(value)) return "cancelled";
+  if (value === "ready for return") return "ready_for_return";
+  if (["return", "return to shipper", "returned"].includes(value)) return "returned";
+  if (["failed attempt", "customer not available", "customer not answering", "refused to accept", "incomplete address"].includes(value)) return "failed_attempt";
+  if (["new", "booked", "pickup ready"].includes(value)) return "booked";
+  return "shipped";
+}
+
+function mapDeliveryStatus(normalizedStatus: string) {
+  if (normalizedStatus === "delivered") return "delivered";
+  if (normalizedStatus === "cancelled") return "cancelled";
+  if (normalizedStatus === "ready_for_return") return "ready_for_return";
+  if (normalizedStatus === "returned" || normalizedStatus === "return_received") return "return";
+  if (normalizedStatus === "failed_attempt") return "failed_attempt";
+  if (normalizedStatus === "booked") return "booked";
+  return "shipped";
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const supabase = getSupabaseAdmin();
 
   try {
-    // Check if ORIO API is enabled
-    const { data: enabledSetting } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "orio_api_enabled")
-      .maybeSingle();
-
-    if (!enabledSetting || enabledSetting.value !== "true") {
-      console.log("ORIO API is disabled, skipping status sync");
+    const cfg = await getOrioConfig(supabase);
+    if (!cfg.enabled) {
       return new Response(JSON.stringify({ skipped: true, reason: "ORIO API disabled" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Get ORIO credentials
-    const { data: tokenSetting } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "orio_api_token")
+    const { data: carrier, error: carrierError } = await supabase
+      .from("carriers")
+      .select("id")
+      .eq("code", "orio")
       .maybeSingle();
+    if (carrierError) throw carrierError;
+    if (!carrier) throw new Error("ORIO carrier is not configured");
 
-    const { data: acnoSetting } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("key", "orio_account_number")
-      .maybeSingle();
+    const staleBefore = new Date(Date.now() - 12 * 60 * 1000).toISOString();
+    const terminal = ["delivered", "returned", "return_received", "cancelled"];
 
-    const token = tokenSetting?.value || Deno.env.get("ORIO_API_TOKEN");
-    const acno = acnoSetting?.value || "OR-04820";
-
-    if (!token) {
-      console.error("No ORIO API token configured");
-      return new Response(JSON.stringify({ error: "No ORIO API token configured" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Smart fetching with tiered priorities + 30-day cutoff + paginated loop.
-    // Tier rules (an order qualifies if ANY tier matches):
-    //   - booked            → sync every run (no staleness gate)
-    //   - shipped / failed_attempt → sync if last synced > 12 min ago
-    //   - ready_for_return  → sync if last synced > 25 min ago
-    // Hard exclusions:
-    //   - terminal statuses (delivered/returned/cancelled/return/rejected)
-    //   - orders older than 30 days (created_at) — stop polling stale shipments forever
-    const now = Date.now();
-    const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const twelveMinAgo = new Date(now - 12 * 60 * 1000).toISOString();
-    const twentyFiveMinAgo = new Date(now - 25 * 60 * 1000).toISOString();
-
-    const tierFilter =
-      `and(delivery_status.eq.booked),` +
-      `and(delivery_status.in.(shipped,failed_attempt),or(orio_synced_at.is.null,orio_synced_at.lt.${twelveMinAgo})),` +
-      `and(delivery_status.eq.ready_for_return,or(orio_synced_at.is.null,orio_synced_at.lt.${twentyFiveMinAgo}))`;
-
-    const PAGE_SIZE = 1000;
-    const MAX_PAGES = 5; // safety cap → up to 5000 orders/run
-    const orders: any[] = [];
-    let fetchErr: any = null;
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const { data: pageData, error } = await supabase
-        .from("orders")
-        .select("id, order_id, orio_order_id, delivery_status, orio_shipping_status, updated_at, orio_synced_at")
-        .not("orio_order_id", "is", null)
-        .gte("created_at", thirtyDaysAgo)
-        .or(tierFilter)
-        .order("orio_synced_at", { ascending: true, nullsFirst: true })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-      if (error) { fetchErr = error; break; }
-      if (!pageData || pageData.length === 0) break;
-      orders.push(...pageData);
-      if (pageData.length < PAGE_SIZE) break;
-    }
-
-    if (fetchErr) {
-      console.error("Error fetching orders:", fetchErr);
-      throw new Error(fetchErr.message);
-    }
-
-    if (!orders || orders.length === 0) {
-      console.log("No orders to sync");
-      // Update last sync timestamp
-      await supabase
-        .from("app_settings")
-        .upsert(
-          { key: "orio_last_status_sync", value: new Date().toISOString(), updated_at: new Date().toISOString() },
-          { onConflict: "key" },
-        );
-      return new Response(JSON.stringify({ synced: 0, message: "No orders to sync" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    console.log(`Processing ${orders.length} orders for status sync (parallel batches of 15)`);
+    const { data: shipments, error } = await supabase
+      .from("shipments")
+      .select("*, orders(id, order_id, delivery_status)")
+      .eq("carrier_id", carrier.id)
+      .not("carrier_order_id", "is", null)
+      .not("normalized_status", "in", `(${terminal.join(",")})`)
+      .or(`last_synced_at.is.null,last_synced_at.lt.${staleBefore}`)
+      .order("last_synced_at", { ascending: true, nullsFirst: true })
+      .limit(500);
+    if (error) throw error;
 
     const results: any[] = [];
-    const BATCH_SIZE = 15;
+    const batchSize = 15;
 
-    // Statuses considered "post-shipped" — must have a shipped history event
-    const POST_SHIPPED = new Set([
-      "shipped",
-      "delivered",
-      "rejected",
-      "returned",
-      "failed_attempt",
-      "ready_for_return",
-      "return",
-    ]);
-
-    // Process a single order: track + update
-    const processOrder = async (order: any) => {
+    async function processShipment(shipment: any) {
       try {
         const res = await fetch(`${ORIO_BASE}/track`, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${cfg.token}`,
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          body: JSON.stringify({
-            order_id: order.orio_order_id,
-            acno: acno,
-          }),
+          body: JSON.stringify({ order_id: shipment.carrier_order_id, acno: cfg.acno }),
+        });
+        const data = await res.json();
+        const payload = Array.isArray(data) && data[0]?.payload ? data[0].payload : data?.payload || data;
+        if (!payload?.status) {
+          return { shipment_id: shipment.id, order_id: shipment.order_id, skipped: true, reason: "No status in tracking response" };
+        }
+
+        const normalized = normalizeStatus(payload.status);
+        const deliveryStatus = mapDeliveryStatus(normalized);
+        const now = new Date().toISOString();
+
+        const { error: shipmentErr } = await supabase.from("shipments").update({
+          tracking_number: payload.consigment_no || shipment.tracking_number,
+          carrier_status: payload.status,
+          normalized_status: normalized,
+          sync_status: "synced",
+          sync_error: null,
+          last_synced_at: now,
+          raw_tracking_response: data,
+        }).eq("id", shipment.id);
+        if (shipmentErr) throw shipmentErr;
+
+        await supabase.from("shipment_events").insert({
+          shipment_id: shipment.id,
+          carrier_status: payload.status,
+          normalized_status: normalized,
+          raw_event: payload,
+          occurred_at: now,
         });
 
-        const data = await res.json();
+        if (deliveryStatus !== shipment.orders?.delivery_status) {
+          await supabase.from("orders").update({
+            delivery_status: deliveryStatus,
+            shipping_status: payload.status,
+            delivered_at: deliveryStatus === "delivered" ? now : undefined,
+            updated_at: now,
+          }).eq("id", shipment.order_uuid);
 
-        let payload: any = null;
-        if (Array.isArray(data) && data.length > 0 && data[0].payload) {
-          payload = data[0].payload;
-        } else if (data?.payload) {
-          payload = data.payload;
+          await supabase.from("order_history").insert({
+            order_id: shipment.order_id,
+            field_changed: "delivery_status",
+            old_value: shipment.orders?.delivery_status,
+            new_value: deliveryStatus,
+            changed_by: "00000000-0000-0000-0000-000000000000",
+            changed_by_role: "system",
+            action_type: "carrier_status_sync",
+            created_at: now,
+          });
         }
 
-        if (!payload || !payload.status) {
-          return { order_id: order.order_id, skipped: true, reason: "No status in tracking response" };
-        }
-
-        const orioStatus = payload.status;
-        const mappedStatus = mapOrioStatus(orioStatus);
-
-        const updateData: any = {
-          orio_shipping_status: orioStatus,
-          orio_consignment_no: payload.consigment_no || undefined,
-          orio_synced_at: new Date().toISOString(),
-        };
-
-        if (mappedStatus && mappedStatus !== order.delivery_status) {
-          updateData.delivery_status = mappedStatus;
-          if (mappedStatus === "delivered") {
-            updateData.delivered_at = new Date().toISOString();
-          }
-          console.log(`Order ${order.order_id}: ${order.delivery_status} → ${mappedStatus} (ORIO: ${orioStatus})`);
-        }
-
-        // Always write back orio_synced_at so the staleness filter advances
-        const { error: updateErr } = await supabase.from("orders").update(updateData).eq("id", order.id);
-
-        if (updateErr) {
-          console.error(`Error updating order ${order.order_id}:`, updateErr);
-          return { order_id: order.order_id, error: updateErr.message };
-        }
-
-        if (orioStatus !== order.orio_shipping_status || (mappedStatus && mappedStatus !== order.delivery_status)) {
-
-          // Log status change to order_history (single source of truth for billing)
-          if (mappedStatus && mappedStatus !== order.delivery_status) {
-            const historyRows: any[] = [];
-            const now = new Date();
-
-            // If new status is post-shipped, ensure a "shipped" event exists first
-            if (POST_SHIPPED.has(mappedStatus) && mappedStatus !== "shipped") {
-              const { data: existingShipped } = await supabase
-                .from("order_history")
-                .select("id")
-                .eq("order_id", order.order_id)
-                .eq("field_changed", "delivery_status")
-                .eq("new_value", "shipped")
-                .limit(1)
-                .maybeSingle();
-
-              if (!existingShipped) {
-                // Insert synthetic shipped event 1ms before the real change so ordering is preserved
-                historyRows.push({
-                  order_id: order.order_id,
-                  field_changed: "delivery_status",
-                  old_value: order.delivery_status || "booked",
-                  new_value: "shipped",
-                  changed_by: "00000000-0000-0000-0000-000000000000",
-                  changed_by_role: "system",
-                  action_type: "orio_sync_synthetic",
-                  created_at: new Date(now.getTime() - 1).toISOString(),
-                });
-                console.log(
-                  `Order ${order.order_id}: inserting synthetic 'shipped' history event (jumped to ${mappedStatus})`,
-                );
-              }
-            }
-
-            // The actual status change
-            historyRows.push({
-              order_id: order.order_id,
-              field_changed: "delivery_status",
-              old_value: order.delivery_status,
-              new_value: mappedStatus,
-              changed_by: "00000000-0000-0000-0000-000000000000",
-              changed_by_role: "system",
-              action_type: "orio_sync",
-              created_at: now.toISOString(),
-            });
-
-            const { error: historyErr } = await supabase.from("order_history").insert(historyRows);
-            if (historyErr) {
-              console.error(`Error logging history for ${order.order_id}:`, historyErr);
-            }
-          }
-        }
-
-        return {
-          order_id: order.order_id,
-          orio_status: orioStatus,
-          mapped_status: mappedStatus,
-          updated: mappedStatus !== order.delivery_status,
-        };
+        return { shipment_id: shipment.id, order_id: shipment.order_id, carrier_status: payload.status, mapped_status: deliveryStatus, updated: true };
       } catch (e) {
-        console.error(`Error tracking order ${order.order_id}:`, e);
-        return { order_id: order.order_id, error: (e as Error).message };
+        await supabase.from("shipments").update({
+          sync_status: "failed",
+          sync_error: (e as Error).message,
+          last_synced_at: new Date().toISOString(),
+        }).eq("id", shipment.id);
+        return { shipment_id: shipment.id, order_id: shipment.order_id, error: (e as Error).message };
       }
-    };
-
-    // Process orders in parallel batches of BATCH_SIZE
-    for (let i = 0; i < orders.length; i += BATCH_SIZE) {
-      const batch = orders.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(batch.map(processOrder));
-      results.push(...batchResults);
     }
 
-    // Update last sync timestamp
-    await supabase
-      .from("app_settings")
-      .upsert(
-        { key: "orio_last_status_sync", value: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { onConflict: "key" },
-      );
+    for (let i = 0; i < (shipments || []).length; i += batchSize) {
+      results.push(...await Promise.all(shipments.slice(i, i + batchSize).map(processShipment)));
+    }
 
-    const updated = results.filter((r) => r.updated).length;
-    const errored = results.filter((r) => r.error).length;
-    console.log(`Sync complete: ${updated} updated, ${errored} errors, ${results.length} total`);
+    await supabase.from("app_settings").upsert(
+      { key: "orio_last_status_sync", value: new Date().toISOString(), updated_at: new Date().toISOString() },
+      { onConflict: "key" },
+    );
 
-    return new Response(JSON.stringify({ synced: results.length, updated, errors: errored, results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({
+      synced: results.length,
+      updated: results.filter((r) => r.updated).length,
+      errors: results.filter((r) => r.error).length,
+      results,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("orio-status-sync error:", e);
     return new Response(JSON.stringify({ error: (e as Error).message }), {

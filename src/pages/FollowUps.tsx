@@ -71,7 +71,6 @@ const startOfYesterday = () => startOfDay(subDaysPKT(new Date(), 1));
 const endOfYesterday   = () => endOfDay(subDaysPKT(new Date(), 1));
 import type { DateRange } from "react-day-picker";
 import OrderHistoryModal from "@/components/OrderHistoryModal";
-import OrioTrackingModal from "@/components/OrioTrackingModal";
 import {
   DndContext,
   closestCenter,
@@ -150,8 +149,9 @@ interface FollowUpRow {
   customer_city: string;
   delivery_status: string | null;
   shipping_status: string | null;
-  orio_order_id: number | null;
-  orio_consignment_no: string | null;
+  shipping_company: string | null;
+  shipment_id: string | null;
+  tracking_number: string | null;
   shipped_at: string | null;
   days_since_shipped: number | null;
   follow_up_status: string;
@@ -168,18 +168,6 @@ interface FollowUpRow {
   product_name: string | null;
   total_amount: number | null;
   fu_no_answer_count: number;
-}
-
-// Detect courier from ORIO consignment number prefix
-function detectCourier(consignmentNo: string | null): string | null {
-  if (!consignmentNo) return null;
-  const cn = consignmentNo.toUpperCase().trim();
-  if (cn.startsWith("MP") || cn.includes("MPX")) return "MPostex";
-  if (cn.startsWith("BL") || cn.includes("BLX")) return "Bleux";
-  if (cn.startsWith("LD") || cn.includes("LEO")) return "Leopard";
-  if (cn.startsWith("TCS"))                       return "TCS";
-  if (cn.startsWith("TR") || cn.includes("TRX"))  return "Trax";
-  return null;
 }
 
 function computeSegment(row: FollowUpRow): "failed_attempt" | "delayed" | "on_going" | null {
@@ -238,7 +226,7 @@ type ColumnKey =
 
 const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "order_id",  label: "Order ID"   },
-  { key: "orio_id",   label: "ORIO ID"    },
+  { key: "orio_id",   label: "Tracking"   },
   { key: "customer",  label: "Customer"   },
   { key: "phone",     label: "Phone"      },
   { key: "city",      label: "City"       },
@@ -290,7 +278,6 @@ export default function FollowUps() {
   const [page, setPage]                 = useState<number>(1);
   const [savingId, setSavingId]         = useState<string | null>(null);
   const [historyOrder, setHistoryOrder] = useState<{ id: string; customer: string } | null>(null);
-  const [trackingTarget, setTrackingTarget] = useState<{ orioId: number; sellerId: string } | null>(null);
   const [noteDialog, setNoteDialog]     = useState<{ orderId: string; currentNote: string; fromStatusChange?: boolean } | null>(null);
   const [noteText, setNoteText]         = useState("");
   const [columns, setColumns]           = useState<ColumnConfig[]>(() => loadColumnConfig());
@@ -420,8 +407,8 @@ export default function FollowUps() {
         r.customer_city,
         r.seller_name ?? "",
         r.agent_name ?? "",
-        r.orio_order_id?.toString() ?? "",
-        r.orio_consignment_no ?? "",
+        r.tracking_number ?? "",
+        r.shipping_company ?? "",
         r.product_name ?? "",
       ].join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
@@ -867,7 +854,7 @@ export default function FollowUps() {
                         <div>
                           <p className="text-sm font-semibold">No orders found</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {activeFilterCount > 0 ? "Try adjusting your filters" : "Orders appear here once shipped to ORIO"}
+                            {activeFilterCount > 0 ? "Try adjusting your filters" : "Orders appear here once shipped to a carrier"}
                           </p>
                         </div>
                         {activeFilterCount > 0 && (
@@ -892,7 +879,7 @@ export default function FollowUps() {
                             key={col.key}
                             className={`py-1.5 overflow-hidden ${cellClassFor(col.key)}`}
                           >
-                            {renderCell(col.key, row, segMeta, savingId, handleStatusChange, handleNoteSave, navigate, setHistoryOrder, setTrackingTarget, openNoteDialog)}
+                            {renderCell(col.key, row, segMeta, savingId, handleStatusChange, handleNoteSave, navigate, setHistoryOrder, openNoteDialog)}
                           </td>
                         ))}
                       </tr>
@@ -910,16 +897,6 @@ export default function FollowUps() {
             onOpenChange={(o) => !o && setHistoryOrder(null)}
             orderId={historyOrder.id}
             customerName={historyOrder.customer}
-          />
-        )}
-
-        {trackingTarget && (
-          <OrioTrackingModal
-            orioOrderId={trackingTarget.orioId}
-            systemId={null}
-            sellerId={trackingTarget.sellerId}
-            open={!!trackingTarget}
-            onClose={() => setTrackingTarget(null)}
           />
         )}
 
@@ -976,7 +953,20 @@ const columnWidths: Record<ColumnKey, string> = {
 function cellClassFor(key: ColumnKey): string {
   switch (key) {
     case "order_id": return "px-3 font-mono text-xs font-medium";
-    case "orio_id":  return "px-3 text-xs";
+    case "orio_id":
+      return row.tracking_number ? (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[hsl(210,60%,52%)] font-semibold text-xs tabular-nums">
+            {row.tracking_number}
+          </span>
+          {row.shipping_company && (
+            <span className="text-[9px] font-semibold text-muted-foreground/60 leading-none truncate max-w-[100px]">
+              {row.shipping_company}
+            </span>
+          )}
+        </div>
+      ) : <span className="text-muted-foreground/50">—</span>;
+
     case "customer": return "px-3 text-xs";
     case "phone":    return "px-3 text-xs text-muted-foreground tabular-nums";
     case "city":     return "px-3 text-xs text-muted-foreground";
@@ -1474,7 +1464,6 @@ function renderCell(
   handleNoteSave: (id: string, note: string) => void,
   navigate: (to: string) => void,
   setHistoryOrder: (v: { id: string; customer: string } | null) => void,
-  setTrackingTarget: (v: { orioId: number; sellerId: string } | null) => void,
   openNoteDialog: (orderId: string, currentNote: string) => void,
 ) {
   switch (key) {
@@ -1486,27 +1475,16 @@ function renderCell(
       );
 
     case "orio_id":
-      return row.orio_order_id ? (
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => setTrackingTarget({ orioId: row.orio_order_id!, sellerId: row.seller_id ?? "" })}
-            className="text-[hsl(210,60%,52%)] hover:underline font-semibold text-xs tabular-nums"
-          >
-            {row.orio_order_id}
-          </button>
-          <a
-            href={`https://oms.getorio.com/orderDetail?odid=${row.orio_order_id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground/40 hover:text-[hsl(210,60%,52%)] transition-colors"
-            title="Open in Orio OMS"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
-          </a>
+      return row.tracking_number ? (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[hsl(210,60%,52%)] font-semibold text-xs tabular-nums">
+            {row.tracking_number}
+          </span>
+          {row.shipping_company && (
+            <span className="text-[9px] font-semibold text-muted-foreground/60 leading-none truncate max-w-[100px]">
+              {row.shipping_company}
+            </span>
+          )}
         </div>
       ) : <span className="text-muted-foreground/50">—</span>;
 
@@ -1590,9 +1568,9 @@ function renderCell(
       return (
         <div className="flex flex-col items-start gap-0.5">
           <StatusPill value={row.delivery_status} styleMap={deliveryStatusStyle} />
-          {detectCourier(row.orio_consignment_no) && (
+          {row.shipping_company && (
             <span className="text-[9px] font-semibold text-muted-foreground/55 leading-none pl-1 truncate max-w-[100px]">
-              {detectCourier(row.orio_consignment_no)}
+              {row.shipping_company}
             </span>
           )}
         </div>

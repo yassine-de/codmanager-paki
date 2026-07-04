@@ -41,7 +41,10 @@ type Order = {
   delivered_at: string | null;
   updated_at: string;
   shipping_status: string | null;
-  orio_consignment_no: string | null;
+  shipments?: Array<{
+    tracking_number: string | null;
+    carriers?: { name: string | null } | null;
+  }>;
 };
 
 type SortDir = "asc" | "desc";
@@ -54,7 +57,7 @@ type AgentSortField = "name" | "confirmed" | "delivered" | "failed" | "rate";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ORDER_SELECT =
-  "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, updated_at, shipping_status, orio_consignment_no";
+  "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, updated_at, shipping_status, shipments(tracking_number, carriers(name))";
 const PAGE_SIZE = 1000;
 
 const CONFIRMED_DELIVERY_STATUSES = [
@@ -82,9 +85,11 @@ function courierColor(name: string) {
   return { bg: "bg-gray-100 dark:bg-gray-800", text: "text-gray-700 dark:text-gray-300", accent: "#6b7280" };
 }
 
-// Detect courier name from consignment number prefix or shipping_status
-function detectCourier(o: Pick<Order, "orio_consignment_no" | "shipping_status">): string {
-  const cn = (o.orio_consignment_no || "").toUpperCase().trim();
+// Detect courier name from shipment carrier, tracking number prefix, or shipping_status
+function detectCourier(o: Pick<Order, "shipments" | "shipping_status">): string {
+  const shipment = o.shipments?.[0];
+  if (shipment?.carriers?.name) return shipment.carriers.name;
+  const cn = (shipment?.tracking_number || "").toUpperCase().trim();
   const ss = (o.shipping_status || "").toLowerCase();
 
   // Check consignment number prefix
