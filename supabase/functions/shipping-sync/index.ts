@@ -135,7 +135,7 @@ async function getCities(supabase: ReturnType<typeof createClient>) {
   }
 
   const cfg = await getCarrierConfig(supabase);
-  const res = await fetch(`${POSTEX_API_BASE}/v2/get-operational-city?operationalCityType=Delivery`, {
+  const res = await fetch(`${POSTEX_API_BASE}/v2/get-operational-city?operationalCityType=delivery`, {
     method: "GET",
     headers: postexHeaders(cfg.token),
   });
