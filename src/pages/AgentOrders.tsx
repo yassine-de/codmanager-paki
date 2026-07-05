@@ -397,10 +397,10 @@ const AgentOrders = () => {
       return null;
     }
 
-    const rows = data as DbOrder[] | null;
-    if (!rows || rows.length === 0) return null;
+    const claimed = Array.isArray(data) ? data[0] : data;
+    if (!claimed) return null;
 
-    return enrichClaimedOrder(rows[0], orderType);
+    return enrichClaimedOrder(claimed as DbOrder, orderType);
   }, [authUser, assignedProducts, enrichClaimedOrder]);
 
   const claimNextAvailableOrder = useCallback(async (): Promise<DbOrder | null> => {
