@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Boxes, CheckCircle2, ClipboardList, PackageCheck, RotateCcw, ScanLine, Truck, Warehouse as WarehouseIcon } from "lucide-react";
+import { Boxes, CheckCircle2, ClipboardList, PackageCheck, Printer, RotateCcw, ScanLine, Truck, Warehouse as WarehouseIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +72,7 @@ export default function Warehouse() {
   const [returnNote, setReturnNote] = useState("");
   const [queueStatus, setQueueStatus] = useState<string>("pending");
   const [busy, setBusy] = useState(false);
+  const [printingLabels, setPrintingLabels] = useState(false);
 
   const isWarehouseUser = authUser?.role === "admin" || authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager";
 
@@ -130,6 +131,61 @@ export default function Warehouse() {
     queryClient.invalidateQueries({ queryKey: ["warehouse-fulfillment-queue"] });
     queryClient.invalidateQueries({ queryKey: ["warehouse-inventory"] });
     queryClient.invalidateQueries({ queryKey: ["warehouse-recent-scans"] });
+  };
+
+  const pendingTrackingNumbers = useMemo(() => {
+    return fulfillmentQueue
+      .filter((row) => row.fulfillment_item_status === "pending" && row.tracking_number)
+      .map((row) => row.tracking_number as string);
+  }, [fulfillmentQueue]);
+
+  const openPdf = (base64: string, label: string) => {
+    const binary = atob(base64);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const popup = window.open(url, "_blank", "noopener,noreferrer");
+    if (!popup) {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = label;
+      link.click();
+    } else {
+      setTimeout(() => popup.print(), 700);
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  const printLabels = async () => {
+    if (pendingTrackingNumbers.length === 0) {
+      toast.info("No pending labels to print");
+      return;
+    }
+    setPrintingLabels(true);
+    try {
+      const chunks: string[][] = [];
+      for (let i = 0; i < pendingTrackingNumbers.length; i += 10) {
+        chunks.push(pendingTrackingNumbers.slice(i, i + 10));
+      }
+
+      for (let i = 0; i < chunks.length; i += 1) {
+        const { data, error } = await supabase.functions.invoke("shipping-sync", {
+          body: {
+            action: "generate-labels",
+            tracking_numbers: chunks[i],
+          },
+        });
+        if (error) throw error;
+        if (!data?.pdf_base64) throw new Error("PostEx did not return a label PDF");
+        openPdf(data.pdf_base64, `postex-labels-${i + 1}.pdf`);
+      }
+
+      toast.success(`Opened ${pendingTrackingNumbers.length} labels for printing`);
+    } catch (error: any) {
+      toast.error(error.message || "Label printing failed");
+    } finally {
+      setPrintingLabels(false);
+    }
   };
 
   const scanOutbound = async (event: FormEvent) => {
@@ -286,17 +342,28 @@ export default function Warehouse() {
           <Card className="border-border/60">
             <CardHeader className="py-3 flex-row items-center justify-between">
               <CardTitle className="text-sm">Queue</CardTitle>
-              <Select value={queueStatus} onValueChange={setQueueStatus}>
-                <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="picked">Picked</SelectItem>
-                  <SelectItem value="packed">Packed</SelectItem>
-                  <SelectItem value="label_printed">Label printed</SelectItem>
-                  <SelectItem value="scanned">Scanned</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={printLabels}
+                  disabled={printingLabels || pendingTrackingNumbers.length === 0}
+                >
+                  <Printer className="h-3.5 w-3.5 mr-1.5" />
+                  Print Labels
+                </Button>
+                <Select value={queueStatus} onValueChange={setQueueStatus}>
+                  <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="picked">Picked</SelectItem>
+                    <SelectItem value="packed">Packed</SelectItem>
+                    <SelectItem value="label_printed">Label printed</SelectItem>
+                    <SelectItem value="scanned">Scanned</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <Table>

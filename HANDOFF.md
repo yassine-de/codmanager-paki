@@ -95,6 +95,10 @@ Resolved on 2026-07-05:
   - The employee scans the PostEx tracking number once in `Ship Package`.
   - The scan completes fulfillment, sets picked/packed/label timestamps, records the outbound scan and deducts MAIN stock.
   - Manual Picked/Packed/Label buttons were removed from the main queue UI.
+- Warehouse label printing was added:
+  - `shipping-sync` action `generate-labels` calls PostEx `v1/get-invoice?trackingNumbers=...`.
+  - Warehouse `Print Labels` opens PostEx Airway Bill PDFs for pending tracking numbers.
+  - PostEx supports a maximum of 10 tracking numbers per PDF, so the UI splits labels into batches of 10.
 
 No current PostEx create-order blocker is known.
 
@@ -121,11 +125,12 @@ Read HANDOFF.md and continue the PostEx migration. We need to set the PostEx pic
 
 ## Next Steps
 
-1. Test outbound scan with one tracking number.
-2. Verify stock decreases by the order item quantity.
-3. Verify fulfillment item has picked/packed/label/scanned timestamps.
-4. Test return scan.
-5. Verify stock is added back to MAIN/RETURNS/DAMAGED depending on return condition.
+1. In Warehouse, click `Print Labels` and verify the PostEx PDF opens/prints.
+2. Test outbound scan with one tracking number.
+3. Verify stock decreases by the order item quantity.
+4. Verify fulfillment item has picked/packed/label/scanned timestamps.
+5. Test return scan.
+6. Verify stock is added back to MAIN/RETURNS/DAMAGED depending on return condition.
 
 ## Latest Verification - 2026-07-05
 

@@ -388,6 +388,30 @@ async function generateLoadSheet(supabase: ReturnType<typeof createClient>, trac
   };
 }
 
+async function generateAirwayBill(supabase: ReturnType<typeof createClient>, trackingNumbers: string[]) {
+  const cfg = await getCarrierConfig(supabase);
+  if (trackingNumbers.length === 0) throw new Error("tracking_numbers required");
+  if (trackingNumbers.length > 10) throw new Error("PostEx labels support a maximum of 10 tracking numbers per PDF");
+
+  const params = new URLSearchParams({ trackingNumbers: trackingNumbers.join(",") });
+  const res = await fetch(`${POSTEX_API_BASE}/v1/get-invoice?${params.toString()}`, {
+    method: "GET",
+    headers: postexHeaders(cfg.token),
+  });
+  const contentType = res.headers.get("content-type") || "";
+  const bytes = await res.arrayBuffer();
+  if (!res.ok) {
+    const text = new TextDecoder().decode(bytes);
+    throw new Error(`PostEx label PDF failed: ${text.substring(0, 300)}`);
+  }
+  return {
+    success: true,
+    content_type: contentType,
+    pdf_base64: btoa(String.fromCharCode(...new Uint8Array(bytes))),
+    tracking_numbers: trackingNumbers,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -432,6 +456,11 @@ Deno.serve(async (req) => {
       }
       case "generate-load-sheet": {
         result = await generateLoadSheet(supabase, (tracking_numbers || []).map(String));
+        break;
+      }
+      case "generate-labels":
+      case "generate-airway-bill": {
+        result = await generateAirwayBill(supabase, (tracking_numbers || []).map(String));
         break;
       }
       default:
