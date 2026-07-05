@@ -186,6 +186,10 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const accessToken = await getAccessToken(googleKey);
+    const maxRowsPerSheet = Math.max(
+      1,
+      Math.min(Number(Deno.env.get("SHEETS_IMPORT_BATCH_SIZE") || "500"), 1000),
+    );
 
     const { data: sheets, error: sheetsError } = await supabase
       .from("integration_sheets").select("*").eq("active", true);
@@ -223,6 +227,10 @@ Deno.serve(async (req) => {
       } catch (err) {
         console.error(`Error fetching sheet ${sheet.id}:`, err);
         continue;
+      }
+
+      if (rows.length > maxRowsPerSheet) {
+        rows = rows.slice(0, maxRowsPerSheet);
       }
 
       if (rows.length === 0) {
