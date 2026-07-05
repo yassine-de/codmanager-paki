@@ -250,6 +250,7 @@ Deno.serve(async (req) => {
       let skipped = 0;
       let consecutiveEmptyRows = 0;
       let stoppedAtEmptyGap = false;
+      let lastNonEmptyRowIndex = -1;
 
       // Resolve per-sheet column mapping (falls back to defaults)
       const mapping: Record<string, string> = {
@@ -271,6 +272,7 @@ Deno.serve(async (req) => {
         }
 
         consecutiveEmptyRows = 0;
+        lastNonEmptyRowIndex = i;
 
         const orderId = getCell(row, mapping, "order_id");
         const customerName = getCell(row, mapping, "customer_name");
@@ -424,7 +426,9 @@ Deno.serve(async (req) => {
         }
       }
 
-      const newLastRow = startRow + rows.length - 1;
+      const newLastRow = stoppedAtEmptyGap
+        ? (lastNonEmptyRowIndex >= 0 ? startRow + lastNonEmptyRowIndex : sheet.last_imported_row)
+        : startRow + rows.length - 1;
       await supabase.from("integration_sheets")
         .update({
           last_imported_row: newLastRow,
