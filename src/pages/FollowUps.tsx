@@ -953,20 +953,7 @@ const columnWidths: Record<ColumnKey, string> = {
 function cellClassFor(key: ColumnKey): string {
   switch (key) {
     case "order_id": return "px-3 font-mono text-xs font-medium";
-    case "tracking":
-      return row.tracking_number ? (
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[hsl(210,60%,52%)] font-semibold text-xs tabular-nums">
-            {row.tracking_number}
-          </span>
-          {row.shipping_company && (
-            <span className="text-[9px] font-semibold text-muted-foreground/60 leading-none truncate max-w-[100px]">
-              {row.shipping_company}
-            </span>
-          )}
-        </div>
-      ) : <span className="text-muted-foreground/50">—</span>;
-
+    case "tracking": return "px-3 text-xs tabular-nums";
     case "customer": return "px-3 text-xs";
     case "phone":    return "px-3 text-xs text-muted-foreground tabular-nums";
     case "city":     return "px-3 text-xs text-muted-foreground";
@@ -1782,4 +1769,3 @@ function SortableColumnItem({ id, label, visible, onToggle }: { id: ColumnKey; l
     </div>
   );
 }
-
