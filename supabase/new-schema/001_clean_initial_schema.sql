@@ -2277,7 +2277,14 @@ BEGIN
   END LOOP;
 
   UPDATE public.fulfillment_items
-  SET status = 'scanned', scanned_at = now(), scanned_by = p_scanned_by, updated_at = now()
+  SET status = 'scanned',
+      picked_at = COALESCE(picked_at, now()),
+      packed_at = COALESCE(packed_at, now()),
+      label_printed_at = COALESCE(label_printed_at, now()),
+      scanned_at = now(),
+      packed_by = COALESCE(packed_by, p_scanned_by),
+      scanned_by = p_scanned_by,
+      updated_at = now()
   WHERE shipment_id = v_shipment.id;
 
   UPDATE public.orders

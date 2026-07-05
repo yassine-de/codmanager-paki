@@ -1,14 +1,13 @@
 import { FormEvent, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Boxes, CheckCircle2, ClipboardList, PackageCheck, RotateCcw, ScanLine, Warehouse as WarehouseIcon } from "lucide-react";
+import { Boxes, CheckCircle2, ClipboardList, PackageCheck, RotateCcw, ScanLine, Truck, Warehouse as WarehouseIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -147,7 +146,7 @@ export default function Warehouse() {
       const result = data as any;
       if (result?.result === "unknown") toast.error("Unknown tracking number");
       else if (result?.result === "duplicate") toast.warning("Shipment was already scanned");
-      else toast.success("Shipment scanned and stock deducted");
+      else toast.success("Package shipped, queue completed and stock deducted");
       setOutboundTracking("");
       refresh();
       setTimeout(() => outboundInput.current?.focus(), 50);
@@ -186,23 +185,6 @@ export default function Warehouse() {
     }
   };
 
-  const markFulfillmentStatus = async (row: FulfillmentRow, status: string) => {
-    const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
-    if (status === "picked") patch.picked_at = new Date().toISOString();
-    if (status === "packed") {
-      patch.packed_at = new Date().toISOString();
-      patch.packed_by = authUser?.id;
-    }
-    if (status === "label_printed") patch.label_printed_at = new Date().toISOString();
-    const { error } = await supabase.from("fulfillment_items" as any).update(patch).eq("id", row.fulfillment_item_id);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success("Fulfillment updated");
-    refresh();
-  };
-
   if (!isWarehouseUser) {
     return (
       <div className="rounded-md border bg-card p-6 text-sm text-muted-foreground">
@@ -219,7 +201,7 @@ export default function Warehouse() {
             <WarehouseIcon className="h-5 w-5 text-primary" />
             Warehouse
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Scan shipments, receive returns and monitor inventory.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Fast scan desk for outbound packages, returns and inventory.</p>
         </div>
       </div>
 
@@ -230,24 +212,33 @@ export default function Warehouse() {
         <Kpi icon={<Boxes className="h-4 w-4" />} label="On Hand" value={stats.onHand} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <Card className="border-border/60">
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm flex items-center gap-2"><ScanLine className="h-4 w-4" /> Outbound Scan</CardTitle>
+      <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-4">
+        <Card className="border-primary/30 bg-primary/[0.03]">
+          <CardHeader className="py-4">
+            <CardTitle className="text-base flex items-center gap-2"><Truck className="h-5 w-5 text-primary" /> Ship Package</CardTitle>
           </CardHeader>
           <CardContent>
             <form className="flex gap-2" onSubmit={scanOutbound}>
               <Input
                 ref={outboundInput}
-                className="h-10 font-mono"
+                className="h-12 text-base font-mono bg-background"
                 value={outboundTracking}
                 onChange={(e) => setOutboundTracking(e.target.value)}
-                placeholder="Scan tracking number"
+                placeholder="Scan PostEx tracking number"
                 autoComplete="off"
+                autoFocus
               />
-              <Button type="submit" disabled={busy} className="shrink-0">Scan</Button>
+              <Button type="submit" disabled={busy} className="h-12 shrink-0 px-6">
+                <ScanLine className="h-4 w-4 mr-2" />
+                Ship
+              </Button>
             </form>
-            <p className="text-xs text-muted-foreground mt-2">Successful scans deduct the order items from MAIN stock and mark the shipment as scanned.</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <Badge variant="secondary">Picked</Badge>
+              <Badge variant="secondary">Packed</Badge>
+              <Badge variant="secondary">Label</Badge>
+              <Badge variant="secondary">Stock deducted</Badge>
+            </div>
           </CardContent>
         </Card>
 
@@ -316,14 +307,13 @@ export default function Warehouse() {
                     <TableHead className="h-9 text-xs">Carrier</TableHead>
                     <TableHead className="h-9 text-xs">Tracking</TableHead>
                     <TableHead className="h-9 text-xs">Status</TableHead>
-                    <TableHead className="h-9 text-xs text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loadingQueue ? (
-                    <TableRow><TableCell colSpan={6} className="text-sm text-muted-foreground">Loading queue...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">Loading queue...</TableCell></TableRow>
                   ) : fulfillmentQueue.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-sm text-muted-foreground">No fulfillment items in this view.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">No fulfillment items in this view.</TableCell></TableRow>
                   ) : fulfillmentQueue.map((row) => (
                     <TableRow key={row.fulfillment_item_id}>
                       <TableCell>
@@ -337,13 +327,6 @@ export default function Warehouse() {
                       <TableCell className="text-sm">{row.carrier_name}</TableCell>
                       <TableCell className="font-mono text-xs">{row.tracking_number || "-"}</TableCell>
                       <TableCell><Badge variant="secondary" className="text-[10px]">{row.fulfillment_item_status}</Badge></TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => markFulfillmentStatus(row, "picked")}>Picked</Button>
-                          <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => markFulfillmentStatus(row, "packed")}>Packed</Button>
-                          <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => markFulfillmentStatus(row, "label_printed")}>Label</Button>
-                        </div>
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

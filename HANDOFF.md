@@ -37,6 +37,8 @@ Sensitive values are intentionally not written in this file. They are in Supabas
   - `whatsapp-campaign-scheduler` every minute
   - `whatsapp-ai-sweeper` every minute
 - PostEx API token has been set in the new DB app settings.
+- PostEx pickup address code has been set in the new DB app settings:
+  - `postex_pickup_address_code = 001`
 - WhatsApp settings were copied from the old DB where available.
 - Admin users exist:
   - `adil@codmanager.com`
@@ -83,24 +85,18 @@ All 10 orders:
 
 ## Current Blocking Issue
 
-PostEx create-order now reaches the API, but returns:
+Resolved on 2026-07-05:
 
-```text
-BOTH PICKUP ADDRESS CODE AND STORE ADDRESS CODE MUST NOT BE NULL AT THE SAME TIME
-```
+- PostEx merchant address lookup returned `addressCode = 001`.
+- `postex_pickup_address_code` was stored in the new Supabase project.
+- `shipping-sync` was deployed with optional `storeAddressCode` support as a fallback.
+- Test orders `OR-1` through `OR-10` were retried successfully and now have PostEx tracking numbers.
+- Warehouse outbound flow was simplified:
+  - The employee scans the PostEx tracking number once in `Ship Package`.
+  - The scan completes fulfillment, sets picked/packed/label timestamps, records the outbound scan and deducts MAIN stock.
+  - Manual Picked/Packed/Label buttons were removed from the main queue UI.
 
-This means the next required value is one of:
-
-- PostEx Pickup Address Code, or
-- PostEx Store Address Code
-
-Once the user provides the code, set it in the new Supabase project, preferably:
-
-```text
-postex_pickup_address_code
-```
-
-or if PostEx specifically requires store address code, add/update the function payload accordingly.
+No current PostEx create-order blocker is known.
 
 ## How To Continue On Another PC
 
@@ -125,15 +121,50 @@ Read HANDOFF.md and continue the PostEx migration. We need to set the PostEx pic
 
 ## Next Steps
 
-1. Get the PostEx pickup/store address code from the user.
-2. Store it in the new Supabase project.
-3. Retry `shipping-sync-retry`.
-4. Verify shipments for `OR-1` through `OR-10` have tracking numbers.
-5. Check that fulfillment queue receives those shipments.
-6. Test outbound scan with one tracking number.
-7. Verify stock decreases by the order item quantity.
-8. Test return scan.
-9. Verify stock is added back to MAIN/RETURNS/DAMAGED depending on return condition.
+1. Test outbound scan with one tracking number.
+2. Verify stock decreases by the order item quantity.
+3. Verify fulfillment item has picked/packed/label/scanned timestamps.
+4. Test return scan.
+5. Verify stock is added back to MAIN/RETURNS/DAMAGED depending on return condition.
+
+## Latest Verification - 2026-07-05
+
+PostEx pickup address:
+
+```text
+Address code: 001
+City: Lahore
+Address type: Default Address
+```
+
+Synced test orders:
+
+```text
+OR-1  -> 24632910000001
+OR-2  -> 25632910000002
+OR-3  -> 28632910000003
+OR-4  -> 29632910000004
+OR-5  -> 24632910000005
+OR-6  -> 28632910000006
+OR-7  -> 27632910000007
+OR-8  -> 22632910000008
+OR-9  -> 29632910000009
+OR-10 -> 22632910000010
+```
+
+All 10 shipments:
+
+- have `sync_status = synced`
+- have `sync_error = null`
+- have `normalized_status = booked`
+- have matching `fulfillment_items` rows with `status = pending`
+
+Current test SKU stock:
+
+```text
+SKU: TEST-20260705080416-SKU
+MAIN quantity_on_hand: 100
+```
 
 ## Useful Checks
 

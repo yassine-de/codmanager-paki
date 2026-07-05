@@ -35,9 +35,11 @@ async function getCarrierConfig(supabase: ReturnType<typeof createClient>) {
       "carrier_sync_enabled",
       "carrier_pickup_address",
       "carrier_pickup_address_code",
+      "carrier_store_address_code",
       "postex_api_token",
       "postex_pickup_address",
       "postex_pickup_address_code",
+      "postex_store_address_code",
     ]);
 
   const byKey = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
@@ -49,6 +51,7 @@ async function getCarrierConfig(supabase: ReturnType<typeof createClient>) {
     enabled: byKey.carrier_sync_enabled !== "false",
     pickupAddress: byKey.postex_pickup_address || byKey.carrier_pickup_address || Deno.env.get("POSTEX_PICKUP_ADDRESS") || "",
     pickupAddressCode: byKey.postex_pickup_address_code || byKey.carrier_pickup_address_code || Deno.env.get("POSTEX_PICKUP_ADDRESS_CODE") || "",
+    storeAddressCode: byKey.postex_store_address_code || byKey.carrier_store_address_code || Deno.env.get("POSTEX_STORE_ADDRESS_CODE") || "",
   };
 }
 
@@ -223,6 +226,7 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
     transactionNotes: order.note || "",
   };
   if (cfg.pickupAddressCode) postexOrder.pickupAddressCode = cfg.pickupAddressCode;
+  if (cfg.storeAddressCode) postexOrder.storeAddressCode = cfg.storeAddressCode;
 
   const res = await fetch(`${POSTEX_API_BASE}/v3/create-order`, {
     method: "POST",
