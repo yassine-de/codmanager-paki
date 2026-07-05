@@ -2548,6 +2548,7 @@ CREATE POLICY "Users view own permissions" ON public.user_permissions FOR SELECT
 CREATE POLICY "Sellers view own orders" ON public.orders FOR SELECT TO authenticated USING (seller_id = auth.uid());
 CREATE POLICY "Sellers manage own products" ON public.products FOR ALL TO authenticated USING (seller_id = auth.uid()) WITH CHECK (seller_id = auth.uid());
 CREATE POLICY "Sellers view own order items" ON public.order_items FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.orders o WHERE o.id = public.order_items.order_id AND o.seller_id = auth.uid()));
+CREATE POLICY "Sellers manage own integration sheets" ON public.integration_sheets FOR ALL TO authenticated USING (seller_id = auth.uid()) WITH CHECK (seller_id = auth.uid());
 CREATE POLICY "Authenticated read permissions" ON public.permissions FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read public app_settings" ON public.app_settings FOR SELECT TO authenticated USING (is_public OR public.is_staff(auth.uid()));
 
