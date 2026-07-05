@@ -31,6 +31,8 @@ interface FulfillmentRow {
   carrier_name: string;
   created_at: string;
   updated_at: string;
+  product_name: string | null;
+  item_count: number | null;
 }
 
 interface InventoryRow {
@@ -75,6 +77,9 @@ export default function Warehouse() {
   const [busy, setBusy] = useState(false);
   const [printingLabels, setPrintingLabels] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
+  const [labelCityFilter, setLabelCityFilter] = useState("all");
+  const [labelProductFilter, setLabelProductFilter] = useState("all");
+  const [labelCarrierFilter, setLabelCarrierFilter] = useState("all");
 
   const isWarehouseUser = authUser?.role === "admin" || authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager";
 
@@ -145,14 +150,32 @@ export default function Warehouse() {
     return fulfillmentQueue.filter((row) => row.fulfillment_item_status === "pending" && row.tracking_number);
   }, [fulfillmentQueue]);
 
-  const labelSummary = useMemo(() => {
-    const total = pendingLabelRows.length;
-    const batches = Math.ceil(total / 10);
-    const carriers = new Set(pendingLabelRows.map((row) => row.carrier_name).filter(Boolean));
-    const cities = new Set(pendingLabelRows.map((row) => row.customer_city).filter(Boolean));
-    const codTotal = pendingLabelRows.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
-    return { total, batches, carriers: carriers.size, cities: cities.size, codTotal };
+  const labelFilterOptions = useMemo(() => {
+    const byLabel = (a: string, b: string) => a.localeCompare(b);
+    return {
+      cities: Array.from(new Set(pendingLabelRows.map((row) => row.customer_city).filter(Boolean))).sort(byLabel),
+      products: Array.from(new Set(pendingLabelRows.map((row) => row.product_name).filter(Boolean) as string[])).sort(byLabel),
+      carriers: Array.from(new Set(pendingLabelRows.map((row) => row.carrier_name).filter(Boolean))).sort(byLabel),
+    };
   }, [pendingLabelRows]);
+
+  const filteredLabelRows = useMemo(() => {
+    return pendingLabelRows.filter((row) => {
+      if (labelCityFilter !== "all" && row.customer_city !== labelCityFilter) return false;
+      if (labelProductFilter !== "all" && row.product_name !== labelProductFilter) return false;
+      if (labelCarrierFilter !== "all" && row.carrier_name !== labelCarrierFilter) return false;
+      return true;
+    });
+  }, [labelCarrierFilter, labelCityFilter, labelProductFilter, pendingLabelRows]);
+
+  const labelSummary = useMemo(() => {
+    const total = filteredLabelRows.length;
+    const batches = Math.ceil(total / 10);
+    const carriers = new Set(filteredLabelRows.map((row) => row.carrier_name).filter(Boolean));
+    const cities = new Set(filteredLabelRows.map((row) => row.customer_city).filter(Boolean));
+    const codTotal = filteredLabelRows.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+    return { total, batches, carriers: carriers.size, cities: cities.size, codTotal };
+  }, [filteredLabelRows]);
 
   const openPdf = (base64: string, label: string) => {
     const binary = atob(base64);
@@ -171,16 +194,17 @@ export default function Warehouse() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
-  const printLabels = async () => {
-    if (pendingTrackingNumbers.length === 0) {
+  const printLabels = async (rows = filteredLabelRows) => {
+    const trackingNumbers = rows.map((row) => row.tracking_number).filter(Boolean) as string[];
+    if (trackingNumbers.length === 0) {
       toast.info("No pending labels to print");
       return;
     }
     setPrintingLabels(true);
     try {
       const chunks: string[][] = [];
-      for (let i = 0; i < pendingTrackingNumbers.length; i += 10) {
-        chunks.push(pendingTrackingNumbers.slice(i, i + 10));
+      for (let i = 0; i < trackingNumbers.length; i += 10) {
+        chunks.push(trackingNumbers.slice(i, i + 10));
       }
 
       for (let i = 0; i < chunks.length; i += 1) {
@@ -195,7 +219,7 @@ export default function Warehouse() {
         openPdf(data.pdf_base64, `postex-labels-${i + 1}.pdf`);
       }
 
-      toast.success(`Opened ${pendingTrackingNumbers.length} labels for printing`);
+      toast.success(`Opened ${trackingNumbers.length} labels for printing`);
     } catch (error: any) {
       toast.error(error.message || "Label printing failed");
     } finally {
@@ -518,6 +542,36 @@ export default function Warehouse() {
             <Kpi icon={<Boxes className="h-4 w-4" />} label="COD PKR" value={labelSummary.codTotal} />
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <Select value={labelCityFilter} onValueChange={setLabelCityFilter}>
+              <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="City" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All cities</SelectItem>
+                {labelFilterOptions.cities.map((city) => (
+                  <SelectItem key={city} value={city}>{city}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={labelProductFilter} onValueChange={setLabelProductFilter}>
+              <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Product" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All products</SelectItem>
+                {labelFilterOptions.products.map((product) => (
+                  <SelectItem key={product} value={product}>{product}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={labelCarrierFilter} onValueChange={setLabelCarrierFilter}>
+              <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Carrier" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All carriers</SelectItem>
+                {labelFilterOptions.carriers.map((carrier) => (
+                  <SelectItem key={carrier} value={carrier}>{carrier}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="rounded-md border max-h-[420px] overflow-auto">
             <Table>
               <TableHeader>
@@ -525,17 +579,23 @@ export default function Warehouse() {
                   <TableHead className="h-9 text-xs">Order</TableHead>
                   <TableHead className="h-9 text-xs">Customer</TableHead>
                   <TableHead className="h-9 text-xs">City</TableHead>
+                  <TableHead className="h-9 text-xs">Product</TableHead>
                   <TableHead className="h-9 text-xs">Carrier</TableHead>
                   <TableHead className="h-9 text-xs">Tracking</TableHead>
                   <TableHead className="h-9 text-xs text-right">COD</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pendingLabelRows.map((row) => (
+                {filteredLabelRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-sm text-muted-foreground">No pending labels match these filters.</TableCell>
+                  </TableRow>
+                ) : filteredLabelRows.map((row) => (
                   <TableRow key={row.fulfillment_item_id}>
                     <TableCell className="font-mono text-xs font-semibold">{row.order_id}</TableCell>
                     <TableCell className="text-sm">{row.customer_name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{row.customer_city}</TableCell>
+                    <TableCell className="text-xs max-w-[220px] truncate">{row.product_name || "-"}</TableCell>
                     <TableCell className="text-sm">{row.carrier_name}</TableCell>
                     <TableCell className="font-mono text-xs">{row.tracking_number}</TableCell>
                     <TableCell className="text-right text-sm tabular-nums">{Number(row.total_amount || 0).toLocaleString()}</TableCell>
@@ -551,10 +611,10 @@ export default function Warehouse() {
             </Button>
             <Button
               onClick={async () => {
-                await printLabels();
+                await printLabels(filteredLabelRows);
                 setLabelDialogOpen(false);
               }}
-              disabled={printingLabels}
+              disabled={printingLabels || filteredLabelRows.length === 0}
             >
               <Printer className="h-4 w-4 mr-2" />
               Print {labelSummary.total} Labels

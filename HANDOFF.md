@@ -99,6 +99,7 @@ Resolved on 2026-07-05:
   - `shipping-sync` action `generate-labels` calls PostEx `v1/get-invoice?trackingNumbers=...`.
   - Warehouse `Print Labels` opens PostEx Airway Bill PDFs for pending tracking numbers.
   - PostEx supports a maximum of 10 tracking numbers per PDF, so the UI splits labels into batches of 10.
+  - The label confirmation popup supports filtering by city, product and carrier before printing.
 
 No current PostEx create-order blocker is known.
 
@@ -125,7 +126,7 @@ Read HANDOFF.md and continue the PostEx migration. We need to set the PostEx pic
 
 ## Next Steps
 
-1. In Warehouse, click `Print Labels` and verify the PostEx PDF opens/prints.
+1. In Warehouse, click `Print Labels`, filter by city/product/carrier if needed, and verify the PostEx PDF opens/prints only for the filtered shipments.
 2. Test outbound scan with one tracking number.
 3. Verify stock decreases by the order item quantity.
 4. Verify fulfillment item has picked/packed/label/scanned timestamps.

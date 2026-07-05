@@ -1883,12 +1883,21 @@ SELECT
   c.code AS carrier_code,
   c.name AS carrier_name,
   fi.created_at,
-  fi.updated_at
+  fi.updated_at,
+  COALESCE(items.product_names, o.product_name) AS product_name,
+  COALESCE(items.item_count, 1) AS item_count
 FROM public.fulfillment_items fi
 JOIN public.orders o ON o.id = fi.order_uuid
 JOIN public.shipments sh ON sh.id = fi.shipment_id
 JOIN public.carriers c ON c.id = sh.carrier_id
-LEFT JOIN public.fulfillment_batches fb ON fb.id = fi.batch_id;
+LEFT JOIN public.fulfillment_batches fb ON fb.id = fi.batch_id
+LEFT JOIN LATERAL (
+  SELECT
+    COUNT(*)::integer AS item_count,
+    string_agg(DISTINCT oi.product_name, ', ' ORDER BY oi.product_name) AS product_names
+  FROM public.order_items oi
+  WHERE oi.order_id = o.id
+) items ON true;
 
 CREATE OR REPLACE VIEW public.inventory_balance_view AS
 SELECT
