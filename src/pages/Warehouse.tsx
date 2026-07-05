@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -73,6 +74,7 @@ export default function Warehouse() {
   const [queueStatus, setQueueStatus] = useState<string>("pending");
   const [busy, setBusy] = useState(false);
   const [printingLabels, setPrintingLabels] = useState(false);
+  const [labelDialogOpen, setLabelDialogOpen] = useState(false);
 
   const isWarehouseUser = authUser?.role === "admin" || authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager";
 
@@ -139,6 +141,19 @@ export default function Warehouse() {
       .map((row) => row.tracking_number as string);
   }, [fulfillmentQueue]);
 
+  const pendingLabelRows = useMemo(() => {
+    return fulfillmentQueue.filter((row) => row.fulfillment_item_status === "pending" && row.tracking_number);
+  }, [fulfillmentQueue]);
+
+  const labelSummary = useMemo(() => {
+    const total = pendingLabelRows.length;
+    const batches = Math.ceil(total / 10);
+    const carriers = new Set(pendingLabelRows.map((row) => row.carrier_name).filter(Boolean));
+    const cities = new Set(pendingLabelRows.map((row) => row.customer_city).filter(Boolean));
+    const codTotal = pendingLabelRows.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+    return { total, batches, carriers: carriers.size, cities: cities.size, codTotal };
+  }, [pendingLabelRows]);
+
   const openPdf = (base64: string, label: string) => {
     const binary = atob(base64);
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -186,6 +201,14 @@ export default function Warehouse() {
     } finally {
       setPrintingLabels(false);
     }
+  };
+
+  const requestPrintLabels = () => {
+    if (pendingLabelRows.length === 0) {
+      toast.info("No pending labels to print");
+      return;
+    }
+    setLabelDialogOpen(true);
   };
 
   const scanOutbound = async (event: FormEvent) => {
@@ -346,7 +369,7 @@ export default function Warehouse() {
                 <Button
                   size="sm"
                   className="h-8 text-xs"
-                  onClick={printLabels}
+                  onClick={requestPrintLabels}
                   disabled={printingLabels || pendingTrackingNumbers.length === 0}
                 >
                   <Printer className="h-3.5 w-3.5 mr-1.5" />
@@ -477,6 +500,68 @@ export default function Warehouse() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={labelDialogOpen} onOpenChange={setLabelDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="h-5 w-5 text-primary" />
+              Confirm Label Print
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <Kpi icon={<ClipboardList className="h-4 w-4" />} label="Shipments" value={labelSummary.total} />
+            <Kpi icon={<Printer className="h-4 w-4" />} label="PDF Batches" value={labelSummary.batches} />
+            <Kpi icon={<PackageCheck className="h-4 w-4" />} label="Carriers" value={labelSummary.carriers} />
+            <Kpi icon={<WarehouseIcon className="h-4 w-4" />} label="Cities" value={labelSummary.cities} />
+            <Kpi icon={<Boxes className="h-4 w-4" />} label="COD PKR" value={labelSummary.codTotal} />
+          </div>
+
+          <div className="rounded-md border max-h-[420px] overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="h-9 text-xs">Order</TableHead>
+                  <TableHead className="h-9 text-xs">Customer</TableHead>
+                  <TableHead className="h-9 text-xs">City</TableHead>
+                  <TableHead className="h-9 text-xs">Carrier</TableHead>
+                  <TableHead className="h-9 text-xs">Tracking</TableHead>
+                  <TableHead className="h-9 text-xs text-right">COD</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pendingLabelRows.map((row) => (
+                  <TableRow key={row.fulfillment_item_id}>
+                    <TableCell className="font-mono text-xs font-semibold">{row.order_id}</TableCell>
+                    <TableCell className="text-sm">{row.customer_name}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{row.customer_city}</TableCell>
+                    <TableCell className="text-sm">{row.carrier_name}</TableCell>
+                    <TableCell className="font-mono text-xs">{row.tracking_number}</TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">{Number(row.total_amount || 0).toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLabelDialogOpen(false)} disabled={printingLabels}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                await printLabels();
+                setLabelDialogOpen(false);
+              }}
+              disabled={printingLabels}
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Print {labelSummary.total} Labels
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
