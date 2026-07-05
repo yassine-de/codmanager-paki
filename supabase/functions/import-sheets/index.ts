@@ -190,6 +190,10 @@ Deno.serve(async (req) => {
       1,
       Math.min(Number(Deno.env.get("SHEETS_IMPORT_BATCH_SIZE") || "500"), 1000),
     );
+    const maxConsecutiveEmptyRows = Math.max(
+      1,
+      Math.min(Number(Deno.env.get("SHEETS_IMPORT_MAX_EMPTY_ROWS") || "25"), 500),
+    );
 
     const { data: sheets, error: sheetsError } = await supabase
       .from("integration_sheets").select("*").eq("active", true);
@@ -244,6 +248,8 @@ Deno.serve(async (req) => {
       let imported = 0;
       let errorsCount = 0;
       let skipped = 0;
+      let consecutiveEmptyRows = 0;
+      let stoppedAtEmptyGap = false;
 
       // Resolve per-sheet column mapping (falls back to defaults)
       const mapping: Record<string, string> = {
@@ -253,7 +259,18 @@ Deno.serve(async (req) => {
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        if (!row || row.length < 3) { skipped++; continue; }
+        if (!row || row.length < 3 || row.every((cell) => !String(cell || "").trim())) {
+          skipped++;
+          consecutiveEmptyRows++;
+          if (consecutiveEmptyRows >= maxConsecutiveEmptyRows) {
+            stoppedAtEmptyGap = true;
+            rows = rows.slice(0, i + 1);
+            break;
+          }
+          continue;
+        }
+
+        consecutiveEmptyRows = 0;
 
         const orderId = getCell(row, mapping, "order_id");
         const customerName = getCell(row, mapping, "customer_name");
@@ -417,7 +434,7 @@ Deno.serve(async (req) => {
         })
         .eq("id", sheet.id);
 
-      results[sheet.id] = { imported, errors: errorsCount, skipped };
+      results[sheet.id] = { imported, errors: errorsCount, skipped, stoppedAtEmptyGap };
     }
 
     return new Response(
