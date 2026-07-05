@@ -100,6 +100,8 @@ Resolved on 2026-07-05:
   - Warehouse `Print Labels` opens PostEx Airway Bill PDFs for pending tracking numbers.
   - PostEx supports a maximum of 10 tracking numbers per PDF, so the UI splits labels into batches of 10.
   - The label confirmation popup supports filtering by city, product and carrier before printing.
+  - Warehouse queue now supports search by order/tracking/customer/city/product plus checkbox selection for printing only selected orders.
+- New internal order IDs now use the `TZ-` prefix instead of `OR-`.
 
 No current PostEx create-order blocker is known.
 
@@ -126,7 +128,7 @@ Read HANDOFF.md and continue the PostEx migration. We need to set the PostEx pic
 
 ## Next Steps
 
-1. In Warehouse, click `Print Labels`, filter by city/product/carrier if needed, and verify the PostEx PDF opens/prints only for the filtered shipments.
+1. In Warehouse, search/select specific orders, click `Print Labels`, filter by city/product/carrier if needed, and verify the PostEx PDF opens/prints only for the selected/filtered shipments.
 2. Test outbound scan with one tracking number.
 3. Verify stock decreases by the order item quantity.
 4. Verify fulfillment item has picked/packed/label/scanned timestamps.

@@ -1026,12 +1026,17 @@ export default function Orders() {
                   {isAdmin && isCol('carrierId') && (
                     <td className="py-2.5 px-4 text-xs" onClick={(e) => e.stopPropagation()}>
                       {order.carrierOrderId ? (
-                        <button
-                          onClick={() => setTrackingTarget({ carrierId: order.carrierOrderId!, systemId: (order as any).systemId ?? null, sellerId: order.id })}
-                          className="text-[hsl(210,60%,52%)] hover:underline font-medium"
-                        >
-                          {order.carrierOrderId}
-                        </button>
+                        <div className="space-y-0.5">
+                          <button
+                            onClick={() => setTrackingTarget({ carrierId: order.carrierOrderId!, systemId: (order as any).systemId ?? null, sellerId: order.id })}
+                            className="text-[hsl(210,60%,52%)] hover:underline font-medium"
+                          >
+                            {order.carrierOrderId}
+                          </button>
+                          {order.carrierName && (
+                            <div className="text-[10px] font-medium text-muted-foreground">{order.carrierName}</div>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}

@@ -550,28 +550,26 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_prefix text;
   v_counter integer;
 BEGIN
-  SELECT prefix, current_counter + 1
-    INTO v_prefix, v_counter
+  SELECT current_counter + 1
+    INTO v_counter
   FROM public.seller_order_prefixes
   WHERE seller_id = p_seller_id
   FOR UPDATE;
 
-  IF v_prefix IS NULL THEN
-    v_prefix := 'OR';
+  IF v_counter IS NULL THEN
     INSERT INTO public.seller_order_prefixes (seller_id, prefix, current_counter)
-    VALUES (p_seller_id, v_prefix, 1)
-    ON CONFLICT (seller_id) DO UPDATE SET current_counter = public.seller_order_prefixes.current_counter + 1
+    VALUES (p_seller_id, 'TZ', 1)
+    ON CONFLICT (seller_id) DO UPDATE SET prefix = 'TZ', current_counter = public.seller_order_prefixes.current_counter + 1
     RETURNING current_counter INTO v_counter;
   ELSE
     UPDATE public.seller_order_prefixes
-    SET current_counter = v_counter
+    SET prefix = 'TZ', current_counter = v_counter
     WHERE seller_id = p_seller_id;
   END IF;
 
-  RETURN v_prefix || '-' || v_counter::text;
+  RETURN 'TZ-' || v_counter::text;
 END;
 $$;
 

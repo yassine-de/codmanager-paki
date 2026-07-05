@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -77,6 +78,8 @@ export default function Warehouse() {
   const [busy, setBusy] = useState(false);
   const [printingLabels, setPrintingLabels] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
+  const [queueSearch, setQueueSearch] = useState("");
+  const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
   const [labelCityFilter, setLabelCityFilter] = useState("all");
   const [labelProductFilter, setLabelProductFilter] = useState("all");
   const [labelCarrierFilter, setLabelCarrierFilter] = useState("all");
@@ -140,15 +143,76 @@ export default function Warehouse() {
     queryClient.invalidateQueries({ queryKey: ["warehouse-recent-scans"] });
   };
 
+  const displayedQueue = useMemo(() => {
+    const q = queueSearch.trim().toLowerCase();
+    if (!q) return fulfillmentQueue;
+    return fulfillmentQueue.filter((row) => {
+      const haystack = [
+        row.order_id,
+        row.system_id ? String(row.system_id) : "",
+        row.customer_name,
+        row.customer_city,
+        row.product_name || "",
+        row.carrier_name,
+        row.tracking_number || "",
+      ].join(" ").toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [fulfillmentQueue, queueSearch]);
+
+  const selectableQueueRows = useMemo(() => {
+    return displayedQueue.filter((row) => row.fulfillment_item_status === "pending" && row.tracking_number);
+  }, [displayedQueue]);
+
+  const selectedLabelRows = useMemo(() => {
+    return fulfillmentQueue.filter((row) => selectedLabelIds.has(row.fulfillment_item_id) && row.fulfillment_item_status === "pending" && row.tracking_number);
+  }, [fulfillmentQueue, selectedLabelIds]);
+
+  const baseLabelRows = useMemo(() => {
+    return selectedLabelRows.length > 0 ? selectedLabelRows : selectableQueueRows;
+  }, [selectableQueueRows, selectedLabelRows]);
+
   const pendingTrackingNumbers = useMemo(() => {
-    return fulfillmentQueue
-      .filter((row) => row.fulfillment_item_status === "pending" && row.tracking_number)
-      .map((row) => row.tracking_number as string);
-  }, [fulfillmentQueue]);
+    return baseLabelRows.map((row) => row.tracking_number as string);
+  }, [baseLabelRows]);
+
+  const allDisplayedSelected = selectableQueueRows.length > 0 && selectableQueueRows.every((row) => selectedLabelIds.has(row.fulfillment_item_id));
+
+  const toggleLabelRow = (rowId: string) => {
+    setSelectedLabelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  };
+
+  const toggleDisplayedLabels = () => {
+    setSelectedLabelIds((prev) => {
+      const next = new Set(prev);
+      if (allDisplayedSelected) {
+        selectableQueueRows.forEach((row) => next.delete(row.fulfillment_item_id));
+      } else {
+        selectableQueueRows.forEach((row) => next.add(row.fulfillment_item_id));
+      }
+      return next;
+    });
+  };
+
+  const clearLabelSelection = () => {
+    setSelectedLabelIds(new Set());
+  };
+
+  const openPrintDialog = () => {
+    setLabelCityFilter("all");
+    setLabelProductFilter("all");
+    setLabelCarrierFilter("all");
+    setLabelDialogOpen(true);
+  };
 
   const pendingLabelRows = useMemo(() => {
-    return fulfillmentQueue.filter((row) => row.fulfillment_item_status === "pending" && row.tracking_number);
-  }, [fulfillmentQueue]);
+    return baseLabelRows;
+  }, [baseLabelRows]);
 
   const labelFilterOptions = useMemo(() => {
     const byLabel = (a: string, b: string) => a.localeCompare(b);
@@ -228,11 +292,11 @@ export default function Warehouse() {
   };
 
   const requestPrintLabels = () => {
-    if (pendingLabelRows.length === 0) {
+    if (baseLabelRows.length === 0) {
       toast.info("No pending labels to print");
       return;
     }
-    setLabelDialogOpen(true);
+    openPrintDialog();
   };
 
   const scanOutbound = async (event: FormEvent) => {
@@ -390,6 +454,11 @@ export default function Warehouse() {
             <CardHeader className="py-3 flex-row items-center justify-between">
               <CardTitle className="text-sm">Queue</CardTitle>
               <div className="flex items-center gap-2">
+                {selectedLabelIds.size > 0 && (
+                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={clearLabelSelection}>
+                    Clear {selectedLabelIds.size}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   className="h-8 text-xs"
@@ -412,12 +481,28 @@ export default function Warehouse() {
                 </Select>
               </div>
             </CardHeader>
+            <div className="px-4 pb-3">
+              <Input
+                value={queueSearch}
+                onChange={(e) => setQueueSearch(e.target.value)}
+                placeholder="Search order, tracking, customer, city or product..."
+                className="h-9 text-sm"
+              />
+            </div>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="h-9 w-10">
+                      <Checkbox
+                        checked={allDisplayedSelected}
+                        onCheckedChange={toggleDisplayedLabels}
+                        disabled={selectableQueueRows.length === 0}
+                      />
+                    </TableHead>
                     <TableHead className="h-9 text-xs">Order</TableHead>
                     <TableHead className="h-9 text-xs">Customer</TableHead>
+                    <TableHead className="h-9 text-xs">Product</TableHead>
                     <TableHead className="h-9 text-xs">Carrier</TableHead>
                     <TableHead className="h-9 text-xs">Tracking</TableHead>
                     <TableHead className="h-9 text-xs">Status</TableHead>
@@ -425,11 +510,18 @@ export default function Warehouse() {
                 </TableHeader>
                 <TableBody>
                   {loadingQueue ? (
-                    <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">Loading queue...</TableCell></TableRow>
-                  ) : fulfillmentQueue.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">No fulfillment items in this view.</TableCell></TableRow>
-                  ) : fulfillmentQueue.map((row) => (
+                    <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground">Loading queue...</TableCell></TableRow>
+                  ) : displayedQueue.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground">No fulfillment items in this view.</TableCell></TableRow>
+                  ) : displayedQueue.map((row) => (
                     <TableRow key={row.fulfillment_item_id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedLabelIds.has(row.fulfillment_item_id)}
+                          onCheckedChange={() => toggleLabelRow(row.fulfillment_item_id)}
+                          disabled={row.fulfillment_item_status !== "pending" || !row.tracking_number}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="font-mono text-xs font-semibold">{row.order_id}</div>
                         {row.system_id && <div className="text-[11px] text-muted-foreground">#{row.system_id}</div>}
@@ -438,6 +530,7 @@ export default function Warehouse() {
                         <div className="text-sm font-medium">{row.customer_name}</div>
                         <div className="text-[11px] text-muted-foreground">{row.customer_city}</div>
                       </TableCell>
+                      <TableCell className="text-xs max-w-[220px] truncate">{row.product_name || "-"}</TableCell>
                       <TableCell className="text-sm">{row.carrier_name}</TableCell>
                       <TableCell className="font-mono text-xs">{row.tracking_number || "-"}</TableCell>
                       <TableCell><Badge variant="secondary" className="text-[10px]">{row.fulfillment_item_status}</Badge></TableCell>
