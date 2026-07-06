@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -124,7 +124,8 @@ function ProtectedRoute({ children, permission }: { children: React.ReactNode; p
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth();
+  const { user, authUser, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return <AppSkeleton />;
@@ -137,6 +138,10 @@ function AppRoutes() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
+  }
+
+  if (authUser?.role === "warehouse_manager" && !location.pathname.startsWith("/warehouse")) {
+    return <Navigate to="/warehouse/dashboard" replace />;
   }
 
   return (
@@ -175,7 +180,12 @@ function AppRoutes() {
         <Route path="/adjustments" element={<ProtectedRoute permission="access_to_settings"><Adjustments /></ProtectedRoute>} />
         <Route path="/system-health" element={<ProtectedRoute permission="access_to_settings"><SystemHealth /></ProtectedRoute>} />
         <Route path="/carriers" element={<ProtectedRoute permission="access_to_settings"><CarrierManagement /></ProtectedRoute>} />
-        <Route path="/warehouse" element={<ProtectedRoute><Warehouse /></ProtectedRoute>} />
+        <Route path="/warehouse" element={<ProtectedRoute><Navigate to="/warehouse/dashboard" replace /></ProtectedRoute>} />
+        <Route path="/warehouse/dashboard" element={<ProtectedRoute><Warehouse section="dashboard" /></ProtectedRoute>} />
+        <Route path="/warehouse/receiving" element={<ProtectedRoute><Warehouse section="receiving" /></ProtectedRoute>} />
+        <Route path="/warehouse/inventory" element={<ProtectedRoute><Warehouse section="inventory" /></ProtectedRoute>} />
+        <Route path="/warehouse/dispatch" element={<ProtectedRoute><Warehouse section="dispatch" /></ProtectedRoute>} />
+        <Route path="/warehouse/returns" element={<ProtectedRoute><Warehouse section="returns" /></ProtectedRoute>} />
         <Route path="/follow-ups" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />
         <Route path="/follow-up/dashboard" element={<ProtectedRoute><FollowUpDashboard /></ProtectedRoute>} />
         <Route path="/follow-up/queue" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />

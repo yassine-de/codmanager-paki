@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Zap, Sparkles, Send, Warehouse, Truck } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Zap, Sparkles, Send, Warehouse, Truck, PackageCheck, Boxes, RotateCcw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -76,6 +76,14 @@ const getWhatsappSubItems = (inboxUnread: number) => [
   { title: "Settings", url: "/whatsapp/settings", icon: Settings },
 ];
 
+const warehouseSubItems = [
+  { title: "Dashboard", url: "/warehouse/dashboard", icon: LayoutDashboard },
+  { title: "Receiving", url: "/warehouse/receiving", icon: PackageCheck },
+  { title: "Inventory", url: "/warehouse/inventory", icon: Boxes },
+  { title: "Dispatch Center", url: "/warehouse/dispatch", icon: Truck },
+  { title: "Returns", url: "/warehouse/returns", icon: RotateCcw },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -86,6 +94,7 @@ export function AppSidebar() {
   const isAgent = authUser?.role === "agent";
   const isFollowUp = authUser?.role === "follow_up";
   const isWarehouse = authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager";
+  const isWarehouseManager = authUser?.role === "warehouse_manager";
 
   const { data: orderCount = 0 } = useQuery({
     queryKey: ["sidebar-order-count"],
@@ -241,6 +250,9 @@ export function AppSidebar() {
 
   const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments, followUpPending);
   const whatsappSubItems = getWhatsappSubItems(whatsappInboxUnread);
+  const visibleWarehouseSubItems = isWarehouseManager
+    ? warehouseSubItems.filter((sub) => sub.url !== "/warehouse/dashboard")
+    : warehouseSubItems;
 
   const WHATSAPP_ALLOWED_EMAILS = ["eshaehsan@gmail.com"];
   const hasWhatsappException = WHATSAPP_ALLOWED_EMAILS.includes(authUser?.email ?? "");
@@ -253,6 +265,7 @@ export function AppSidebar() {
     if (item.adminOnly) return isAdmin;
     if (item.adminAgentOnly) return isAdmin || isAgent;
     if (isFollowUp) return false;
+    if (isWarehouseManager) return item.url === "/" || item.warehouseVisible;
     if (isWarehouse) return item.warehouseVisible;
     if (isAgent) return item.permission === "access_to_whatsapp_inbox" && hasWhatsappException;
     if (isSeller) return !item.permission || item.sellerVisible;
@@ -315,6 +328,67 @@ export function AppSidebar() {
                 const isActive = item.url === '/'
                   ? location.pathname === '/'
                   : location.pathname.startsWith(item.url);
+                if (item.url === "/" && isWarehouseManager) {
+                  const isDashboardActive = location.pathname === "/warehouse/dashboard";
+                  return (
+                    <SidebarMenuItem key="warehouse-dashboard-main">
+                      <SidebarMenuButton asChild isActive={isDashboardActive} className="h-9 text-[13px] rounded-lg transition-all duration-150">
+                        <NavLink
+                          to="/warehouse/dashboard"
+                          className="hover:bg-sidebar-accent/70"
+                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                        >
+                          <LayoutDashboard className="mr-2 h-4 w-4 opacity-70" />
+                          {!collapsed && <span className="flex-1">Dashboard</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                }
+                if (item.url === "/warehouse") {
+                  const isWarehouseActive = location.pathname.startsWith("/warehouse");
+                  return (
+                    <Collapsible key={item.url} defaultOpen={isWarehouseActive} className="group/warehouse">
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            isActive={isWarehouseActive}
+                            className="h-9 text-[13px] cursor-pointer rounded-lg"
+                          >
+                            <Warehouse className="mr-2 h-4 w-4 opacity-70" />
+                            {!collapsed && (
+                              <>
+                                <span className="flex-1">Warehouse</span>
+                                <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/warehouse:rotate-180 opacity-50" />
+                              </>
+                            )}
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {visibleWarehouseSubItems.map((sub) => {
+                              const isSubActive = location.pathname.startsWith(sub.url);
+                              return (
+                                <SidebarMenuSubItem key={sub.url}>
+                                  <SidebarMenuSubButton asChild isActive={isSubActive} className="text-[13px] h-8 rounded-lg">
+                                    <NavLink
+                                      to={sub.url}
+                                      className="hover:bg-sidebar-accent/70"
+                                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                                    >
+                                      <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
+                                      <span className="flex-1">{sub.title}</span>
+                                    </NavLink>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              );
+                            })}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  );
+                }
                 return (
                   <Fragment key={item.url}>
                     <SidebarMenuItem>

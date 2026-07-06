@@ -7,7 +7,7 @@ const Index = () => {
   const { authUser } = useAuth();
   if (authUser?.role === "agent") return <AgentDashboard />;
   if (authUser?.role === "follow_up") return <Navigate to="/follow-up/dashboard" replace />;
-  if (authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager") return <Navigate to="/warehouse" replace />;
+  if (authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager") return <Navigate to="/warehouse/dashboard" replace />;
   return <Dashboard />;
 };
 
