@@ -2551,7 +2551,7 @@ export default function WhatsappInbox() {
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {(isAdmin
-                            ? ["pending","booked","shipped","in_transit","with_courier","delivered","returned","cancelled","no_answer","postponed","failed_attempt","ready_for_return","rejected","return"]
+                            ? ["pending","booked","printed","dispatched","shipped","in_transit","with_courier","delivered","returned","cancelled","no_answer","postponed","failed_attempt","ready_for_return","rejected","return"]
                             : ["pending","booked","new"]
                           ).map(s => (
                             <SelectItem key={s} value={s} className="text-xs">

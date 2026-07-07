@@ -137,7 +137,7 @@ export default function ProductDetail() {
     const totalOrders = productOrders.length;
     const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').length;
     const shipped = productOrders.filter(o =>
-      ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
+      ['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
     ).length;
     const delivered = productOrders.filter(o =>
       o.delivery_status === 'delivered' || o.delivery_status === 'paid'
@@ -174,7 +174,7 @@ export default function ProductDetail() {
       const orders = productOrders.filter(o => format(new Date(o.created_at), "yyyy-MM-dd") === dayStr).length;
       // Shipped/delivered count by updated_at (orders)
       const shipped = productOrders.filter(o =>
-        ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
+        ['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
         && format(new Date(o.updated_at), "yyyy-MM-dd") === dayStr
       ).length;
       const delivered = productOrders.filter(o =>
@@ -207,7 +207,7 @@ export default function ProductDetail() {
   // Compute real shipped/delivered/returned counts from orders (by units/quantity)
   const realDelivered = productOrders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').reduce((sum, o) => sum + (o.quantity || 1), 0);
   const realShipped = productOrders.filter(o =>
-    ['shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
+    ['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
   ).reduce((sum, o) => sum + (o.quantity || 1), 0);
   const realReturned = productOrders.filter(o => o.delivery_status === 'returned').reduce((sum, o) => sum + (o.quantity || 1), 0);
   const realAvailable = Math.max(0, product.totalQty - realShipped - realDelivered + realReturned);

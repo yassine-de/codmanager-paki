@@ -61,11 +61,11 @@ const ORDER_SELECT =
 const PAGE_SIZE = 1000;
 
 const CONFIRMED_DELIVERY_STATUSES = [
-  "booked", "shipped", "in_transit", "with_courier", "out_for_delivery",
+  "booked", "printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery",
   "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return",
 ];
 const DELIVERED_STATUSES = ["delivered", "paid"];
-const SHIPPED_STATUSES = ["shipped", "in_transit", "with_courier", "out_for_delivery"];
+const SHIPPED_STATUSES = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery"];
 const RETURNED_STATUSES = ["returned", "return"];
 
 // Courier color map

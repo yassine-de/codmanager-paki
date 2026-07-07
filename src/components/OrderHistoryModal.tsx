@@ -56,6 +56,8 @@ const fieldLabels: Record<string, string> = {
 function getActionIcon(actionType: string) {
   switch (actionType) {
     case "status_change": return ArrowRightLeft;
+    case "warehouse_label_printed":
+    case "warehouse_dispatch_scan": return PlusCircle;
     case "retry": return RotateCcw;
     case "cancel": return XCircle;
     case "postpone": return CalendarClock;
@@ -72,6 +74,8 @@ function getActionIcon(actionType: string) {
 function getActionColor(actionType: string) {
   switch (actionType) {
     case "status_change": return "text-info bg-info/10";
+    case "warehouse_label_printed": return "text-blue-500 bg-blue-500/10";
+    case "warehouse_dispatch_scan": return "text-emerald-500 bg-emerald-500/10";
     case "retry": return "text-blue-500 bg-blue-500/10";
     case "cancel":
     case "whatsapp_cancel": return "text-destructive bg-destructive/10";
@@ -91,6 +95,9 @@ function getActor(group: GroupedEntry): string {
     case "agent": return "Agent";
     case "ai": return "AI Assistant";
     case "whatsapp": return "WhatsApp";
+    case "warehouse":
+    case "warehouse_agent": return "Warehouse";
+    case "warehouse_manager": return "Warehouse Manager";
     case "system": return "System";
     default: return group.changed_by_role || "User";
   }
@@ -117,6 +124,13 @@ function buildReadableMessage(group: GroupedEntry): string {
   }
   if (action_type === "whatsapp_more_info") {
     return `Customer requested more info via WhatsApp`;
+  }
+
+  if (action_type === "warehouse_label_printed") {
+    return `Warehouse printed order label`;
+  }
+  if (action_type === "warehouse_dispatch_scan") {
+    return `Warehouse dispatched order`;
   }
 
   if (action_type === "retry") {

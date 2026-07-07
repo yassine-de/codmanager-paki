@@ -151,7 +151,7 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
   // Delivery status counts (matching real DB values)
   // Pending = explicit 'pending' OR legacy in-flight statuses
   const pending = orders.filter(o => ['pending', 'with_courier', 'in_transit', 'postponed'].includes(o.delivery_status || '')).length;
-  const shipped = orders.filter(o => ['shipped', 'booked'].includes(o.delivery_status || '')).length;
+  const shipped = orders.filter(o => ['printed', 'dispatched', 'shipped', 'booked'].includes(o.delivery_status || '')).length;
   const inTransit = orders.filter(o => o.delivery_status === 'in_transit').length;
   const withCourier = orders.filter(o => o.delivery_status === 'with_courier').length;
   // Delivered = orders currently delivered/paid whose chosen date falls in this period
@@ -231,7 +231,7 @@ function reachedDeliveredStage(o: DashboardOrder): boolean {
   return o.delivery_status === 'delivered' || o.delivery_status === 'paid';
 }
 
-const SHIPPED_DELIVERY_STATUSES = ['shipped', 'booked', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'];
+const SHIPPED_DELIVERY_STATUSES = ['printed', 'dispatched', 'shipped', 'booked', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'];
 
 function computeDailyData(orders: DashboardOrder[], numDays: number) {
   // Use startOfDayPKT(now) as the true UTC timestamp for midnight PKT today.
@@ -368,7 +368,7 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
       if (!map[o.product_name]) map[o.product_name] = { total: 0, delivered: 0, shipped: 0, confirmed: 0 };
       map[o.product_name].total += o.quantity;
       if (['delivered', 'paid'].includes(o.delivery_status || '')) map[o.product_name].delivered += o.quantity;
-      if (['shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'].includes(o.delivery_status || '')) map[o.product_name].shipped += o.quantity;
+      if (['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'].includes(o.delivery_status || '')) map[o.product_name].shipped += o.quantity;
       // Confirmed = strict confirmation_status === 'confirmed'
       if (reachedConfirmedStage(o)) {
         map[o.product_name].confirmed += o.quantity;

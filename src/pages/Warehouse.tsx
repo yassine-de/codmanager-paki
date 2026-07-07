@@ -85,6 +85,9 @@ interface InventoryRow {
   quantity_on_hand: number;
   quantity_reserved: number;
   updated_at: string;
+  available_quantity?: number;
+  damaged_quantity?: number;
+  location_codes?: string[];
 }
 
 interface DispatchedInventoryOrder {
@@ -141,7 +144,7 @@ function sellerName(map: Map<string, ProfileRow>, id: string | null | undefined)
 function statusBadgeClass(status: string) {
   const normalized = status.toLowerCase();
   if (["received", "scanned", "dispatched", "ok", "sellable"].includes(normalized)) return "bg-success/12 text-success border-success/25";
-  if (["pending", "label_printed", "ready", "shipped"].includes(normalized)) return "bg-primary/12 text-primary border-primary/25";
+  if (["pending", "label_printed", "ready", "printed", "shipped"].includes(normalized)) return "bg-primary/12 text-primary border-primary/25";
   if (["damaged", "missing_item", "unknown", "error"].includes(normalized)) return "bg-destructive/12 text-destructive border-destructive/25";
   if (["duplicate", "arrived"].includes(normalized)) return "bg-warning/12 text-warning border-warning/25";
   return "bg-muted text-muted-foreground border-border";
@@ -467,12 +470,80 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     });
   }, [hideSellerInfo, profileMap, receivingRows, receivingSearch]);
 
+  const displayInventory = useMemo(() => {
+    const groups = new Map<string, {
+      primary: InventoryRow;
+      rows: InventoryRow[];
+      available: number;
+      damaged: number;
+      reserved: number;
+      latest: string;
+      locationCodes: string[];
+    }>();
+
+    inventory.forEach((row) => {
+      const group = groups.get(row.product_variant_id) || {
+        primary: row,
+        rows: [],
+        available: 0,
+        damaged: 0,
+        reserved: 0,
+        latest: row.updated_at,
+        locationCodes: [],
+      };
+
+      if (group.primary.location_type === "damaged" && row.location_type !== "damaged") {
+        group.primary = row;
+      }
+      group.rows.push(row);
+      group.reserved += Number(row.quantity_reserved || 0);
+      if (row.location_type === "damaged") {
+        group.damaged += Number(row.quantity_on_hand || 0);
+      } else {
+        group.available += Number(row.quantity_on_hand || 0);
+      }
+      if (row.location_code && !group.locationCodes.includes(row.location_code)) {
+        group.locationCodes.push(row.location_code);
+      }
+      if (new Date(row.updated_at).getTime() > new Date(group.latest).getTime()) {
+        group.latest = row.updated_at;
+      }
+      groups.set(row.product_variant_id, group);
+    });
+
+    return Array.from(groups.values()).map((group) => {
+      const sellableLocations = Array.from(new Set(
+        group.rows
+          .filter((row) => row.location_type !== "damaged")
+          .map((row) => row.location_code)
+          .filter(Boolean),
+      ));
+      const locationCode = sellableLocations.length === 0
+        ? "DAMAGED"
+        : sellableLocations.length === 1
+          ? sellableLocations[0]
+          : "MULTIPLE";
+
+      return {
+        ...group.primary,
+        quantity_on_hand: group.available,
+        quantity_reserved: group.reserved,
+        updated_at: group.latest,
+        location_code: locationCode,
+        location_name: locationCode,
+        available_quantity: group.available,
+        damaged_quantity: group.damaged,
+        location_codes: group.locationCodes,
+      };
+    });
+  }, [inventory]);
+
   const inventoryOptions = useMemo(() => {
-    const sellerIds = Array.from(new Set(inventory.map((row) => row.seller_id).filter(Boolean)));
-    const products = Array.from(new Set(inventory.map((row) => row.product_name).filter(Boolean))).sort();
+    const sellerIds = Array.from(new Set(displayInventory.map((row) => row.seller_id).filter(Boolean)));
+    const products = Array.from(new Set(displayInventory.map((row) => row.product_name).filter(Boolean))).sort();
     const locations = Array.from(new Set(inventory.map((row) => row.location_code).filter(Boolean))).sort();
     return { sellerIds, products, locations };
-  }, [inventory]);
+  }, [displayInventory, inventory]);
 
   const dispatchedByVariant = useMemo(() => {
     const deliveredOrClosed = new Set(["delivered", "return_received", "returned", "cancelled"]);
@@ -493,10 +564,10 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
   const filteredInventory = useMemo(() => {
     const q = inventorySearch.trim().toLowerCase();
-    return inventory.filter((row) => {
+    return displayInventory.filter((row) => {
       if (inventorySellerFilter !== "all" && row.seller_id !== inventorySellerFilter) return false;
       if (inventoryProductFilter !== "all" && row.product_name !== inventoryProductFilter) return false;
-      if (inventoryLocationFilter !== "all" && row.location_code !== inventoryLocationFilter) return false;
+      if (inventoryLocationFilter !== "all" && !row.location_codes?.includes(inventoryLocationFilter)) return false;
       if (!q) return true;
       return [
         hideSellerInfo ? "" : sellerName(profileMap, row.seller_id),
@@ -504,9 +575,10 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         row.variant_name || "",
         row.sku || "",
         row.location_code,
+        ...(row.location_codes || []),
       ].join(" ").toLowerCase().includes(q);
     });
-  }, [hideSellerInfo, inventory, inventoryLocationFilter, inventoryProductFilter, inventorySearch, inventorySellerFilter, profileMap]);
+  }, [displayInventory, hideSellerInfo, inventoryLocationFilter, inventoryProductFilter, inventorySearch, inventorySellerFilter, profileMap]);
 
   const filteredNotPrinted = useMemo(() => {
     const q = notPrintedSearch.trim().toLowerCase();
@@ -704,6 +776,28 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     return { productId, variantId: createdVariant.id as string, sku: createdVariant.sku as string };
   }
 
+  async function addInventoryBalance(productVariantId: string, locationId: string, quantity: number) {
+    if (quantity <= 0) return;
+    const { data: existing, error: selectError } = await supabase
+      .from("inventory_balances" as any)
+      .select("quantity_on_hand")
+      .eq("product_variant_id", productVariantId)
+      .eq("location_id", locationId)
+      .maybeSingle();
+    if (selectError) throw selectError;
+
+    const nextQuantity = Number(existing?.quantity_on_hand || 0) + quantity;
+    const { error } = await supabase
+      .from("inventory_balances" as any)
+      .upsert({
+        product_variant_id: productVariantId,
+        location_id: locationId,
+        quantity_on_hand: nextQuantity,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "product_variant_id,location_id" });
+    if (error) throw error;
+  }
+
   const saveReceive = async () => {
     if (!receiveDialogRow) return;
     const received = Number(receiveForm.receivedQuantity || 0);
@@ -725,10 +819,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       const damagedLocationId = damaged > 0 ? await ensureLocation("DAMAGED", "damaged") : null;
 
       if (good > 0) {
-        const { error: balanceError } = await supabase
-          .from("inventory_balances" as any)
-          .upsert({ product_variant_id: variantId, location_id: sellableLocationId, quantity_on_hand: good }, { onConflict: "product_variant_id,location_id" });
-        if (balanceError) throw balanceError;
+        await addInventoryBalance(variantId, sellableLocationId, good);
         const { error: movementError } = await supabase.from("inventory_movements" as any).insert({
           product_variant_id: variantId,
           movement_type: "restock",
@@ -748,10 +839,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       }
 
       if (damaged > 0 && damagedLocationId) {
-        const { error: balanceError } = await supabase
-          .from("inventory_balances" as any)
-          .upsert({ product_variant_id: variantId, location_id: damagedLocationId, quantity_on_hand: damaged }, { onConflict: "product_variant_id,location_id" });
-        if (balanceError) throw balanceError;
+        await addInventoryBalance(variantId, damagedLocationId, damaged);
         const { error: movementError } = await supabase.from("inventory_movements" as any).insert({
           product_variant_id: variantId,
           movement_type: "damage",
@@ -917,6 +1005,39 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
+  const updateOrderDeliveryStatus = async (rows: FulfillmentRow[], nextStatus: "printed" | "dispatched", actionType: string) => {
+    const orderIds = Array.from(new Set(rows.map((row) => row.order_id).filter(Boolean)));
+    if (orderIds.length === 0) return;
+
+    const { data: currentRows, error: selectError } = await supabase
+      .from("orders")
+      .select("order_id, delivery_status")
+      .in("order_id", orderIds);
+    if (selectError) throw selectError;
+
+    const now = new Date().toISOString();
+    const { error: updateError } = await supabase
+      .from("orders")
+      .update({ delivery_status: nextStatus, updated_at: now } as any)
+      .in("order_id", orderIds);
+    if (updateError) throw updateError;
+
+    const historyRows = (currentRows || [])
+      .filter((row: any) => row.delivery_status !== nextStatus)
+      .map((row: any) => ({
+        order_id: row.order_id,
+        changed_by: authUser?.id,
+        changed_by_role: authUser?.role || "warehouse",
+        field_changed: "delivery_status",
+        old_value: row.delivery_status || null,
+        new_value: nextStatus,
+        action_type: actionType,
+      }));
+    if (historyRows.length > 0) {
+      await supabase.from("order_history").insert(historyRows as any);
+    }
+  };
+
   const printLabels = async (rows = filteredLabelRows) => {
     const alreadyPrinted = rows.filter((row) => row.fulfillment_item_status !== "pending");
     if (alreadyPrinted.length > 0 && !canReprint) {
@@ -944,13 +1065,15 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       }
 
       const printedAt = new Date().toISOString();
-      const pendingIds = rows.filter((row) => row.fulfillment_item_status === "pending").map((row) => row.fulfillment_item_id);
+      const pendingRows = rows.filter((row) => row.fulfillment_item_status === "pending");
+      const pendingIds = pendingRows.map((row) => row.fulfillment_item_id);
       if (pendingIds.length > 0) {
         const { error } = await supabase
           .from("fulfillment_items" as any)
           .update({ status: "label_printed", label_printed_at: printedAt, packed_at: printedAt, packed_by: authUser?.id, updated_at: printedAt })
           .in("id", pendingIds);
         if (error) throw error;
+        await updateOrderDeliveryStatus(pendingRows, "printed", "warehouse_label_printed");
       }
 
       await Promise.all(trackingNumbers.map((tracking) => supabase.from("scan_events" as any).insert({
@@ -1007,7 +1130,10 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       const result = data as any;
       if (result?.result === "duplicate") toast.error("Already dispatched");
       else if (result?.result === "unknown") toast.error("Order not found");
-      else toast.success("Order dispatched and stock deducted");
+      else {
+        await updateOrderDeliveryStatus([dispatchCandidate], "dispatched", "warehouse_dispatch_scan");
+        toast.success("Order dispatched and stock deducted");
+      }
       setReadyScan("");
       setDispatchCandidate(null);
       refreshWarehouse();
@@ -1312,14 +1438,14 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                       <TableCell className="text-xs text-muted-foreground">{row.variant_name || "Default"}</TableCell>
                       <TableCell className="font-mono text-xs">{row.sku || "-"}</TableCell>
                       <TableCell className="font-mono text-xs">{row.sku || row.product_variant_id.slice(0, 10)}</TableCell>
-                      <TableCell className="text-right font-semibold">{row.location_type === "damaged" ? 0 : row.quantity_on_hand}</TableCell>
+                      <TableCell className="text-right font-semibold">{row.available_quantity ?? row.quantity_on_hand}</TableCell>
                       <TableCell className="text-right">{row.quantity_reserved}</TableCell>
                       <TableCell className="text-right">
                         <span className={`font-semibold tabular-nums ${dispatchedByVariant.get(row.product_variant_id) ? "text-primary" : "text-muted-foreground"}`}>
                           {dispatchedByVariant.get(row.product_variant_id) || 0}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right">{row.location_type === "damaged" ? row.quantity_on_hand : 0}</TableCell>
+                      <TableCell className="text-right">{row.damaged_quantity ?? 0}</TableCell>
                       <TableCell><Badge variant="outline" className="text-[10px]">{row.location_code || "UNASSIGNED"}</Badge></TableCell>
                       <TableCell className="text-xs text-muted-foreground">{format(new Date(row.updated_at), "MMM d, HH:mm")}</TableCell>
                       <TableCell className="text-right">
@@ -1405,7 +1531,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                   <Input className="h-8 w-[260px] text-xs" value={readySearch} onChange={(e) => setReadySearch(e.target.value)} placeholder="Filter ready orders..." />
                 </CardHeader>
                 <CardContent className="p-0">
-                  <DispatchTable rows={filteredReady} loading={loadingReady} />
+                  <DispatchTable rows={filteredReady} loading={loadingReady} showReadyAt />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1756,6 +1882,7 @@ function DispatchTable({
   onToggleAll,
   onToggleRow,
   selectable = false,
+  showReadyAt = false,
 }: {
   rows: FulfillmentRow[];
   loading: boolean;
@@ -1764,7 +1891,9 @@ function DispatchTable({
   onToggleAll?: () => void;
   onToggleRow?: (id: string) => void;
   selectable?: boolean;
+  showReadyAt?: boolean;
 }) {
+  const columnCount = (selectable ? 7 : 6) + (showReadyAt ? 1 : 0);
   return (
     <Table>
       <TableHeader>
@@ -1779,14 +1908,15 @@ function DispatchTable({
           <TableHead className="h-9 text-xs">Product</TableHead>
           <TableHead className="h-9 text-xs">Courier</TableHead>
           <TableHead className="h-9 text-xs">Tracking</TableHead>
+          {showReadyAt && <TableHead className="h-9 text-xs">Ready at</TableHead>}
           <TableHead className="h-9 text-xs">Stage</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {loading ? (
-          <TableRow><TableCell colSpan={selectable ? 7 : 6} className="text-sm text-muted-foreground">Loading orders...</TableCell></TableRow>
+          <TableRow><TableCell colSpan={columnCount} className="text-sm text-muted-foreground">Loading orders...</TableCell></TableRow>
         ) : rows.length === 0 ? (
-          <TableRow><TableCell colSpan={selectable ? 7 : 6} className="text-sm text-muted-foreground">No orders in this view.</TableCell></TableRow>
+          <TableRow><TableCell colSpan={columnCount} className="text-sm text-muted-foreground">No orders in this view.</TableCell></TableRow>
         ) : rows.map((row) => (
           <TableRow key={row.fulfillment_item_id}>
             {selectable && (
@@ -1805,6 +1935,12 @@ function DispatchTable({
             <TableCell className="text-xs max-w-[240px] truncate">{row.product_name || "-"}</TableCell>
             <TableCell className="text-sm">{row.carrier_name}</TableCell>
             <TableCell className="font-mono text-xs">{row.tracking_number || "-"}</TableCell>
+            {showReadyAt && (
+              <TableCell>
+                <div className="text-xs font-medium">{format(new Date(row.updated_at), "MMM d, yyyy")}</div>
+                <div className="text-[11px] text-muted-foreground">{format(new Date(row.updated_at), "HH:mm")}</div>
+              </TableCell>
+            )}
             <TableCell><StatusBadge value={row.fulfillment_item_status} /></TableCell>
           </TableRow>
         ))}

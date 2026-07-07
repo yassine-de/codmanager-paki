@@ -244,7 +244,7 @@ const AgentDashboard = () => {
     const productMap = new Map<string, { shipped: number; delivered: number }>();
     filteredOrders.forEach((o) => {
       const entry = productMap.get(o.product_name) || { shipped: 0, delivered: 0 };
-      if (["shipped", "delivered", "in_transit", "with_courier", "returned", "paid"].includes(o.delivery_status || "")) entry.shipped++;
+      if (["printed", "dispatched", "shipped", "delivered", "in_transit", "with_courier", "returned", "paid"].includes(o.delivery_status || "")) entry.shipped++;
       if (o.delivery_status === "delivered" || o.delivery_status === "paid") entry.delivered++;
       productMap.set(o.product_name, entry);
     });

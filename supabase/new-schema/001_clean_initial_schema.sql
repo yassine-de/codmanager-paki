@@ -2073,7 +2073,7 @@ AS $$
   LEFT JOIN public.carriers c ON c.id = s.carrier_id
   LEFT JOIN public.profiles sp ON sp.user_id = o.seller_id
   LEFT JOIN public.profiles ap ON ap.user_id = o.agent_id
-  WHERE o.delivery_status IN ('booked','shipped','in_transit','out_for_delivery','with_courier','delivered','failed_attempt','returned','return','ready_for_return','return_received')
+  WHERE o.delivery_status IN ('booked','printed','dispatched','shipped','in_transit','out_for_delivery','with_courier','delivered','failed_attempt','returned','return','ready_for_return','return_received')
   ORDER BY o.updated_at DESC;
 $$;
 
@@ -2086,7 +2086,7 @@ SET search_path = public
 AS $$
   SELECT count(*)::integer
   FROM public.orders
-  WHERE delivery_status IN ('booked','shipped','in_transit','out_for_delivery','with_courier','delivered','failed_attempt','returned','return','ready_for_return','return_received');
+  WHERE delivery_status IN ('booked','printed','dispatched','shipped','in_transit','out_for_delivery','with_courier','delivered','failed_attempt','returned','return','ready_for_return','return_received');
 $$;
 
 CREATE OR REPLACE FUNCTION public.refresh_daily_order_metrics(
@@ -2231,6 +2231,7 @@ DECLARE
   v_main_location uuid;
   v_existing integer;
   v_item record;
+  v_old_delivery_status text;
 BEGIN
   SELECT * INTO v_shipment
   FROM public.shipments
@@ -2294,9 +2295,36 @@ BEGIN
       updated_at = now()
   WHERE shipment_id = v_shipment.id;
 
-  UPDATE public.orders
-  SET fulfillment_status = 'scanned', updated_at = now()
+  SELECT delivery_status INTO v_old_delivery_status
+  FROM public.orders
   WHERE id = v_shipment.order_uuid;
+
+  UPDATE public.orders
+  SET fulfillment_status = 'scanned',
+      delivery_status = 'dispatched',
+      updated_at = now()
+  WHERE id = v_shipment.order_uuid;
+
+  IF v_old_delivery_status IS DISTINCT FROM 'dispatched' THEN
+    INSERT INTO public.order_history (
+      order_id,
+      changed_by,
+      changed_by_role,
+      field_changed,
+      old_value,
+      new_value,
+      action_type
+    )
+    VALUES (
+      v_shipment.order_id,
+      p_scanned_by,
+      'warehouse_manager',
+      'delivery_status',
+      v_old_delivery_status,
+      'dispatched',
+      'warehouse_dispatch_scan'
+    );
+  END IF;
 
   RETURN jsonb_build_object('ok', true, 'result', 'ok', 'shipment_id', v_shipment.id, 'scan_event_id', v_scan_id);
 END;

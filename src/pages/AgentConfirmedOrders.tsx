@@ -29,6 +29,8 @@ const confirmationBadge: Record<string, { label: string; className: string }> = 
 
 const deliveryBadge: Record<string, { label: string; className: string }> = {
   booked: { label: "📦 Booked", className: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
+  printed: { label: "Printed", className: "bg-sky-500/10 text-sky-600 border-sky-500/20" },
+  dispatched: { label: "Dispatched", className: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
   shipped: { label: "📦 Shipped", className: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
   in_transit: { label: "🚚 In Transit", className: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
   with_courier: { label: "🏍️ With Courier", className: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
@@ -40,7 +42,7 @@ const deliveryBadge: Record<string, { label: string; className: string }> = {
   postponed: { label: "⏰ Postponed", className: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
 };
 
-const SHIPPED_STATUSES = ["shipped", "in_transit", "with_courier", "delivered", "paid", "returned"];
+const SHIPPED_STATUSES = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "delivered", "paid", "returned"];
 
 const CONFIRMATION_OPTIONS = [
   { value: "confirmed", label: "Confirmed" },

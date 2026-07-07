@@ -46,7 +46,7 @@ export function FinancialIndicators({ confirmationStatus, deliveryStatus, invoic
   if (HIDDEN_STATUSES.includes(confirmationStatus)) return null;
 
   const invoiceColor = getInvoiceColor(invoiceId, invoiceStatus);
-  const shippedStatuses = ["shipped", "booked", "in_transit", "with_courier", "out_for_delivery", "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return"];
+  const shippedStatuses = ["printed", "dispatched", "shipped", "booked", "in_transit", "with_courier", "out_for_delivery", "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return"];
 
   // C — confirmed
   const cActive = confirmationStatus === "confirmed";

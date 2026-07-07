@@ -367,7 +367,7 @@ export default function Dashboard() {
   });
   const fuKpis = useMemo(() => {
     const total     = fuRows.length;
-    const shipped   = fuRows.filter((r) => ["shipped","in_transit","with_courier","out_for_delivery"].includes(r.delivery_status ?? "")).length;
+    const shipped   = fuRows.filter((r) => ["printed","dispatched","shipped","in_transit","with_courier","out_for_delivery"].includes(r.delivery_status ?? "")).length;
     const delivered = fuRows.filter((r) => r.delivery_status === "delivered").length;
     const needAction = fuRows.filter((r) => r.follow_up_status !== "closed").length;
     return {

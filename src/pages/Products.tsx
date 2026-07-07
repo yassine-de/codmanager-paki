@@ -76,7 +76,7 @@ export default function Products() {
 
       if (row.delivery_status === "delivered" || row.delivery_status === "paid") {
         current.delivered += qty;
-      } else if (["shipped", "in_transit", "with_courier"].includes(row.delivery_status || "")) {
+      } else if (["printed", "dispatched", "shipped", "in_transit", "with_courier"].includes(row.delivery_status || "")) {
         current.shipped += qty;
       } else if (row.delivery_status === "returned") {
         current.returned += qty;

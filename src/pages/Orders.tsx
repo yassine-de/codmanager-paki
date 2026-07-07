@@ -59,6 +59,8 @@ const whatsappStatusConfig: Record<string, { label: string; cls: string }> = {
 const deliveryConfig: Record<DeliveryStatus, { label: string; cls: string }> = {
   pending: { label: 'Pending', cls: 'bg-[hsl(30,6%,50%)]/12 text-[hsl(30,6%,50%)] border-[hsl(30,6%,50%)]/20' },
   booked: { label: 'Booked', cls: 'bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)] border-[hsl(200,65%,50%)]/20' },
+  printed: { label: 'Printed', cls: 'bg-[hsl(205,65%,48%)]/12 text-[hsl(205,65%,48%)] border-[hsl(205,65%,48%)]/20' },
+  dispatched: { label: 'Dispatched', cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
   shipped: { label: 'Shipped', cls: 'bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20' },
   in_transit: { label: 'In Transit', cls: 'bg-[hsl(230,55%,55%)]/12 text-[hsl(230,55%,55%)] border-[hsl(230,55%,55%)]/20' },
   with_courier: { label: 'With Courier', cls: 'bg-[hsl(185,55%,42%)]/12 text-[hsl(185,55%,42%)] border-[hsl(185,55%,42%)]/20' },
@@ -92,7 +94,7 @@ const subStatusClass = (raw?: string | null): string => {
   return 'bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)] border-[hsl(200,65%,50%)]/20';
 };
 
-const shippedDeliveryStatuses: DeliveryStatus[] = ["shipped", "in_transit", "with_courier"];
+const shippedDeliveryStatuses: DeliveryStatus[] = ["printed", "dispatched", "shipped", "in_transit", "with_courier"];
 
 function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string; attemptCount?: number }) {
   return (

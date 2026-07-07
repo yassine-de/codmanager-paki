@@ -130,6 +130,8 @@ const followUpStatusStyle: Record<string, string> = {
 const deliveryStatusStyle: Record<string, string> = {
   pending:          "bg-[hsl(30,6%,50%)]/12   text-[hsl(30,6%,50%)]   border-[hsl(30,6%,50%)]/25",
   booked:           "bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)] border-[hsl(200,65%,50%)]/25",
+  printed:          "bg-[hsl(205,65%,48%)]/12 text-[hsl(205,65%,48%)] border-[hsl(205,65%,48%)]/25",
+  dispatched:       "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/25",
   shipped:          "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/25",
   in_transit:       "bg-[hsl(230,55%,55%)]/12 text-[hsl(230,55%,55%)] border-[hsl(230,55%,55%)]/25",
   with_courier:     "bg-[hsl(185,55%,42%)]/12 text-[hsl(185,55%,42%)] border-[hsl(185,55%,42%)]/25",
@@ -172,7 +174,7 @@ interface FollowUpRow {
 
 function computeSegment(row: FollowUpRow): "failed_attempt" | "delayed" | "on_going" | null {
   const ds = row.delivery_status;
-  const inTransit = ["shipped", "in_transit", "out_for_delivery", "with_courier"].includes(ds ?? "");
+  const inTransit = ["printed", "dispatched", "shipped", "in_transit", "out_for_delivery", "with_courier"].includes(ds ?? "");
   if (ds === "failed_attempt") return "failed_attempt";
   if (!inTransit) return null;
   // Use days_since_shipped if available, otherwise fall back to days since order_updated_at

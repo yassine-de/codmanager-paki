@@ -51,7 +51,7 @@ const ORDER_SELECT =
   "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, price, quantity, created_at, confirmed_at, delivered_at, updated_at";
 const PAGE_SIZE = 1000;
 const DELIVERED_STATUSES = ["delivered", "paid"];
-const SHIPPED_STATUSES = ["shipped", "in_transit", "with_courier", "out_for_delivery"];
+const SHIPPED_STATUSES = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery"];
 
 // ─── Data Fetching ────────────────────────────────────────────────────────────
 

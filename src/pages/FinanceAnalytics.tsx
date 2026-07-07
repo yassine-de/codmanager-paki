@@ -171,7 +171,7 @@ export default function FinanceAnalytics() {
   // === CALCULATIONS with invoice-based paid/pending ===
 
   const shippedOrders = useMemo(() => {
-    return filteredOrders.filter(o => o.delivery_status && ["shipped", "in_transit", "with_courier", "delivered", "paid", "returned", "pending"].includes(o.delivery_status));
+    return filteredOrders.filter(o => o.delivery_status && ["printed", "dispatched", "shipped", "in_transit", "with_courier", "delivered", "paid", "returned", "pending"].includes(o.delivery_status));
   }, [filteredOrders]);
 
   const shippingStats = useMemo(() => {
@@ -341,7 +341,7 @@ export default function FinanceAnalytics() {
     filteredOrders.forEach(o => {
       const id = o.seller_id;
       if (!map[id]) map[id] = { shipping: 0, confirmation: 0, cod: 0, sourcing: 0 };
-      if (o.delivery_status && ["shipped", "in_transit", "with_courier", "delivered", "paid", "returned", "pending"].includes(o.delivery_status)) {
+      if (o.delivery_status && ["printed", "dispatched", "shipped", "in_transit", "with_courier", "delivered", "paid", "returned", "pending"].includes(o.delivery_status)) {
         map[id].shipping += getShippingFee(id, Number(o.weight) || 0.5);
       }
       if (o.confirmation_status === "confirmed") map[id].confirmation += rateHelpers.getConfirmedRate(id);

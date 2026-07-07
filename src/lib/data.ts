@@ -1,7 +1,7 @@
 export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned' | 'postponed' | 'no_answer' | 'double' | 'wrong_number' | 'in_transit' | 'with_courier' | 'failed';
 
 export type ConfirmationStatus = 'new' | 'new_wts' | 'confirmed' | 'no_answer' | 'unreachable' | 'postponed' | 'cancelled' | 'wrong_number' | 'double';
-export type DeliveryStatus = 'pending' | 'booked' | 'shipped' | 'in_transit' | 'with_courier' | 'delivered' | 'returned' | 'cancelled' | 'no_answer' | 'postponed' | 'failed' | 'failed_attempt' | 'ready_for_return' | 'rejected' | 'return';
+export type DeliveryStatus = 'pending' | 'booked' | 'printed' | 'dispatched' | 'shipped' | 'in_transit' | 'with_courier' | 'delivered' | 'returned' | 'cancelled' | 'no_answer' | 'postponed' | 'failed' | 'failed_attempt' | 'ready_for_return' | 'rejected' | 'return';
 
 export interface OrderHistoryEvent {
   id: string;
@@ -108,7 +108,7 @@ function generateHistory(status: OrderStatus, createdAt: string, daysAgo: number
   }
 
   // Shipping & delivery
-  if (['shipped', 'in_transit', 'with_courier', 'delivered', 'returned'].includes(status)) {
+  if (['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier', 'delivered', 'returned'].includes(status)) {
     events.push({ id: `${orderId}-h${eid++}`, timestamp: ts(2, 0), type: 'delivery_update', description: 'Order shipped to courier', agent: rand(agentNames), oldValue: 'Pending', newValue: 'Shipped' });
   }
   if (['in_transit', 'with_courier', 'delivered'].includes(status)) {
@@ -186,7 +186,7 @@ function generateOrder(i: number): Order {
     createdAt,
     updatedAt,
     confirmedAt: ['confirmed', 'shipped', 'delivered', 'in_transit', 'with_courier'].includes(status) ? new Date(Date.now() - (daysAgo - 1) * 86400000).toISOString() : undefined,
-    shippedAt: ['shipped', 'delivered', 'in_transit', 'with_courier'].includes(status) ? new Date(Date.now() - (daysAgo - 2) * 86400000).toISOString() : undefined,
+    shippedAt: ['printed', 'dispatched', 'shipped', 'delivered', 'in_transit', 'with_courier'].includes(status) ? new Date(Date.now() - (daysAgo - 2) * 86400000).toISOString() : undefined,
     deliveredAt: status === 'delivered' ? new Date(Date.now() - (daysAgo - 4) * 86400000).toISOString() : undefined,
     notes: Math.random() > 0.7 ? rand(['Call before delivery', 'Fragile items', 'Leave at door', 'Customer prefers morning delivery']) : undefined,
     seller: rand(sellerNames),
@@ -205,7 +205,7 @@ export function getKPIs(orders: Order[]) {
   const delivered = orders.filter(o => o.status === 'delivered').length;
   const cancelled = orders.filter(o => o.status === 'cancelled').length;
   const returned = orders.filter(o => o.status === 'returned').length;
-  const shipped = orders.filter(o => ['shipped', 'in_transit', 'with_courier', 'delivered'].includes(o.status)).length;
+  const shipped = orders.filter(o => ['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier', 'delivered'].includes(o.status)).length;
   const postponed = orders.filter(o => o.status === 'postponed').length;
   const noAnswer = orders.filter(o => o.status === 'no_answer').length;
   const doubleOrders = orders.filter(o => o.status === 'double').length;
