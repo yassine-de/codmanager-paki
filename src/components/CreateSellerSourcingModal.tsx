@@ -221,9 +221,13 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
         const ext = imageFile.name.split(".").pop() || "jpg";
         const filePath = `${authUser!.id}/${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage.from("sourcing-images").upload(filePath, imageFile);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("sourcing-images").getPublicUrl(filePath);
-        productImageUrl = urlData.publicUrl;
+        if (uploadError) {
+          console.warn("Sourcing image upload failed; creating request without image", uploadError);
+          toast.warning("Image upload failed, request will be created without image");
+        } else {
+          const { data: urlData } = supabase.storage.from("sourcing-images").getPublicUrl(filePath);
+          productImageUrl = urlData.publicUrl;
+        }
       }
 
       const variantsData = hasVariants
@@ -265,7 +269,10 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
       resetForm();
       toast.success(autoValidate ? "Sourcing request created & validated" : "Sourcing request created");
     },
-    onError: () => { toast.error("Failed to create request"); },
+    onError: (error: any) => {
+      console.error("Failed to create sourcing request", error);
+      toast.error(error?.message || "Failed to create request");
+    },
   });
 
   const handleCreate = () => {

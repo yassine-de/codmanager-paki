@@ -129,11 +129,8 @@ interface ReceiveForm {
 
 const sourcingReceiveStatuses = ["ordered", "shipped", "arrived", "ready_to_receive", "ready_to_receive_in_warehouse"];
 
-function buildInternalSku(row: Pick<SourcingReceiveRow, "seller_id" | "product_name" | "id">) {
-  const sellerCode = row.seller_id.slice(0, 6).toUpperCase();
-  const productCode = row.product_name.replace(/[^a-z0-9]/gi, "").slice(0, 10).toUpperCase() || "PRODUCT";
-  const batchCode = row.id.slice(0, 6).toUpperCase();
-  return `WH-${sellerCode}-${productCode}-${batchCode}`;
+function buildInternalSku(row: Pick<SourcingReceiveRow, "id">) {
+  return `WH-${row.id.slice(0, 6).toUpperCase()}`;
 }
 
 function sellerName(map: Map<string, ProfileRow>, id: string | null | undefined) {
@@ -766,7 +763,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       .from("product_variants" as any)
       .insert({
         product_id: productId,
-        sku: `${baseSku}-B1`,
+        sku: baseSku,
         name: "Default",
         attributes: { batch: row.id.slice(0, 8), source: "warehouse_receiving" },
       })
@@ -857,7 +854,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
       const { error: sourcingError } = await supabase
         .from("sourcing_requests")
-        .update({ status: "received", notes: receiveForm.notes || receiveDialogRow.notes, updated_at: new Date().toISOString() })
+        .update({ status: "received", product_created: true, notes: receiveForm.notes || receiveDialogRow.notes, updated_at: new Date().toISOString() } as any)
         .eq("id", receiveDialogRow.id);
       if (sourcingError) throw sourcingError;
 
@@ -1347,7 +1344,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 	                        <div className="text-[11px] text-muted-foreground">{row.tracking_id || "Waiting tracking"}</div>
 	                      </TableCell>
 	                      <TableCell>
-	                        <div className="font-mono text-xs font-semibold">{buildInternalSku(row)}-B1</div>
+                        <div className="font-mono text-xs font-semibold">{buildInternalSku(row)}</div>
 	                        <div className="text-[11px] text-muted-foreground">Auto after receiving</div>
 	                      </TableCell>
 	                      <TableCell><StatusBadge value={row.status} /></TableCell>
@@ -1629,8 +1626,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                   Auto-generated product barcode
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
-                  <InfoLine label="Internal SKU" value={`${buildInternalSku(receiveDialogRow)}-B1`} />
-                  <InfoLine label="Barcode" value={`${buildInternalSku(receiveDialogRow)}-B1`} />
+                  <InfoLine label="Internal SKU" value={buildInternalSku(receiveDialogRow)} />
+                  <InfoLine label="Barcode" value={buildInternalSku(receiveDialogRow)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

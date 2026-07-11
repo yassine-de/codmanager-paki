@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ExternalLink, Loader2, MapPin, Ship, ImageIcon, PackageCheck, Layers, Package, Info, Truck } from "lucide-react";
+import { ExternalLink, Loader2, MapPin, Ship, ImageIcon, Layers, Package, Info, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -81,7 +80,6 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   const [freightForwarder, setFreightForwarder] = useState<string>("");
   const [trackingId, setTrackingId] = useState<string>("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showProductConfirm, setShowProductConfirm] = useState(false);
 
   const [prevId, setPrevId] = useState<string | null>(null);
   if (request && request.id !== prevId) {
@@ -130,7 +128,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     } as any);
   };
 
-  const doUpdate = async (productCreated?: boolean) => {
+  const doUpdate = async () => {
     if (!request) return;
 
     // Track changes for history
@@ -159,7 +157,6 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       product_weight: productWeight,
       updated_at: new Date().toISOString(),
       seller_seen: false,
-      ...(productCreated !== undefined ? { product_created: productCreated } : {}),
     };
     // Admin-only fields
     if (isAdmin) {
@@ -218,182 +215,32 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     }
   };
 
-  const createProduct = async () => {
-    if (!request) return;
-    // Generate SKU
-    const { data: skuData, error: skuError } = await supabase.rpc("generate_product_sku");
-    if (skuError) throw skuError;
-    const sku = skuData as string;
-
-    // Generate display_id
-    const { data: displayIdData, error: displayIdError } = await supabase.rpc("generate_product_display_id", { p_seller_id: request.seller_id });
-    if (displayIdError) throw displayIdError;
-    const displayId = displayIdData as string;
-
-    const insertData: Record<string, unknown> = {
-      seller_id: request.seller_id,
-      sku,
-      display_id: displayId,
-      name: request.product_name,
-      image_url: request.product_image_url || "",
-      price: 0,
-      landed_price: sellerPrice || 0,
-      quantity: quantity,
-      product_url: "",
-      sourcing_request_id: request.id,
-      weight: productWeight || null,
-      variants: request.variants || null,
-    };
-    const { error } = await supabase.from("products").insert(insertData as any);
-    if (error) throw error;
-  };
-
-  const addStockToExistingProduct = async () => {
-    if (!request || !sourceProductId) return;
-    // Get current product quantity
-    const { data: prod, error: fetchErr } = await supabase
-      .from("products")
-      .select("quantity, variants")
-      .eq("id", sourceProductId)
-      .single();
-    if (fetchErr) throw fetchErr;
-
-    const currentQty = prod.quantity || 0;
-    const newQty = currentQty + n(quantity);
-
-    // If sourcing has variants, merge quantities into existing product variants
-    const updateData: any = {
-      quantity: newQty,
-      updated_at: new Date().toISOString(),
-      seller_seen: false,
-    };
-
-    // Update landed_price (buying price) from seller_price
-    if (n(sellerPrice) > 0) {
-      updateData.landed_price = sellerPrice;
-    }
-    if (productWeight) {
-      updateData.weight = productWeight;
-    }
-
-    // Merge variant quantities
-    if (request.variants && Array.isArray(request.variants) && prod.variants && Array.isArray(prod.variants)) {
-      const existingVariants = prod.variants as any[];
-      const sourcingVariants = request.variants as any[];
-      const mergedVariants = existingVariants.map((ev: any) => {
-        const match = sourcingVariants.find((sv: any) => sv.name === ev.name);
-        if (!match) return ev;
-        if (ev.subVariants && match.subVariants) {
-          const mergedSubs = ev.subVariants.map((esv: any) => {
-            const subMatch = match.subVariants.find((ssv: any) => ssv.name === esv.name);
-            return subMatch ? { ...esv, quantity: (esv.quantity || 0) + (subMatch.quantity || 0) } : esv;
-          });
-          return { ...ev, quantity: (ev.quantity || 0) + (match.quantity || 0), subVariants: mergedSubs };
-        }
-        return { ...ev, quantity: (ev.quantity || 0) + (match.quantity || 0) };
-      });
-      updateData.variants = mergedVariants;
-    }
-
-    const { error } = await supabase.from("products").update(updateData).eq("id", sourceProductId);
-    if (error) throw error;
-  };
-
   const updateMutation = useMutation({
-    mutationFn: async ({ withProduct, addStock }: { withProduct?: boolean; addStock?: boolean } = {}) => {
-      if (addStock) {
-        await addStockToExistingProduct();
-        await doUpdate(true);
-      } else if (withProduct) {
-        await createProduct();
-        await doUpdate(true);
-      } else {
-        await doUpdate(withProduct === false ? false : undefined);
-      }
+    mutationFn: async () => {
+      await doUpdate();
     },
-    onSuccess: (_, { addStock, withProduct }) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-sourcing"] });
       queryClient.invalidateQueries({ queryKey: ["source-product"] });
       onOpenChange(false);
-      if (addStock) {
-        toast.success("Request updated & stock added to product");
-      } else if (withProduct) {
-        toast.success("Request updated & product created");
-      } else {
-        toast.success("Request updated successfully");
-      }
+      toast.success("Request updated successfully");
     },
     onError: () => {
       toast.error("Failed to update request");
     },
   });
 
-  // Validate product for requests where product_created is false
-  const validateProductMutation = useMutation({
-    mutationFn: async () => {
-      if (!productWeight) {
-        toast.error("Product weight is required before creating a product");
-        throw new Error("Weight required");
-      }
-      // Save weight first
-      await supabase
-        .from("sourcing_requests")
-        .update({ product_weight: productWeight } as any)
-        .eq("id", request!.id);
-      await createProduct();
-      if (!request) return;
-      await supabase
-        .from("sourcing_requests")
-        .update({ product_created: true, product_weight: productWeight, updated_at: new Date().toISOString() } as any)
-        .eq("id", request.id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-sourcing"] });
-      toast.success("Product created successfully");
-    },
-    onError: (err: any) => {
-      if (err?.message !== "Weight required") toast.error("Failed to create product");
-    },
-  });
-
   const handleSave = () => {
     if (!validate()) return;
-    const wasReceived = request?.status === "received";
-    const isNowReceived = status === "received";
-    const alreadyCreated = request?.product_created === true;
-    const isExistingProduct = !!sourceProductId;
-
-    if (isNowReceived && !wasReceived && !alreadyCreated) {
-      if (!productWeight) {
-        toast.error("Product weight is required");
-        setErrors(prev => ({ ...prev, productWeight: "Weight is required" }));
-        return;
-      }
-      setShowProductConfirm(true);
-      return;
-    }
-    updateMutation.mutate({});
-  };
-
-  const handleProductConfirm = (action: "create" | "addStock" | "no") => {
-    setShowProductConfirm(false);
-    if (action === "addStock") {
-      updateMutation.mutate({ addStock: true });
-    } else if (action === "create") {
-      updateMutation.mutate({ withProduct: true });
-    } else {
-      updateMutation.mutate({ withProduct: false });
-    }
+    updateMutation.mutate();
   };
 
   if (!request) return null;
 
   const imageUrl = request.product_image_url;
-  const canValidateProduct = request.status === "received" && !request.product_created;
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base">Edit Sourcing Request</DialogTitle>
@@ -502,24 +349,6 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
               </div>
             )}
 
-            {/* Validate Product Button - shows when received but product not created */}
-            {canValidateProduct && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full gap-2 border-destructive/30 text-destructive hover:bg-destructive/10"
-                onClick={() => validateProductMutation.mutate()}
-                disabled={validateProductMutation.isPending}
-              >
-                {validateProductMutation.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <PackageCheck className="h-3.5 w-3.5" />
-                )}
-                Validate & Create Product
-              </Button>
-            )}
-
             {/* Quantity, Landed Price & Seller Price */}
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
@@ -605,7 +434,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
                 })()}
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Product Weight (kg) {canValidateProduct && <span className="text-destructive">*</span>}</Label>
+                <Label className="text-xs">Product Weight (kg)</Label>
                 <Input
                   type="number"
                   min={0}
@@ -712,44 +541,6 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-
-      {/* Product Confirmation - different for existing vs new */}
-      <AlertDialog open={showProductConfirm} onOpenChange={setShowProductConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <PackageCheck className="h-5 w-5 text-primary" />
-              {sourceProductId ? "Add Stock to Product?" : "Create Product?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {sourceProductId ? (
-                <>
-                  This sourcing request is linked to an existing product: <strong>{sourceProduct?.name || request.product_name}</strong>.
-                  Do you want to add <strong>{quantity} units</strong> to the existing product stock?
-                </>
-              ) : (
-                <>
-                  The sourcing request for <strong>{request.product_name}</strong> has been received.
-                  Do you want to automatically create a product for this seller?
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => handleProductConfirm("no")} disabled={updateMutation.isPending}>
-              No
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => handleProductConfirm(sourceProductId ? "addStock" : "create")}
-              disabled={updateMutation.isPending}
-            >
-              {updateMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              {sourceProductId ? "Yes, Add Stock" : "Yes, Create Product"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+    </Dialog>
   );
 }

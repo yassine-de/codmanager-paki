@@ -77,7 +77,7 @@ export default function Sourcing() {
   const [sellerFilter, setSellerFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [validationFilter, setValidationFilter] = useState("all");
-  const [kpiFilter, setKpiFilter] = useState<"all" | "awaiting_validation" | "in_transit" | "arrived_not_created" | "paid" | "unpaid">("all");
+  const [kpiFilter, setKpiFilter] = useState<"all" | "awaiting_validation" | "in_transit" | "received" | "paid" | "unpaid">("all");
 
   // Realtime notifications
   type SourcingNotif = { id: string; type: "new_request" | "validated" | "cancelled"; productName: string; sellerId: string; at: Date };
@@ -190,7 +190,7 @@ export default function Sourcing() {
       total:               requests.length,
       awaitingValidation:  requests.filter(r => r.status === "quoted" && !r.seller_validated).length,
       inTransit:           requests.filter(r => r.status === "shipped").length,
-      arrivedNotCreated:   requests.filter(r => r.status === "received" && !r.product_created).length,
+      received:            requests.filter(r => r.status === "received").length,
       paidCount:           activeReqs.filter(r => r.payment_status === "paid").length,
       unpaidCount:         activeReqs.filter(r => r.payment_status === "unpaid").length,
       amountPaid:          activeReqs.filter(r => r.payment_status === "paid").reduce((s, r) => s + rowAmount(r), 0),
@@ -205,7 +205,7 @@ export default function Sourcing() {
     if (key === "all")                  { setStatusFilter("all");      setValidationFilter("all"); }
     if (key === "awaiting_validation")  { setStatusFilter("quoted");   setValidationFilter("pending"); }
     if (key === "in_transit")           { setStatusFilter("shipped");  setValidationFilter("all"); }
-    if (key === "arrived_not_created")  { setStatusFilter("received"); setValidationFilter("all"); }
+    if (key === "received")             { setStatusFilter("received"); setValidationFilter("all"); }
     if (key === "paid")                 { setStatusFilter("all");      setValidationFilter("all"); }
     if (key === "unpaid")               { setStatusFilter("all");      setValidationFilter("all"); }
   };
@@ -217,7 +217,6 @@ export default function Sourcing() {
       if (validationFilter === "validated" && r.seller_validated !== true) return false;
       if (validationFilter === "cancelled" && r.seller_validated !== false) return false;
       if (validationFilter === "pending" && r.seller_validated !== null) return false;
-      if (kpiFilter === "arrived_not_created" && r.product_created === true) return false;
       if (kpiFilter === "paid"   && !(ACTIVE_STATUSES.includes(r.status) && r.payment_status === "paid"))   return false;
       if (kpiFilter === "unpaid" && !(ACTIVE_STATUSES.includes(r.status) && r.payment_status === "unpaid")) return false;
       return true;
@@ -327,14 +326,14 @@ export default function Sourcing() {
           <div className="text-[10px] text-muted-foreground mt-0.5">Shipped — on the way</div>
         </button>
 
-        {/* Arrived Not Created */}
-        <button onClick={() => applyKpi("arrived_not_created")} className={`text-left rounded-lg border p-3 transition-all hover:shadow-sm ${kpiFilter === "arrived_not_created" ? "border-emerald-500 bg-emerald-500/5 ring-1 ring-emerald-500/30" : "bg-card border-border hover:border-emerald-400/40"}`}>
+        {/* Received */}
+        <button onClick={() => applyKpi("received")} className={`text-left rounded-lg border p-3 transition-all hover:shadow-sm ${kpiFilter === "received" ? "border-emerald-500 bg-emerald-500/5 ring-1 ring-emerald-500/30" : "bg-card border-border hover:border-emerald-400/40"}`}>
           <div className="flex items-center gap-2 mb-1">
             <PackageCheck className="h-3.5 w-3.5 text-emerald-500" />
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Arrived — Not Created</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Received</span>
           </div>
-          <div className="text-2xl font-bold text-emerald-600">{kpis.arrivedNotCreated}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">Received — product not added</div>
+          <div className="text-2xl font-bold text-emerald-600">{kpis.received}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Received sourcing requests</div>
         </button>
 
         {/* Amount Paid */}
@@ -436,10 +435,8 @@ export default function Sourcing() {
                 const sConfig = statusConfig[req.status] || statusConfig.waiting_quote;
                 const vKey = req.seller_validated === true ? "validated" : req.seller_validated === false ? "cancelled" : "pending";
                 const vConfig = validationConfig[vKey];
-                const isReceivedNoProduct = req.status === "received" && !req.product_created;
-
                 return (
-                  <TableRow key={req.id} className={`text-xs ${isReceivedNoProduct ? "bg-destructive/5 hover:bg-destructive/10" : ""}`}>
+                  <TableRow key={req.id} className="text-xs">
                     <TableCell className="pr-0">
                       {req.product_image_url ? (
                         <img src={req.product_image_url} alt="" className="w-8 h-8 rounded object-cover border" />
