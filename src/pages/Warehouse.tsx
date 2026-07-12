@@ -161,8 +161,52 @@ function dateTodayStart() {
   return d.toISOString();
 }
 
+const barcodeLabelSizes: Record<BarcodeLabelSize, { label: string; description: string; width: number; height: number; barcodeHeight: number; fontSize: number }> = {
+  small: { label: "Small", description: "50 x 25 mm", width: 50, height: 25, barcodeHeight: 38, fontSize: 8 },
+  standard: { label: "Standard", description: "70 x 35 mm", width: 70, height: 35, barcodeHeight: 52, fontSize: 10 },
+  large: { label: "Large", description: "100 x 50 mm", width: 100, height: 50, barcodeHeight: 72, fontSize: 12 },
+};
+
+const code128Patterns = [
+  "11011001100", "11001101100", "11001100110", "10010011000", "10010001100", "10001001100", "10011001000", "10011000100", "10001100100", "11001001000",
+  "11001000100", "11000100100", "10110011100", "10011011100", "10011001110", "10111001100", "10011101100", "10011100110", "11001110010", "11001011100",
+  "11001001110", "11011100100", "11001110100", "11101101110", "11101001100", "11100101100", "11100100110", "11101100100", "11100110100", "11100110010",
+  "11011011000", "11011000110", "11000110110", "10100011000", "10001011000", "10001000110", "10110001000", "10001101000", "10001100010", "11010001000",
+  "11000101000", "11000100010", "10110111000", "10110001110", "10001101110", "10111011000", "10111000110", "10001110110", "11101110110", "11010001110",
+  "11000101110", "11011101000", "11011100010", "11011101110", "11101011000", "11101000110", "11100010110", "11101101000", "11101100010", "11100011010",
+  "11101111010", "11001000010", "11110001010", "10100110000", "10100001100", "10010110000", "10010000110", "10000101100", "10000100110", "10110010000",
+  "10110000100", "10011010000", "10011000010", "10000110100", "10000110010", "11000010010", "11001010000", "11110111010", "11000010100", "10001111010",
+  "10100111100", "10010111100", "10010011110", "10111100100", "10011110100", "10011110010", "11110100100", "11110010100", "11110010010", "11011011110",
+  "11011110110", "11110110110", "10101111000", "10100011110", "10001011110", "10111101000", "10111100010", "11110101000", "11110100010", "10111011110",
+  "10111101110", "11101011110", "11110101110", "11010000100", "11010010000", "11010011100", "1100011101011",
+];
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
+}
+
+function toCode128BarcodeSvg(value: string, height: number) {
+  const clean = value.replace(/[^\x20-\x7f]/g, "").trim();
+  if (!clean) return "";
+  const codes = [104, ...Array.from(clean, (char) => char.charCodeAt(0) - 32)];
+  const checksum = codes.reduce((sum, code, index) => sum + (index === 0 ? code : code * index), 0) % 103;
+  codes.push(checksum, 106);
+  const pattern = codes.map((code) => code128Patterns[code]).join("");
+  const moduleWidth = 2;
+  let x = 0;
+  const bars: string[] = [];
+
+  for (const bit of pattern) {
+    if (bit === "1") bars.push(`<rect x="${x}" y="0" width="${moduleWidth}" height="${height}" />`);
+    x += moduleWidth;
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${x} ${height}" preserveAspectRatio="none" aria-label="${escapeHtml(clean)}"><g fill="#111">${bars.join("")}</g></svg>`;
+}
+
 type WarehouseSection = "dashboard" | "receiving" | "inventory" | "dispatch" | "returns";
 type DashboardRange = "today" | "yesterday" | "last_7" | "last_30" | "custom";
+type BarcodeLabelSize = "small" | "standard" | "large";
 
 interface InventoryMovementRow {
   id: string;
@@ -243,6 +287,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const [adjustDialogRow, setAdjustDialogRow] = useState<InventoryRow | null>(null);
   const [adjustQuantity, setAdjustQuantity] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
+  const [barcodeDialogRow, setBarcodeDialogRow] = useState<InventoryRow | null>(null);
+  const [barcodePrintSize, setBarcodePrintSize] = useState<BarcodeLabelSize>("standard");
 
   const [printingLabels, setPrintingLabels] = useState(false);
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
@@ -1129,7 +1175,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       else if (result?.result === "unknown") toast.error("Order not found");
       else {
         await updateOrderDeliveryStatus([dispatchCandidate], "dispatched", "warehouse_dispatch_scan");
-        toast.success("Order dispatched and stock deducted");
+        toast.success("Order dispatched");
       }
       setReadyScan("");
       setDispatchCandidate(null);
@@ -1181,35 +1227,103 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     }
   };
 
-  const printBarcode = (row: InventoryRow) => {
-    const popup = window.open("", "_blank", "noopener,noreferrer,width=420,height=360");
-    if (!popup) {
-      toast.error("Popup blocked");
+  const printBarcode = (row: InventoryRow, sizeKey: BarcodeLabelSize) => {
+    const value = (row.sku || row.product_variant_id).trim();
+    if (!toCode128BarcodeSvg(value, barcodeLabelSizes[sizeKey].barcodeHeight)) {
+      toast.error("No barcode value found");
       return;
     }
-    popup.document.write(`
-      <html>
-        <head><title>${row.sku || row.product_name}</title></head>
-        <body style="font-family: system-ui; padding: 24px;">
-          <div style="border:1px solid #111; padding:16px; width:320px;">
-            ${hideSellerInfo ? "" : `<div style="font-size:12px; color:#555;">${sellerName(profileMap, row.seller_id)}</div>`}
-            <h3 style="margin:4px 0 8px;font-size:16px;">${row.product_name}</h3>
-            <div style="font-family:monospace;font-size:18px;letter-spacing:2px;padding:14px 0;border-top:1px solid #ddd;border-bottom:1px solid #ddd;">${row.sku || row.product_variant_id}</div>
-            <div style="margin-top:8px;font-size:12px;">Location: ${row.location_code}</div>
-          </div>
-          <script>window.print()</script>
-        </body>
-      </html>
-    `);
-    popup.document.close();
+    setBarcodePrintSize(sizeKey);
+    window.print();
   };
 
   if (!isWarehouseUser) {
     return <div className="rounded-md border bg-card p-6 text-sm text-muted-foreground">You do not have access to the warehouse module.</div>;
   }
 
+  const activeBarcodeSize = barcodeLabelSizes[barcodePrintSize];
+  const activeBarcodeValue = barcodeDialogRow ? (barcodeDialogRow.sku || barcodeDialogRow.product_variant_id) : "";
+
   return (
     <div className="space-y-5">
+      <style>
+        {`
+          @media print {
+            html,
+            body,
+            #root {
+              width: ${activeBarcodeSize.width}mm !important;
+              height: ${activeBarcodeSize.height}mm !important;
+              min-width: 0 !important;
+              min-height: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              overflow: hidden !important;
+              background: #fff !important;
+            }
+            body * {
+              visibility: hidden !important;
+              overflow: hidden !important;
+            }
+            #warehouse-barcode-print-area,
+            #warehouse-barcode-print-area * {
+              visibility: visible !important;
+            }
+            #warehouse-barcode-print-area {
+              display: block !important;
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: ${activeBarcodeSize.width}mm !important;
+              height: ${activeBarcodeSize.height}mm !important;
+              max-width: ${activeBarcodeSize.width}mm !important;
+              max-height: ${activeBarcodeSize.height}mm !important;
+              margin: 0 !important;
+              padding: 2.2mm 2.6mm !important;
+              background: #fff !important;
+              overflow: hidden !important;
+              break-after: avoid !important;
+              page-break-after: avoid !important;
+            }
+            @page {
+              size: ${activeBarcodeSize.width}mm ${activeBarcodeSize.height}mm;
+              margin: 0;
+            }
+          }
+        `}
+      </style>
+      {barcodeDialogRow && (
+        <div
+          id="warehouse-barcode-print-area"
+          className="hidden"
+          style={{
+            width: `${activeBarcodeSize.width}mm`,
+            height: `${activeBarcodeSize.height}mm`,
+            padding: "2.2mm 2.6mm",
+            background: "#fff",
+            color: "#111",
+            fontFamily: "Arial, system-ui, sans-serif",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ display: "flex", height: "100%", flexDirection: "column", justifyContent: "center", gap: "1.2mm" }}>
+            <div style={{ fontSize: activeBarcodeSize.fontSize, fontWeight: 700, lineHeight: 1.05, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {barcodeDialogRow.product_name}
+            </div>
+            <div
+              style={{ width: "100%", height: `${Math.max(9, activeBarcodeSize.height * 0.42)}mm` }}
+              dangerouslySetInnerHTML={{ __html: toCode128BarcodeSvg(activeBarcodeValue, activeBarcodeSize.barcodeHeight) }}
+            />
+            <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: Math.max(8, activeBarcodeSize.fontSize - 1), fontWeight: 700, letterSpacing: ".3px", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {activeBarcodeValue}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "2mm", fontSize: Math.max(7, activeBarcodeSize.fontSize - 2), color: "#333", whiteSpace: "nowrap" }}>
+              <span>{barcodeDialogRow.variant_name || "Default"}</span>
+              <span>{barcodeDialogRow.location_code || "UNASSIGNED"}</span>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
@@ -1447,7 +1561,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                       <TableCell className="text-xs text-muted-foreground">{format(new Date(row.updated_at), "MMM d, HH:mm")}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => printBarcode(row)}><Barcode className="h-3.5 w-3.5" /></Button>
+                          <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setBarcodeDialogRow(row)} title="Print barcode"><Barcode className="h-3.5 w-3.5" /></Button>
                           {canAdjustStock && <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setAdjustDialogRow(row)}><Settings2 className="h-3.5 w-3.5" /></Button>}
                         </div>
                       </TableCell>
@@ -1608,6 +1722,55 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
           </div>
         )}
       </div>
+
+      <Dialog open={!!barcodeDialogRow} onOpenChange={(open) => !open && setBarcodeDialogRow(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Barcode className="h-4 w-4" />
+              Print Barcode
+            </DialogTitle>
+          </DialogHeader>
+          {barcodeDialogRow && (
+            <div className="space-y-4">
+              <div className="rounded-md border bg-muted/20 p-3">
+                <div className="text-sm font-semibold">{barcodeDialogRow.product_name}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="font-mono text-foreground">{barcodeDialogRow.sku || barcodeDialogRow.product_variant_id}</span>
+                  <Badge variant="outline" className="text-[10px]">{barcodeDialogRow.location_code || "UNASSIGNED"}</Badge>
+                </div>
+                <div
+                  className="mt-3 h-14 rounded border bg-white p-2"
+                  dangerouslySetInnerHTML={{ __html: toCode128BarcodeSvg(barcodeDialogRow.sku || barcodeDialogRow.product_variant_id, 48) }}
+                />
+              </div>
+              <div className="grid gap-2">
+                {(Object.keys(barcodeLabelSizes) as BarcodeLabelSize[]).map((sizeKey) => {
+                  const size = barcodeLabelSizes[sizeKey];
+                  return (
+                    <Button
+                      key={sizeKey}
+                      type="button"
+                      variant="outline"
+                      className="h-auto justify-between rounded-md px-3 py-3 text-left"
+                      onClick={() => printBarcode(barcodeDialogRow, sizeKey)}
+                    >
+                      <span>
+                        <span className="block text-sm font-semibold">{size.label}</span>
+                        <span className="block text-xs text-muted-foreground">{size.description} · print now</span>
+                      </span>
+                      <Printer className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBarcodeDialogRow(null)}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!receiveDialogRow} onOpenChange={(open) => !open && setReceiveDialogRow(null)}>
         <DialogContent className="max-w-2xl">
