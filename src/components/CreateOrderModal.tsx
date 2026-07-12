@@ -21,7 +21,7 @@ interface CreateOrderModalProps {
 export default function CreateOrderModal({ open, onOpenChange, onCreated }: CreateOrderModalProps) {
   const { authUser } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [products, setProducts] = useState<{ id: string; name: string; price: number }[]>([]);
+  const [products, setProducts] = useState<{ id: string; name: string; price: number; whatsapp_confirmation_enabled?: boolean }[]>([]);
 
   // Form state
   const [customerName, setCustomerName] = useState("");
@@ -39,7 +39,7 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
     const fetchProducts = async () => {
       const { data } = await supabase
         .from("products")
-        .select("id, name, price")
+        .select("id, name, price, whatsapp_confirmation_enabled")
         .eq("seller_id", authUser.id);
       setProducts(data || []);
     };
@@ -94,6 +94,8 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
 
       // For now, create one order row per item (first item as main)
       const mainItem = items[0];
+      const selectedProduct = products.find((p) => p.name === mainItem.productName);
+      const routeToWhatsapp = !!selectedProduct?.whatsapp_confirmation_enabled;
       const totalQty = items.reduce((s, i) => s + i.quantity, 0);
 
       const { error } = await supabase.from("orders").insert({
@@ -108,10 +110,22 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
         price: mainItem.price,
         total_amount: totalAmount,
         note: note.trim() || null,
-        confirmation_status: "new",
+        confirmation_status: routeToWhatsapp ? "new_wts" : "new",
+        confirmation_channel: routeToWhatsapp ? "whatsapp" : "agent",
+        whatsapp_status: routeToWhatsapp ? "pending" : null,
       });
 
       if (error) throw error;
+
+      if (routeToWhatsapp) {
+        const { error: automationError } = await supabase.functions.invoke("whatsapp-automation-runner", {
+          body: { trigger_type: "new_order", order_id: orderId },
+        });
+        if (automationError) {
+          toast.warning("Order created, but WhatsApp automation did not start");
+          console.error("WhatsApp automation start failed:", automationError);
+        }
+      }
 
       toast.success(`Order ${orderId} created successfully! 🎉`, {
         description: `${customerName.trim()} — ${mainItem.productName} × ${totalQty}`,
