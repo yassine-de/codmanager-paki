@@ -316,6 +316,7 @@ async function syncConfirmedOrder(supabase: ReturnType<typeof createClient>, ord
   }
   if (!order) throw new Error(`Order not found: ${orderIdOrDbId}`);
   if (order.confirmation_status !== "confirmed") return { skipped: true, reason: "Order is not confirmed" };
+  if (order.delivery_status !== "booked") return { skipped: true, reason: "Order is not booked for shipping" };
   return createShipment(supabase, order);
 }
 
@@ -441,6 +442,7 @@ Deno.serve(async (req) => {
           .from("orders")
           .select("*")
           .eq("confirmation_status", "confirmed")
+          .eq("delivery_status", "booked")
           .limit(50);
         if (error) throw error;
         const results = [];

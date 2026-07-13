@@ -1,5 +1,5 @@
 // @ts-nocheck
-// Cron fallback: retries confirmed orders without a synced carrier shipment.
+// Cron fallback: retries confirmed + booked orders without a synced carrier shipment.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0?no-check";
 
 const corsHeaders = {
@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
       .from("orders")
       .select("id, order_id, shipments(id, sync_status, carrier_id)")
       .eq("confirmation_status", "confirmed")
+      .eq("delivery_status", "booked")
       .order("updated_at", { ascending: true, nullsFirst: true })
       .limit(200);
     if (error) throw error;

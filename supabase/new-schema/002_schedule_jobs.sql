@@ -71,7 +71,42 @@ END $$;
 SELECT cron.schedule(
   'carrier-shipping-retry',
   '*/5 * * * *',
-  $$SELECT public.invoke_scheduled_edge_function('shipping-sync-retry', '{}'::jsonb);$$
+  $$
+  WITH default_carrier AS (
+    SELECT id
+    FROM public.carriers
+    WHERE code = COALESCE(NULLIF(current_setting('app.default_carrier_code', true), ''), 'postex')
+    LIMIT 1
+  ),
+  candidates AS (
+    SELECT o.order_id
+    FROM public.orders o
+    CROSS JOIN default_carrier c
+    WHERE o.confirmation_status = 'confirmed'
+      AND o.delivery_status = 'booked'
+      AND (
+        NOT EXISTS (
+          SELECT 1
+          FROM public.shipments s
+          WHERE s.order_uuid = o.id
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM public.shipments s
+          WHERE s.order_uuid = o.id
+            AND s.carrier_id = c.id
+            AND s.sync_status IN ('pending', 'failed')
+        )
+      )
+    ORDER BY o.updated_at ASC NULLS FIRST
+    LIMIT 50
+  )
+  SELECT public.invoke_scheduled_edge_function(
+    'shipping-sync',
+    jsonb_build_object('action', 'sync-order', 'order_id', order_id)
+  )
+  FROM candidates;
+  $$
 );
 
 SELECT cron.schedule(
