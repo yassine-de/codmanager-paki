@@ -12,6 +12,7 @@ import {
   Truck, Package, CheckCircle2, XCircle, AlertTriangle, RotateCcw,
   MapPin, Users, Award, TrendingUp, BarChart2, ChevronUp, ChevronDown,
   ChevronsUpDown, Loader2, ArrowRight, PackageX, PackageCheck, Navigation,
+  Printer, Send,
 } from "lucide-react";
 import {
   formatPKT as format,
@@ -65,8 +66,24 @@ const CONFIRMED_DELIVERY_STATUSES = [
   "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return",
 ];
 const DELIVERED_STATUSES = ["delivered", "paid"];
-const SHIPPED_STATUSES = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery"];
+const SHIPPED_STATUSES = ["shipped", "in_transit", "with_courier", "out_for_delivery"];
 const RETURNED_STATUSES = ["returned", "return"];
+
+const DELIVERY_STATUS_OPTIONS = [
+  { value: "booked", label: "Booked" },
+  { value: "printed", label: "Printed" },
+  { value: "dispatched", label: "Dispatched" },
+  { value: "shipped", label: "Shipped" },
+  { value: "in_transit", label: "In Transit" },
+  { value: "with_courier", label: "With Courier" },
+  { value: "out_for_delivery", label: "Out for Delivery" },
+  { value: "delivered", label: "Delivered" },
+  { value: "paid", label: "Paid" },
+  { value: "failed_attempt", label: "Failed Attempt" },
+  { value: "returned", label: "Returned" },
+  { value: "return", label: "Return" },
+  { value: "ready_for_return", label: "Ready for Return" },
+];
 
 // Courier color map
 const COURIER_COLORS: Record<string, { bg: string; text: string; accent: string }> = {
@@ -284,6 +301,7 @@ function SkeletonBlock() {
 export default function DeliveryAnalytics() {
   const [sellerFilter, setSellerFilter] = useState("all");
   const [productFilter, setProductFilter] = useState("all");
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all");
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [dateField, setDateField] = useState<DateField>("created");
@@ -343,11 +361,12 @@ export default function DeliveryAnalytics() {
     return orders.filter((o) => {
       if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
       if (productFilter !== "all" && o.product_name !== productFilter) return false;
+      if (deliveryStatusFilter !== "all" && o.delivery_status !== deliveryStatusFilter) return false;
       const dt = dateField === "created" ? o.created_at : o.updated_at;
       if (!isWithinRange(new Date(dt), dateRange)) return false;
       return true;
     });
-  }, [orders, sellerFilter, productFilter, dateField, dateRange]);
+  }, [orders, sellerFilter, productFilter, deliveryStatusFilter, dateField, dateRange]);
 
   // ── KPI Calculations ─────────────────────────────────────────────────────────
 
@@ -359,9 +378,10 @@ export default function DeliveryAnalytics() {
     return orders.filter((o) => {
       if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
       if (productFilter !== "all" && o.product_name !== productFilter) return false;
+      if (deliveryStatusFilter !== "all" && o.delivery_status !== deliveryStatusFilter) return false;
       return true;
     });
-  }, [orders, sellerFilter, productFilter, dateRange]);
+  }, [orders, sellerFilter, productFilter, deliveryStatusFilter, dateRange]);
 
   const kpis = useMemo(() => {
     const total = filteredOrders.length;
@@ -383,6 +403,8 @@ export default function DeliveryAnalytics() {
     );
     const poolCount = deliveryPool.length;
     const booked  = filteredOrders.filter((o) => o.delivery_status === "booked").length;
+    const printed = filteredOrders.filter((o) => o.delivery_status === "printed").length;
+    const dispatched = filteredOrders.filter((o) => o.delivery_status === "dispatched").length;
     const shipped = filteredOrders.filter((o) => SHIPPED_STATUSES.includes(o.delivery_status || "")).length;
 
     // Delivered: use delivered_at if set, otherwise updated_at
@@ -404,7 +426,7 @@ export default function DeliveryAnalytics() {
     const inReturnProcess = filteredOrders.filter((o) => o.delivery_status === "ready_for_return").length;
 
     return {
-      total, confirmed, poolCount, booked, shipped, delivered,
+      total, confirmed, poolCount, booked, printed, dispatched, shipped, delivered,
       failedAttempt, returned, inReturnProcess,
       deliveryRate: pct(delivered, confirmed),
       returnRate: pct(returned, poolCount),
@@ -647,7 +669,7 @@ export default function DeliveryAnalytics() {
     else { setAgentSort(field); setAgentSortDir("desc"); }
   }
 
-  const hasFilters = sellerFilter !== "all" || productFilter !== "all" || !!dateRange;
+  const hasFilters = sellerFilter !== "all" || productFilter !== "all" || deliveryStatusFilter !== "all" || !!dateRange;
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -691,6 +713,14 @@ export default function DeliveryAnalytics() {
             allLabel="All Products"
             className="w-[150px]"
           />
+          <SearchableSelect
+            value={deliveryStatusFilter}
+            onValueChange={setDeliveryStatusFilter}
+            options={DELIVERY_STATUS_OPTIONS}
+            placeholder="Delivery Status"
+            allLabel="All Delivery Statuses"
+            className="w-[170px]"
+          />
 
           {/* Date field toggle */}
           <div className="flex rounded-lg border border-border overflow-hidden text-xs font-medium">
@@ -718,6 +748,7 @@ export default function DeliveryAnalytics() {
               onClick={() => {
                 setSellerFilter("all");
                 setProductFilter("all");
+                setDeliveryStatusFilter("all");
                 setDatePreset("maximum");
                 setDateRange(undefined);
               }}
@@ -767,6 +798,26 @@ export default function DeliveryAnalytics() {
               colorIcon="text-violet-600 dark:text-violet-300"
               gradient="from-violet-500 to-purple-400"
               delay={100}
+              pool={kpis.poolCount}
+            />
+            <KPICard
+              title="Printed"
+              value={kpis.printed}
+              icon={Printer}
+              colorBg="bg-indigo-100 dark:bg-indigo-900/30"
+              colorIcon="text-indigo-600 dark:text-indigo-300"
+              gradient="from-indigo-500 to-blue-400"
+              delay={125}
+              pool={kpis.poolCount}
+            />
+            <KPICard
+              title="Dispatched"
+              value={kpis.dispatched}
+              icon={Send}
+              colorBg="bg-cyan-100 dark:bg-cyan-900/30"
+              colorIcon="text-cyan-600 dark:text-cyan-300"
+              gradient="from-cyan-500 to-teal-400"
+              delay={140}
               pool={kpis.poolCount}
             />
             <KPICard

@@ -4,6 +4,7 @@ import {
   Sparkles, PhoneOff, CalendarClock, TrendingUp, TrendingDown,
   Package, Copy, PhoneForwarded, Navigation, UserCheck, Banknote,
   Clock, Store, Award, Activity, PackageCheck, Hourglass, PhoneMissed,
+  Printer, Send,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, LabelList,
@@ -566,14 +567,20 @@ export default function Dashboard() {
           <SectionHeader icon={Truck} title="Delivery Performance" color="text-success" iconBg="bg-success/10" delay={280} />
           {(() => {
             // Denominator = total orders that reached delivery stage (confirmed pool)
-            const deliveryPool = kpis.delivered + kpis.shipped + kpis.pending + kpis.deliveryNoAnswer + kpis.returned;
+            const deliveryPool = kpis.delivered + kpis.printed + kpis.dispatched + kpis.shipped + kpis.pending + kpis.deliveryNoAnswer + kpis.returned;
             const deliveryPct = (n: number) => pct(n, deliveryPool);
             return (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3">
                 <SectionKPI title="Delivered" value={kpis.delivered} percentage={deliveryPct(kpis.delivered)}
                   percentLabel="of delivery pool" icon={Truck} color="text-success" iconBg="bg-success/10"
                   highlight delay={290}
                   onClick={() => navigate("/orders?delivery=delivered")} />
+                <SectionKPI title="Printed" value={kpis.printed} percentage={deliveryPct(kpis.printed)}
+                  percentLabel="of delivery pool" icon={Printer} color="text-indigo-500" iconBg="bg-indigo-500/10" delay={295}
+                  onClick={() => navigate("/orders?delivery=printed")} />
+                <SectionKPI title="Dispatched" value={kpis.dispatched} percentage={deliveryPct(kpis.dispatched)}
+                  percentLabel="of delivery pool" icon={Send} color="text-cyan-500" iconBg="bg-cyan-500/10" delay={298}
+                  onClick={() => navigate("/orders?delivery=dispatched")} />
                 <SectionKPI title="Shipped" value={kpis.shipped} percentage={deliveryPct(kpis.shipped)}
                   percentLabel="of delivery pool" icon={Package} color="text-primary" iconBg="bg-primary/10" delay={300}
                   onClick={() => navigate("/orders?delivery=shipped")} />

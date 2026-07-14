@@ -84,6 +84,8 @@ const warehouseSubItems = [
   { title: "Returns", url: "/warehouse/returns", icon: RotateCcw },
 ];
 
+const warehouseReceivingStatuses = ["ordered", "shipped", "arrived", "ready_to_receive", "ready_to_receive_in_warehouse"];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -248,6 +250,20 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
+  const { data: warehouseReceivingCount = 0 } = useQuery({
+    queryKey: ["sidebar-warehouse-receiving-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("sourcing_requests")
+        .select("*", { count: "exact", head: true })
+        .in("status", warehouseReceivingStatuses);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: (isAdmin || isWarehouse) && !!authUser,
+    refetchInterval: 15000,
+  });
+
   const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments, followUpPending);
   const whatsappSubItems = getWhatsappSubItems(whatsappInboxUnread);
   const visibleWarehouseSubItems = isWarehouseManager
@@ -378,6 +394,11 @@ export function AppSidebar() {
                                     >
                                       <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
                                       <span className="flex-1">{sub.title}</span>
+                                      {!collapsed && sub.url === "/warehouse/receiving" && warehouseReceivingCount > 0 && (
+                                        <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
+                                          {warehouseReceivingCount.toLocaleString()}
+                                        </span>
+                                      )}
                                     </NavLink>
                                   </SidebarMenuSubButton>
                                 </SidebarMenuSubItem>

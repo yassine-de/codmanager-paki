@@ -50,6 +50,29 @@ function render(template: string, vars: Record<string, any>) {
   });
 }
 
+// Address-deliverable check shared by AI steps and button actions.
+function isAddressDeliverable(addr?: string | null, city?: string | null): boolean {
+  if (!addr) return false;
+  if (!city || String(city).trim().length === 0) return false;
+  const raw = String(addr).trim();
+  if (raw.length < 12) return false;
+  const lower = raw.toLowerCase();
+  const fakePattern = /\b(test|testing|tester|fake|dummy|sample|example|n\/?a|none|null|xxx+|asdf+|qwerty|aaaa+|placeholder|abc+|address here|adress|same|here)\b/i;
+  if (fakePattern.test(lower)) return false;
+  const tokens = raw.split(/\s+/).filter((w) => w.length > 1);
+  if (tokens.length < 3) return false;
+  const hasNumber = /\d/.test(raw);
+  const strongKeyword = /\b(house|flat|plot|shop\s*(?:no|number|#)?\s*\d|office\s*(?:no|number|#)?\s*\d|street\s*(?:no|number|#)?\s*\d|gali\s*(?:no|number|#)?\s*\d|block|sector|phase|apartment|building|floor|villa|tower|plaza)\b/i;
+  const weakKeyword = /\b(shop|office|store|street|road|st\.?|rd\.?|lane|town|village|colony|mohalla|mahalla|gali|bazar|bazaar|market|society|park|stop|stand|gate|center|centre|care|hotel|masjid|mosque|school|college|university|hospital|clinic|bank|station|chowk|square|more|tehsil|tehseel|ward|union|abad|pura|nagar|kot|gunj|ganj|garh|wala|پور|آباد|گھر|مکان|گلی|سڑک|محلہ|فلیٹ|بلاک|سیکٹر|چوک|تحصیل|دکان)\b/gi;
+  const landmarkIndicator = /\b(near|opposite|behind|front|side|adjacent|main|stop)\b/i;
+  if (hasNumber && (strongKeyword.test(lower) || weakKeyword.test(lower) || landmarkIndicator.test(lower))) return true;
+  if (hasNumber && tokens.length >= 4) return true;
+  if (strongKeyword.test(lower)) return true;
+  const weakHits = (lower.match(weakKeyword) || []).length;
+  if (weakHits >= 2) return true;
+  return false;
+}
+
 async function getSettings() {
   const { data } = await admin
     .from("whatsapp_settings")

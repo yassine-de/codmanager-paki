@@ -91,6 +91,53 @@ export default function Products() {
     return map;
   }, [productOrderRows]);
 
+  const { data: inventoryRows = [] } = useQuery({
+    queryKey: ["products-inventory-stock"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory_balance_view" as any)
+        .select("product_id, product_variant_id, variant_name, sku, quantity_on_hand, location_type")
+        .limit(5000);
+      if (error) throw error;
+      return (data || []) as Array<{
+        product_id: string;
+        product_variant_id: string;
+        variant_name: string | null;
+        sku: string | null;
+        quantity_on_hand: number;
+        location_type: string | null;
+      }>;
+    },
+    refetchInterval: 15000,
+  });
+
+  const inventoryStockMap = useMemo(() => {
+    const map = new Map<string, {
+      available: number;
+      damaged: number;
+      variants: Map<string, { id: string; name: string; sku: string; quantity: number }>;
+    }>();
+
+    inventoryRows.forEach((row) => {
+      const current = map.get(row.product_id) || { available: 0, damaged: 0, variants: new Map() };
+      const qty = Number(row.quantity_on_hand || 0);
+      if (row.location_type === "damaged") current.damaged += qty;
+      else current.available += qty;
+
+      const variant = current.variants.get(row.product_variant_id) || {
+        id: row.product_variant_id,
+        name: row.variant_name || "Default",
+        sku: row.sku || "",
+        quantity: 0,
+      };
+      if (row.location_type !== "damaged") variant.quantity += qty;
+      current.variants.set(row.product_variant_id, variant);
+      map.set(row.product_id, current);
+    });
+
+    return map;
+  }, [inventoryRows]);
+
   // Fetch seller profiles for DB products (admin only needs this)
   const dbSellerIds = useMemo(() => [...new Set(dbProducts.map(p => p.seller_id))], [dbProducts]);
   const { data: dbSellerProfiles = [] } = useQuery({
@@ -117,11 +164,19 @@ export default function Products() {
   const products = useMemo(() => {
     const dbMapped: Product[] = dbProducts.map(p => {
       const orderStats = productOrderStatsMap[`${p.seller_id}::${p.name}`] || { delivered: 0, shipped: 0, returned: 0, cancelled: 0 };
-      const availableQty = Math.max(0, (p.quantity || 0) - orderStats.delivered - orderStats.shipped + orderStats.returned);
+      const inventoryStock = inventoryStockMap.get(p.id);
+      const stockAvailable = inventoryStock?.available ?? null;
+      const totalQty = stockAvailable != null ? stockAvailable : Number(p.quantity || 0);
+      const availableQty = stockAvailable != null
+        ? Math.max(0, stockAvailable)
+        : Math.max(0, (p.quantity || 0) - orderStats.delivered - orderStats.shipped + orderStats.returned);
 
       // Map sourcing-style variants to product variants
       const rawVariants = (p as any).variants as any[] | null;
-      const mappedVariants: Product["variants"] = rawVariants
+      const inventoryVariants = inventoryStock ? Array.from(inventoryStock.variants.values()).filter((v) => v.quantity > 0) : [];
+      const mappedVariants: Product["variants"] = inventoryVariants.length > 0
+        ? inventoryVariants
+        : rawVariants
         ? rawVariants.map((v: any, i: number) => ({
             id: v.id || `v-${i}`,
             name: v.name || v.group || "",
@@ -138,7 +193,7 @@ export default function Products() {
         name: p.name,
         image: p.image_url || "",
         price: Number((p as any).landed_price) || 0,
-        totalQty: p.quantity || 0,
+        totalQty,
         delivered: orderStats.delivered,
         shipped: orderStats.shipped,
         cancelled: orderStats.returned,
@@ -157,7 +212,7 @@ export default function Products() {
       } as Product & { whatsappEnabled: boolean };
     });
     return dbMapped;
-  }, [dbProducts, dbSellerNameMap, localProducts, isAdmin, authUser, productOrderStatsMap]);
+  }, [dbProducts, dbSellerNameMap, localProducts, isAdmin, authUser, productOrderStatsMap, inventoryStockMap]);
 
   // Mark unseen products as seen for sellers
   useEffect(() => {
@@ -552,13 +607,27 @@ export default function Products() {
                           </span>
                         </td>
                         <td className="py-2 px-3 text-center">
-                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                            product.available > 0
-                              ? "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20"
-                              : "bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20"
-                          }`}>
-                            {product.available}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                              product.available > 0
+                                ? "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20"
+                                : "bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20"
+                            }`}>
+                              {product.available}
+                            </span>
+                            {product.variants.length > 0 && (
+                              <div className="flex max-w-[140px] flex-wrap justify-center gap-1">
+                                {product.variants.map((variant) => (
+                                  <span
+                                    key={variant.id}
+                                    className="inline-flex items-center rounded-md border border-border bg-muted/50 px-1.5 py-0.5 text-[9px] font-medium leading-none text-muted-foreground"
+                                  >
+                                    {variant.name || "Default"}: <span className="ml-1 text-foreground">{variant.quantity}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="py-2 px-3 text-center">
                           {product.weightKg ? (

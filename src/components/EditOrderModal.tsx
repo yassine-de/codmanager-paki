@@ -28,6 +28,8 @@ const confirmationOptions: { value: ConfirmationStatus; label: string }[] = [
 const deliveryOptions: { value: DeliveryStatus; label: string }[] = [
   { value: 'pending', label: 'Pending' },
   { value: 'booked', label: 'Booked' },
+  { value: 'printed', label: 'Printed' },
+  { value: 'dispatched', label: 'Dispatched' },
   { value: 'shipped', label: 'Shipped' },
   { value: 'in_transit', label: 'In Transit' },
   { value: 'with_courier', label: 'With Courier' },

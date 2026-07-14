@@ -1,13 +1,16 @@
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { Fragment, FormEvent, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   AlertCircle,
   Barcode,
   Boxes,
+  ChevronDown,
+  ChevronRight,
   CheckCircle2,
   ClipboardList,
   History,
+  Layers,
   MapPin,
   Package,
   PackageCheck,
@@ -77,6 +80,7 @@ interface InventoryRow {
   variant_name: string | null;
   product_id: string;
   product_name: string;
+  product_image_url?: string | null;
   seller_id: string;
   location_id: string;
   location_code: string;
@@ -127,10 +131,81 @@ interface ReceiveForm {
   notes: string;
 }
 
+interface ReceiveLine {
+  key: string;
+  label: string;
+  expectedQuantity: number;
+  receivedQuantity: number;
+  goodQuantity: number;
+  damagedQuantity: number;
+}
+
 const sourcingReceiveStatuses = ["ordered", "shipped", "arrived", "ready_to_receive", "ready_to_receive_in_warehouse"];
 
 function buildInternalSku(row: Pick<SourcingReceiveRow, "id">) {
   return `WH-${row.id.slice(0, 6).toUpperCase()}`;
+}
+
+function skuSuffix(value: string, fallback: string) {
+  const clean = value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 10);
+  return clean || fallback;
+}
+
+function flattenReceiveLines(row: SourcingReceiveRow): ReceiveLine[] {
+  const variants = Array.isArray(row.variants) ? row.variants : [];
+  const lines: ReceiveLine[] = [];
+
+  variants.forEach((variant: any, variantIndex: number) => {
+    const variantName = String(variant?.name || variant?.group || `Variant ${variantIndex + 1}`).trim();
+    const children = Array.isArray(variant?.subVariants) && variant.subVariants.length > 0
+      ? variant.subVariants
+      : Array.isArray(variant?.options) && variant.options.length > 0
+        ? variant.options
+        : null;
+
+    if (children) {
+      children.forEach((child: any, childIndex: number) => {
+        const childName = String(child?.name || child?.label || `Option ${childIndex + 1}`).trim();
+        const expected = Number(child?.quantity || 0);
+        lines.push({
+          key: `v${variantIndex}-s${childIndex}`,
+          label: `${variantName} / ${childName}`,
+          expectedQuantity: expected,
+          receivedQuantity: expected,
+          goodQuantity: expected,
+          damagedQuantity: 0,
+        });
+      });
+      return;
+    }
+
+    const expected = Number(variant?.quantity || 0);
+    lines.push({
+      key: `v${variantIndex}`,
+      label: variantName || `Variant ${variantIndex + 1}`,
+      expectedQuantity: expected,
+      receivedQuantity: expected,
+      goodQuantity: expected,
+      damagedQuantity: 0,
+    });
+  });
+
+  const validLines = lines.filter((line) => line.expectedQuantity > 0 || line.label.trim());
+  if (validLines.length > 0) return validLines;
+
+  const expected = Number(row.quantity || 0);
+  return [{
+    key: "default",
+    label: "Default",
+    expectedQuantity: expected,
+    receivedQuantity: expected,
+    goodQuantity: expected,
+    damagedQuantity: 0,
+  }];
 }
 
 function sellerName(map: Map<string, ProfileRow>, id: string | null | undefined) {
@@ -268,6 +343,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
   const [receivingSearch, setReceivingSearch] = useState("");
   const [receiveDialogRow, setReceiveDialogRow] = useState<SourcingReceiveRow | null>(null);
+  const [receiveLines, setReceiveLines] = useState<ReceiveLine[]>([]);
   const [receiveForm, setReceiveForm] = useState<ReceiveForm>({
     sourcingId: "",
     expectedQuantity: 0,
@@ -284,6 +360,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const [inventorySellerFilter, setInventorySellerFilter] = useState("all");
   const [inventoryProductFilter, setInventoryProductFilter] = useState("all");
   const [inventoryLocationFilter, setInventoryLocationFilter] = useState("all");
+  const [expandedInventoryProducts, setExpandedInventoryProducts] = useState<Set<string>>(new Set());
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
   const [adjustDialogRow, setAdjustDialogRow] = useState<InventoryRow | null>(null);
   const [adjustQuantity, setAdjustQuantity] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
@@ -355,7 +433,18 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         .order("updated_at", { ascending: false })
         .limit(500);
       if (error) throw error;
-      return (data || []) as InventoryRow[];
+      const rows = (data || []) as InventoryRow[];
+      const productIds = Array.from(new Set(rows.map((row) => row.product_id).filter(Boolean)));
+      if (productIds.length === 0) return rows;
+
+      const { data: products, error: productsError } = await supabase
+        .from("products")
+        .select("id, image_url, scraped_image_url")
+        .in("id", productIds);
+      if (productsError) throw productsError;
+
+      const imageMap = new Map((products || []).map((product: any) => [product.id, product.image_url || product.scraped_image_url || null]));
+      return rows.map((row) => ({ ...row, product_image_url: imageMap.get(row.product_id) || null }));
     },
     enabled: isWarehouseUser,
   });
@@ -498,6 +587,21 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     refetchInterval: 15000,
   });
 
+  const { data: dashboardOrders = [] } = useQuery({
+    queryKey: ["warehouse-dashboard-orders"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_id, delivery_status, updated_at")
+        .in("delivery_status", ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery"])
+        .limit(1000);
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; order_id: string; delivery_status: string | null; updated_at: string }>;
+    },
+    enabled: isWarehouseUser,
+    refetchInterval: 15000,
+  });
+
   const filteredReceiving = useMemo(() => {
     const q = receivingSearch.trim().toLowerCase();
     if (!q) return receivingRows;
@@ -623,6 +727,107 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     });
   }, [displayInventory, hideSellerInfo, inventoryLocationFilter, inventoryProductFilter, inventorySearch, inventorySellerFilter, profileMap]);
 
+  const groupedInventory = useMemo(() => {
+    const groups = new Map<string, {
+      key: string;
+      productName: string;
+      sellerId: string;
+      variants: InventoryRow[];
+      available: number;
+      reserved: number;
+      damaged: number;
+      dispatched: number;
+      latest: string;
+      locations: string[];
+      imageUrl: string | null;
+    }>();
+
+    filteredInventory.forEach((row) => {
+      const key = `${row.seller_id || "seller"}:${row.product_id}`;
+      const existing = groups.get(key) || {
+        key,
+        productName: row.product_name,
+        sellerId: row.seller_id,
+        variants: [],
+        available: 0,
+        reserved: 0,
+        damaged: 0,
+        dispatched: 0,
+        latest: row.updated_at,
+        locations: [],
+        imageUrl: row.product_image_url || null,
+      };
+      if (!existing.imageUrl && row.product_image_url) existing.imageUrl = row.product_image_url;
+      existing.variants.push(row);
+      existing.available += Number(row.available_quantity ?? row.quantity_on_hand ?? 0);
+      existing.reserved += Number(row.quantity_reserved || 0);
+      existing.damaged += Number(row.damaged_quantity || 0);
+      existing.dispatched += Number(dispatchedByVariant.get(row.product_variant_id) || 0);
+      if (new Date(row.updated_at).getTime() > new Date(existing.latest).getTime()) existing.latest = row.updated_at;
+      (row.location_codes?.length ? row.location_codes : [row.location_code]).forEach((location) => {
+        if (location && !existing.locations.includes(location)) existing.locations.push(location);
+      });
+      groups.set(key, existing);
+    });
+
+    return Array.from(groups.values()).sort((a, b) => a.productName.localeCompare(b.productName));
+  }, [dispatchedByVariant, filteredInventory]);
+
+  const dashboardProductRows = useMemo(() => {
+    const groups = new Map<string, {
+      key: string;
+      productName: string;
+      sellerId: string;
+      imageUrl: string | null;
+      variants: number;
+      available: number;
+      reserved: number;
+      damaged: number;
+      dispatched: number;
+      locations: string[];
+      latest: string;
+    }>();
+
+    displayInventory.forEach((row) => {
+      const key = `${row.seller_id || "seller"}:${row.product_id}`;
+      const current = groups.get(key) || {
+        key,
+        productName: row.product_name,
+        sellerId: row.seller_id,
+        imageUrl: row.product_image_url || null,
+        variants: 0,
+        available: 0,
+        reserved: 0,
+        damaged: 0,
+        dispatched: 0,
+        locations: [],
+        latest: row.updated_at,
+      };
+      if (!current.imageUrl && row.product_image_url) current.imageUrl = row.product_image_url;
+      current.variants += 1;
+      current.available += Number(row.available_quantity ?? row.quantity_on_hand ?? 0);
+      current.reserved += Number(row.quantity_reserved || 0);
+      current.damaged += Number(row.damaged_quantity || 0);
+      current.dispatched += Number(dispatchedByVariant.get(row.product_variant_id) || 0);
+      if (new Date(row.updated_at).getTime() > new Date(current.latest).getTime()) current.latest = row.updated_at;
+      (row.location_codes?.length ? row.location_codes : [row.location_code]).forEach((location) => {
+        if (location && !current.locations.includes(location)) current.locations.push(location);
+      });
+      groups.set(key, current);
+    });
+
+    return Array.from(groups.values()).sort((a, b) => (b.available + b.dispatched + b.damaged) - (a.available + a.dispatched + a.damaged));
+  }, [displayInventory, dispatchedByVariant]);
+
+  const toggleInventoryProduct = (key: string) => {
+    setExpandedInventoryProducts((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const filteredNotPrinted = useMemo(() => {
     const q = notPrintedSearch.trim().toLowerCase();
     if (!q) return notPrintedRows;
@@ -710,8 +915,13 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       notPrintedOrders: notPrintedRows.length,
       readyToDispatchOrders: readyRows.length,
       dispatchedOrders: dashboardDispatched.length,
+      shippedOrders: dashboardOrders.filter((row) => ["shipped", "in_transit", "with_courier", "out_for_delivery"].includes(row.delivery_status || "")).length,
       dispatchSuccessRate,
       avgDispatchTimeHours,
+      productCount: dashboardProductRows.length,
+      variantsInStock: dashboardProductRows.reduce((sum, row) => sum + row.variants, 0),
+      productsWithDispatched: dashboardProductRows.filter((row) => row.dispatched > 0).length,
+      productsWithDamage: dashboardProductRows.filter((row) => row.damaged > 0).length,
       returnsReceived: dashboardReturns.length,
       sellableReturns: dashboardReturns.filter((row) => row.condition === "sellable").length,
       damagedReturns: dashboardReturns.filter((row) => row.condition === "damaged").length,
@@ -720,7 +930,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       unknownScanAttempts: dashboardScans.filter((row) => row.result === "unknown").length,
       manualStockAdjustments: dashboardMovements.filter((row) => row.movement_type === "adjustment").length,
     };
-  }, [dashboardDispatched, dashboardMovements, dashboardReturns, dashboardScans, inventory, notPrintedRows.length, readyRows.length, receivingRows.length]);
+  }, [dashboardDispatched, dashboardMovements, dashboardOrders, dashboardProductRows, dashboardReturns, dashboardScans, inventory, notPrintedRows.length, readyRows.length, receivingRows.length]);
 
   const refreshWarehouse = () => {
     queryClient.invalidateQueries({ queryKey: ["warehouse-receiving"] });
@@ -733,12 +943,15 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   };
 
   const openReceiveDialog = (row: SourcingReceiveRow) => {
+    const lines = flattenReceiveLines(row);
+    const expected = lines.reduce((sum, line) => sum + Number(line.expectedQuantity || 0), 0);
     setReceiveDialogRow(row);
+    setReceiveLines(lines);
     setReceiveForm({
       sourcingId: row.id,
-      expectedQuantity: row.quantity || 0,
-      receivedQuantity: row.quantity || 0,
-      goodQuantity: row.quantity || 0,
+      expectedQuantity: expected,
+      receivedQuantity: expected,
+      goodQuantity: expected,
       damagedQuantity: 0,
       rack: "",
       shelf: "",
@@ -747,7 +960,19 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     });
   };
 
-  const receiveMissing = Math.max(0, Number(receiveForm.expectedQuantity || 0) - Number(receiveForm.receivedQuantity || 0));
+  const receiveTotals = useMemo(() => {
+    const expected = receiveLines.reduce((sum, line) => sum + Number(line.expectedQuantity || 0), 0);
+    const received = receiveLines.reduce((sum, line) => sum + Number(line.receivedQuantity || 0), 0);
+    const good = receiveLines.reduce((sum, line) => sum + Number(line.goodQuantity || 0), 0);
+    const damaged = receiveLines.reduce((sum, line) => sum + Number(line.damagedQuantity || 0), 0);
+    return { expected, received, good, damaged, missing: Math.max(0, expected - received) };
+  }, [receiveLines]);
+
+  const receiveMissing = receiveTotals.missing;
+
+  const updateReceiveLine = (key: string, patch: Partial<ReceiveLine>) => {
+    setReceiveLines((lines) => lines.map((line) => line.key === key ? { ...line, ...patch } : line));
+  };
 
   async function ensureLocation(code: string, type: "sellable" | "damaged") {
     const { data: existing, error: selectError } = await supabase
@@ -767,7 +992,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     return data.id as string;
   }
 
-  async function ensureProductVariant(row: SourcingReceiveRow) {
+  async function ensureProductVariant(row: SourcingReceiveRow, line: ReceiveLine) {
     let productId = row.source_product_id;
     if (!productId) {
       const { data: existingProduct } = await supabase
@@ -779,6 +1004,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     }
 
     const baseSku = buildInternalSku(row);
+    const isDefaultLine = line.key === "default";
+    const variantSku = isDefaultLine ? baseSku : `${baseSku}-${skuSuffix(line.label, line.key.toUpperCase())}`;
 
     if (!productId) {
       const { data: product, error } = await supabase
@@ -800,7 +1027,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     const { data: variant } = await supabase
       .from("product_variants" as any)
       .select("id, sku")
-      .eq("product_id", productId)
+      .eq("sku", variantSku)
       .limit(1)
       .maybeSingle();
     if (variant?.id) return { productId, variantId: variant.id as string, sku: variant.sku as string };
@@ -809,9 +1036,9 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       .from("product_variants" as any)
       .insert({
         product_id: productId,
-        sku: baseSku,
-        name: "Default",
-        attributes: { batch: row.id.slice(0, 8), source: "warehouse_receiving" },
+        sku: variantSku,
+        name: line.label,
+        attributes: { batch: row.id.slice(0, 8), source: "warehouse_receiving", receive_line_key: line.key },
       })
       .select("id, sku")
       .single();
@@ -843,59 +1070,78 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
   const saveReceive = async () => {
     if (!receiveDialogRow) return;
-    const received = Number(receiveForm.receivedQuantity || 0);
-    const good = Number(receiveForm.goodQuantity || 0);
-    const damaged = Number(receiveForm.damagedQuantity || 0);
-    if (received < 0 || good < 0 || damaged < 0) {
-      toast.error("Quantities cannot be negative");
+    if (receiveLines.length === 0) {
+      toast.error("No receiving lines found");
       return;
     }
-    if (good + damaged > received) {
-      toast.error("Good + damaged cannot exceed received quantity");
-      return;
+    for (const line of receiveLines) {
+      const received = Number(line.receivedQuantity || 0);
+      const good = Number(line.goodQuantity || 0);
+      const damaged = Number(line.damagedQuantity || 0);
+      if (received < 0 || good < 0 || damaged < 0) {
+        toast.error("Quantities cannot be negative");
+        return;
+      }
+      if (good + damaged > received) {
+        toast.error(`Good + damaged cannot exceed received quantity for ${line.label}`);
+        return;
+      }
     }
 
     setBusy(true);
     try {
-      const { variantId } = await ensureProductVariant(receiveDialogRow);
       const sellableLocationId = await ensureLocation(buildLocationCode(receiveForm.rack, receiveForm.shelf, receiveForm.bin), "sellable");
-      const damagedLocationId = damaged > 0 ? await ensureLocation("DAMAGED", "damaged") : null;
+      const hasDamaged = receiveLines.some((line) => Number(line.damagedQuantity || 0) > 0);
+      const damagedLocationId = hasDamaged ? await ensureLocation("DAMAGED", "damaged") : null;
 
-      if (good > 0) {
-        await addInventoryBalance(variantId, sellableLocationId, good);
-        const { error: movementError } = await supabase.from("inventory_movements" as any).insert({
-          product_variant_id: variantId,
-          movement_type: "restock",
-          quantity_change: good,
-          to_location_id: sellableLocationId,
-          created_by: authUser?.id,
-          metadata: {
-            reason: "Warehouse receiving",
-            sourcing_request_id: receiveDialogRow.id,
-            expected_quantity: receiveForm.expectedQuantity,
-            received_quantity: received,
-            missing_quantity: receiveMissing,
-            notes: receiveForm.notes || null,
-          },
-        });
-        if (movementError) throw movementError;
-      }
+      for (const line of receiveLines) {
+        const { variantId } = await ensureProductVariant(receiveDialogRow, line);
+        const received = Number(line.receivedQuantity || 0);
+        const good = Number(line.goodQuantity || 0);
+        const damaged = Number(line.damagedQuantity || 0);
+        const lineMissing = Math.max(0, Number(line.expectedQuantity || 0) - received);
 
-      if (damaged > 0 && damagedLocationId) {
-        await addInventoryBalance(variantId, damagedLocationId, damaged);
-        const { error: movementError } = await supabase.from("inventory_movements" as any).insert({
-          product_variant_id: variantId,
-          movement_type: "damage",
-          quantity_change: damaged,
-          to_location_id: damagedLocationId,
-          created_by: authUser?.id,
-          metadata: {
-            reason: "Warehouse receiving damaged",
-            sourcing_request_id: receiveDialogRow.id,
-            notes: receiveForm.notes || null,
-          },
-        });
-        if (movementError) throw movementError;
+        if (good > 0) {
+          await addInventoryBalance(variantId, sellableLocationId, good);
+          const { error: movementError } = await supabase.from("inventory_movements" as any).insert({
+            product_variant_id: variantId,
+            movement_type: "restock",
+            quantity_change: good,
+            to_location_id: sellableLocationId,
+            created_by: authUser?.id,
+            metadata: {
+              reason: "Warehouse receiving",
+              sourcing_request_id: receiveDialogRow.id,
+              variant_name: line.label,
+              expected_quantity: line.expectedQuantity,
+              received_quantity: received,
+              missing_quantity: lineMissing,
+              notes: receiveForm.notes || null,
+            },
+          });
+          if (movementError) throw movementError;
+        }
+
+        if (damaged > 0 && damagedLocationId) {
+          await addInventoryBalance(variantId, damagedLocationId, damaged);
+          const { error: movementError } = await supabase.from("inventory_movements" as any).insert({
+            product_variant_id: variantId,
+            movement_type: "damage",
+            quantity_change: damaged,
+            to_location_id: damagedLocationId,
+            created_by: authUser?.id,
+            metadata: {
+              reason: "Warehouse receiving damaged",
+              sourcing_request_id: receiveDialogRow.id,
+              variant_name: line.label,
+              expected_quantity: line.expectedQuantity,
+              received_quantity: received,
+              missing_quantity: lineMissing,
+              notes: receiveForm.notes || null,
+            },
+          });
+          if (movementError) throw movementError;
+        }
       }
 
       const { error: sourcingError } = await supabase
@@ -915,6 +1161,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
       toast.success("Products received into warehouse inventory");
       setReceiveDialogRow(null);
+      setReceiveLines([]);
       refreshWarehouse();
     } catch (error: any) {
       toast.error(error.message || "Receiving failed");
@@ -1378,40 +1625,93 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
               </CardHeader>
             </Card>
 
-            <DashboardSection title="Receiving" icon={<PackageCheck className="h-4 w-4" />}>
-              <Kpi icon={<ClipboardList className="h-4 w-4" />} label="Pending Receiving" value={dashboardStats.pendingReceiving} />
-              <Kpi icon={<CheckCircle2 className="h-4 w-4" />} label="Received" value={dashboardStats.received} />
-              <Kpi icon={<Boxes className="h-4 w-4" />} label="Good Qty Received" value={dashboardStats.goodQtyReceived} />
-              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Damaged Qty Received" value={dashboardStats.damagedQtyReceived} />
-              <Kpi icon={<Package className="h-4 w-4" />} label="Missing Qty" value={dashboardStats.missingQty} />
+            <DashboardSection title="Warehouse Products" icon={<PackageCheck className="h-4 w-4" />}>
+              <Kpi icon={<ClipboardList className="h-4 w-4" />} label="Pending Receiving" value={dashboardStats.pendingReceiving} tone="amber" />
+              <Kpi icon={<CheckCircle2 className="h-4 w-4" />} label="Received Products" value={dashboardStats.received} tone="emerald" />
+              <Kpi icon={<Boxes className="h-4 w-4" />} label="Good Qty Received" value={dashboardStats.goodQtyReceived} tone="blue" />
+              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Damaged Qty" value={dashboardStats.damagedQtyReceived} tone="red" />
+              <Kpi icon={<Package className="h-4 w-4" />} label="Missing Qty" value={dashboardStats.missingQty} tone="slate" />
             </DashboardSection>
 
-            <DashboardSection title="Inventory" icon={<Boxes className="h-4 w-4" />}>
-              <Kpi icon={<Boxes className="h-4 w-4" />} label="Total Available Stock" value={dashboardStats.totalAvailableStock} />
-              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Total Damaged Stock" value={dashboardStats.totalDamagedStock} />
-              <Kpi icon={<Package className="h-4 w-4" />} label="Low Stock Items" value={dashboardStats.lowStockItems} />
-              <Kpi icon={<MapPin className="h-4 w-4" />} label="Unassigned Location Items" value={dashboardStats.unassignedLocationItems} />
+            <DashboardSection title="Order Workflow" icon={<Truck className="h-4 w-4" />}>
+              <Kpi icon={<Printer className="h-4 w-4" />} label="Not Printed" value={dashboardStats.notPrintedOrders} tone="amber" />
+              <Kpi icon={<Truck className="h-4 w-4" />} label="Ready Dispatch" value={dashboardStats.readyToDispatchOrders} tone="blue" />
+              <Kpi icon={<CheckCircle2 className="h-4 w-4" />} label="Dispatched" value={dashboardStats.dispatchedOrders} tone="emerald" />
+              <Kpi icon={<PackageCheck className="h-4 w-4" />} label="Shipped" value={dashboardStats.shippedOrders} tone="violet" />
+              <Kpi icon={<ScanLine className="h-4 w-4" />} label="Scan Success" value={dashboardStats.dispatchSuccessRate} suffix="%" tone="slate" />
             </DashboardSection>
 
-            <DashboardSection title="Dispatch" icon={<Truck className="h-4 w-4" />}>
-              <Kpi icon={<Printer className="h-4 w-4" />} label="Not Printed Orders" value={dashboardStats.notPrintedOrders} />
-              <Kpi icon={<Truck className="h-4 w-4" />} label="Ready to Dispatch Orders" value={dashboardStats.readyToDispatchOrders} />
-              <Kpi icon={<CheckCircle2 className="h-4 w-4" />} label="Dispatched Orders" value={dashboardStats.dispatchedOrders} />
-              <Kpi icon={<ScanLine className="h-4 w-4" />} label="Dispatch Scan Success Rate" value={dashboardStats.dispatchSuccessRate} suffix="%" />
-              <Kpi icon={<History className="h-4 w-4" />} label="Average Dispatch Time" value={dashboardStats.avgDispatchTimeHours} suffix="h" />
+            <DashboardSection title="Product Inventory KPIs" icon={<Boxes className="h-4 w-4" />}>
+              <Kpi icon={<Package className="h-4 w-4" />} label="Products in Stock" value={dashboardStats.productCount} tone="blue" />
+              <Kpi icon={<Boxes className="h-4 w-4" />} label="Available Stock" value={dashboardStats.totalAvailableStock} tone="emerald" />
+              <Kpi icon={<Layers className="h-4 w-4" />} label="Variants in Stock" value={dashboardStats.variantsInStock} tone="violet" />
+              <Kpi icon={<Truck className="h-4 w-4" />} label="Products Dispatched" value={dashboardStats.productsWithDispatched} tone="amber" />
+              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Products Damaged" value={dashboardStats.productsWithDamage} tone="red" />
             </DashboardSection>
 
-            <DashboardSection title="Returns" icon={<RotateCcw className="h-4 w-4" />}>
-              <Kpi icon={<RotateCcw className="h-4 w-4" />} label="Returns Received" value={dashboardStats.returnsReceived} />
-              <Kpi icon={<CheckCircle2 className="h-4 w-4" />} label="Sellable Returns" value={dashboardStats.sellableReturns} />
-              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Damaged Returns" value={dashboardStats.damagedReturns} />
-              <Kpi icon={<Package className="h-4 w-4" />} label="Missing Returns" value={dashboardStats.missingReturns} />
-            </DashboardSection>
+            <Card className="border-border/60 overflow-hidden">
+              <CardHeader className="py-4 border-b bg-muted/20">
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Boxes className="h-4 w-4" />
+                    Product Inventory Detail
+                  </CardTitle>
+                  <Badge variant="outline" className="text-[10px]">{dashboardProductRows.length} products</Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="h-9 text-xs">Product</TableHead>
+                      {!hideSellerInfo && <TableHead className="h-9 text-xs">Seller</TableHead>}
+                      <TableHead className="h-9 text-xs text-right">Available</TableHead>
+                      <TableHead className="h-9 text-xs text-right">Dispatched</TableHead>
+                      <TableHead className="h-9 text-xs text-right">Reserved</TableHead>
+                      <TableHead className="h-9 text-xs text-right">Damaged</TableHead>
+                      <TableHead className="h-9 text-xs">Variants</TableHead>
+                      <TableHead className="h-9 text-xs">Location</TableHead>
+                      <TableHead className="h-9 text-xs">Last Move</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dashboardProductRows.length === 0 ? (
+                      <TableRow><TableCell colSpan={hideSellerInfo ? 8 : 9} className="text-sm text-muted-foreground">No warehouse product stock yet.</TableCell></TableRow>
+                    ) : dashboardProductRows.slice(0, 12).map((row) => (
+                      <TableRow key={row.key}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {row.imageUrl ? (
+                              <button type="button" onClick={() => setPreviewImage({ url: row.imageUrl!, title: row.productName })} className="h-9 w-9 overflow-hidden rounded-md border bg-muted">
+                                <img src={row.imageUrl} alt={row.productName} className="h-full w-full object-cover" loading="lazy" />
+                              </button>
+                            ) : (
+                              <div className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted text-muted-foreground"><Package className="h-4 w-4" /></div>
+                            )}
+                            <span className="text-sm font-semibold">{row.productName}</span>
+                          </div>
+                        </TableCell>
+                        {!hideSellerInfo && <TableCell className="text-xs text-muted-foreground">{sellerName(profileMap, row.sellerId)}</TableCell>}
+                        <TableCell className="text-right font-bold text-emerald-600">{row.available.toLocaleString()}</TableCell>
+                        <TableCell className="text-right font-semibold text-primary">{row.dispatched.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{row.reserved.toLocaleString()}</TableCell>
+                        <TableCell className={`text-right font-semibold ${row.damaged > 0 ? "text-destructive" : "text-muted-foreground"}`}>{row.damaged.toLocaleString()}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[10px]">{row.variants} variant{row.variants === 1 ? "" : "s"}</Badge></TableCell>
+                        <TableCell><Badge variant="outline" className="text-[10px]">{row.locations.length > 1 ? "MULTIPLE" : row.locations[0] || "UNASSIGNED"}</Badge></TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{format(new Date(row.latest), "MMM d, HH:mm")}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
 
-            <DashboardSection title="Errors / Control" icon={<Settings2 className="h-4 w-4" />}>
-              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Duplicate Scan Attempts" value={dashboardStats.duplicateScanAttempts} />
-              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Unknown Scan Attempts" value={dashboardStats.unknownScanAttempts} />
-              <Kpi icon={<Settings2 className="h-4 w-4" />} label="Manual Stock Adjustments" value={dashboardStats.manualStockAdjustments} />
+            <DashboardSection title="Returns & Control" icon={<Settings2 className="h-4 w-4" />}>
+              <Kpi icon={<RotateCcw className="h-4 w-4" />} label="Returns Received" value={dashboardStats.returnsReceived} tone="violet" />
+              <Kpi icon={<CheckCircle2 className="h-4 w-4" />} label="Sellable Returns" value={dashboardStats.sellableReturns} tone="emerald" />
+              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Duplicate Scans" value={dashboardStats.duplicateScanAttempts} tone="amber" />
+              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Unknown Scans" value={dashboardStats.unknownScanAttempts} tone="red" />
+              <Kpi icon={<Settings2 className="h-4 w-4" />} label="Stock Adjustments" value={dashboardStats.manualStockAdjustments} tone="slate" />
             </DashboardSection>
           </div>
         )}
@@ -1525,7 +1825,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                   <TableRow>
                     {!hideSellerInfo && <TableHead className="h-9 text-xs">Seller</TableHead>}
                     <TableHead className="h-9 text-xs">Product</TableHead>
-                    <TableHead className="h-9 text-xs">Variant</TableHead>
+                    <TableHead className="h-9 text-xs">Variants</TableHead>
                     <TableHead className="h-9 text-xs">Internal SKU</TableHead>
                     <TableHead className="h-9 text-xs">Barcode</TableHead>
                     <TableHead className="h-9 text-xs text-right">Available</TableHead>
@@ -1540,33 +1840,102 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                 <TableBody>
                   {loadingInventory ? (
                     <TableRow><TableCell colSpan={hideSellerInfo ? 11 : 12} className="text-sm text-muted-foreground">Loading inventory...</TableCell></TableRow>
-                  ) : filteredInventory.length === 0 ? (
+                  ) : groupedInventory.length === 0 ? (
                     <TableRow><TableCell colSpan={hideSellerInfo ? 11 : 12} className="text-sm text-muted-foreground">No inventory balances found.</TableCell></TableRow>
-                  ) : filteredInventory.map((row) => (
-                    <TableRow key={row.id}>
-                      {!hideSellerInfo && <TableCell className="text-sm">{sellerName(profileMap, row.seller_id)}</TableCell>}
-                      <TableCell className="text-sm font-medium">{row.product_name}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{row.variant_name || "Default"}</TableCell>
-                      <TableCell className="font-mono text-xs">{row.sku || "-"}</TableCell>
-                      <TableCell className="font-mono text-xs">{row.sku || row.product_variant_id.slice(0, 10)}</TableCell>
-                      <TableCell className="text-right font-semibold">{row.available_quantity ?? row.quantity_on_hand}</TableCell>
-                      <TableCell className="text-right">{row.quantity_reserved}</TableCell>
-                      <TableCell className="text-right">
-                        <span className={`font-semibold tabular-nums ${dispatchedByVariant.get(row.product_variant_id) ? "text-primary" : "text-muted-foreground"}`}>
-                          {dispatchedByVariant.get(row.product_variant_id) || 0}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">{row.damaged_quantity ?? 0}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-[10px]">{row.location_code || "UNASSIGNED"}</Badge></TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{format(new Date(row.updated_at), "MMM d, HH:mm")}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setBarcodeDialogRow(row)} title="Print barcode"><Barcode className="h-3.5 w-3.5" /></Button>
-                          {canAdjustStock && <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setAdjustDialogRow(row)}><Settings2 className="h-3.5 w-3.5" /></Button>}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  ) : groupedInventory.map((group) => {
+                    const expanded = expandedInventoryProducts.has(group.key);
+                    const primary = group.variants[0];
+                    const locationLabel = group.locations.length === 0
+                      ? "UNASSIGNED"
+                      : group.locations.length === 1
+                        ? group.locations[0]
+                        : "MULTIPLE";
+                    return (
+                      <Fragment key={group.key}>
+                        <TableRow key={group.key} className="bg-muted/20 hover:bg-muted/35">
+                          {!hideSellerInfo && <TableCell className="text-sm">{sellerName(profileMap, group.sellerId)}</TableCell>}
+                          <TableCell>
+                            <button
+                              type="button"
+                              onClick={() => toggleInventoryProduct(group.key)}
+                              className="flex items-center gap-2 text-left"
+                            >
+                              {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                              {group.imageUrl ? (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setPreviewImage({ url: group.imageUrl!, title: group.productName });
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter" || event.key === " ") {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      setPreviewImage({ url: group.imageUrl!, title: group.productName });
+                                    }
+                                  }}
+                                  className="h-9 w-9 shrink-0 overflow-hidden rounded-md border bg-muted"
+                                  title="View product image"
+                                >
+                                  <img src={group.imageUrl} alt={group.productName} className="h-full w-full object-cover" loading="lazy" />
+                                </span>
+                              ) : (
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-muted text-muted-foreground">
+                                  <Package className="h-4 w-4" />
+                                </span>
+                              )}
+                              <span className="text-sm font-semibold">{group.productName}</span>
+                            </button>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px]">{group.variants.length} variant{group.variants.length === 1 ? "" : "s"}</Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">{primary?.sku?.split("-").slice(0, 2).join("-") || "-"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">Expand to print</TableCell>
+                          <TableCell className="text-right font-semibold">{group.available}</TableCell>
+                          <TableCell className="text-right">{group.reserved}</TableCell>
+                          <TableCell className="text-right">
+                            <span className={`font-semibold tabular-nums ${group.dispatched ? "text-primary" : "text-muted-foreground"}`}>{group.dispatched}</span>
+                          </TableCell>
+                          <TableCell className="text-right">{group.damaged}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-[10px]">{locationLabel}</Badge></TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{format(new Date(group.latest), "MMM d, HH:mm")}</TableCell>
+                          <TableCell className="text-right">
+                            <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => toggleInventoryProduct(group.key)}>
+                              {expanded ? "Hide" : "View"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                        {expanded && group.variants.map((row) => (
+                          <TableRow key={row.id} className="bg-background">
+                            {!hideSellerInfo && <TableCell />}
+                            <TableCell className="pl-9 text-xs text-muted-foreground">{row.product_name}</TableCell>
+                            <TableCell className="text-sm font-medium">{row.variant_name || "Default"}</TableCell>
+                            <TableCell className="font-mono text-xs">{row.sku || "-"}</TableCell>
+                            <TableCell className="font-mono text-xs">{row.sku || row.product_variant_id.slice(0, 10)}</TableCell>
+                            <TableCell className="text-right font-semibold">{row.available_quantity ?? row.quantity_on_hand}</TableCell>
+                            <TableCell className="text-right">{row.quantity_reserved}</TableCell>
+                            <TableCell className="text-right">
+                              <span className={`font-semibold tabular-nums ${dispatchedByVariant.get(row.product_variant_id) ? "text-primary" : "text-muted-foreground"}`}>
+                                {dispatchedByVariant.get(row.product_variant_id) || 0}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">{row.damaged_quantity ?? 0}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-[10px]">{row.location_code || "UNASSIGNED"}</Badge></TableCell>
+                            <TableCell className="text-xs text-muted-foreground">{format(new Date(row.updated_at), "MMM d, HH:mm")}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setBarcodeDialogRow(row)} title="Print barcode"><Barcode className="h-3.5 w-3.5" /></Button>
+                                {canAdjustStock && <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => setAdjustDialogRow(row)}><Settings2 className="h-3.5 w-3.5" /></Button>}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -1772,15 +2141,31 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!receiveDialogRow} onOpenChange={(open) => !open && setReceiveDialogRow(null)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader><DialogTitle>{previewImage?.title || "Product image"}</DialogTitle></DialogHeader>
+          {previewImage && (
+            <div className="overflow-hidden rounded-lg border bg-muted">
+              <img src={previewImage.url} alt={previewImage.title} className="max-h-[70vh] w-full object-contain" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!receiveDialogRow} onOpenChange={(open) => {
+        if (!open) {
+          setReceiveDialogRow(null);
+          setReceiveLines([]);
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Receive Sourcing Products</DialogTitle></DialogHeader>
           {receiveDialogRow && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/20 p-3 text-sm">
                 {!hideSellerInfo && <InfoLine label="Seller" value={sellerName(profileMap, receiveDialogRow.seller_id)} />}
                 <InfoLine label="Product" value={receiveDialogRow.product_name} />
-                <InfoLine label="Expected" value={String(receiveForm.expectedQuantity)} />
+                <InfoLine label="Expected" value={String(receiveTotals.expected)} />
                 <InfoLine label="Status" value={receiveDialogRow.status} />
               </div>
               <div className="rounded-md border border-primary/20 bg-primary/[0.03] p-3">
@@ -1793,11 +2178,57 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                   <InfoLine label="Barcode" value={buildInternalSku(receiveDialogRow)} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <NumberField label="Expected quantity" value={receiveForm.expectedQuantity} onChange={(v) => setReceiveForm((f) => ({ ...f, expectedQuantity: v }))} />
-                <NumberField label="Received quantity" value={receiveForm.receivedQuantity} onChange={(v) => setReceiveForm((f) => ({ ...f, receivedQuantity: v, goodQuantity: Math.max(0, v - f.damagedQuantity) }))} />
-                <NumberField label="Good quantity" value={receiveForm.goodQuantity} onChange={(v) => setReceiveForm((f) => ({ ...f, goodQuantity: v }))} />
-                <NumberField label="Damaged quantity" value={receiveForm.damagedQuantity} onChange={(v) => setReceiveForm((f) => ({ ...f, damagedQuantity: v, goodQuantity: Math.max(0, f.receivedQuantity - v) }))} />
+              <div className="rounded-md border overflow-hidden">
+                <div className="grid grid-cols-[minmax(180px,1fr)_110px_130px_130px_130px] gap-3 border-b bg-muted/30 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span>Variant</span>
+                  <span className="text-right">Expected</span>
+                  <span>Received</span>
+                  <span>Good</span>
+                  <span>Damaged</span>
+                </div>
+                <div className="divide-y">
+                  {receiveLines.map((line) => (
+                    <div key={line.key} className="grid grid-cols-[minmax(180px,1fr)_110px_130px_130px_130px] gap-3 px-3 py-3 items-center">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{line.label}</p>
+                        {line.key !== "default" && (
+                          <p className="text-[11px] text-muted-foreground">SKU: {buildInternalSku(receiveDialogRow)}-{skuSuffix(line.label, line.key.toUpperCase())}</p>
+                        )}
+                      </div>
+                      <div className="text-right text-sm font-semibold tabular-nums">{line.expectedQuantity}</div>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={line.receivedQuantity}
+                        onChange={(e) => {
+                          const received = Number(e.target.value || 0);
+                          updateReceiveLine(line.key, {
+                            receivedQuantity: received,
+                            goodQuantity: Math.max(0, received - Number(line.damagedQuantity || 0)),
+                          });
+                        }}
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        value={line.goodQuantity}
+                        onChange={(e) => updateReceiveLine(line.key, { goodQuantity: Number(e.target.value || 0) })}
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        value={line.damagedQuantity}
+                        onChange={(e) => {
+                          const damaged = Number(e.target.value || 0);
+                          updateReceiveLine(line.key, {
+                            damagedQuantity: damaged,
+                            goodQuantity: Math.max(0, Number(line.receivedQuantity || 0) - damaged),
+                          });
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="rounded-md border p-3">
                 <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground"><MapPin className="h-3.5 w-3.5" /> Optional location</div>
@@ -1809,11 +2240,16 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                 <p className="mt-2 text-xs text-muted-foreground">Location code: {buildLocationCode(receiveForm.rack, receiveForm.shelf, receiveForm.bin)}</p>
               </div>
               <Textarea value={receiveForm.notes} onChange={(e) => setReceiveForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Notes" />
-              <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">Missing quantity: <span className="font-semibold text-foreground">{receiveMissing}</span></div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+                <span>Expected: <span className="font-semibold text-foreground">{receiveTotals.expected}</span></span>
+                <span>Received: <span className="font-semibold text-foreground">{receiveTotals.received}</span></span>
+                <span>Good: <span className="font-semibold text-foreground">{receiveTotals.good}</span></span>
+                <span>Missing: <span className="font-semibold text-foreground">{receiveMissing}</span></span>
+              </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReceiveDialogRow(null)} disabled={busy}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setReceiveDialogRow(null); setReceiveLines([]); }} disabled={busy}>Cancel</Button>
             <Button onClick={saveReceive} disabled={busy}>Save Receiving</Button>
           </DialogFooter>
         </DialogContent>
@@ -2002,15 +2438,23 @@ function DashboardSection({ title, icon, children }: { title: string; icon: Reac
   );
 }
 
-function Kpi({ icon, label, value, suffix = "" }: { icon: React.ReactNode; label: string; value: number; suffix?: string }) {
+function Kpi({ icon, label, value, suffix = "", tone = "slate" }: { icon: React.ReactNode; label: string; value: number; suffix?: string; tone?: "slate" | "blue" | "emerald" | "amber" | "red" | "violet" }) {
+  const toneClass = {
+    slate: "border-slate-500/15 bg-slate-500/[0.04] text-slate-600",
+    blue: "border-blue-500/20 bg-blue-500/[0.06] text-blue-600",
+    emerald: "border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-600",
+    amber: "border-amber-500/25 bg-amber-500/[0.08] text-amber-600",
+    red: "border-red-500/20 bg-red-500/[0.06] text-red-600",
+    violet: "border-violet-500/20 bg-violet-500/[0.06] text-violet-600",
+  }[tone];
   return (
-    <Card className="border-border/60">
+    <Card className={`border ${toneClass}`}>
       <CardContent className="p-3">
-        <div className="flex items-center gap-2 text-muted-foreground mb-1.5">
-          {icon}
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-background/70 shadow-sm">{icon}</span>
           <span className="text-[10px] font-semibold uppercase tracking-wider">{label}</span>
         </div>
-        <p className="text-lg font-bold tabular-nums">{value.toLocaleString()}{suffix}</p>
+        <p className="text-2xl font-bold tabular-nums text-foreground">{value.toLocaleString()}{suffix}</p>
       </CardContent>
     </Card>
   );

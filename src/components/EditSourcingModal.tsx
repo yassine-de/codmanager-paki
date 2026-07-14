@@ -18,7 +18,6 @@ const statusOptions: { value: string; label: string }[] = [
   { value: "quoted", label: "Quoted" },
   { value: "ordered", label: "Ordered" },
   { value: "shipped", label: "Shipped" },
-  { value: "received", label: "Received" },
   { value: "cancelled", label: "Cancelled" },
 ];
 
@@ -89,7 +88,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     setLandedPrice(request.landed_price || prevLandedPrice || 0);
     setSellerPrice(request.seller_price || prevSellerPrice || 0);
     setQuantity(request.quantity);
-    setStatus(request.status === "validated" ? "received" : request.status);
+    setStatus(request.status);
     setNotes(request.notes ?? "");
     setPaymentStatus(request.payment_status ?? "unpaid");
     setPaymentMethod(request.payment_method ?? null);
@@ -406,7 +405,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
               <div className="space-y-1.5">
                 <Label className="text-xs">Status</Label>
                 {(() => {
-                  const shippingStatuses = ["ordered", "shipped", "received"];
+                  const shippingStatuses = ["ordered", "shipped"];
                   const isSellerValidated = request?.seller_validated === true;
                   const hasSellerPrice = n(sellerPrice) > 0;
                   const canSelectShipping = isSellerValidated && hasSellerPrice;
@@ -414,6 +413,11 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
                     <Select value={status} onValueChange={setStatus}>
                       <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                       <SelectContent>
+                        {request.status === "received" && (
+                          <SelectItem value="received" disabled>
+                            Received (Warehouse only)
+                          </SelectItem>
+                        )}
                         {statusOptions.map(s => (
                           <SelectItem
                             key={s.value}

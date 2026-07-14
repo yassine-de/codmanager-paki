@@ -76,11 +76,51 @@ export default function ProductDetail() {
     enabled: !!dbProduct?.seller_id && isAdmin,
   });
 
+  const { data: inventoryRows = [] } = useQuery({
+    queryKey: ["product-detail-inventory", dbProduct?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory_balance_view" as any)
+        .select("product_variant_id, variant_name, sku, quantity_on_hand, location_type")
+        .eq("product_id", dbProduct!.id);
+      if (error) throw error;
+      return (data || []) as Array<{
+        product_variant_id: string;
+        variant_name: string | null;
+        sku: string | null;
+        quantity_on_hand: number;
+        location_type: string | null;
+      }>;
+    },
+    enabled: !!dbProduct?.id,
+    refetchInterval: 15000,
+  });
+
+  const inventoryStock = useMemo(() => {
+    const variants = new Map<string, { id: string; name: string; sku: string; quantity: number }>();
+    const available = inventoryRows.reduce((sum, row) => {
+      const qty = Number(row.quantity_on_hand || 0);
+      if (row.location_type === "damaged") return sum;
+      const variant = variants.get(row.product_variant_id) || {
+        id: row.product_variant_id,
+        name: row.variant_name || "Default",
+        sku: row.sku || "",
+        quantity: 0,
+      };
+      variant.quantity += qty;
+      variants.set(row.product_variant_id, variant);
+      return sum + qty;
+    }, 0);
+    return { available, variants: Array.from(variants.values()).filter((variant) => variant.quantity > 0) };
+  }, [inventoryRows]);
+
   const product: Product | null = useMemo(() => {
     if (mockProduct) return mockProduct;
     if (!dbProduct) return null;
     const rawVariants = (dbProduct as any).variants as any[] | null;
-    const mappedVariants = rawVariants
+    const mappedVariants = inventoryStock.variants.length > 0
+      ? inventoryStock.variants
+      : rawVariants
       ? rawVariants.map((v: any, i: number) => ({
           id: v.id || `v-${i}`,
           name: v.name || v.group || "",
@@ -96,10 +136,10 @@ export default function ProductDetail() {
       name: dbProduct.name,
       image: dbProduct.image_url || "",
       price: Number(dbProduct.landed_price) || 0,
-      totalQty: dbProduct.quantity || 0,
+      totalQty: inventoryStock.available || dbProduct.quantity || 0,
       delivered: 0,
       shipped: 0,
-      available: dbProduct.quantity || 0,
+      available: inventoryStock.available || dbProduct.quantity || 0,
       createdAt: dbProduct.created_at,
       variants: mappedVariants,
       storeLink: dbProduct.product_url || "",
@@ -109,7 +149,7 @@ export default function ProductDetail() {
       offers: ((dbProduct as any).offers || []).map((o: any, idx: number) => ({ id: `OFF-${idx}`, quantity: o.quantity || 1, price: o.price || 0 })),
       weight: (dbProduct as any).weight || undefined,
     } as Product;
-  }, [dbProduct, mockProduct, sellerProfile, authUser]);
+  }, [dbProduct, mockProduct, sellerProfile, authUser, inventoryStock]);
 
   // Fetch real orders — RLS handles seller isolation; admin filters by seller_id
   const { data: productOrders = [] } = useQuery({

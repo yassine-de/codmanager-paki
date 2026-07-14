@@ -35,6 +35,8 @@ export interface DashboardKPIs {
   wrongNumber: number;
   // Delivery
   pending: number;
+  printed: number;
+  dispatched: number;
   shipped: number;
   inTransit: number;
   withCourier: number;
@@ -151,7 +153,9 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
   // Delivery status counts (matching real DB values)
   // Pending = explicit 'pending' OR legacy in-flight statuses
   const pending = orders.filter(o => ['pending', 'with_courier', 'in_transit', 'postponed'].includes(o.delivery_status || '')).length;
-  const shipped = orders.filter(o => ['printed', 'dispatched', 'shipped', 'booked'].includes(o.delivery_status || '')).length;
+  const printed = orders.filter(o => o.delivery_status === 'printed').length;
+  const dispatched = orders.filter(o => o.delivery_status === 'dispatched').length;
+  const shipped = orders.filter(o => o.delivery_status === 'shipped').length;
   const inTransit = orders.filter(o => o.delivery_status === 'in_transit').length;
   const withCourier = orders.filter(o => o.delivery_status === 'with_courier').length;
   // Delivered = orders currently delivered/paid whose chosen date falls in this period
@@ -199,7 +203,7 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
 
   return {
     total, newOrders, confirmed, noAnswer, unreachable, postponed, cancelled, doubleOrders, wrongNumber,
-    pending, shipped, inTransit, withCourier, delivered, paid, returned,
+    pending, printed, dispatched, shipped, inTransit, withCourier, delivered, paid, returned,
     deliveryCancelled, deliveryNoAnswer, deliveryPostponed,
     confirmationRate, deliveryRate,
     revenue, paidAmount, pendingAmount,
