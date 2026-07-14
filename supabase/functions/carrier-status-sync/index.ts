@@ -55,22 +55,32 @@ function normalizeStatus(status?: string | null, code?: string | null) {
   if (messageCode === "0013" || value === "attempted") return "failed_attempt";
   if (value === "out for return") return "ready_for_return";
   if (value === "out for delivery") return "out_for_delivery";
+  if (["0003", "0004", "0015", "0018", "15", "18"].includes(messageCode)) return "in_transit";
+  if (messageCode === "0001") return "booked";
   if (["postex warehouse", "picked by postex", "en-route to postex warehouse", "package on root", "package on route"].includes(value)) return "in_transit";
-  if (["unbooked", "booked", "at merchant's warehouse", "at merchant warehouse", "un-assigned by me"].includes(value)) return "booked";
+  if (["unbooked", "un-booked", "booked", "at merchant's warehouse", "at merchant warehouse", "un-assigned by me"].includes(value)) return "booked";
   if (value === "delivery under review") return "failed_attempt";
   if (value === "expired") return "cancelled";
-  return value ? "shipped" : "booked";
+  return value ? "carrier_unknown" : "booked";
 }
 
-function mapDeliveryStatus(normalizedStatus: string) {
+function mapDeliveryStatus(normalizedStatus: string, currentStatus?: string | null) {
   if (normalizedStatus === "delivered") return "delivered";
   if (normalizedStatus === "cancelled") return "cancelled";
   if (normalizedStatus === "ready_for_return") return "ready_for_return";
   if (normalizedStatus === "returned" || normalizedStatus === "return_received") return "return";
   if (normalizedStatus === "failed_attempt") return "failed_attempt";
   if (normalizedStatus === "out_for_delivery") return "with_courier";
-  if (normalizedStatus === "booked") return "booked";
-  return "shipped";
+  if (normalizedStatus === "in_transit") return "shipped";
+  if (normalizedStatus === "booked" || normalizedStatus === "carrier_unknown") {
+    const lockedWarehouseStatuses = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery", "delivered", "failed_attempt", "ready_for_return", "return", "returned", "cancelled"];
+    return currentStatus && lockedWarehouseStatuses.includes(currentStatus) ? currentStatus : "booked";
+  }
+  return currentStatus || "booked";
+}
+
+function shouldSetShippedAt(deliveryStatus: string) {
+  return ["shipped", "in_transit", "with_courier", "delivered", "failed_attempt", "ready_for_return", "return"].includes(deliveryStatus);
 }
 
 Deno.serve(async (req) => {
@@ -99,7 +109,7 @@ Deno.serve(async (req) => {
 
     const { data: shipments, error } = await supabase
       .from("shipments")
-      .select("*, orders(id, order_id, delivery_status)")
+      .select("*, orders(id, order_id, delivery_status, shipped_at)")
       .eq("carrier_id", carrier.id)
       .not("tracking_number", "is", null)
       .not("normalized_status", "in", `(${terminal.join(",")})`)
@@ -126,7 +136,7 @@ Deno.serve(async (req) => {
         const payload = data?.dist || data;
         const status = latestTrackingStatus(payload);
         const normalized = normalizeStatus(status.status, status.code);
-        const deliveryStatus = mapDeliveryStatus(normalized);
+        const deliveryStatus = mapDeliveryStatus(normalized, shipment.orders?.delivery_status);
         const now = new Date().toISOString();
 
         const { error: shipmentErr } = await supabase.from("shipments").update({
@@ -149,12 +159,14 @@ Deno.serve(async (req) => {
         });
 
         if (deliveryStatus !== shipment.orders?.delivery_status) {
-          await supabase.from("orders").update({
+          const orderUpdate: Record<string, unknown> = {
             delivery_status: deliveryStatus,
             shipping_status: status.status,
-            delivered_at: deliveryStatus === "delivered" ? now : undefined,
             updated_at: now,
-          }).eq("id", shipment.order_uuid);
+          };
+          if (deliveryStatus === "delivered") orderUpdate.delivered_at = now;
+          if (shouldSetShippedAt(deliveryStatus)) orderUpdate.shipped_at = shipment.orders?.shipped_at || now;
+          await supabase.from("orders").update(orderUpdate).eq("id", shipment.order_uuid);
 
           await supabase.from("order_history").insert({
             order_id: shipment.order_id,

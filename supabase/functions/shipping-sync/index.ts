@@ -71,22 +71,32 @@ function normalizeStatus(status?: string | null, code?: string | null) {
   if (messageCode === "0013" || value === "attempted") return "failed_attempt";
   if (value === "out for return") return "ready_for_return";
   if (value === "out for delivery") return "out_for_delivery";
+  if (["0003", "0004", "0015", "0018", "15", "18"].includes(messageCode)) return "in_transit";
+  if (messageCode === "0001") return "booked";
   if (["postex warehouse", "picked by postex", "en-route to postex warehouse", "package on root", "package on route"].includes(value)) return "in_transit";
-  if (["unbooked", "booked", "at merchant's warehouse", "at merchant warehouse", "un-assigned by me"].includes(value)) return "booked";
+  if (["unbooked", "un-booked", "booked", "at merchant's warehouse", "at merchant warehouse", "un-assigned by me"].includes(value)) return "booked";
   if (value === "delivery under review") return "failed_attempt";
   if (value === "expired") return "cancelled";
-  return value ? "shipped" : "booked";
+  return value ? "carrier_unknown" : "booked";
 }
 
-function mapDeliveryStatus(normalizedStatus: string) {
+function mapDeliveryStatus(normalizedStatus: string, currentStatus?: string | null) {
   if (normalizedStatus === "delivered") return "delivered";
   if (normalizedStatus === "cancelled") return "cancelled";
   if (normalizedStatus === "ready_for_return") return "ready_for_return";
   if (normalizedStatus === "returned" || normalizedStatus === "return_received") return "return";
   if (normalizedStatus === "failed_attempt") return "failed_attempt";
   if (normalizedStatus === "out_for_delivery") return "with_courier";
-  if (normalizedStatus === "booked") return "booked";
-  return "shipped";
+  if (normalizedStatus === "in_transit") return "shipped";
+  if (normalizedStatus === "booked" || normalizedStatus === "carrier_unknown") {
+    const lockedWarehouseStatuses = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery", "delivered", "failed_attempt", "ready_for_return", "return", "returned", "cancelled"];
+    return currentStatus && lockedWarehouseStatuses.includes(currentStatus) ? currentStatus : "booked";
+  }
+  return currentStatus || "booked";
+}
+
+function shouldSetShippedAt(deliveryStatus: string) {
+  return ["shipped", "in_transit", "with_courier", "delivered", "failed_attempt", "ready_for_return", "return"].includes(deliveryStatus);
 }
 
 function latestTrackingStatus(payload: any) {
@@ -169,7 +179,7 @@ async function findShipmentByTracking(supabase: ReturnType<typeof createClient>,
   const carrier = await getCarrier(supabase);
   const { data, error } = await supabase
     .from("shipments")
-    .select("*, carriers(*)")
+    .select("*, carriers(*), orders(delivery_status, shipped_at)")
     .eq("carrier_id", carrier.id)
     .or(`tracking_number.eq.${trackingNumber},carrier_order_id.eq.${trackingNumber}`)
     .maybeSingle();
@@ -288,11 +298,10 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
   }
 
   await supabase.from("orders").update({
-    delivery_status: mapDeliveryStatus(normalizedStatus),
+    delivery_status: "booked",
     fulfillment_status: carrier.fulfillment_mode === "self_fulfilled" ? "pending" : "carrier_managed",
     shipping_company: carrier.name,
     shipping_status: carrierStatus,
-    shipped_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).eq("id", order.id);
 
@@ -354,12 +363,15 @@ async function trackByTrackingNumber(supabase: ReturnType<typeof createClient>, 
       raw_event: payload,
       occurred_at: now,
     });
-    await supabase.from("orders").update({
-      delivery_status: mapDeliveryStatus(normalized),
+    const nextDeliveryStatus = mapDeliveryStatus(normalized, shipment.orders?.delivery_status);
+    const orderUpdate: Record<string, unknown> = {
+      delivery_status: nextDeliveryStatus,
       shipping_status: status.status,
-      delivered_at: normalized === "delivered" ? now : undefined,
       updated_at: now,
-    }).eq("id", shipment.order_uuid);
+    };
+    if (normalized === "delivered") orderUpdate.delivered_at = now;
+    if (shouldSetShippedAt(nextDeliveryStatus)) orderUpdate.shipped_at = shipment.orders?.shipped_at || now;
+    await supabase.from("orders").update(orderUpdate).eq("id", shipment.order_uuid);
   }
 
   return payload;
