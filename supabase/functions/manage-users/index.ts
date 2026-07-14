@@ -7,6 +7,18 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const DEFAULT_SELLER_RATES = {
+  rate_1kg: 3,
+  rate_2kg: 4,
+  rate_3kg: 5,
+};
+
+const DEFAULT_SELLER_RATE_SETTINGS = {
+  dropped_order_rate: 0.2,
+  confirmed_order_rate: 0.3,
+  cod_fee_per_delivery: 5,
+};
+
 const sellerPermissions = [
   "access_to_dashboard",
   "view_dashboard",
@@ -182,9 +194,9 @@ async function ensureSellerData(
   if (ratesLookupError) throw ratesLookupError;
 
   const sellerRates = {
-    rate_1kg: rates?.rate_1kg ?? 35,
-    rate_2kg: rates?.rate_2kg ?? 45,
-    rate_3kg: rates?.rate_3kg ?? 55,
+    rate_1kg: rates?.rate_1kg ?? DEFAULT_SELLER_RATES.rate_1kg,
+    rate_2kg: rates?.rate_2kg ?? DEFAULT_SELLER_RATES.rate_2kg,
+    rate_3kg: rates?.rate_3kg ?? DEFAULT_SELLER_RATES.rate_3kg,
   };
 
   if (existingRates) {
@@ -228,6 +240,46 @@ async function ensureSellerData(
     current_counter: 0,
   });
   if (error) throw error;
+}
+
+async function ensureSellerRateSettings(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  rates?: { rate_1kg?: number; rate_2kg?: number; rate_3kg?: number },
+  rateSettings?: { dropped_order_rate?: number; confirmed_order_rate?: number; cod_fee_per_delivery?: number },
+) {
+  const payload = {
+    dropped_order_rate: rateSettings?.dropped_order_rate ?? DEFAULT_SELLER_RATE_SETTINGS.dropped_order_rate,
+    confirmed_order_rate: rateSettings?.confirmed_order_rate ?? DEFAULT_SELLER_RATE_SETTINGS.confirmed_order_rate,
+    cod_fee_per_delivery: rateSettings?.cod_fee_per_delivery ?? DEFAULT_SELLER_RATE_SETTINGS.cod_fee_per_delivery,
+    shipping_rate_1kg: rates?.rate_1kg ?? DEFAULT_SELLER_RATES.rate_1kg,
+    shipping_rate_2kg: rates?.rate_2kg ?? DEFAULT_SELLER_RATES.rate_2kg,
+    shipping_rate_3kg: rates?.rate_3kg ?? DEFAULT_SELLER_RATES.rate_3kg,
+    is_custom: true,
+  };
+
+  const { data: existingRS, error } = await supabaseAdmin
+    .from("rate_settings")
+    .select("id")
+    .eq("seller_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (existingRS) {
+    const { error: updateError } = await supabaseAdmin.from("rate_settings").update(payload).eq("id", existingRS.id);
+    if (updateError) throw updateError;
+    return;
+  }
+
+  const { error: insertError } = await supabaseAdmin.from("rate_settings").insert({
+    seller_id: userId,
+    is_global: false,
+    agent_commission_confirmed: 0,
+    agent_commission_delivered: 0,
+    ...payload,
+  });
+  if (insertError) throw insertError;
 }
 
 async function verifyAdmin(supabaseAdmin: ReturnType<typeof createClient>, req: Request) {
@@ -385,24 +437,7 @@ Deno.serve(async (req) => {
             await supabaseAdmin.from("profiles").update({ display_id: didData }).eq("user_id", userId);
           }
         }
-        // Update rate_settings with confirmation rates if provided
-        if (rateSettings) {
-          // Wait a moment for the trigger to create the rate_settings record
-          const { data: existingRS } = await supabaseAdmin
-            .from("rate_settings")
-            .select("id")
-            .eq("seller_id", userId)
-            .maybeSingle();
-
-          if (existingRS) {
-            await supabaseAdmin.from("rate_settings").update({
-              dropped_order_rate: rateSettings.dropped_order_rate ?? 0,
-              confirmed_order_rate: rateSettings.confirmed_order_rate ?? 0,
-              cod_fee_per_delivery: rateSettings.cod_fee_per_delivery ?? 0,
-              is_custom: true,
-            }).eq("id", existingRS.id);
-          }
-        }
+        await ensureSellerRateSettings(supabaseAdmin, userId, rates, rateSettings);
       }
 
       return new Response(JSON.stringify({ success: true, user_id: userId }), {
@@ -440,9 +475,9 @@ Deno.serve(async (req) => {
             .maybeSingle();
 
           const rsUpdate = {
-            dropped_order_rate: rateSettings.dropped_order_rate ?? 0,
-            confirmed_order_rate: rateSettings.confirmed_order_rate ?? 0,
-            cod_fee_per_delivery: rateSettings.cod_fee_per_delivery ?? 0,
+            dropped_order_rate: rateSettings.dropped_order_rate ?? DEFAULT_SELLER_RATE_SETTINGS.dropped_order_rate,
+            confirmed_order_rate: rateSettings.confirmed_order_rate ?? DEFAULT_SELLER_RATE_SETTINGS.confirmed_order_rate,
+            cod_fee_per_delivery: rateSettings.cod_fee_per_delivery ?? DEFAULT_SELLER_RATE_SETTINGS.cod_fee_per_delivery,
             is_custom: true,
           };
 
@@ -453,9 +488,9 @@ Deno.serve(async (req) => {
               seller_id: userId,
               is_global: false,
               ...rsUpdate,
-              shipping_rate_1kg: rates?.rate_1kg ?? 0,
-              shipping_rate_2kg: rates?.rate_2kg ?? 0,
-              shipping_rate_3kg: rates?.rate_3kg ?? 0,
+              shipping_rate_1kg: rates?.rate_1kg ?? DEFAULT_SELLER_RATES.rate_1kg,
+              shipping_rate_2kg: rates?.rate_2kg ?? DEFAULT_SELLER_RATES.rate_2kg,
+              shipping_rate_3kg: rates?.rate_3kg ?? DEFAULT_SELLER_RATES.rate_3kg,
             });
           }
         }

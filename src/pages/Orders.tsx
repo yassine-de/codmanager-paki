@@ -112,7 +112,7 @@ type ColumnKey = 'systemId' | 'id' | 'carrierId' | 'createdAt' | 'updatedAt' | '
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
-  { key: 'id', label: 'Seller ID', defaultVisible: true },
+  { key: 'id', label: 'Order ID', defaultVisible: true },
   { key: 'carrierId', label: 'Carrier ID', defaultVisible: true, adminOnly: true },
   { key: 'createdAt', label: 'Created', defaultVisible: true },
   { key: 'updatedAt', label: 'Updated', defaultVisible: true },
@@ -961,7 +961,7 @@ export default function Orders() {
                 {isAdmin && isCol('systemId') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('systemId')}>
                   <span className="inline-flex items-center gap-1">System ID {sortKey === 'systemId' ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}</span>
                 </th>}
-                {isCol('id') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Seller ID</th>}
+                {isCol('id') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Order ID</th>}
                 {isAdmin && isCol('carrierId') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Carrier ID</th>}
                 {isCol('createdAt') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('createdAt')}>
                   <span className="inline-flex items-center gap-1">Created {sortKey === 'createdAt' ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}</span>

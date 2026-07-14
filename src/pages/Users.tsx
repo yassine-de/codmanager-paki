@@ -44,6 +44,29 @@ const roleConfig: Record<string, { label: string; icon: typeof Shield; color: st
   custom: { label: "Custom", icon: UserCog, color: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
 };
 
+const defaultSellerRateFields = {
+  rate_1kg: "3",
+  rate_2kg: "4",
+  rate_3kg: "5",
+  dropped_order_rate: "0.2",
+  confirmed_order_rate: "0.3",
+  cod_fee_per_delivery: "5",
+};
+
+const getFunctionErrorMessage = async (error: any, fallback = "Erreur") => {
+  const response = error?.context;
+  if (response && typeof response.json === "function") {
+    try {
+      const body = await response.json();
+      if (body?.error) return body.error;
+      if (body?.message) return body.message;
+    } catch {
+      // Fall through to the normal error message.
+    }
+  }
+  return error?.message || fallback;
+};
+
 const Users = () => {
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -56,12 +79,7 @@ const Users = () => {
     password: "",
     phone: "",
     role: "seller" as string,
-    rate_1kg: "",
-    rate_2kg: "",
-    rate_3kg: "",
-    dropped_order_rate: "",
-    confirmed_order_rate: "",
-    cod_fee_per_delivery: "",
+    ...defaultSellerRateFields,
     selectedPermissions: [] as string[],
     customRoleName: "",
     agentProductScope: "all" as "all" | "specific",
@@ -95,8 +113,7 @@ const Users = () => {
     setEditingUser(null);
     setForm({
       name: "", email: "", password: "", phone: "",
-      role: "seller", rate_1kg: "", rate_2kg: "", rate_3kg: "",
-      dropped_order_rate: "0.2", confirmed_order_rate: "0.3", cod_fee_per_delivery: "",
+      role: "seller", ...defaultSellerRateFields,
       selectedPermissions: [], customRoleName: "",
       agentProductScope: "all", agentProducts: [],
     });
@@ -180,7 +197,7 @@ const Users = () => {
             permissions: form.role === "custom" ? form.selectedPermissions : undefined,
           },
         });
-        if (error) throw error;
+        if (error) throw new Error(await getFunctionErrorMessage(error));
 
         // Save agent product assignments
         if (form.role === "agent") {
@@ -210,7 +227,8 @@ const Users = () => {
             permissions: form.role === "custom" ? form.selectedPermissions : undefined,
           },
         });
-        if (error || data?.error) throw new Error(data?.error || error?.message);
+        if (error) throw new Error(await getFunctionErrorMessage(error));
+        if (data?.error) throw new Error(data.error);
 
         // Save agent product assignments for new user
         if (form.role === "agent" && data?.userId) {
@@ -468,7 +486,11 @@ const Users = () => {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Rôle *</Label>
-                <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
+                <Select value={form.role} onValueChange={(v) => setForm((f) => ({
+                  ...f,
+                  role: v,
+                  ...(v === "seller" && !editingUser ? defaultSellerRateFields : {}),
+                }))}>
                   <SelectTrigger className="h-9 text-xs">
                     <SelectValue />
                   </SelectTrigger>
@@ -491,17 +513,17 @@ const Users = () => {
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">1 Kg</Label>
-                      <Input className="h-9 text-xs" type="number" placeholder="35" value={form.rate_1kg}
+                      <Input className="h-9 text-xs" type="number" placeholder="3" value={form.rate_1kg}
                         onChange={(e) => setForm((f) => ({ ...f, rate_1kg: e.target.value }))} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">2 Kg</Label>
-                      <Input className="h-9 text-xs" type="number" placeholder="45" value={form.rate_2kg}
+                      <Input className="h-9 text-xs" type="number" placeholder="4" value={form.rate_2kg}
                         onChange={(e) => setForm((f) => ({ ...f, rate_2kg: e.target.value }))} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">3 Kg</Label>
-                      <Input className="h-9 text-xs" type="number" placeholder="55" value={form.rate_3kg}
+                      <Input className="h-9 text-xs" type="number" placeholder="5" value={form.rate_3kg}
                         onChange={(e) => setForm((f) => ({ ...f, rate_3kg: e.target.value }))} />
                     </div>
                   </div>
@@ -511,12 +533,12 @@ const Users = () => {
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Dropped Lead</Label>
-                      <Input className="h-9 text-xs" type="number" step="0.01" placeholder="0" value={form.dropped_order_rate}
+                      <Input className="h-9 text-xs" type="number" step="0.01" placeholder="0.2" value={form.dropped_order_rate}
                         onChange={(e) => setForm((f) => ({ ...f, dropped_order_rate: e.target.value }))} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] text-muted-foreground">Confirmed Lead</Label>
-                      <Input className="h-9 text-xs" type="number" step="0.01" placeholder="0" value={form.confirmed_order_rate}
+                      <Input className="h-9 text-xs" type="number" step="0.01" placeholder="0.3" value={form.confirmed_order_rate}
                         onChange={(e) => setForm((f) => ({ ...f, confirmed_order_rate: e.target.value }))} />
                     </div>
                     <div className="space-y-1">
