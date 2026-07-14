@@ -2675,6 +2675,7 @@ VALUES
   ('update_confirmation', 'Update confirmations', 'confirmations'),
   ('show_all_confirmations', 'Show all confirmations', 'confirmations'),
   ('access_to_whatsapp', 'Access WhatsApp', 'whatsapp'),
+  ('access_to_whatsapp_inbox', 'WhatsApp Inbox', 'whatsapp'),
   ('manage_whatsapp', 'Manage WhatsApp', 'whatsapp'),
   ('access_to_fulfillment', 'Access fulfillment', 'fulfillment'),
   ('scan_shipments', 'Scan shipments', 'fulfillment'),
