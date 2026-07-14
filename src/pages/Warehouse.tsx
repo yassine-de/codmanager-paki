@@ -73,6 +73,26 @@ interface FulfillmentRow {
   item_count: number | null;
 }
 
+interface ReturnedOrderRow {
+  id: string;
+  order_id: string;
+  customer_name: string;
+  customer_city: string;
+  total_amount: number;
+  delivery_status: string | null;
+  fulfillment_status: string | null;
+  updated_at: string;
+  shipments?: Array<{
+    id: string;
+    tracking_number: string | null;
+    carriers?: { name: string | null } | null;
+  }>;
+  order_items?: Array<{
+    product_name: string | null;
+    quantity: number;
+  }>;
+}
+
 interface InventoryRow {
   id: string;
   product_variant_id: string;
@@ -293,6 +313,8 @@ interface InventoryMovementRow {
 
 interface ReturnReceiptRow {
   id: string;
+  shipment_id?: string | null;
+  order_id?: string | null;
   condition: string;
   received_at: string;
 }
@@ -522,6 +544,37 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     refetchInterval: 12000,
   });
 
+  const { data: returnReceipts = [] } = useQuery({
+    queryKey: ["warehouse-return-receipts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("return_receipts" as any)
+        .select("id, shipment_id, order_id, condition, received_at")
+        .order("received_at", { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      return (data || []) as ReturnReceiptRow[];
+    },
+    enabled: isWarehouseUser,
+    refetchInterval: 15000,
+  });
+
+  const { data: returnedOrders = [], isLoading: loadingReturnedOrders } = useQuery({
+    queryKey: ["warehouse-returned-orders"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders" as any)
+        .select("id, order_id, customer_name, customer_city, total_amount, delivery_status, fulfillment_status, updated_at, shipments(id, tracking_number, carriers(name)), order_items(product_name, quantity)")
+        .in("delivery_status", ["return", "returned", "ready_for_return", "return_received"])
+        .order("updated_at", { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      return (data || []) as ReturnedOrderRow[];
+    },
+    enabled: isWarehouseUser,
+    refetchInterval: 15000,
+  });
+
   const { data: dashboardScans = [] } = useQuery({
     queryKey: ["warehouse-dashboard-scans", dashboardDateRange.start, dashboardDateRange.end],
     queryFn: async () => {
@@ -561,7 +614,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     queryFn: async () => {
       const { data, error } = await supabase
         .from("return_receipts" as any)
-        .select("id, condition, received_at")
+        .select("id, shipment_id, order_id, condition, received_at")
         .gte("received_at", dashboardDateRange.start)
         .lte("received_at", dashboardDateRange.end)
         .order("received_at", { ascending: false })
@@ -864,6 +917,33 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     });
   }, [dispatchedRows, historyCityFilter, historyCourierFilter, historySellerFilter, historyUserFilter]);
 
+  const returnReceiptKeys = useMemo(() => {
+    const shipmentIds = new Set<string>();
+    const orderIds = new Set<string>();
+    returnReceipts.forEach((receipt) => {
+      if (receipt.shipment_id) shipmentIds.add(receipt.shipment_id);
+      if (receipt.order_id) orderIds.add(receipt.order_id);
+    });
+    return { shipmentIds, orderIds };
+  }, [returnReceipts]);
+
+  const pendingReturnOrders = useMemo(() => {
+    return returnedOrders.filter((order) => {
+      if (order.delivery_status === "return_received") return false;
+      if (order.fulfillment_status && ["restocked", "damaged_return", "missing_return", "return_inspection"].includes(order.fulfillment_status)) return false;
+      if (returnReceiptKeys.orderIds.has(order.order_id)) return false;
+      const hasReceiptForShipment = (order.shipments || []).some((shipment) => returnReceiptKeys.shipmentIds.has(shipment.id));
+      return !hasReceiptForShipment;
+    });
+  }, [returnReceiptKeys, returnedOrders]);
+
+  const returnStats = useMemo(() => ({
+    scannedReturned: returnReceipts.length,
+    pendingWarehouseScan: pendingReturnOrders.length,
+    damagedOrders: returnReceipts.filter((receipt) => receipt.condition === "damaged").length,
+    missingItems: returnReceipts.filter((receipt) => receipt.condition === "missing_item").length,
+  }), [pendingReturnOrders.length, returnReceipts]);
+
   const stats = useMemo(() => {
     const onHand = inventory.reduce((sum, row) => sum + Number(row.quantity_on_hand || 0), 0);
     const damaged = inventory.filter((row) => row.location_type === "damaged").reduce((sum, row) => sum + Number(row.quantity_on_hand || 0), 0);
@@ -940,6 +1020,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     queryClient.invalidateQueries({ queryKey: ["warehouse-ready-dispatch"] });
     queryClient.invalidateQueries({ queryKey: ["warehouse-dispatched-today"] });
     queryClient.invalidateQueries({ queryKey: ["warehouse-audit-scans"] });
+    queryClient.invalidateQueries({ queryKey: ["warehouse-return-receipts"] });
+    queryClient.invalidateQueries({ queryKey: ["warehouse-returned-orders"] });
   };
 
   const openReceiveDialog = (row: SourcingReceiveRow) => {
@@ -1440,11 +1522,39 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     const code = returnScan.trim();
     if (!code) return;
     const order = [...readyRows, ...dispatchedRows, ...notPrintedRows].find((row) => row.tracking_number === code || row.order_id === code || String(row.system_id || "") === code);
-    if (!order) {
+    const returnedOrder = pendingReturnOrders.find((row) => {
+      const tracking = row.shipments?.[0]?.tracking_number || "";
+      return tracking === code || row.order_id === code || String(row.id || "") === code;
+    });
+    if (!order && !returnedOrder) {
       toast.error("Order not found");
       return;
     }
-    setReturnDialogOrder(order);
+    if (order) {
+      setReturnDialogOrder(order);
+    } else if (returnedOrder) {
+      const shipment = returnedOrder.shipments?.[0];
+      const productSummary = (returnedOrder.order_items || [])
+        .map((item) => `${item.product_name || "Product"}${Number(item.quantity || 0) > 1 ? ` x${item.quantity}` : ""}`)
+        .join(", ");
+      setReturnDialogOrder({
+        fulfillment_item_id: returnedOrder.id,
+        fulfillment_item_status: returnedOrder.fulfillment_status || "returned",
+        batch_number: null,
+        order_id: returnedOrder.order_id,
+        system_id: null,
+        customer_name: returnedOrder.customer_name,
+        customer_city: returnedOrder.customer_city,
+        total_amount: returnedOrder.total_amount,
+        shipment_id: shipment?.id || "",
+        tracking_number: shipment?.tracking_number || null,
+        carrier_name: shipment?.carriers?.name || "-",
+        created_at: returnedOrder.updated_at,
+        updated_at: returnedOrder.updated_at,
+        product_name: productSummary || "-",
+        item_count: returnedOrder.order_items?.length || null,
+      });
+    }
   };
 
   const receiveReturn = async () => {
@@ -2038,52 +2148,106 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         )}
 
         {section === "returns" && (
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_0.9fr] gap-4">
-            <Card className="border-primary/30 bg-primary/[0.03]">
-              <CardHeader className="py-4">
-                <CardTitle className="text-sm flex items-center gap-2"><RotateCcw className="h-4 w-4" /> Receive Returned Parcel</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-3" onSubmit={submitReturnScan}>
-                  <Input ref={returnScanInput} className="h-14 text-lg font-mono bg-background" value={returnScan} onChange={(e) => setReturnScan(e.target.value)} placeholder="Scan internal QR, order code or tracking number" autoComplete="off" />
-                  <div className="flex gap-2">
-                    <Select value={returnCondition} onValueChange={(value: ReturnCondition) => setReturnCondition(value)}>
-                      <SelectTrigger className="h-10 w-[180px]"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sellable">Sellable</SelectItem>
-                        <SelectItem value="damaged">Damaged</SelectItem>
-                        <SelectItem value="missing_item">Missing</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button type="submit" className="h-10"><ScanLine className="h-4 w-4 mr-2" /> Find Order</Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Kpi icon={<ScanLine className="h-4 w-4" />} label="Scanned Returned" value={returnStats.scannedReturned} tone="blue" />
+              <Kpi icon={<RotateCcw className="h-4 w-4" />} label="Returned Not Received" value={returnStats.pendingWarehouseScan} tone="amber" />
+              <Kpi icon={<AlertCircle className="h-4 w-4" />} label="Damaged Orders" value={returnStats.damagedOrders} tone="red" />
+              <Kpi icon={<Package className="h-4 w-4" />} label="Missing Items" value={returnStats.missingItems} tone="violet" />
+            </div>
 
-            <Card className="border-border/60">
-              <CardHeader className="py-4"><CardTitle className="text-sm">Warehouse Audit Log</CardTitle></CardHeader>
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_0.9fr] gap-4">
+              <Card className="border-primary/30 bg-primary/[0.03]">
+                <CardHeader className="py-4">
+                  <CardTitle className="text-sm flex items-center gap-2"><RotateCcw className="h-4 w-4" /> Receive Returned Parcel</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form className="space-y-3" onSubmit={submitReturnScan}>
+                    <Input ref={returnScanInput} className="h-14 text-lg font-mono bg-background" value={returnScan} onChange={(e) => setReturnScan(e.target.value)} placeholder="Scan internal QR, order code or tracking number" autoComplete="off" />
+                    <div className="flex gap-2">
+                      <Select value={returnCondition} onValueChange={(value: ReturnCondition) => setReturnCondition(value)}>
+                        <SelectTrigger className="h-10 w-[180px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="sellable">Sellable</SelectItem>
+                          <SelectItem value="damaged">Damaged</SelectItem>
+                          <SelectItem value="missing_item">Missing</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button type="submit" className="h-10"><ScanLine className="h-4 w-4 mr-2" /> Find Order</Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/60">
+                <CardHeader className="py-4"><CardTitle className="text-sm">Warehouse Audit Log</CardTitle></CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="h-9 text-xs">Time</TableHead>
+                        <TableHead className="h-9 text-xs">Code</TableHead>
+                        <TableHead className="h-9 text-xs">Action</TableHead>
+                        <TableHead className="h-9 text-xs">Result</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {recentScans.length === 0 ? (
+                        <TableRow><TableCell colSpan={4} className="text-sm text-muted-foreground">No audit events yet.</TableCell></TableRow>
+                      ) : recentScans.map((scan) => (
+                        <TableRow key={scan.id}>
+                          <TableCell className="text-xs text-muted-foreground">{format(new Date(scan.scanned_at), "MMM d, HH:mm")}</TableCell>
+                          <TableCell className="font-mono text-xs">{scan.tracking_number}</TableCell>
+                          <TableCell className="text-xs">{scan.message || scan.scan_type}</TableCell>
+                          <TableCell><StatusBadge value={scan.result} /></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="border-amber-500/20">
+              <CardHeader className="py-4">
+                <CardTitle className="text-sm flex items-center gap-2"><AlertCircle className="h-4 w-4 text-amber-600" /> Returned Orders Waiting Warehouse Scan</CardTitle>
+              </CardHeader>
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="h-9 text-xs">Time</TableHead>
-                      <TableHead className="h-9 text-xs">Code</TableHead>
-                      <TableHead className="h-9 text-xs">Action</TableHead>
-                      <TableHead className="h-9 text-xs">Result</TableHead>
+                      <TableHead className="h-9 text-xs">Order</TableHead>
+                      <TableHead className="h-9 text-xs">Tracking</TableHead>
+                      <TableHead className="h-9 text-xs">Customer</TableHead>
+                      <TableHead className="h-9 text-xs">Product</TableHead>
+                      <TableHead className="h-9 text-xs">Courier</TableHead>
+                      <TableHead className="h-9 text-xs">Returned At</TableHead>
+                      <TableHead className="h-9 text-xs">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {recentScans.length === 0 ? (
-                      <TableRow><TableCell colSpan={4} className="text-sm text-muted-foreground">No audit events yet.</TableCell></TableRow>
-                    ) : recentScans.map((scan) => (
-                      <TableRow key={scan.id}>
-                        <TableCell className="text-xs text-muted-foreground">{format(new Date(scan.scanned_at), "MMM d, HH:mm")}</TableCell>
-                        <TableCell className="font-mono text-xs">{scan.tracking_number}</TableCell>
-                        <TableCell className="text-xs">{scan.message || scan.scan_type}</TableCell>
-                        <TableCell><StatusBadge value={scan.result} /></TableCell>
-                      </TableRow>
-                    ))}
+                    {loadingReturnedOrders ? (
+                      <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground">Loading returned orders...</TableCell></TableRow>
+                    ) : pendingReturnOrders.length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground">No returned parcels waiting for warehouse scan.</TableCell></TableRow>
+                    ) : pendingReturnOrders.slice(0, 80).map((order) => {
+                      const shipment = order.shipments?.[0];
+                      const productSummary = (order.order_items || []).map((item) => item.product_name || "Product").join(", ");
+                      return (
+                        <TableRow key={order.id}>
+                          <TableCell className="font-mono text-xs font-semibold">{order.order_id}</TableCell>
+                          <TableCell className="font-mono text-xs">{shipment?.tracking_number || "-"}</TableCell>
+                          <TableCell className="text-xs">
+                            <div className="font-medium">{order.customer_name}</div>
+                            <div className="text-muted-foreground">{order.customer_city || "-"}</div>
+                          </TableCell>
+                          <TableCell className="text-xs max-w-[280px] truncate">{productSummary || "-"}</TableCell>
+                          <TableCell className="text-xs">{shipment?.carriers?.name || "-"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{format(new Date(order.updated_at), "MMM d, HH:mm")}</TableCell>
+                          <TableCell><StatusBadge value={order.delivery_status || "returned"} /></TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </CardContent>
