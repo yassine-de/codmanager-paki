@@ -113,6 +113,7 @@ export function CreateSourcingModal({ open, onOpenChange }: Props) {
         product_url: productUrl.trim(),
         notes: notes.trim() || "",
         status: "waiting_quote",
+        seller_validated: null,
         product_image_url: productImageUrl || null,
       });
       if (error) throw error;

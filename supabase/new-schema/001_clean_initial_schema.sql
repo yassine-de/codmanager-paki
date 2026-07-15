@@ -376,7 +376,7 @@ CREATE TABLE public.sourcing_requests (
   variants jsonb,
   seller_seen boolean DEFAULT false,
   admin_seen boolean DEFAULT false,
-  seller_validated boolean DEFAULT false,
+  seller_validated boolean,
   product_created boolean DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
