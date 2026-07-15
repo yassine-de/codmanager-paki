@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Link2, Loader2 } from "lucide-react";
+import { Link2, Loader2, Upload, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -19,6 +19,7 @@ interface Props {
 
 export function CreateSourcingModal({ open, onOpenChange }: Props) {
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [sellerId, setSellerId] = useState("");
   const [productName, setProductName] = useState("");
   const [quantity, setQuantity] = useState<number | "">("");
@@ -26,6 +27,8 @@ export function CreateSourcingModal({ open, onOpenChange }: Props) {
   const [shippingMethod, setShippingMethod] = useState("");
   const [productUrl, setProductUrl] = useState("");
   const [notes, setNotes] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Fetch sellers for dropdown
@@ -54,7 +57,27 @@ export function CreateSourcingModal({ open, onOpenChange }: Props) {
     setShippingMethod("");
     setProductUrl("");
     setNotes("");
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setErrors({});
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be less than 5MB");
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const validate = (): boolean => {
@@ -71,6 +94,16 @@ export function CreateSourcingModal({ open, onOpenChange }: Props) {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      let productImageUrl = "";
+      if (imageFile) {
+        const ext = imageFile.name.split(".").pop() || "jpg";
+        const filePath = `${sellerId}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from("sourcing-images").upload(filePath, imageFile);
+        if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
+        const { data: urlData } = supabase.storage.from("sourcing-images").getPublicUrl(filePath);
+        productImageUrl = urlData.publicUrl;
+      }
+
       const { error } = await supabase.from("sourcing_requests").insert({
         seller_id: sellerId,
         product_name: productName.trim(),
@@ -80,6 +113,7 @@ export function CreateSourcingModal({ open, onOpenChange }: Props) {
         product_url: productUrl.trim(),
         notes: notes.trim() || "",
         status: "waiting_quote",
+        product_image_url: productImageUrl || null,
       });
       if (error) throw error;
     },
@@ -89,8 +123,8 @@ export function CreateSourcingModal({ open, onOpenChange }: Props) {
       resetForm();
       toast.success("Sourcing request created");
     },
-    onError: () => {
-      toast.error("Failed to create request");
+    onError: (error: any) => {
+      toast.error(error?.message || "Failed to create request");
     },
   });
 
@@ -199,6 +233,39 @@ export function CreateSourcingModal({ open, onOpenChange }: Props) {
               />
             </div>
             {errors.productUrl && <p className="text-[11px] text-destructive">{errors.productUrl}</p>}
+          </div>
+
+          {/* Product Image */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Product Image <span className="text-muted-foreground">(optional)</span></Label>
+            <div className="flex items-center gap-3">
+              {imagePreview ? (
+                <div className="relative">
+                  <img src={imagePreview} alt="" className="w-20 h-20 rounded-lg object-cover border bg-background" />
+                  <button
+                    type="button"
+                    onClick={removeImage}
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-20 h-20 rounded-lg border-2 border-dashed bg-muted/30 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
+                >
+                  <Upload className="h-5 w-5" />
+                  <span className="text-[10px]">Upload</span>
+                </button>
+              )}
+              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-3.5 w-3.5 mr-1.5" />
+                {imagePreview ? "Change image" : "Add image"}
+              </Button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+            </div>
           </div>
 
           {/* Notes */}
