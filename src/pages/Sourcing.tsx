@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatPKT as format } from "@/lib/timezone";
-import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2, ImageIcon, History, LayoutList, Clock, Plane, PackageCheck, Bell, X, CheckCircle2, XCircle, PlusCircle } from "lucide-react";
+import { ExternalLink, Pencil, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package2, Plus, Loader2, ImageIcon, History, LayoutList, Clock, Plane, PackageCheck, Bell, X, CheckCircle2, XCircle, PlusCircle, Trash2 } from "lucide-react";
 import { SourcingVariantsBadge } from "@/components/SourcingVariantsBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { EditSourcingModal } from "@/components/EditSourcingModal";
@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   waiting_quote: { label: "Waiting Quote", color: "bg-warning/15 text-warning border-warning/25" },
@@ -87,6 +89,7 @@ export default function Sourcing() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [editRequest, setEditRequest] = useState<DbSourcingRequest | null>(null);
+  const [deleteRequest, setDeleteRequest] = useState<DbSourcingRequest | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [historyRequestId, setHistoryRequestId] = useState<string | null>(null);
 
@@ -99,6 +102,26 @@ export default function Sourcing() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as DbSourcingRequest[];
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { error } = await supabase
+        .from("sourcing_requests")
+        .delete()
+        .eq("id", requestId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Sourcing request deleted");
+      setDeleteRequest(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-sourcing"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-sourcing-unseen"] });
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to delete sourcing request");
     },
   });
 
@@ -421,12 +444,13 @@ export default function Sourcing() {
               <TableHead className="text-center">Link</TableHead>
               <TableHead className="text-center w-[70px]">Edit</TableHead>
               <TableHead className="text-center w-[50px]"></TableHead>
+              <TableHead className="text-center w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginated.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={17} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={18} className="text-center py-10 text-muted-foreground text-sm">
                   No sourcing requests found.
                 </TableCell>
               </TableRow>
@@ -536,6 +560,16 @@ export default function Sourcing() {
                         <TooltipContent>View history</TooltipContent>
                       </Tooltip>
                     </TableCell>
+                    <TableCell className="text-center">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteRequest(req)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Delete request</TooltipContent>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                 );
               })
@@ -579,6 +613,31 @@ export default function Sourcing() {
         open={!!historyRequestId}
         onOpenChange={open => { if (!open) setHistoryRequestId(null); }}
       />
+      <AlertDialog open={!!deleteRequest} onOpenChange={open => { if (!open && !deleteMutation.isPending) setDeleteRequest(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete sourcing request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {deleteRequest?.display_id || deleteRequest?.product_name || "this request"} and its sourcing history.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                if (deleteRequest) deleteMutation.mutate(deleteRequest.id);
+              }}
+            >
+              {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
