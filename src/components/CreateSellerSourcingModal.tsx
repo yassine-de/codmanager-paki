@@ -222,8 +222,7 @@ export function CreateSellerSourcingModal({ open, onOpenChange }: Props) {
         const filePath = `${authUser!.id}/${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage.from("sourcing-images").upload(filePath, imageFile);
         if (uploadError) {
-          console.warn("Sourcing image upload failed; creating request without image", uploadError);
-          toast.warning("Image upload failed, request will be created without image");
+          throw new Error(`Image upload failed: ${uploadError.message}`);
         } else {
           const { data: urlData } = supabase.storage.from("sourcing-images").getPublicUrl(filePath);
           productImageUrl = urlData.publicUrl;
