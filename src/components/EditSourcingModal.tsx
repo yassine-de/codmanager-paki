@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ExternalLink, Loader2, MapPin, Ship, ImageIcon, Layers, Package, Info, Truck } from "lucide-react";
+import { ExternalLink, Loader2, MapPin, Ship, ImageIcon, Layers, Package, Info, Truck, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,6 +31,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   const queryClient = useQueryClient();
   const { authUser } = useAuth();
   const isAdmin = authUser?.role === "admin";
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch source product info if this sourcing came from an existing product
   const sourceProductId = (request as any)?.source_product_id;
@@ -78,6 +79,9 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   const [productWeight, setProductWeight] = useState<string | null>(null);
   const [freightForwarder, setFreightForwarder] = useState<string>("");
   const [trackingId, setTrackingId] = useState<string>("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [prevId, setPrevId] = useState<string | null>(null);
@@ -95,6 +99,10 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     setProductWeight((request as any).product_weight ?? null);
     setFreightForwarder(request.freight_forwarder ?? "");
     setTrackingId(request.tracking_id ?? "");
+    setImageFile(null);
+    setImagePreview(request.product_image_url || null);
+    setImageRemoved(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setErrors({});
   }
 
@@ -127,8 +135,37 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     } as any);
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be less than 5MB");
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setImageRemoved(false);
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setImageRemoved(true);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const doUpdate = async () => {
     if (!request) return;
+
+    let productImageUrl = imageRemoved ? "" : (request.product_image_url || "");
+    if (imageFile) {
+      const ext = imageFile.name.split(".").pop() || "jpg";
+      const filePath = `${authUser!.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("sourcing-images").upload(filePath, imageFile);
+      if (uploadError) throw new Error(`Image upload failed: ${uploadError.message}`);
+      const { data: urlData } = supabase.storage.from("sourcing-images").getPublicUrl(filePath);
+      productImageUrl = urlData.publicUrl;
+    }
 
     // Track changes for history
     const changes: { field: string; oldV: string | null; newV: string | null }[] = [];
@@ -140,6 +177,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     if ((productWeight || null) !== (request.product_weight || null)) changes.push({ field: "product_weight", oldV: request.product_weight || null, newV: productWeight || null });
     const newPayMethod = paymentStatus === "paid" ? paymentMethod : null;
     if (newPayMethod !== (request.payment_method || null)) changes.push({ field: "payment_method", oldV: request.payment_method || null, newV: newPayMethod });
+    if (productImageUrl !== (request.product_image_url || "")) changes.push({ field: "product_image_url", oldV: request.product_image_url || null, newV: productImageUrl || null });
 
     const updateData: Record<string, unknown> = {
       unit_price: 0,
@@ -154,6 +192,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
       payment_method: paymentStatus === "paid" ? paymentMethod : null,
       payment_date: paymentStatus === "paid" && request.payment_status !== "paid" ? new Date().toISOString() : (paymentStatus === "unpaid" ? null : undefined),
       product_weight: productWeight,
+      product_image_url: productImageUrl || null,
       updated_at: new Date().toISOString(),
       seller_seen: false,
     };
@@ -236,7 +275,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
 
   if (!request) return null;
 
-  const imageUrl = request.product_image_url;
+  const imageUrl = imagePreview;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -268,6 +307,48 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
                     <ExternalLink className="h-3 w-3" /> View Product
                   </a>
                 </div>
+              </div>
+            </div>
+
+            {/* Product Image */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium">Product Image</Label>
+              <div className="flex items-center gap-3">
+                {imageUrl ? (
+                  <div className="relative">
+                    <img src={imageUrl} alt={request.product_name} className="w-20 h-20 rounded-lg object-cover border bg-background" />
+                    <button
+                      type="button"
+                      onClick={removeImage}
+                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow-sm"
+                      title="Remove image"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-20 h-20 rounded-lg border-2 border-dashed bg-muted/30 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
+                  >
+                    <Upload className="h-5 w-5" />
+                    <span className="text-[10px]">Upload</span>
+                  </button>
+                )}
+                <div className="flex flex-col gap-2">
+                  <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="h-3.5 w-3.5 mr-1.5" />
+                    {imageUrl ? "Change image" : "Add image"}
+                  </Button>
+                  {imageUrl && (
+                    <Button type="button" variant="ghost" size="sm" className="h-8 text-xs text-destructive hover:text-destructive" onClick={removeImage}>
+                      <X className="h-3.5 w-3.5 mr-1.5" />
+                      Remove image
+                    </Button>
+                  )}
+                </div>
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
               </div>
             </div>
 
