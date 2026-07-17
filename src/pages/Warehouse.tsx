@@ -1664,14 +1664,14 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
           }}
         >
           <div style={{ display: "flex", height: "100%", flexDirection: "column", justifyContent: "center", gap: "1.2mm" }}>
-            <div style={{ fontSize: activeBarcodeSize.fontSize, fontWeight: 700, lineHeight: 1.05, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div style={{ fontSize: activeBarcodeSize.fontSize + 4, fontWeight: 900, lineHeight: 1.02, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {barcodeDialogRow.product_name}
             </div>
             <div
               style={{ width: "100%", height: `${Math.max(9, activeBarcodeSize.height * 0.42)}mm` }}
               dangerouslySetInnerHTML={{ __html: toCode128BarcodeSvg(activeBarcodeValue, activeBarcodeSize.barcodeHeight) }}
             />
-            <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: Math.max(8, activeBarcodeSize.fontSize - 1), fontWeight: 700, letterSpacing: ".3px", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: Math.max(9, activeBarcodeSize.fontSize + 1), fontWeight: 800, letterSpacing: ".3px", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {activeBarcodeValue}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "2mm", fontSize: Math.max(7, activeBarcodeSize.fontSize - 2), color: "#333", whiteSpace: "nowrap" }}>
