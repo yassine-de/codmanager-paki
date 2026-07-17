@@ -474,6 +474,7 @@ const deliveryStatusCls = (s: string) => {
     failed_attempt: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25",
     delivered: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25",
     ready_for_return: "bg-orange-500/15 text-orange-500 border-orange-500/25",
+    return_received: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25",
     return: "bg-rose-500/15 text-rose-500 border-rose-500/25",
     cancelled: "bg-rose-500/15 text-rose-500 border-rose-500/25",
   };
@@ -2551,7 +2552,7 @@ export default function WhatsappInbox() {
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {(isAdmin
-                            ? ["pending","booked","printed","dispatched","shipped","in_transit","with_courier","delivered","returned","cancelled","no_answer","postponed","failed_attempt","ready_for_return","rejected","return"]
+                            ? ["pending","booked","printed","dispatched","shipped","in_transit","with_courier","delivered","returned","cancelled","no_answer","postponed","failed_attempt","ready_for_return","rejected","return","return_received"]
                             : ["pending","booked","new"]
                           ).map(s => (
                             <SelectItem key={s} value={s} className="text-xs">

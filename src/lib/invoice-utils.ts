@@ -44,6 +44,7 @@ export interface InvoiceSummaryResult {
   deliveredCount: number;
   shippedCount: number;
   confirmedCount: number;
+  droppedCount: number;
   totalOrdersCount: number;
 }
 
@@ -102,10 +103,12 @@ export function calculateInvoiceSummary(params: InvoiceCalcParams): InvoiceSumma
   }, 0);
 
   // 3. Call center fees
-  //    confirmed × confirmed_rate  +  total_seller_orders × dropped_rate
+  //    Every order that enters the system is billed at the dropped/lead rate.
+  //    Confirmed orders additionally get the confirmed rate.
   const confirmed = orders.filter(o => o.confirmation_status === "confirmed");
+  const dropped = orders;
   const callCenterFees =
-    confirmed.length * confirmedRate + totalSellerOrders * droppedRate;
+    confirmed.length * confirmedRate + dropped.length * droppedRate;
 
   // 4. COD fees (percentage of delivered revenue in USD)
   const codFees = deliveredRevenueUSD * (codFeePercentage / 100);
@@ -136,6 +139,7 @@ export function calculateInvoiceSummary(params: InvoiceCalcParams): InvoiceSumma
     deliveredCount: delivered.length,
     shippedCount: shipped.length,
     confirmedCount: confirmed.length,
+    droppedCount: dropped.length,
     totalOrdersCount: totalSellerOrders,
   };
 }

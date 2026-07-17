@@ -74,6 +74,7 @@ const deliveryConfig: Record<DeliveryStatus, { label: string; cls: string }> = {
   ready_for_return: { label: 'Ready for Return', cls: 'bg-[hsl(15,75%,55%)]/12 text-[hsl(15,75%,55%)] border-[hsl(15,75%,55%)]/20' },
   rejected: { label: 'Rejected', cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
   return: { label: 'Return', cls: 'bg-[hsl(340,65%,52%)]/12 text-[hsl(340,65%,52%)] border-[hsl(340,65%,52%)]/20' },
+  return_received: { label: 'Return Received', cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
 };
 
 // Pretty label for carrier sub-status (kept verbatim from carrier API)
@@ -153,7 +154,7 @@ function OrderSparklineCards({ orders }: { orders: Order[] }) {
         total: dayOrders.length,
         shipped: dayOrders.filter(o => shippedDeliveryStatuses.includes(o.deliveryStatus)).length,
         delivered: dayOrders.filter(o => o.deliveryStatus === "delivered").length,
-        returned: dayOrders.filter(o => o.deliveryStatus === "returned").length,
+        returned: dayOrders.filter(o => ["returned", "return", "ready_for_return", "return_received"].includes(o.deliveryStatus)).length,
       };
     });
   }, [orders]);
@@ -162,7 +163,7 @@ function OrderSparklineCards({ orders }: { orders: Order[] }) {
     total: orders.length,
     shipped: orders.filter(o => shippedDeliveryStatuses.includes(o.deliveryStatus)).length,
     delivered: orders.filter(o => o.deliveryStatus === "delivered").length,
-    returned: orders.filter(o => o.deliveryStatus === "returned").length,
+    returned: orders.filter(o => ["returned", "return", "ready_for_return", "return_received"].includes(o.deliveryStatus)).length,
   }), [orders]);
 
   const cards = [
@@ -383,13 +384,13 @@ export default function Orders() {
 
       // Fetch invoice statuses for all orders that have an invoice_id
       const invoiceIds = [...new Set((data || []).map(o => o.invoice_id).filter(Boolean))];
-      const invoiceMap = new Map<string, string>();
+      const invoiceMap = new Map<string, { status: string; finalized_at: string | null }>();
       if (invoiceIds.length > 0) {
         const { data: invoices } = await supabase
           .from("invoices")
-          .select("id, status")
+          .select("id, status, finalized_at")
           .in("id", invoiceIds);
-        (invoices || []).forEach(inv => invoiceMap.set(inv.id, inv.status));
+        (invoices || []).forEach(inv => invoiceMap.set(inv.id, { status: inv.status, finalized_at: inv.finalized_at || null }));
       }
 
       const mapped: Order[] = (data || []).map(o => {
@@ -427,7 +428,8 @@ export default function Orders() {
         confirmationChannel: o.confirmation_channel || 'agent',
         whatsappStatus: o.whatsapp_status || null,
         invoiceId: o.invoice_id || null,
-        invoiceStatus: o.invoice_id ? (invoiceMap.get(o.invoice_id) || null) : null,
+        invoiceStatus: o.invoice_id ? (invoiceMap.get(o.invoice_id)?.status || null) : null,
+        invoiceFinalizedAt: o.invoice_id ? (invoiceMap.get(o.invoice_id)?.finalized_at || null) : null,
         };
       });
 
@@ -1085,6 +1087,10 @@ export default function Orders() {
                         deliveryStatus={order.deliveryStatus}
                         invoiceId={order.invoiceId}
                         invoiceStatus={order.invoiceStatus}
+                        invoiceFinalizedAt={order.invoiceFinalizedAt}
+                        confirmedAt={order.confirmedAt}
+                        deliveredAt={order.deliveredAt}
+                        updatedAt={order.updatedAt}
                       />
                     </td>
                   )}

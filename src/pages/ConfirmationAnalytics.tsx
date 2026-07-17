@@ -224,24 +224,52 @@ export default function ConfirmationAnalytics() {
     return filtered;
   }, [orders, statusActionsInPeriod, sellerFilter, productFilter, dateRange, dateField]);
 
-  // Stats — filteredOrders already has confirmation_status overridden to the in-period action,
-  // so counts directly reflect "what happened in the selected period (and by the selected agent)".
+  // Stats — keep the headline confirmation rate aligned with the main dashboard.
+  // Dashboard logic uses the orders table as source of truth:
+  // - denominator: orders in the selected date basis, minus new/double
+  // - numerator: current confirmed orders, using confirmed_at for updated/event date
+  // The history-based filteredOrders is still used by deeper agent/action sections below.
   const stats = useMemo(() => {
-    const total = filteredOrders.length;
-    const delivered = filteredOrders.filter(o => o.delivery_status === "delivered" || o.delivery_status === "paid").length;
+    const from = dateRange?.from ? startOfDay(dateRange.from) : null;
+    const to = dateRange?.from ? endOfDay(dateRange.to ?? dateRange.from) : null;
+
+    const baseOrders = orders.filter(o => {
+      if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
+      if (productFilter !== "all" && o.product_name !== productFilter) return false;
+      if (agentFilter !== "all" && o.agent_id !== agentFilter && o.original_agent_id !== agentFilter) return false;
+      return true;
+    });
+
+    const genericDate = (o: typeof orders[number]) =>
+      new Date(dateField === "updated" ? o.updated_at : o.created_at);
+    const confirmedDate = (o: typeof orders[number]) =>
+      new Date(dateField === "updated" ? (o.confirmed_at || o.updated_at) : o.created_at);
+    const deliveredDate = (o: typeof orders[number]) =>
+      new Date(dateField === "updated" ? (o.delivered_at || o.updated_at) : o.created_at);
+
+    const inSelectedRange = (d: Date) => !from || !to || (d >= from && d <= to);
+    const denominatorOrders = baseOrders.filter(o => inSelectedRange(genericDate(o)));
+    const total = denominatorOrders.length;
+    const delivered = baseOrders.filter(o =>
+      (o.delivery_status === "delivered" || o.delivery_status === "paid") &&
+      inSelectedRange(deliveredDate(o))
+    ).length;
 
     // Strict: only count orders whose confirmation_status is exactly "confirmed".
     // Matches the Orders table filter so both pages show the same number.
-    const confirmed = filteredOrders.filter(o =>
-      o.confirmation_status === "confirmed"
+    const confirmed = baseOrders.filter(o =>
+      o.confirmation_status === "confirmed" &&
+      inSelectedRange(confirmedDate(o))
     ).length;
-    const cancelled = filteredOrders.filter(o => o.confirmation_status === "cancelled").length;
-    const postponed = filteredOrders.filter(o => o.confirmation_status === "postponed").length;
-    const unreachable = filteredOrders.filter(o => o.confirmation_status === "unreachable").length;
+    const newOrders = denominatorOrders.filter(o => o.confirmation_status === "new").length;
+    const doubleOrders = denominatorOrders.filter(o => o.confirmation_status === "double").length;
+    const cancelled = denominatorOrders.filter(o => o.confirmation_status === "cancelled").length;
+    const postponed = denominatorOrders.filter(o => o.confirmation_status === "postponed").length;
+    const unreachable = denominatorOrders.filter(o => o.confirmation_status === "unreachable").length;
 
     // Treated = distinct orders that had at least one status-change action within filters.
     // We count distinct order_ids (not raw event count) so an order touched 3x counts once.
-    const filteredOrderIds = new Set(filteredOrders.map(o => o.order_id));
+    const filteredOrderIds = new Set(denominatorOrders.map(o => o.order_id));
     const treatedIds = new Set<string>();
     orderHistory.forEach(h => {
       if (h.field_changed !== "confirmation_status") return;
@@ -255,9 +283,10 @@ export default function ConfirmationAnalytics() {
     const treated = treatedIds.size;
 
     // Claimed = orders that were touched by an agent (status not "new")
-    const claimed = filteredOrders.filter(o => (o.agent_id || o.original_agent_id) && o.confirmation_status !== "new").length;
+    const claimed = denominatorOrders.filter(o => (o.agent_id || o.original_agent_id) && o.confirmation_status !== "new").length;
 
-    const confirmationRate = claimed > 0 ? Math.round((confirmed / claimed) * 100) : 0;
+    const confirmableTotal = total - newOrders - doubleOrders;
+    const confirmationRate = confirmableTotal > 0 ? Math.round((confirmed / confirmableTotal) * 100) : 0;
     const deliveryRate = confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0;
 
     return {
@@ -275,7 +304,7 @@ export default function ConfirmationAnalytics() {
       delivered,
       deliveredRate: deliveryRate,
     };
-  }, [filteredOrders, orderHistory, agentFilter, dateRange, statusActionsInPeriod]);
+  }, [orders, orderHistory, agentFilter, sellerFilter, productFilter, dateRange, dateField]);
 
   // Confirmed count for display — mirrors dashboard's confirmed_at-based event-date logic
   // so both pages agree when filtered by "updated" date range.
@@ -628,6 +657,7 @@ export default function ConfirmationAnalytics() {
         agentIds={agentIds}
         totalConfirmed={confirmedForDisplay.total}
         totalByWhatsApp={confirmedForDisplay.byWhatsApp}
+        confirmationRate={stats.confirmationRate}
         treatedOrders={stats.treated}
         firstCallAvg={timeStats.firstCallAvg}
         handlingTime={timeStats.handlingTime}

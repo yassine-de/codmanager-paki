@@ -240,6 +240,12 @@ export default function Invoices() {
     mutationFn: async ({ invoiceId, currentStatus, netPayable, sellerId }: { invoiceId: string; currentStatus: string; netPayable?: number; sellerId?: string }) => {
       const isPaid = currentStatus === "paid";
       const newStatus = isPaid ? "ready" : "paid";
+      let carryAmount = netPayable ?? 0;
+      if (!isPaid) {
+        const freshSummary = await fetchInvoiceSummary(invoiceId);
+        carryAmount = Number(freshSummary.totals.net_payable ?? carryAmount);
+      }
+
       const { error } = await supabase
         .from("invoices")
         .update({
@@ -252,9 +258,7 @@ export default function Invoices() {
       await logInvoiceHistory(invoiceId, "status_change", "status", currentStatus, newStatus);
 
       // When marking as paid: carry negative balance to next open invoice
-      if (!isPaid && netPayable !== undefined && netPayable < 0 && sellerId) {
-        const carryAmount = netPayable; // negative value
-
+      if (!isPaid && carryAmount < 0 && sellerId) {
         // Find or create open invoice for this seller
         const { data: existingOpen } = await supabase
           .from("invoices")

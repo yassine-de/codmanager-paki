@@ -35,6 +35,8 @@ interface DailyConfirmationReportProps {
   totalConfirmed?: number;
   /** Override for the WhatsApp channel split count */
   totalByWhatsApp?: number;
+  /** Override for the hero confirmation rate — aligned with the main dashboard KPI */
+  confirmationRate?: number;
 }
 
 interface AgentRow {
@@ -154,7 +156,7 @@ function ConfRatePill({ rate }: { rate: number }) {
 
 export function DailyConfirmationReport({
   orders, profileNameMap, profilePhoneMap = {}, agentIds, agentScores = [], treatedOrders, firstCallAvg, handlingTime,
-  totalConfirmed, totalByWhatsApp,
+  totalConfirmed, totalByWhatsApp, confirmationRate,
 }: DailyConfirmationReportProps) {
 
   const handledOrders = useMemo(
@@ -314,7 +316,7 @@ export function DailyConfirmationReport({
             <BigStat
               label="Confirmed"
               value={dispConf}
-              rate={s.confirmRate}
+              rate={confirmationRate ?? s.confirmRate}
               sub={`${dispPhone} phone · ${dispWA} WhatsApp`}
               icon={CheckCircle2}
               accent="bg-[hsl(155,50%,30%)] text-white border-[hsl(155,50%,25%)] shadow-[0_2px_16px_hsl(155,50%,30%)/25]"

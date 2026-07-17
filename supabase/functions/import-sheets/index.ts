@@ -208,7 +208,7 @@ Deno.serve(async (req) => {
 
     const { data: allProducts } = await supabase
       .from("products")
-      .select("sku, seller_id, name, price, weight, product_url, video_url, active");
+      .select("sku, seller_id, name, price, weight, product_url, video_url, active, whatsapp_confirmation_enabled");
 
     const skuMap = new Map<string, typeof allProducts extends (infer T)[] ? T : never>();
     allProducts?.forEach((p) => skuMap.set(p.sku.toLowerCase(), p));
@@ -395,9 +395,11 @@ Deno.serve(async (req) => {
         const { data: generatedId } = await supabase.rpc("generate_order_id", {
           p_seller_id: sheet.seller_id,
         });
+        const orderIdToInsert = generatedId || orderData.order_id;
+        const routeToWhatsapp = !!product.whatsapp_confirmation_enabled;
 
         const { error: insertError } = await supabase.from("orders").insert({
-          order_id: generatedId || orderData.order_id,
+          order_id: orderIdToInsert,
           seller_id: sheet.seller_id,
           customer_name: orderData.customer_name,
           customer_phone: normalizedPhone,
@@ -411,7 +413,9 @@ Deno.serve(async (req) => {
           total_amount: orderData.total_amount || (orderData.quantity * (orderData.unit_price || product.price)),
           weight: product.weight ? parseFloat(product.weight) : 0,
           source_sheet_id: sheet.id,
-          confirmation_status: "new",
+          confirmation_status: routeToWhatsapp ? "new_wts" : "new",
+          confirmation_channel: routeToWhatsapp ? "whatsapp" : "agent",
+          whatsapp_status: routeToWhatsapp ? "pending" : null,
         });
 
         if (insertError) {
@@ -423,6 +427,24 @@ Deno.serve(async (req) => {
           errorsCount++;
         } else {
           imported++;
+          if (routeToWhatsapp) {
+            try {
+              const runnerResponse = await fetch(`${supabaseUrl}/functions/v1/whatsapp-automation-runner`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${serviceRoleKey}`,
+                },
+                body: JSON.stringify({ trigger_type: "new_order", order_id: orderIdToInsert }),
+              });
+              if (!runnerResponse.ok) {
+                const runnerBody = await runnerResponse.text();
+                console.error(`WhatsApp automation start failed for order ${orderIdToInsert}:`, runnerBody);
+              }
+            } catch (automationError) {
+              console.error(`WhatsApp automation start failed for order ${orderIdToInsert}:`, automationError);
+            }
+          }
         }
       }
 

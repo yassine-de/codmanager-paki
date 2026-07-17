@@ -63,11 +63,11 @@ const PAGE_SIZE = 1000;
 
 const CONFIRMED_DELIVERY_STATUSES = [
   "booked", "printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery",
-  "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return",
+  "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return", "return_received",
 ];
 const DELIVERED_STATUSES = ["delivered", "paid"];
 const SHIPPED_STATUSES = ["shipped", "in_transit", "with_courier", "out_for_delivery"];
-const RETURNED_STATUSES = ["returned", "return"];
+const RETURNED_STATUSES = ["returned", "return", "return_received"];
 
 const DELIVERY_STATUS_OPTIONS = [
   { value: "booked", label: "Booked" },
@@ -83,6 +83,7 @@ const DELIVERY_STATUS_OPTIONS = [
   { value: "returned", label: "Returned" },
   { value: "return", label: "Return" },
   { value: "ready_for_return", label: "Ready for Return" },
+  { value: "return_received", label: "Return Received" },
 ];
 
 // Courier color map

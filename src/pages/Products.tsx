@@ -78,7 +78,7 @@ export default function Products() {
         current.delivered += qty;
       } else if (["printed", "dispatched", "shipped", "in_transit", "with_courier"].includes(row.delivery_status || "")) {
         current.shipped += qty;
-      } else if (row.delivery_status === "returned") {
+      } else if (["returned", "return", "ready_for_return", "return_received"].includes(row.delivery_status || "")) {
         current.returned += qty;
       }
       if (row.confirmation_status === "cancelled") {

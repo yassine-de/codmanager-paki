@@ -141,6 +141,7 @@ const deliveryStatusStyle: Record<string, string> = {
   cancelled:        "bg-[hsl(0,65%,52%)]/12   text-[hsl(0,65%,52%)]   border-[hsl(0,65%,52%)]/25",
   failed_attempt:   "bg-[hsl(25,85%,55%)]/12  text-[hsl(25,85%,55%)]  border-[hsl(25,85%,55%)]/25",
   ready_for_return: "bg-[hsl(15,75%,55%)]/12  text-[hsl(15,75%,55%)]  border-[hsl(15,75%,55%)]/25",
+  return_received: "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/25",
   rejected:         "bg-[hsl(0,65%,52%)]/12   text-[hsl(0,65%,52%)]   border-[hsl(0,65%,52%)]/25",
 };
 
@@ -342,7 +343,7 @@ export default function FollowUps() {
     const c = { failed_attempt: 0, delayed: 0, on_going: 0, none: 0, returned: 0, re_attempted: 0, no_answer: 0 };
     for (const r of enriched) {
       if (r.segment) c[r.segment]++; else c.none++;
-      if (["returned","return","ready_for_return"].includes(r.delivery_status ?? "")) c.returned++;
+      if (["returned","return","ready_for_return","return_received"].includes(r.delivery_status ?? "")) c.returned++;
       if (r.follow_up_status === "re_attempted") c.re_attempted++;
       if (r.follow_up_status === "no_answer")    c.no_answer++;
     }
@@ -368,7 +369,7 @@ export default function FollowUps() {
   const filtered = useMemo(() => enriched.filter((r) => {
     if (segment !== "all") {
       if (segment === "none")         { if (r.segment !== null) return false; }
-      else if (segment === "returned")     { if (!["returned","return","ready_for_return"].includes(r.delivery_status ?? "")) return false; }
+      else if (segment === "returned")     { if (!["returned","return","ready_for_return","return_received"].includes(r.delivery_status ?? "")) return false; }
       else if (segment === "re_attempted") { if (r.follow_up_status !== "re_attempted") return false; }
       else if (segment === "no_answer")    { if (r.follow_up_status !== "no_answer")    return false; }
       else if (r.segment !== segment) return false;

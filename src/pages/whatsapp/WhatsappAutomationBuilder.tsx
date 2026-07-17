@@ -62,6 +62,7 @@ const DELIVERY_STATUSES = [
   "delivered",
   "ready_for_return",
   "return",
+  "return_received",
   "cancelled",
 ];
 const FOLLOW_UP_STATUSES = ["pending", "in_progress", "resolved", "escalated"];

@@ -2013,9 +2013,26 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                           <TableCell><Badge variant="outline" className="text-[10px]">{locationLabel}</Badge></TableCell>
                           <TableCell className="text-xs text-muted-foreground">{format(new Date(group.latest), "MMM d, HH:mm")}</TableCell>
                           <TableCell className="text-right">
-                            <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => toggleInventoryProduct(group.key)}>
-                              {expanded ? "Hide" : "View"}
-                            </Button>
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  if (group.variants.length === 1 && primary) {
+                                    setBarcodeDialogRow(primary);
+                                  } else if (!expanded) {
+                                    toggleInventoryProduct(group.key);
+                                  }
+                                }}
+                                title={group.variants.length === 1 ? "Print barcode" : "Expand variants to print barcode"}
+                              >
+                                <Barcode className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => toggleInventoryProduct(group.key)}>
+                                {expanded ? "Hide" : "View"}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                         {expanded && group.variants.map((row) => (

@@ -163,8 +163,8 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
     ? source.filter(o => reachedDeliveredStage(o) && inRangeFor(o, "delivered")).length
     : orders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
   const paid = orders.filter(o => o.delivery_status === 'paid').length;
-  // Returned = 'return' (current) OR 'returned' (legacy) OR 'ready_for_return'
-  const returned = orders.filter(o => ['return', 'returned', 'ready_for_return'].includes(o.delivery_status || '')).length;
+  // Returned = courier return flow plus warehouse-received returns
+  const returned = orders.filter(o => ['return', 'returned', 'ready_for_return', 'return_received'].includes(o.delivery_status || '')).length;
   const deliveryCancelled = orders.filter(o => o.delivery_status === 'cancelled').length;
   // Failed Attempt = 'failed_attempt' (current) OR 'no_answer' (legacy)
   const deliveryNoAnswer = orders.filter(o => ['failed_attempt', 'no_answer'].includes(o.delivery_status || '')).length;

@@ -42,6 +42,7 @@ const deliveryOptions: { value: DeliveryStatus; label: string }[] = [
   { value: 'ready_for_return', label: 'Ready for Return' },
   { value: 'rejected', label: 'Rejected' },
   { value: 'return', label: 'Return' },
+  { value: 'return_received', label: 'Return Received' },
 ];
 
 

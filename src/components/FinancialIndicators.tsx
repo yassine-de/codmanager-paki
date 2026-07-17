@@ -7,12 +7,27 @@ interface Props {
   deliveryStatus: string;
   invoiceId?: string | null;
   invoiceStatus?: string | null;
+  invoiceFinalizedAt?: string | null;
+  confirmedAt?: string | null;
+  deliveredAt?: string | null;
+  updatedAt?: string | null;
 }
 
 const HIDDEN_STATUSES = ["new", "new_wts", "no_answer", "postponed", "wrong_number", "double"];
 
-function getInvoiceColor(invoiceId: string | null | undefined, invoiceStatus: string | null | undefined): FinColor {
+function isAfterFinalized(eventAt: string | null | undefined, invoiceFinalizedAt: string | null | undefined) {
+  if (!eventAt || !invoiceFinalizedAt) return false;
+  return new Date(eventAt).getTime() > new Date(invoiceFinalizedAt).getTime();
+}
+
+function getInvoiceColor(
+  invoiceId: string | null | undefined,
+  invoiceStatus: string | null | undefined,
+  eventAt?: string | null,
+  invoiceFinalizedAt?: string | null,
+): FinColor {
   if (!invoiceId) return "gray";
+  if (invoiceStatus === "paid" && isAfterFinalized(eventAt, invoiceFinalizedAt)) return "orange";
   if (invoiceStatus === "paid") return "green";
   return "orange";
 }
@@ -25,7 +40,7 @@ const colorMap: Record<FinColor, string> = {
 
 const labelMap: Record<FinColor, string> = {
   gray:   "Not in any invoice",
-  orange: "In invoice — pending payment",
+  orange: "In current/unpaid invoice period",
   green:  "In invoice — paid",
 };
 
@@ -42,23 +57,31 @@ function Dot({ color, label, letter }: { color: FinColor; label: string; letter:
   );
 }
 
-export function FinancialIndicators({ confirmationStatus, deliveryStatus, invoiceId, invoiceStatus }: Props) {
+export function FinancialIndicators({
+  confirmationStatus,
+  deliveryStatus,
+  invoiceId,
+  invoiceStatus,
+  invoiceFinalizedAt,
+  confirmedAt,
+  deliveredAt,
+  updatedAt,
+}: Props) {
   if (HIDDEN_STATUSES.includes(confirmationStatus)) return null;
 
-  const invoiceColor = getInvoiceColor(invoiceId, invoiceStatus);
-  const shippedStatuses = ["printed", "dispatched", "shipped", "booked", "in_transit", "with_courier", "out_for_delivery", "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return"];
+  const shippedStatuses = ["shipped", "in_transit", "with_courier", "out_for_delivery", "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return", "return_received"];
 
   // C — confirmed
   const cActive = confirmationStatus === "confirmed";
-  const cColor: FinColor = cActive ? invoiceColor : "gray";
+  const cColor: FinColor = cActive ? getInvoiceColor(invoiceId, invoiceStatus, confirmedAt || updatedAt, invoiceFinalizedAt) : "gray";
 
   // S — shipped or beyond
   const sActive = shippedStatuses.some(s => deliveryStatus === s);
-  const sColor: FinColor = sActive ? invoiceColor : "gray";
+  const sColor: FinColor = sActive ? getInvoiceColor(invoiceId, invoiceStatus, deliveredAt || updatedAt, invoiceFinalizedAt) : "gray";
 
   // D — delivered / paid
   const dActive = deliveryStatus === "delivered" || deliveryStatus === "paid";
-  const dColor: FinColor = dActive ? invoiceColor : "gray";
+  const dColor: FinColor = dActive ? getInvoiceColor(invoiceId, invoiceStatus, deliveredAt || updatedAt, invoiceFinalizedAt) : "gray";
 
   return (
     <div className="inline-flex items-center gap-0.5">

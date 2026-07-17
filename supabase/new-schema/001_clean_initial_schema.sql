@@ -578,34 +578,130 @@ CREATE OR REPLACE FUNCTION public.claim_next_order(
   p_order_type text DEFAULT 'new',
   p_product_names text[] DEFAULT NULL
 )
-RETURNS public.orders
+RETURNS SETOF public.orders
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-  v_order public.orders%ROWTYPE;
 BEGIN
-  SELECT *
-  INTO v_order
-  FROM public.orders
-  WHERE confirmation_status = p_order_type
-    AND agent_id IS NULL
-    AND (p_product_names IS NULL OR product_name = ANY(p_product_names))
-  ORDER BY created_at ASC
-  FOR UPDATE SKIP LOCKED
-  LIMIT 1;
+  PERFORM public.release_expired_order_locks();
 
-  IF NOT FOUND THEN
-    RETURN NULL;
+  IF p_order_type = 'new' THEN
+    RETURN QUERY
+    WITH picked AS (
+      SELECT o.id
+      FROM public.orders o
+      WHERE o.confirmation_status = 'new'
+        AND o.agent_id IS NULL
+        AND (p_product_names IS NULL OR o.product_name = ANY(p_product_names))
+      ORDER BY o.created_at ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.orders o2
+    SET agent_id = p_agent_id, assigned_at = now(), last_activity_at = now(), updated_at = now()
+    FROM picked
+    WHERE o2.id = picked.id
+    RETURNING o2.*;
+
+  ELSIF p_order_type = 'no_answer' THEN
+    RETURN QUERY
+    WITH picked AS (
+      SELECT o.id
+      FROM public.orders o
+      WHERE o.confirmation_status = 'no_answer'
+        AND o.agent_id IS NULL
+        AND o.attempt_count < 12
+        AND (o.last_attempt_at IS NULL OR o.last_attempt_at <= now() - interval '30 minutes')
+        AND (
+          o.last_attempt_date IS DISTINCT FROM CURRENT_DATE
+          OR o.attempts_today < 4
+        )
+        AND (p_product_names IS NULL OR o.product_name = ANY(p_product_names))
+      ORDER BY o.last_attempt_at ASC NULLS FIRST
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.orders o2
+    SET agent_id = p_agent_id, assigned_at = now(), last_activity_at = now(), updated_at = now()
+    FROM picked
+    WHERE o2.id = picked.id
+    RETURNING o2.*;
+
+  ELSIF p_order_type = 'postponed' THEN
+    RETURN QUERY
+    WITH picked AS (
+      SELECT o.id
+      FROM public.orders o
+      WHERE o.confirmation_status = 'postponed'
+        AND o.agent_id IS NULL
+        AND o.postpone_date <= now()
+        AND o.original_agent_id = p_agent_id
+        AND (p_product_names IS NULL OR o.product_name = ANY(p_product_names))
+      ORDER BY o.postpone_date ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.orders o2
+    SET agent_id = p_agent_id, assigned_at = now(), last_activity_at = now(), updated_at = now()
+    FROM picked
+    WHERE o2.id = picked.id
+    RETURNING o2.*;
+
+    IF NOT FOUND THEN
+      RETURN QUERY
+      WITH picked AS (
+        SELECT o.id
+        FROM public.orders o
+        WHERE o.confirmation_status = 'postponed'
+          AND o.agent_id IS NULL
+          AND o.postpone_date <= now()
+          AND o.original_agent_id IS DISTINCT FROM p_agent_id
+          AND NOT EXISTS (
+            SELECT 1 FROM public.user_presence up
+            WHERE up.user_id = o.original_agent_id
+              AND up.is_active = true
+              AND up.last_seen > now() - interval '10 minutes'
+          )
+          AND (p_product_names IS NULL OR o.product_name = ANY(p_product_names))
+        ORDER BY o.postpone_date ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE public.orders o2
+      SET agent_id = p_agent_id, assigned_at = now(), last_activity_at = now(), updated_at = now()
+      FROM picked
+      WHERE o2.id = picked.id
+      RETURNING o2.*;
+    END IF;
+
+  ELSIF p_order_type = 'duplicate' THEN
+    RETURN QUERY
+    WITH first_dup AS (
+      SELECT public.normalize_phone_key(o.customer_phone) AS phone_key, o.product_name
+      FROM public.orders o
+      WHERE o.confirmation_status = 'new'
+        AND o.agent_id IS NULL
+        AND (p_product_names IS NULL OR o.product_name = ANY(p_product_names))
+      GROUP BY public.normalize_phone_key(o.customer_phone), o.product_name
+      HAVING COUNT(*) > 1
+      LIMIT 1
+    ), picked AS (
+      SELECT o.id
+      FROM public.orders o
+      INNER JOIN first_dup fd
+        ON public.normalize_phone_key(o.customer_phone) = fd.phone_key
+       AND o.product_name = fd.product_name
+      WHERE o.confirmation_status = 'new'
+        AND o.agent_id IS NULL
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE public.orders o2
+    SET agent_id = p_agent_id, assigned_at = now(), last_activity_at = now(), updated_at = now()
+    FROM picked
+    WHERE o2.id = picked.id
+    RETURNING o2.*;
   END IF;
-
-  UPDATE public.orders
-  SET agent_id = p_agent_id, assigned_at = now(), updated_at = now()
-  WHERE id = v_order.id
-  RETURNING * INTO v_order;
-
-  RETURN v_order;
 END;
 $$;
 
@@ -649,6 +745,22 @@ AS $$
   WHERE id = p_order_id;
 $$;
 
+CREATE OR REPLACE FUNCTION public.release_order_lock(p_order_id uuid, p_agent_id uuid)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  UPDATE public.orders
+  SET agent_id = NULL,
+      assigned_at = NULL,
+      last_activity_at = NULL,
+      updated_at = now()
+  WHERE id = p_order_id
+    AND agent_id = p_agent_id
+    AND confirmation_status IN ('new', 'no_answer', 'postponed');
+$$;
+
 CREATE OR REPLACE FUNCTION public.touch_order_lock(p_order_id uuid)
 RETURNS void
 LANGUAGE sql
@@ -659,6 +771,19 @@ AS $$
   WHERE id = p_order_id;
 $$;
 
+CREATE OR REPLACE FUNCTION public.touch_order_lock(p_order_id uuid, p_agent_id uuid)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  UPDATE public.orders
+  SET last_activity_at = now(),
+      updated_at = now()
+  WHERE id = p_order_id
+    AND agent_id = p_agent_id;
+$$;
+
 CREATE OR REPLACE FUNCTION public.resolve_duplicate_group(p_group_id text, p_keep_order_id text DEFAULT NULL)
 RETURNS jsonb
 LANGUAGE sql
@@ -666,6 +791,41 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
   SELECT jsonb_build_object('success', true, 'group_id', p_group_id, 'keep_order_id', p_keep_order_id);
+$$;
+
+CREATE OR REPLACE FUNCTION public.resolve_duplicate_group(
+  p_valid_order_id uuid,
+  p_agent_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_phone text;
+  v_product text;
+BEGIN
+  SELECT customer_phone, product_name
+  INTO v_phone, v_product
+  FROM public.orders
+  WHERE id = p_valid_order_id
+    AND agent_id = p_agent_id;
+
+  IF v_phone IS NULL THEN
+    RAISE EXCEPTION 'Order not found or not assigned to this agent';
+  END IF;
+
+  UPDATE public.orders
+  SET confirmation_status = 'double',
+      note = 'Duplicate of ' || (SELECT order_id FROM public.orders WHERE id = p_valid_order_id),
+      updated_at = now()
+  WHERE agent_id = p_agent_id
+    AND public.normalize_phone_key(customer_phone) = public.normalize_phone_key(v_phone)
+    AND product_name = v_product
+    AND id <> p_valid_order_id
+    AND confirmation_status = 'new';
+END;
 $$;
 
 -- ---------------------------------------------------------------------------
@@ -780,8 +940,8 @@ AS $$
       updated_at = now()
   WHERE agent_id IS NOT NULL
     AND confirmation_status IN ('new', 'no_answer', 'postponed')
-    AND last_activity_at IS NOT NULL
-    AND last_activity_at < now() - interval '6 minutes';
+    AND COALESCE(last_activity_at, assigned_at) IS NOT NULL
+    AND COALESCE(last_activity_at, assigned_at) < now() - interval '6 minutes';
 $$;
 
 CREATE OR REPLACE FUNCTION public.cleanup_agent_activity_log()
@@ -801,19 +961,33 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_count integer;
+  v_count integer := 0;
 BEGIN
-  UPDATE public.orders
-  SET agent_id = NULL,
-      assigned_at = NULL,
-      agent_switched_at = now(),
-      updated_at = now()
-  WHERE agent_id IS NOT NULL
-    AND confirmation_status IN ('new', 'no_answer', 'postponed')
-    AND agent_switch_scheduled_at IS NOT NULL
-    AND agent_switch_scheduled_at <= now();
+  WITH eligible AS (
+    SELECT o.order_id
+    FROM public.orders o
+    LEFT JOIN public.whatsapp_conversations c
+      ON c.order_id = o.order_id
+    WHERE o.confirmation_status = 'new_wts'
+      AND o.agent_switch_scheduled_at IS NOT NULL
+      AND o.agent_switch_scheduled_at <= now()
+      AND o.agent_switched_at IS NULL
+      AND (c.id IS NULL OR c.last_reply_at IS NULL)
+  ), updated AS (
+    UPDATE public.orders o
+       SET confirmation_status = 'new',
+           confirmation_channel = 'agent',
+           agent_id = NULL,
+           assigned_at = NULL,
+           last_activity_at = NULL,
+           agent_switched_at = now(),
+           updated_at = now()
+      FROM eligible e
+     WHERE o.order_id = e.order_id
+     RETURNING o.order_id
+  )
+  SELECT count(*) INTO v_count FROM updated;
 
-  GET DIAGNOSTICS v_count = ROW_COUNT;
   RETURN v_count;
 END;
 $$;
@@ -843,7 +1017,8 @@ CREATE OR REPLACE FUNCTION public.agent_submit_order(
   p_postpone_note text DEFAULT NULL,
   p_confirmed_at timestamptz DEFAULT NULL,
   p_delivery_status text DEFAULT NULL,
-  p_cancel_reason text DEFAULT NULL
+  p_cancel_reason text DEFAULT NULL,
+  p_confirmation_channel text DEFAULT NULL
 )
 RETURNS SETOF public.orders
 LANGUAGE plpgsql
@@ -854,6 +1029,7 @@ BEGIN
   RETURN QUERY
   UPDATE public.orders
   SET confirmation_status = p_confirmation_status,
+      confirmation_channel = COALESCE(p_confirmation_channel, confirmation_channel),
       agent_id = p_agent_id,
       assigned_at = p_assigned_at,
       last_activity_at = p_last_activity_at,
@@ -887,76 +1063,413 @@ $$;
 CREATE OR REPLACE FUNCTION public.get_invoice_summary(p_invoice_id uuid)
 RETURNS json
 LANGUAGE plpgsql
-STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_invoice record;
-  v_rates record;
-  v_rate_settings record;
-  v_pkr_rate numeric := 290.0;
+  v_invoice public.invoices%ROWTYPE;
+  v_seller_rates public.seller_rates%ROWTYPE;
+  v_confirmed_rate numeric := 0;
+  v_dropped_rate numeric := 0;
+  v_cod_fee_percentage numeric := 0;
+  v_previous_balance numeric := 0;
   v_total_orders_count integer := 0;
   v_delivered_count integer := 0;
   v_shipped_count integer := 0;
   v_confirmed_count integer := 0;
   v_dropped_count integer := 0;
+  v_invoice_confirmed_count integer := 0;
+  v_cross_confirmed_count integer := 0;
   v_delivered_revenue_usd numeric := 0;
   v_shipping_fees numeric := 0;
   v_call_center_fees numeric := 0;
   v_cod_fees numeric := 0;
   v_addon_net numeric := 0;
+  v_adjustment_net_pkr numeric := 0;
   v_adjustment_net numeric := 0;
+  v_net_payable numeric := 0;
   v_delivered_orders jsonb := '[]'::jsonb;
   v_all_orders jsonb := '[]'::jsonb;
   v_shipping_breakdown jsonb := '[]'::jsonb;
   v_addons jsonb := '[]'::jsonb;
   v_adjustments jsonb := '[]'::jsonb;
+  v_cross_shipped_count integer := 0;
+  v_cross_shipped_delivered_count integer := 0;
+  v_cross_delivered_count integer := 0;
+  v_cross_orders jsonb := '[]'::jsonb;
+  v_cross_delivered_orders jsonb := '[]'::jsonb;
+  v_cross_shipping_delivered_revenue numeric := 0;
+  v_cross_delivered_only_count integer := 0;
+  v_cross_delivered_only_orders jsonb := '[]'::jsonb;
+  v_cross_delivered_only_all jsonb := '[]'::jsonb;
+  v_cross_delivered_only_revenue numeric := 0;
+  v_cross_delivered_revenue numeric := 0;
+  v_period_start timestamptz;
+  v_period_end timestamptz;
+  v_rate_1kg numeric := 0;
+  v_rate_2kg numeric := 0;
+  v_rate_3kg numeric := 0;
+  v_rate_3kg_plus numeric := 0;
+  v_pkr_rate numeric := 290.0;
+  v_shipping_statuses text[] := ARRAY[
+    'shipped',
+    'in_transit',
+    'out_for_delivery',
+    'with_courier',
+    'delivered',
+    'paid',
+    'returned',
+    'return',
+    'ready_for_return',
+    'return_received'
+  ];
 BEGIN
   SELECT * INTO v_invoice FROM public.invoices WHERE id = p_invoice_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Invoice not found';
   END IF;
 
-  SELECT * INTO v_rates FROM public.seller_rates WHERE user_id = v_invoice.seller_id LIMIT 1;
-  SELECT * INTO v_rate_settings
-  FROM public.rate_settings
-  WHERE (seller_id = v_invoice.seller_id AND is_custom = true)
-     OR (seller_id IS NULL AND is_global = true)
-  ORDER BY is_custom DESC, is_global DESC
+  v_period_end := COALESCE(v_invoice.finalized_at, now());
+
+  SELECT MAX(finalized_at)
+    INTO v_period_start
+    FROM public.invoices
+    WHERE seller_id = v_invoice.seller_id
+      AND id != p_invoice_id
+      AND finalized_at IS NOT NULL
+      AND finalized_at < v_period_end;
+
+  IF v_period_start IS NULL THEN
+    v_period_start := '-infinity'::timestamptz;
+  END IF;
+
+  SELECT * INTO v_seller_rates
+  FROM public.seller_rates
+  WHERE user_id = v_invoice.seller_id
   LIMIT 1;
 
-  SELECT
-    count(*)::integer,
-    count(*) FILTER (WHERE delivery_status = 'delivered')::integer,
-    count(*) FILTER (WHERE delivery_status IN ('shipped','in_transit','out_for_delivery','delivered'))::integer,
-    count(*) FILTER (WHERE confirmation_status = 'confirmed')::integer,
-    count(*) FILTER (WHERE confirmation_status IN ('cancelled','dropped','unreachable'))::integer,
-    COALESCE(sum(total_amount) FILTER (WHERE delivery_status = 'delivered'), 0) / v_pkr_rate
-  INTO v_total_orders_count, v_delivered_count, v_shipped_count, v_confirmed_count, v_dropped_count, v_delivered_revenue_usd
-  FROM public.orders
-  WHERE invoice_id = p_invoice_id;
+  IF FOUND THEN
+    v_rate_1kg := COALESCE(v_seller_rates.rate_1kg, 0);
+    v_rate_2kg := COALESCE(v_seller_rates.rate_2kg, 0);
+    v_rate_3kg := COALESCE(v_seller_rates.rate_3kg, 0);
+    v_rate_3kg_plus := COALESCE(v_seller_rates.rate_3kg_plus, 0);
+  END IF;
 
-  v_call_center_fees :=
-    v_confirmed_count * COALESCE(v_rate_settings.confirmed_order_rate, 0) +
-    v_dropped_count * COALESCE(v_rate_settings.dropped_order_rate, 0);
-  v_cod_fees := v_delivered_revenue_usd * COALESCE(v_rate_settings.cod_fee_per_delivery, 0) / 100;
+  SELECT COALESCE(confirmed_order_rate, 0),
+         COALESCE(dropped_order_rate, 0),
+         COALESCE(cod_fee_per_delivery, 0)
+    INTO v_confirmed_rate, v_dropped_rate, v_cod_fee_percentage
+    FROM public.rate_settings
+    WHERE (seller_id = v_invoice.seller_id AND is_custom = true)
+       OR (seller_id IS NULL AND is_global = true)
+    ORDER BY is_custom DESC, is_global DESC
+    LIMIT 1;
 
-  WITH order_weights AS (
+  v_previous_balance := COALESCE(v_invoice.previous_balance, 0);
+
+  SELECT COUNT(DISTINCT o.id)
+    INTO v_total_orders_count
+    FROM public.orders o
+    WHERE o.invoice_id = p_invoice_id;
+
+  SELECT COUNT(DISTINCT o.id)
+    INTO v_delivered_count
+    FROM public.orders o
+    WHERE o.invoice_id = p_invoice_id
+      AND o.delivery_status = 'delivered'
+      AND EXISTS (
+        SELECT 1
+        FROM public.order_history oh
+        WHERE oh.order_id = o.order_id
+          AND oh.field_changed = 'delivery_status'
+          AND oh.new_value = 'delivered'
+          AND oh.created_at > v_period_start
+          AND oh.created_at <= v_period_end
+      );
+
+  SELECT COUNT(DISTINCT o.id)
+    INTO v_shipped_count
+    FROM public.orders o
+    WHERE o.invoice_id = p_invoice_id
+      AND EXISTS (
+        SELECT 1
+        FROM public.order_history oh
+        WHERE oh.order_id = o.order_id
+          AND oh.field_changed = 'delivery_status'
+          AND oh.new_value = ANY(v_shipping_statuses)
+          AND oh.created_at > v_period_start
+          AND oh.created_at <= v_period_end
+      );
+
+  SELECT COUNT(DISTINCT o.id)
+    INTO v_dropped_count
+    FROM public.orders o
+    WHERE o.seller_id = v_invoice.seller_id
+      AND o.created_at > v_period_start
+      AND o.created_at <= v_period_end;
+
+  SELECT COUNT(DISTINCT o.id)
+    INTO v_invoice_confirmed_count
+    FROM public.orders o
+    WHERE o.invoice_id = p_invoice_id
+      AND o.confirmation_status = 'confirmed'
+      AND COALESCE(o.confirmed_at, o.updated_at) > v_period_start
+      AND COALESCE(o.confirmed_at, o.updated_at) <= v_period_end;
+
+  SELECT COUNT(DISTINCT o.id)
+    INTO v_cross_confirmed_count
+    FROM public.orders o
+    JOIN public.invoices inv_orig ON inv_orig.id = o.invoice_id
+    WHERE o.seller_id = v_invoice.seller_id
+      AND o.invoice_id != p_invoice_id
+      AND inv_orig.status IN ('ready', 'paid')
+      AND inv_orig.finalized_at IS NOT NULL
+      AND o.confirmation_status = 'confirmed'
+      AND (
+        (
+          o.confirmed_at IS NOT NULL
+          AND o.confirmed_at > inv_orig.finalized_at
+          AND o.confirmed_at > v_period_start
+          AND o.confirmed_at <= v_period_end
+        )
+        OR (
+          o.confirmed_at IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM public.order_history oh
+            WHERE oh.order_id = o.order_id
+              AND oh.field_changed = 'confirmation_status'
+              AND oh.new_value = 'confirmed'
+              AND oh.created_at > inv_orig.finalized_at
+              AND oh.created_at > v_period_start
+              AND oh.created_at <= v_period_end
+          )
+        )
+      );
+
+  v_confirmed_count := v_invoice_confirmed_count + v_cross_confirmed_count;
+
+  WITH invoice_orders AS (
     SELECT
-      o.*,
+      o.id,
+      o.order_id,
+      o.customer_name,
+      o.customer_phone,
+      o.product_name,
+      o.quantity,
+      o.price,
+      o.total_amount,
+      o.created_at,
       COALESCE(p.weight_kg, CASE
         WHEN p.weight = 'up_to_1kg' THEN 0.5
         WHEN p.weight = 'up_to_2kg' THEN 1.5
         WHEN p.weight = 'up_to_3kg' THEN 2.5
         WHEN p.weight = 'above_3kg' THEN 3.5
-        ELSE 0.5
-      END) AS weight_kg
+        ELSE NULL
+      END) AS weight_kg,
+      false AS is_cross_invoice,
+      NULL::text AS original_invoice_number
+    FROM public.orders o
+    LEFT JOIN public.products p ON p.seller_id = o.seller_id AND p.name = o.product_name
+    WHERE o.invoice_id = p_invoice_id
+      AND o.delivery_status = 'delivered'
+      AND EXISTS (
+        SELECT 1
+        FROM public.order_history oh
+        WHERE oh.order_id = o.order_id
+          AND oh.field_changed = 'delivery_status'
+          AND oh.new_value = 'delivered'
+          AND oh.created_at > v_period_start
+          AND oh.created_at <= v_period_end
+      )
+  )
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', id,
+    'order_id', order_id,
+    'customer_name', customer_name,
+    'customer_phone', customer_phone,
+    'product_name', product_name,
+    'quantity', quantity,
+    'price', price,
+    'total_amount', total_amount,
+    'created_at', created_at,
+    'weight_kg', weight_kg,
+    'total_weight_kg', COALESCE(weight_kg, 0) * quantity,
+    'amount_usd', ROUND(price * quantity / v_pkr_rate, 2),
+    'is_cross_invoice', is_cross_invoice,
+    'original_invoice_number', original_invoice_number
+  ) ORDER BY created_at DESC), '[]'::jsonb)
+  INTO v_delivered_orders
+  FROM invoice_orders;
+
+  WITH invoice_orders AS (
+    SELECT
+      o.id,
+      o.order_id,
+      o.customer_name,
+      o.customer_phone,
+      o.product_name,
+      o.quantity,
+      o.price,
+      o.total_amount,
+      o.confirmation_status,
+      o.delivery_status,
+      o.created_at,
+      COALESCE(p.weight_kg, CASE
+        WHEN p.weight = 'up_to_1kg' THEN 0.5
+        WHEN p.weight = 'up_to_2kg' THEN 1.5
+        WHEN p.weight = 'up_to_3kg' THEN 2.5
+        WHEN p.weight = 'above_3kg' THEN 3.5
+        ELSE NULL
+      END) AS weight_kg,
+      EXISTS (
+        SELECT 1
+        FROM public.invoice_adjustments ia
+        WHERE ia.order_id = o.order_id
+          AND ia.applied_invoice_id = p_invoice_id
+      ) AS has_adjustment,
+      (
+        SELECT ia.applied_invoice_id
+        FROM public.invoice_adjustments ia
+        WHERE ia.order_id = o.order_id
+          AND ia.applied_invoice_id IS NOT NULL
+        ORDER BY ia.created_at DESC
+        LIMIT 1
+      ) AS adjustment_invoice_id,
+      (
+        SELECT inv.invoice_number
+        FROM public.invoice_adjustments ia
+        JOIN public.invoices inv ON inv.id = ia.applied_invoice_id
+        WHERE ia.order_id = o.order_id
+          AND ia.applied_invoice_id IS NOT NULL
+        ORDER BY ia.created_at DESC
+        LIMIT 1
+      ) AS adjustment_invoice_number,
+      (
+        o.delivery_status = 'delivered'
+        AND EXISTS (
+          SELECT 1
+          FROM public.order_history oh
+          WHERE oh.order_id = o.order_id
+            AND oh.field_changed = 'delivery_status'
+            AND oh.new_value = 'delivered'
+            AND oh.created_at > v_period_start
+            AND oh.created_at <= v_period_end
+        )
+      ) AS was_delivered
     FROM public.orders o
     LEFT JOIN public.products p ON p.seller_id = o.seller_id AND p.name = o.product_name
     WHERE o.invoice_id = p_invoice_id
   )
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', id,
+    'order_id', order_id,
+    'customer_name', customer_name,
+    'customer_phone', customer_phone,
+    'product_name', product_name,
+    'quantity', quantity,
+    'price', price,
+    'total_amount', total_amount,
+    'created_at', created_at,
+    'weight_kg', weight_kg,
+    'total_weight_kg', COALESCE(weight_kg, 0) * quantity,
+    'amount_usd', ROUND(price * quantity / v_pkr_rate, 2),
+    'confirmation_status', confirmation_status,
+    'delivery_status', COALESCE(delivery_status, 'none'),
+    'has_adjustment', has_adjustment,
+    'adjustment_invoice_id', adjustment_invoice_id,
+    'adjustment_invoice_number', adjustment_invoice_number,
+    'was_delivered', was_delivered,
+    'is_cross_invoice', false,
+    'original_invoice_number', NULL
+  ) ORDER BY created_at DESC), '[]'::jsonb)
+  INTO v_all_orders
+  FROM invoice_orders;
+
+  SELECT COALESCE(SUM(ROUND(o.price * o.quantity / v_pkr_rate, 2)), 0)
+    INTO v_delivered_revenue_usd
+    FROM public.orders o
+    WHERE o.invoice_id = p_invoice_id
+      AND o.delivery_status = 'delivered'
+      AND EXISTS (
+        SELECT 1
+        FROM public.order_history oh
+        WHERE oh.order_id = o.order_id
+          AND oh.field_changed = 'delivery_status'
+          AND oh.new_value = 'delivered'
+          AND oh.created_at > v_period_start
+          AND oh.created_at <= v_period_end
+      );
+
+  WITH cross_shipped AS (
+    SELECT
+      o.id,
+      o.order_id,
+      o.customer_name,
+      o.customer_phone,
+      o.product_name,
+      o.quantity,
+      o.price,
+      o.total_amount,
+      o.created_at,
+      o.delivery_status,
+      COALESCE(p.weight_kg, CASE
+        WHEN p.weight = 'up_to_1kg' THEN 0.5
+        WHEN p.weight = 'up_to_2kg' THEN 1.5
+        WHEN p.weight = 'up_to_3kg' THEN 2.5
+        WHEN p.weight = 'above_3kg' THEN 3.5
+        ELSE NULL
+      END) AS weight_kg,
+      inv_orig.invoice_number AS original_invoice_number,
+      (
+        o.delivery_status = 'delivered'
+        AND EXISTS (
+          SELECT 1
+          FROM public.order_history oh_del
+          WHERE oh_del.order_id = o.order_id
+            AND oh_del.field_changed = 'delivery_status'
+            AND oh_del.new_value = 'delivered'
+            AND oh_del.created_at > v_period_start
+            AND oh_del.created_at <= v_period_end
+        )
+      ) AS is_delivered_in_period
+    FROM public.orders o
+    JOIN public.invoices inv_orig ON inv_orig.id = o.invoice_id
+    LEFT JOIN public.products p ON p.seller_id = o.seller_id AND p.name = o.product_name
+    WHERE o.seller_id = v_invoice.seller_id
+      AND o.invoice_id != p_invoice_id
+      AND inv_orig.status IN ('ready', 'paid')
+      AND inv_orig.finalized_at IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.order_history oh
+        WHERE oh.order_id = o.order_id
+          AND oh.field_changed = 'delivery_status'
+          AND oh.new_value = ANY(v_shipping_statuses)
+          AND oh.created_at > inv_orig.finalized_at
+          AND oh.created_at > v_period_start
+          AND oh.created_at <= v_period_end
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.order_history oh_prev
+        WHERE oh_prev.order_id = o.order_id
+          AND oh_prev.field_changed = 'delivery_status'
+          AND oh_prev.created_at <= inv_orig.finalized_at
+          AND oh_prev.created_at = (
+            SELECT MAX(created_at)
+            FROM public.order_history
+            WHERE order_id = o.order_id
+              AND field_changed = 'delivery_status'
+              AND created_at <= inv_orig.finalized_at
+          )
+          AND oh_prev.new_value = ANY(v_shipping_statuses)
+      )
+  )
   SELECT
+    COUNT(DISTINCT id),
+    COALESCE(SUM(ROUND(price * quantity / v_pkr_rate, 2)) FILTER (WHERE is_delivered_in_period), 0),
+    COUNT(DISTINCT id) FILTER (WHERE is_delivered_in_period),
     COALESCE(jsonb_agg(jsonb_build_object(
       'id', id,
       'order_id', order_id,
@@ -968,14 +1481,139 @@ BEGIN
       'total_amount', total_amount,
       'created_at', created_at,
       'weight_kg', weight_kg,
-      'total_weight_kg', weight_kg * quantity,
-      'amount_usd', round(total_amount / v_pkr_rate, 2),
-      'confirmation_status', confirmation_status,
-      'delivery_status', COALESCE(delivery_status, 'none'),
+      'total_weight_kg', COALESCE(weight_kg, 0) * quantity,
+      'amount_usd', ROUND(price * quantity / v_pkr_rate, 2),
+      'is_cross_invoice', true,
+      'original_invoice_number', original_invoice_number
+    ) ORDER BY created_at DESC) FILTER (WHERE is_delivered_in_period), '[]'::jsonb),
+    COALESCE(jsonb_agg(jsonb_build_object(
+      'id', id,
+      'order_id', order_id,
+      'customer_name', customer_name,
+      'customer_phone', customer_phone,
+      'product_name', product_name,
+      'quantity', quantity,
+      'price', price,
+      'total_amount', total_amount,
+      'created_at', created_at,
+      'weight_kg', weight_kg,
+      'total_weight_kg', COALESCE(weight_kg, 0) * quantity,
+      'amount_usd', ROUND(price * quantity / v_pkr_rate, 2),
+      'confirmation_status', 'confirmed',
+      'delivery_status', delivery_status,
       'has_adjustment', false,
       'adjustment_invoice_id', NULL,
       'adjustment_invoice_number', NULL,
-      'was_delivered', delivery_status = 'delivered'
+      'was_delivered', is_delivered_in_period,
+      'is_cross_invoice', true,
+      'original_invoice_number', original_invoice_number
+    ) ORDER BY created_at DESC), '[]'::jsonb)
+  INTO v_cross_shipped_count,
+       v_cross_shipping_delivered_revenue,
+       v_cross_shipped_delivered_count,
+       v_cross_delivered_orders,
+       v_cross_orders
+  FROM cross_shipped;
+
+  WITH cross_delivered_only AS (
+    SELECT
+      o.id,
+      o.order_id,
+      o.customer_name,
+      o.customer_phone,
+      o.product_name,
+      o.quantity,
+      o.price,
+      o.total_amount,
+      o.created_at,
+      o.delivery_status,
+      COALESCE(p.weight_kg, CASE
+        WHEN p.weight = 'up_to_1kg' THEN 0.5
+        WHEN p.weight = 'up_to_2kg' THEN 1.5
+        WHEN p.weight = 'up_to_3kg' THEN 2.5
+        WHEN p.weight = 'above_3kg' THEN 3.5
+        ELSE NULL
+      END) AS weight_kg,
+      inv_orig.invoice_number AS original_invoice_number
+    FROM public.orders o
+    JOIN public.invoices inv_orig ON inv_orig.id = o.invoice_id
+    LEFT JOIN public.products p ON p.seller_id = o.seller_id AND p.name = o.product_name
+    WHERE o.seller_id = v_invoice.seller_id
+      AND o.invoice_id != p_invoice_id
+      AND inv_orig.status IN ('ready', 'paid')
+      AND inv_orig.finalized_at IS NOT NULL
+      AND o.delivery_status = 'delivered'
+      AND EXISTS (
+        SELECT 1
+        FROM public.order_history oh
+        WHERE oh.order_id = o.order_id
+          AND oh.field_changed = 'delivery_status'
+          AND oh.new_value = 'delivered'
+          AND oh.created_at > inv_orig.finalized_at
+          AND oh.created_at > v_period_start
+          AND oh.created_at <= v_period_end
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.order_history oh_last
+        WHERE oh_last.order_id = o.order_id
+          AND oh_last.field_changed = 'delivery_status'
+          AND oh_last.created_at > v_period_start
+          AND oh_last.created_at <= v_period_end
+          AND oh_last.created_at = (
+            SELECT MAX(created_at)
+            FROM public.order_history
+            WHERE order_id = o.order_id
+              AND field_changed = 'delivery_status'
+              AND created_at > v_period_start
+              AND created_at <= v_period_end
+          )
+          AND oh_last.new_value != 'delivered'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.order_history oh_ship
+        WHERE oh_ship.order_id = o.order_id
+          AND oh_ship.field_changed = 'delivery_status'
+          AND oh_ship.new_value = ANY(v_shipping_statuses)
+          AND oh_ship.created_at > inv_orig.finalized_at
+          AND oh_ship.created_at > v_period_start
+          AND oh_ship.created_at <= v_period_end
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.order_history oh_prev
+            WHERE oh_prev.order_id = o.order_id
+              AND oh_prev.field_changed = 'delivery_status'
+              AND oh_prev.created_at <= inv_orig.finalized_at
+              AND oh_prev.created_at = (
+                SELECT MAX(created_at)
+                FROM public.order_history
+                WHERE order_id = o.order_id
+                  AND field_changed = 'delivery_status'
+                  AND created_at <= inv_orig.finalized_at
+              )
+              AND oh_prev.new_value = ANY(v_shipping_statuses)
+          )
+      )
+  )
+  SELECT
+    COUNT(DISTINCT id),
+    COALESCE(SUM(ROUND(price * quantity / v_pkr_rate, 2)), 0),
+    COALESCE(jsonb_agg(jsonb_build_object(
+      'id', id,
+      'order_id', order_id,
+      'customer_name', customer_name,
+      'customer_phone', customer_phone,
+      'product_name', product_name,
+      'quantity', quantity,
+      'price', price,
+      'total_amount', total_amount,
+      'created_at', created_at,
+      'weight_kg', weight_kg,
+      'total_weight_kg', COALESCE(weight_kg, 0) * quantity,
+      'amount_usd', ROUND(price * quantity / v_pkr_rate, 2),
+      'is_cross_invoice', true,
+      'original_invoice_number', original_invoice_number
     ) ORDER BY created_at DESC), '[]'::jsonb),
     COALESCE(jsonb_agg(jsonb_build_object(
       'id', id,
@@ -988,41 +1626,207 @@ BEGIN
       'total_amount', total_amount,
       'created_at', created_at,
       'weight_kg', weight_kg,
-      'total_weight_kg', weight_kg * quantity,
-      'amount_usd', round(total_amount / v_pkr_rate, 2)
-    ) ORDER BY created_at DESC) FILTER (WHERE delivery_status = 'delivered'), '[]'::jsonb)
-  INTO v_all_orders, v_delivered_orders
-  FROM order_weights;
+      'total_weight_kg', COALESCE(weight_kg, 0) * quantity,
+      'amount_usd', ROUND(price * quantity / v_pkr_rate, 2),
+      'confirmation_status', 'confirmed',
+      'delivery_status', delivery_status,
+      'has_adjustment', false,
+      'adjustment_invoice_id', NULL,
+      'adjustment_invoice_number', NULL,
+      'was_delivered', true,
+      'is_cross_invoice', true,
+      'original_invoice_number', original_invoice_number
+    ) ORDER BY created_at DESC), '[]'::jsonb)
+  INTO v_cross_delivered_only_count,
+       v_cross_delivered_only_revenue,
+       v_cross_delivered_only_orders,
+       v_cross_delivered_only_all
+  FROM cross_delivered_only;
 
-  SELECT COALESCE(jsonb_agg(to_jsonb(a) ORDER BY a.created_at DESC), '[]'::jsonb),
-         COALESCE(sum(CASE WHEN a.type = 'deduction' THEN -abs(a.amount) ELSE a.amount END), 0)
+  v_cross_delivered_count := v_cross_delivered_only_count + v_cross_shipped_delivered_count;
+
+  WITH direct_shipped AS (
+    SELECT DISTINCT
+      o.id,
+      COALESCE(p.weight_kg, CASE
+        WHEN p.weight = 'up_to_1kg' THEN 0.5
+        WHEN p.weight = 'up_to_2kg' THEN 1.5
+        WHEN p.weight = 'up_to_3kg' THEN 2.5
+        WHEN p.weight = 'above_3kg' THEN 3.5
+        ELSE 0.5
+      END) * o.quantity AS total_wt
+    FROM public.orders o
+    LEFT JOIN public.products p ON p.seller_id = o.seller_id AND p.name = o.product_name
+    WHERE o.invoice_id = p_invoice_id
+      AND EXISTS (
+        SELECT 1
+        FROM public.order_history oh
+        WHERE oh.order_id = o.order_id
+          AND oh.field_changed = 'delivery_status'
+          AND oh.new_value = ANY(v_shipping_statuses)
+          AND oh.created_at > v_period_start
+          AND oh.created_at <= v_period_end
+      )
+  ),
+  cross_shipped_wt AS (
+    SELECT DISTINCT
+      o.id,
+      COALESCE(p.weight_kg, CASE
+        WHEN p.weight = 'up_to_1kg' THEN 0.5
+        WHEN p.weight = 'up_to_2kg' THEN 1.5
+        WHEN p.weight = 'up_to_3kg' THEN 2.5
+        WHEN p.weight = 'above_3kg' THEN 3.5
+        ELSE 0.5
+      END) * o.quantity AS total_wt
+    FROM public.orders o
+    JOIN public.invoices inv_orig ON inv_orig.id = o.invoice_id
+    LEFT JOIN public.products p ON p.seller_id = o.seller_id AND p.name = o.product_name
+    WHERE o.seller_id = v_invoice.seller_id
+      AND o.invoice_id != p_invoice_id
+      AND inv_orig.status IN ('ready', 'paid')
+      AND inv_orig.finalized_at IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.order_history oh
+        WHERE oh.order_id = o.order_id
+          AND oh.field_changed = 'delivery_status'
+          AND oh.new_value = ANY(v_shipping_statuses)
+          AND oh.created_at > inv_orig.finalized_at
+          AND oh.created_at > v_period_start
+          AND oh.created_at <= v_period_end
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.order_history oh_prev
+        WHERE oh_prev.order_id = o.order_id
+          AND oh_prev.field_changed = 'delivery_status'
+          AND oh_prev.created_at <= inv_orig.finalized_at
+          AND oh_prev.created_at = (
+            SELECT MAX(created_at)
+            FROM public.order_history
+            WHERE order_id = o.order_id
+              AND field_changed = 'delivery_status'
+              AND created_at <= inv_orig.finalized_at
+          )
+          AND oh_prev.new_value = ANY(v_shipping_statuses)
+      )
+  ),
+  all_shipped AS (
+    SELECT total_wt FROM direct_shipped
+    UNION ALL
+    SELECT total_wt FROM cross_shipped_wt
+  ),
+  brackets AS (
+    SELECT
+      CASE
+        WHEN total_wt <= 1 THEN '0-1 KG'
+        WHEN total_wt <= 2 THEN '1-2 KG'
+        WHEN total_wt <= 3 THEN '2-3 KG'
+        ELSE '3+ KG'
+      END AS bracket,
+      CASE
+        WHEN total_wt <= 1 THEN v_rate_1kg
+        WHEN total_wt <= 2 THEN v_rate_2kg
+        WHEN total_wt <= 3 THEN v_rate_3kg
+        ELSE v_rate_3kg_plus
+      END AS fee
+    FROM all_shipped
+  )
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'bracket', bracket,
+    'count', cnt,
+    'fee', total_fee
+  ) ORDER BY bracket), '[]'::jsonb)
+  INTO v_shipping_breakdown
+  FROM (
+    SELECT bracket, COUNT(*) AS cnt, SUM(fee) AS total_fee
+    FROM brackets
+    GROUP BY bracket
+  ) sub;
+
+  SELECT COALESCE(SUM((item->>'fee')::numeric), 0)
+    INTO v_shipping_fees
+    FROM jsonb_array_elements(v_shipping_breakdown) AS item;
+
+  v_shipped_count := v_shipped_count + v_cross_shipped_count;
+  v_cross_delivered_revenue := v_cross_delivered_only_revenue + v_cross_shipping_delivered_revenue;
+  v_delivered_revenue_usd := v_delivered_revenue_usd + v_cross_delivered_revenue;
+  v_delivered_orders := v_delivered_orders || v_cross_delivered_orders || v_cross_delivered_only_orders;
+  v_all_orders := v_all_orders || v_cross_orders || v_cross_delivered_only_all;
+  v_delivered_count := v_delivered_count + v_cross_delivered_only_count + v_cross_shipped_delivered_count;
+
+  v_call_center_fees := (v_confirmed_count * v_confirmed_rate) + (v_dropped_count * v_dropped_rate);
+  v_cod_fees := ROUND(v_delivered_revenue_usd * (v_cod_fee_percentage / 100), 2);
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', id,
+    'invoice_id', invoice_id,
+    'type', type,
+    'amount', amount,
+    'reason', reason,
+    'created_at', created_at
+  ) ORDER BY created_at DESC), '[]'::jsonb),
+  COALESCE(SUM(CASE
+    WHEN type IN ('in', 'addon', 'credit') THEN amount
+    WHEN type = 'deduction' THEN -ABS(amount)
+    ELSE -ABS(amount)
+  END), 0)
   INTO v_addons, v_addon_net
-  FROM public.invoice_addons a
-  WHERE a.invoice_id = p_invoice_id;
+  FROM public.invoice_addons
+  WHERE invoice_id = p_invoice_id;
 
-  SELECT COALESCE(jsonb_agg(to_jsonb(adj) ORDER BY adj.created_at DESC), '[]'::jsonb),
-         COALESCE(sum(adj.difference_usd + COALESCE(adj.shipping_difference_usd, 0)), 0)
-  INTO v_adjustments, v_adjustment_net
-  FROM public.invoice_adjustments adj
-  WHERE adj.applied_invoice_id = p_invoice_id OR adj.invoice_id = p_invoice_id;
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'id', id,
+    'order_id', order_id,
+    'seller_id', seller_id,
+    'invoice_id', invoice_id,
+    'applied_invoice_id', applied_invoice_id,
+    'old_status', old_status,
+    'new_status', new_status,
+    'difference', difference,
+    'difference_usd', ROUND(difference / v_pkr_rate, 2),
+    'shipping_difference', shipping_difference,
+    'shipping_difference_usd', ROUND(shipping_difference / v_pkr_rate, 2),
+    'reason', reason,
+    'status', status,
+    'created_at', created_at
+  ) ORDER BY created_at DESC), '[]'::jsonb),
+  COALESCE(SUM(CASE
+    WHEN status = 'approved' THEN difference + COALESCE(shipping_difference, 0)
+    ELSE 0
+  END), 0)
+  INTO v_adjustments, v_adjustment_net_pkr
+  FROM public.invoice_adjustments
+  WHERE applied_invoice_id = p_invoice_id;
 
-  v_shipping_fees := v_delivered_count * COALESCE(v_rates.rate_1kg, 0);
-  v_shipping_breakdown := jsonb_build_array(jsonb_build_object('bracket', 'standard', 'count', v_delivered_count, 'fee', v_shipping_fees));
+  v_adjustment_net := ROUND(v_adjustment_net_pkr / v_pkr_rate, 2);
+  v_net_payable := ROUND(v_delivered_revenue_usd - v_shipping_fees - v_call_center_fees - v_cod_fees + v_addon_net + v_adjustment_net + v_previous_balance, 2);
 
-  RETURN json_build_object(
-    'invoice', to_jsonb(v_invoice),
+  RETURN jsonb_build_object(
+    'invoice', jsonb_build_object(
+      'id', v_invoice.id,
+      'invoice_number', v_invoice.invoice_number,
+      'seller_id', v_invoice.seller_id,
+      'status', v_invoice.status,
+      'created_at', v_invoice.created_at,
+      'finalized_at', v_invoice.finalized_at,
+      'paid_at', v_invoice.paid_at,
+      'paid_by', v_invoice.paid_by,
+      'payment_proof_url', v_invoice.payment_proof_url,
+      'previous_balance', v_previous_balance
+    ),
     'rates', jsonb_build_object(
       'shipping', jsonb_build_object(
-        'rate_1kg', COALESCE(v_rates.rate_1kg, 0),
-        'rate_2kg', COALESCE(v_rates.rate_2kg, 0),
-        'rate_3kg', COALESCE(v_rates.rate_3kg, 0),
-        'rate_3kg_plus', COALESCE(v_rates.rate_3kg_plus, 0)
+        'rate_1kg', v_rate_1kg,
+        'rate_2kg', v_rate_2kg,
+        'rate_3kg', v_rate_3kg,
+        'rate_3kg_plus', v_rate_3kg_plus
       ),
       'call_center', jsonb_build_object(
-        'confirmed_rate', COALESCE(v_rate_settings.confirmed_order_rate, 0),
-        'dropped_rate', COALESCE(v_rate_settings.dropped_order_rate, 0)
+        'confirmed_rate', v_confirmed_rate,
+        'dropped_rate', v_dropped_rate
       ),
-      'cod_fee_percentage', COALESCE(v_rate_settings.cod_fee_per_delivery, 0)
+      'cod_fee_percentage', v_cod_fee_percentage
     ),
     'counts', jsonb_build_object(
       'total_orders_count', v_total_orders_count,
@@ -1030,17 +1834,17 @@ BEGIN
       'shipped_count', v_shipped_count,
       'confirmed_count', v_confirmed_count,
       'dropped_count', v_dropped_count,
-      'cross_shipped_count', 0,
-      'cross_delivered_count', 0,
-      'cross_confirmed_count', 0
+      'cross_shipped_count', v_cross_shipped_count,
+      'cross_delivered_count', v_cross_delivered_count,
+      'cross_confirmed_count', v_cross_confirmed_count
     ),
     'call_center_breakdown', jsonb_build_object(
       'confirmed_count', v_confirmed_count,
-      'confirmed_rate', COALESCE(v_rate_settings.confirmed_order_rate, 0),
-      'confirmed_fees', v_confirmed_count * COALESCE(v_rate_settings.confirmed_order_rate, 0),
+      'confirmed_rate', v_confirmed_rate,
+      'confirmed_fees', v_confirmed_count * v_confirmed_rate,
       'dropped_count', v_dropped_count,
-      'dropped_rate', COALESCE(v_rate_settings.dropped_order_rate, 0),
-      'dropped_fees', v_dropped_count * COALESCE(v_rate_settings.dropped_order_rate, 0)
+      'dropped_rate', v_dropped_rate,
+      'dropped_fees', v_dropped_count * v_dropped_rate
     ),
     'delivered_orders', v_delivered_orders,
     'all_orders', v_all_orders,
@@ -1048,14 +1852,14 @@ BEGIN
     'addons', v_addons,
     'adjustments', v_adjustments,
     'totals', jsonb_build_object(
-      'delivered_revenue_usd', round(v_delivered_revenue_usd, 2),
-      'shipping_fees', v_shipping_fees,
-      'call_center_fees', v_call_center_fees,
-      'cod_fees', v_cod_fees,
-      'addon_net', v_addon_net,
-      'adjustment_net', v_adjustment_net,
-      'previous_balance', COALESCE(v_invoice.previous_balance, 0),
-      'net_payable', round(v_delivered_revenue_usd - v_shipping_fees - v_call_center_fees - v_cod_fees + v_addon_net + v_adjustment_net + COALESCE(v_invoice.previous_balance, 0), 2)
+      'delivered_revenue_usd', ROUND(v_delivered_revenue_usd, 2),
+      'shipping_fees', ROUND(v_shipping_fees, 2),
+      'call_center_fees', ROUND(v_call_center_fees, 2),
+      'cod_fees', ROUND(v_cod_fees, 2),
+      'addon_net', ROUND(v_addon_net, 2),
+      'adjustment_net', ROUND(v_adjustment_net, 2),
+      'previous_balance', ROUND(v_previous_balance, 2),
+      'net_payable', v_net_payable
     )
   );
 END;

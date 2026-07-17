@@ -607,6 +607,7 @@ const AgentOrders = () => {
       }
       const updateData: Record<string, any> = {
         confirmation_status: selectedStatus,
+        confirmation_channel: "agent",
         agent_id: authUser.id,
         last_activity_at: new Date().toISOString(),
         customer_name: editCustomer.name,
@@ -690,6 +691,7 @@ const AgentOrders = () => {
       const rpcParams = {
           p_order_id:            currentOrder.id,
           p_confirmation_status: updateData.confirmation_status,
+          p_confirmation_channel:updateData.confirmation_channel,
           p_agent_id:            updateData.agent_id ?? null,
           p_assigned_at:         updateData.assigned_at ?? null,
           p_last_activity_at:    updateData.last_activity_at ?? null,
