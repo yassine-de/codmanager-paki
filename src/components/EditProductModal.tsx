@@ -50,13 +50,62 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
   const [weight, setWeight] = useState<string>("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [skuCopied, setSkuCopied] = useState(false);
-  const [prevId, setPrevId] = useState<string | null>(null);
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [pendingWhatsappValue, setPendingWhatsappValue] = useState<boolean | null>(null);
   const [whatsappSaving, setWhatsappSaving] = useState(false);
 
   // Check if this is a DB product (UUID format)
   const isDbProduct = product ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(product.id) : false;
+
+  const applyProductToForm = (nextProduct: Product) => {
+    setName(nextProduct.name);
+    setSeller(nextProduct.seller);
+    setSku(nextProduct.sku);
+    setImage(nextProduct.image);
+    setPrice(nextProduct.price);
+    setTotalQty(nextProduct.totalQty);
+    setVariants(nextProduct.variants.map(v => ({ ...v })));
+    setStoreLink(nextProduct.storeLink || "");
+    setVideoLink(nextProduct.videoLink || "");
+    setLastSellingPrice(nextProduct.lastSellingPrice || 0);
+    setLastPrice(nextProduct.lastPrice || 0);
+    setOffers(nextProduct.offers?.map(o => ({ ...o })) || []);
+    setWeight(nextProduct.weight || "");
+    setErrors({});
+  };
+
+  useEffect(() => {
+    if (!open || !product) return;
+    let cancelled = false;
+    applyProductToForm(product);
+
+    if (!isDbProduct) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("name, sku, image_url, product_url, video_url, price, landed_price, last_price, quantity, offers, weight")
+        .eq("id", product.id)
+        .maybeSingle();
+      if (cancelled || error || !data) return;
+
+      applyProductToForm({
+        ...product,
+        name: data.name || product.name,
+        sku: data.sku || product.sku,
+        image: data.image_url || product.image,
+        price: Number(data.landed_price) || 0,
+        totalQty: product.totalQty || Number(data.quantity || 0),
+        storeLink: data.product_url || "",
+        videoLink: data.video_url || "",
+        lastSellingPrice: Number(data.price) || 0,
+        lastPrice: Number(data.last_price) || 0,
+        offers: ((data as any).offers || []).map((o: any, idx: number) => ({ id: `OFF-${idx}`, quantity: o.quantity || 1, price: o.price || 0 })),
+        weight: data.weight || "",
+      });
+    })();
+
+    return () => { cancelled = true; };
+  }, [open, product?.id, isDbProduct]);
 
   // Fetch current whatsapp_confirmation_enabled value when opening a DB product (admin only)
   useEffect(() => {
@@ -117,24 +166,6 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
       toast.error("Failed to update product");
     },
   });
-
-  if (product && product.id !== prevId) {
-    setPrevId(product.id);
-    setName(product.name);
-    setSeller(product.seller);
-    setSku(product.sku);
-    setImage(product.image);
-    setPrice(product.price);
-    setTotalQty(product.totalQty);
-    setVariants(product.variants.map(v => ({ ...v })));
-    setStoreLink(product.storeLink || "");
-    setVideoLink(product.videoLink || "");
-    setLastSellingPrice(product.lastSellingPrice || 0);
-    setLastPrice(product.lastPrice || 0);
-    setOffers(product.offers?.map(o => ({ ...o })) || []);
-    setWeight(product.weight || "");
-    setErrors({});
-  }
 
   const addVariant = () => {
     setVariants(prev => [...prev, { id: `VAR-${Date.now()}-${prev.length}`, name: "", sku: "", price: price || 0, quantity: 0 }]);

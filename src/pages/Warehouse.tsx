@@ -44,7 +44,12 @@ interface SourcingReceiveRow {
   display_id: string | null;
   seller_id: string;
   product_name: string;
+  product_url?: string | null;
+  product_image_url?: string | null;
   quantity: number;
+  seller_price?: number | null;
+  landed_price?: number | null;
+  product_weight?: string | null;
   status: string;
   source_product_id: string | null;
   variants: any[] | null;
@@ -1076,6 +1081,9 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
   async function ensureProductVariant(row: SourcingReceiveRow, line: ReceiveLine) {
     let productId = row.source_product_id;
+    const sourceImage = row.product_image_url || null;
+    const buyingPrice = Number(row.seller_price ?? row.landed_price ?? 0) || 0;
+    const weightText = row.product_weight || null;
     if (!productId) {
       const { data: existingProduct } = await supabase
         .from("products" as any)
@@ -1097,6 +1105,12 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
           sku: baseSku,
           name: row.product_name,
           quantity: 0,
+          price: 0,
+          landed_price: buyingPrice,
+          product_url: row.product_url || "",
+          image_url: sourceImage,
+          scraped_image_url: sourceImage,
+          weight: weightText,
           sourcing_request_id: row.id,
           active: true,
         })
@@ -1104,6 +1118,23 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         .single();
       if (error) throw error;
       productId = product.id as string;
+    } else {
+      const patch: Record<string, unknown> = {
+        landed_price: buyingPrice,
+        updated_at: new Date().toISOString(),
+      };
+      if (sourceImage) {
+        patch.image_url = sourceImage;
+        patch.scraped_image_url = sourceImage;
+      }
+      if (row.product_url) patch.product_url = row.product_url;
+      if (weightText) patch.weight = weightText;
+
+      const { error: updateProductError } = await supabase
+        .from("products" as any)
+        .update(patch)
+        .eq("id", productId);
+      if (updateProductError) throw updateProductError;
     }
 
     const { data: variant } = await supabase

@@ -111,6 +111,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
   const sellerInvoiceAmount = n(quantity) * n(sellerPrice);
   const sourcingProfit = n(sellerPrice) > 0 && n(landedPrice) > 0 ? n(sellerPrice) - n(landedPrice) : 0;
   const profitMargin = n(sellerPrice) > 0 ? ((sourcingProfit / n(sellerPrice)) * 100) : 0;
+  const requiresProductWeight = n(landedPrice) > 0 || n(sellerPrice) > 0;
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
@@ -119,6 +120,12 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
     
     if (n(landedPrice) < 0) errs.landedPrice = "Landed price cannot be negative";
     if (n(sellerPrice) < 0) errs.sellerPrice = "Seller price cannot be negative";
+    if (requiresProductWeight) {
+      const weightValue = Number(productWeight || 0);
+      if (!productWeight || !Number.isFinite(weightValue) || weightValue <= 0) {
+        errs.productWeight = "Product weight is required when prices are entered";
+      }
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -519,7 +526,7 @@ export function EditSourcingModal({ request, open, onOpenChange }: EditSourcingM
                 })()}
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Product Weight (kg)</Label>
+                <Label className="text-xs">Product Weight (kg) {requiresProductWeight && <span className="text-destructive">*</span>}</Label>
                 <Input
                   type="number"
                   min={0}
