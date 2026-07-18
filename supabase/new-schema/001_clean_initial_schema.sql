@@ -3383,6 +3383,7 @@ CREATE POLICY "Sellers manage own products" ON public.products FOR ALL TO authen
 CREATE POLICY "Sellers view own order items" ON public.order_items FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.orders o WHERE o.id = public.order_items.order_id AND o.seller_id = auth.uid()));
 CREATE POLICY "Sellers insert own order items" ON public.order_items FOR INSERT TO authenticated WITH CHECK (EXISTS (SELECT 1 FROM public.orders o WHERE o.id = public.order_items.order_id AND o.seller_id = auth.uid()));
 CREATE POLICY "Sellers manage own integration sheets" ON public.integration_sheets FOR ALL TO authenticated USING (seller_id = auth.uid()) WITH CHECK (seller_id = auth.uid());
+CREATE POLICY "Sellers view own integration errors" ON public.integration_errors FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM public.integration_sheets WHERE integration_sheets.id = integration_errors.sheet_id AND integration_sheets.seller_id = auth.uid()));
 CREATE POLICY "Sellers view own rates" ON public.seller_rates FOR SELECT TO authenticated USING (user_id = auth.uid());
 CREATE POLICY "Sellers view own rate settings" ON public.rate_settings FOR SELECT TO authenticated USING (seller_id = auth.uid() OR seller_id IS NULL);
 CREATE POLICY "Sellers manage own payment methods" ON public.seller_payment_methods FOR ALL TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());

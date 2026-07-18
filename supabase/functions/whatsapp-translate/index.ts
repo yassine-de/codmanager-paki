@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Translate a WhatsApp message body to English for internal staff.
-// Uses Lovable AI Gateway. Result is cached on the message row in payload._translation_en.
+// Uses OpenAI when OPENAI_API_KEY is configured; falls back to Lovable AI Gateway.
+// Result is cached on the message row in payload._translation_en.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0?no-check";
 
 const corsHeaders = {
@@ -74,10 +75,31 @@ Deno.serve(async (req) => {
       });
     }
 
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    const OPENAI_TRANSLATION_MODEL = Deno.env.get("OPENAI_TRANSLATION_MODEL") || "gpt-4o-mini";
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const callGateway = async () => {
+    const callOpenAI = async () => {
+      return await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: OPENAI_TRANSLATION_MODEL,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a translator. Translate the user's WhatsApp message to clear, natural English. If the message is already English, return it unchanged. Output ONLY the translation, no quotes, no explanations, no language labels.",
+            },
+            { role: "user", content: body },
+          ],
+          temperature: 0.1,
+          max_tokens: 400,
+        }),
+      });
+    };
+
+    const callLovableGateway = async () => {
       return await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -97,12 +119,16 @@ Deno.serve(async (req) => {
       });
     };
 
-    let r = await callGateway();
+    const provider = OPENAI_API_KEY ? "openai" : LOVABLE_API_KEY ? "lovable" : null;
+    if (!provider) throw new Error("OPENAI_API_KEY or LOVABLE_API_KEY not configured");
+    const callProvider = provider === "openai" ? callOpenAI : callLovableGateway;
+
+    let r = await callProvider();
     // Retry once on rate-limit / transient 5xx after a short backoff
     if (r.status === 429 || (r.status >= 500 && r.status < 600)) {
       await new Promise((res) => setTimeout(res, 1500));
       try {
-        const retry = await callGateway();
+        const retry = await callProvider();
         r = retry;
       } catch (_) {
         // keep original r
@@ -116,8 +142,8 @@ Deno.serve(async (req) => {
           ? "Translation service is busy. Try again in a few seconds."
           : r.status === 402
           ? "AI credits exhausted. Please top up to use translation."
-          : `AI gateway error ${r.status}`;
-      console.error("[wa-translate] gateway failure", { status: r.status, body: t.slice(0, 200) });
+          : `${provider === "openai" ? "OpenAI" : "AI gateway"} error ${r.status}`;
+      console.error("[wa-translate] provider failure", { provider, status: r.status, body: t.slice(0, 200) });
       // Return 200 with ok:false so the client can read the structured reason
       return new Response(
         JSON.stringify({ ok: false, error: reason, status: r.status }),

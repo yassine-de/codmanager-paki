@@ -1408,6 +1408,26 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
+  const readFunctionError = async (error: any) => {
+    const response = error?.context;
+    if (response?.clone) {
+      try {
+        const body = await response.clone().json();
+        if (body?.error) return String(body.error);
+        if (body?.message) return String(body.message);
+      } catch {
+        // Fall back to text below.
+      }
+      try {
+        const text = await response.clone().text();
+        if (text) return text.slice(0, 300);
+      } catch {
+        // Fall back to the SDK message below.
+      }
+    }
+    return error?.message || "Label printing failed";
+  };
+
   const updateOrderDeliveryStatus = async (rows: FulfillmentRow[], nextStatus: "printed" | "dispatched", actionType: string) => {
     const orderIds = Array.from(new Set(rows.map((row) => row.order_id).filter(Boolean)));
     if (orderIds.length === 0) return;
@@ -1458,17 +1478,42 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       const chunks: string[][] = [];
       for (let i = 0; i < trackingNumbers.length; i += 10) chunks.push(trackingNumbers.slice(i, i + 10));
 
-      for (let i = 0; i < chunks.length; i += 1) {
+      const printedTrackingNumbers = new Set<string>();
+      const failedLabels: Array<{ tracking: string; message: string }> = [];
+      const requestLabelPdf = async (numbers: string[], label: string) => {
         const { data, error } = await supabase.functions.invoke("shipping-sync", {
-          body: { action: "generate-labels", tracking_numbers: chunks[i] },
+          body: { action: "generate-labels", tracking_numbers: numbers },
         });
-        if (error) throw error;
+        if (error) throw new Error(await readFunctionError(error));
         if (!data?.pdf_base64) throw new Error("PostEx did not return a label PDF");
-        openPdf(data.pdf_base64, `postex-labels-${i + 1}.pdf`);
+        openPdf(data.pdf_base64, label);
+      };
+
+      for (let i = 0; i < chunks.length; i += 1) {
+        const chunk = chunks[i];
+        try {
+          await requestLabelPdf(chunk, `postex-labels-${i + 1}.pdf`);
+          chunk.forEach((tracking) => printedTrackingNumbers.add(tracking));
+        } catch (batchError: any) {
+          for (const tracking of chunk) {
+            try {
+              await requestLabelPdf([tracking], `postex-label-${tracking}.pdf`);
+              printedTrackingNumbers.add(tracking);
+            } catch (singleError: any) {
+              failedLabels.push({ tracking, message: singleError?.message || batchError?.message || "Label PDF failed" });
+            }
+          }
+        }
+      }
+
+      if (printedTrackingNumbers.size === 0) {
+        const firstFailure = failedLabels[0];
+        throw new Error(firstFailure ? `${firstFailure.tracking}: ${firstFailure.message}` : "Label printing failed");
       }
 
       const printedAt = new Date().toISOString();
-      const pendingRows = rows.filter((row) => row.fulfillment_item_status === "pending");
+      const printedRows = rows.filter((row) => row.tracking_number && printedTrackingNumbers.has(row.tracking_number));
+      const pendingRows = printedRows.filter((row) => row.fulfillment_item_status === "pending");
       const pendingIds = pendingRows.map((row) => row.fulfillment_item_id);
       if (pendingIds.length > 0) {
         const { error } = await supabase
@@ -1479,7 +1524,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         await updateOrderDeliveryStatus(pendingRows, "printed", "warehouse_label_printed");
       }
 
-      await Promise.all(trackingNumbers.map((tracking) => supabase.from("scan_events" as any).insert({
+      await Promise.all(Array.from(printedTrackingNumbers).map((tracking) => supabase.from("scan_events" as any).insert({
         tracking_number: tracking,
         scan_type: "audit",
         result: "ok",
@@ -1488,9 +1533,16 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         metadata: { action: alreadyPrinted.length > 0 ? "reprint" : "print_labels" },
       })));
 
-      toast.success(`Opened ${trackingNumbers.length} labels for printing`);
-      setLabelDialogOpen(false);
-      setSelectedLabelIds(new Set());
+      if (failedLabels.length > 0) {
+        const sample = failedLabels.slice(0, 3).map((item) => item.tracking).join(", ");
+        toast.warning(`Opened ${printedTrackingNumbers.size} labels. ${failedLabels.length} failed`, {
+          description: sample ? `Failed tracking: ${sample}` : undefined,
+        });
+      } else {
+        toast.success(`Opened ${printedTrackingNumbers.size} labels for printing`);
+        setLabelDialogOpen(false);
+        setSelectedLabelIds(new Set());
+      }
       refreshWarehouse();
     } catch (error: any) {
       toast.error(error.message || "Label printing failed");

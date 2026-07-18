@@ -63,6 +63,16 @@ function postexHeaders(token: string) {
   };
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 function normalizeStatus(status?: string | null, code?: string | null) {
   const value = (status || "").toLowerCase().trim();
   const messageCode = String(code || "").trim();
@@ -397,7 +407,7 @@ async function generateLoadSheet(supabase: ReturnType<typeof createClient>, trac
   return {
     success: true,
     content_type: contentType,
-    pdf_base64: btoa(String.fromCharCode(...new Uint8Array(bytes))),
+    pdf_base64: arrayBufferToBase64(bytes),
   };
 }
 
@@ -420,7 +430,7 @@ async function generateAirwayBill(supabase: ReturnType<typeof createClient>, tra
   return {
     success: true,
     content_type: contentType,
-    pdf_base64: btoa(String.fromCharCode(...new Uint8Array(bytes))),
+    pdf_base64: arrayBufferToBase64(bytes),
     tracking_numbers: trackingNumbers,
   };
 }
