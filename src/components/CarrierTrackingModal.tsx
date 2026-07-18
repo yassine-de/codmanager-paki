@@ -18,6 +18,7 @@ interface TrackingEvent {
   transactionStatusMessageCode?: string | number;
   transactionStatusDate?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 interface TrackingPayload {
@@ -43,6 +44,24 @@ interface TrackingPayload {
   cityName?: string;
   transactionNotes?: string;
   transactionStatusHistory?: TrackingEvent[];
+}
+
+function formatTrackingDate(value?: string) {
+  if (!value) return "";
+  const normalizedValue = value.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+  const date = new Date(normalizedValue);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Karachi",
+    timeZoneName: "short",
+  }).format(date);
 }
 
 export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerId, open, onClose }: CarrierTrackingModalProps) {
@@ -85,7 +104,7 @@ export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerI
     const events = (payload?.transactionStatusHistory || payload?.detail || []).map((event) => ({
       status: event.transactionStatusMessage || event.status || "-",
       code: event.transactionStatusMessageCode ? String(event.transactionStatusMessageCode) : "",
-      dateTime: event.transactionStatusDate || event.dateTime || event.createdAt || "",
+      dateTime: formatTrackingDate(event.updatedAt || event.transactionStatusDate || event.dateTime || event.createdAt),
     }));
 
     return {
