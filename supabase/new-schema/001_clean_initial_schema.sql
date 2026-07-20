@@ -401,14 +401,51 @@ SET search_path = public
 AS $$
 DECLARE
   v_counter integer;
+  v_prefix text;
 BEGIN
+  SELECT NULLIF(split_part(display_id, '-', 1), '')
+    INTO v_prefix
+  FROM public.profiles
+  WHERE user_id = p_seller_id;
+
+  IF v_prefix IS NULL THEN
+    SELECT upper(left(regexp_replace(coalesce(name, 'SR'), '[^A-Za-z0-9]', '', 'g'), 2))
+      INTO v_prefix
+    FROM public.profiles
+    WHERE user_id = p_seller_id;
+  END IF;
+
+  v_prefix := coalesce(NULLIF(v_prefix, ''), 'SR');
+
   INSERT INTO public.seller_sourcing_counters (seller_id, current_counter)
   VALUES (p_seller_id, 1)
-  ON CONFLICT (seller_id) DO UPDATE SET current_counter = public.seller_sourcing_counters.current_counter + 1
+  ON CONFLICT (seller_id) DO UPDATE
+    SET current_counter = public.seller_sourcing_counters.current_counter + 1
   RETURNING current_counter INTO v_counter;
-  RETURN 'SR-' || v_counter::text;
+
+  RETURN v_prefix || '-S' || lpad(v_counter::text, 3, '0');
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION public.set_sourcing_request_display_id()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.display_id IS NULL OR btrim(NEW.display_id) = '' THEN
+    NEW.display_id := public.generate_sourcing_display_id(NEW.seller_id);
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_set_sourcing_request_display_id
+BEFORE INSERT ON public.sourcing_requests
+FOR EACH ROW
+EXECUTE FUNCTION public.set_sourcing_request_display_id();
 
 -- ---------------------------------------------------------------------------
 -- Orders and confirmation workflow
@@ -3333,6 +3370,7 @@ CREATE INDEX idx_ai_memory_phone ON public.whatsapp_ai_memory(customer_phone);
 CREATE INDEX idx_ai_suggestions_conv ON public.whatsapp_ai_suggestions(conversation_id, created_at DESC);
 CREATE INDEX idx_sourcing_requests_seller_created ON public.sourcing_requests(seller_id, created_at DESC);
 CREATE INDEX idx_sourcing_requests_status_created ON public.sourcing_requests(status, created_at DESC);
+CREATE UNIQUE INDEX idx_sourcing_requests_display_id_unique ON public.sourcing_requests(display_id) WHERE display_id IS NOT NULL;
 CREATE INDEX idx_support_tickets_seller_status ON public.support_tickets(seller_id, status);
 CREATE INDEX idx_support_tickets_status_created ON public.support_tickets(status, created_at DESC);
 CREATE INDEX idx_support_messages_ticket_created ON public.support_messages(ticket_id, created_at DESC);

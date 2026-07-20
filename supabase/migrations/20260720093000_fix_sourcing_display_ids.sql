@@ -31,6 +31,7 @@ BEGIN
   RETURN v_prefix || '-S' || lpad(v_counter::text, 3, '0');
 END;
 $$;
+
 CREATE OR REPLACE FUNCTION public.set_sourcing_request_display_id()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -50,6 +51,7 @@ CREATE TRIGGER trg_set_sourcing_request_display_id
 BEFORE INSERT ON public.sourcing_requests
 FOR EACH ROW
 EXECUTE FUNCTION public.set_sourcing_request_display_id();
+
 DO $$
 DECLARE
   v_request record;
@@ -66,6 +68,7 @@ BEGIN
   END LOOP;
 END;
 $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sourcing_requests_display_id_unique
 ON public.sourcing_requests(display_id)
 WHERE display_id IS NOT NULL;

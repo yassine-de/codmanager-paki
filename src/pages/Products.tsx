@@ -354,7 +354,7 @@ export default function Products() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="space-y-4 max-w-7xl">
+      <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between animate-fade-in">
           <div>

@@ -1,0 +1,2 @@
+-- Placeholder for a migration version already present in the remote Supabase
+-- migration history. The original SQL was applied outside this local checkout.
