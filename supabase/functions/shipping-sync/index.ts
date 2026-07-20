@@ -238,6 +238,11 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
     throw new Error(`PostEx city not found: "${order.customer_city}"`);
   }
 
+  const orderNote = String(order.note || "").trim();
+  const transactionNotes = orderNote
+    ? `${orderNote} | ALLOWED TO OPEN`
+    : "ALLOWED TO OPEN";
+
   const postexOrder: Record<string, unknown> = {
     cityName: matchedCity.city_name,
     customerName: order.customer_name || "Customer",
@@ -249,7 +254,7 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
     orderDetail: buildOrderDetail(order),
     orderRefNumber: order.order_id,
     orderType: "Normal",
-    transactionNotes: order.note || "",
+    transactionNotes,
   };
   if (cfg.pickupAddressCode) postexOrder.pickupAddressCode = cfg.pickupAddressCode;
   if (cfg.storeAddressCode) postexOrder.storeAddressCode = cfg.storeAddressCode;
