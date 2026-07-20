@@ -404,6 +404,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const [notPrintedSearch, setNotPrintedSearch] = useState("");
 
   const [readySearch, setReadySearch] = useState("");
+  const [selectedReadyIds, setSelectedReadyIds] = useState<Set<string>>(new Set());
   const [readyScan, setReadyScan] = useState("");
   const [dispatchCandidate, setDispatchCandidate] = useState<FulfillmentRow | null>(null);
 
@@ -1334,6 +1335,13 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const selectedLabelRows = useMemo(() => notPrintedRows.filter((row) => selectedLabelIds.has(row.fulfillment_item_id) && row.tracking_number), [notPrintedRows, selectedLabelIds]);
   const baseLabelRows = selectedLabelRows.length > 0 ? selectedLabelRows : selectableLabelRows;
   const allDisplayedSelected = selectableLabelRows.length > 0 && selectableLabelRows.every((row) => selectedLabelIds.has(row.fulfillment_item_id));
+  const selectableReadyRows = useMemo(() => filteredReady.filter((row) => row.tracking_number), [filteredReady]);
+  const selectedReadyRows = useMemo(
+    () => readyRows.filter((row) => selectedReadyIds.has(row.fulfillment_item_id) && row.tracking_number),
+    [readyRows, selectedReadyIds],
+  );
+  const allDisplayedReadySelected = selectableReadyRows.length > 0
+    && selectableReadyRows.every((row) => selectedReadyIds.has(row.fulfillment_item_id));
 
   const toggleLabelRow = (rowId: string) => {
     setSelectedLabelIds((prev) => {
@@ -1349,6 +1357,24 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       const next = new Set(prev);
       if (allDisplayedSelected) selectableLabelRows.forEach((row) => next.delete(row.fulfillment_item_id));
       else selectableLabelRows.forEach((row) => next.add(row.fulfillment_item_id));
+      return next;
+    });
+  };
+
+  const toggleReadyRow = (rowId: string) => {
+    setSelectedReadyIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  };
+
+  const toggleDisplayedReady = () => {
+    setSelectedReadyIds((prev) => {
+      const next = new Set(prev);
+      if (allDisplayedReadySelected) selectableReadyRows.forEach((row) => next.delete(row.fulfillment_item_id));
+      else selectableReadyRows.forEach((row) => next.add(row.fulfillment_item_id));
       return next;
     });
   };
@@ -1391,19 +1417,35 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     return { total, batches, carriers: carriers.size, cities: cities.size, codTotal };
   }, [filteredLabelRows]);
 
-  const openPdf = (base64: string, label: string) => {
+  const base64ToBytes = (base64: string) => {
     const binary = atob(base64);
-    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  };
+
+  const mergeLabelPdfs = async (pdfs: string[]) => {
+    const { PDFDocument } = await import("pdf-lib");
+    const merged = await PDFDocument.create();
+
+    for (const pdf of pdfs) {
+      const source = await PDFDocument.load(base64ToBytes(pdf));
+      const pages = await merged.copyPages(source, source.getPageIndices());
+      pages.forEach((page) => merged.addPage(page));
+    }
+
+    return merged.save();
+  };
+
+  const openPdf = (bytes: Uint8Array, label: string, popup: Window | null) => {
     const blob = new Blob([bytes], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
-    const popup = window.open(url, "_blank", "noopener,noreferrer");
-    if (!popup) {
+    if (!popup || popup.closed) {
       const link = document.createElement("a");
       link.href = url;
       link.download = label;
       link.click();
     } else {
-      setTimeout(() => popup.print(), 700);
+      popup.location.href = url;
+      setTimeout(() => popup.print(), 1_000);
     }
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
@@ -1473,6 +1515,17 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       toast.info("No pending labels to print");
       return;
     }
+
+    // Open one window while the click is still a trusted user gesture. PostEx
+    // limits each generated PDF to 10 labels, so all returned PDFs are merged
+    // into this single print job after the requests finish.
+    const printPopup = window.open("", "_blank");
+    if (printPopup) {
+      printPopup.opener = null;
+      printPopup.document.title = "Preparing labels";
+      printPopup.document.body.innerHTML = '<p style="font:16px system-ui;padding:24px">Preparing labels...</p>';
+    }
+
     setPrintingLabels(true);
     try {
       const chunks: string[][] = [];
@@ -1480,24 +1533,25 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
       const printedTrackingNumbers = new Set<string>();
       const failedLabels: Array<{ tracking: string; message: string }> = [];
-      const requestLabelPdf = async (numbers: string[], label: string) => {
+      const pdfBatches: string[] = [];
+      const requestLabelPdf = async (numbers: string[]) => {
         const { data, error } = await supabase.functions.invoke("shipping-sync", {
           body: { action: "generate-labels", tracking_numbers: numbers },
         });
         if (error) throw new Error(await readFunctionError(error));
         if (!data?.pdf_base64) throw new Error("PostEx did not return a label PDF");
-        openPdf(data.pdf_base64, label);
+        return String(data.pdf_base64);
       };
 
       for (let i = 0; i < chunks.length; i += 1) {
         const chunk = chunks[i];
         try {
-          await requestLabelPdf(chunk, `postex-labels-${i + 1}.pdf`);
+          pdfBatches.push(await requestLabelPdf(chunk));
           chunk.forEach((tracking) => printedTrackingNumbers.add(tracking));
         } catch (batchError: any) {
           for (const tracking of chunk) {
             try {
-              await requestLabelPdf([tracking], `postex-label-${tracking}.pdf`);
+              pdfBatches.push(await requestLabelPdf([tracking]));
               printedTrackingNumbers.add(tracking);
             } catch (singleError: any) {
               failedLabels.push({ tracking, message: singleError?.message || batchError?.message || "Label PDF failed" });
@@ -1510,6 +1564,9 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         const firstFailure = failedLabels[0];
         throw new Error(firstFailure ? `${firstFailure.tracking}: ${firstFailure.message}` : "Label printing failed");
       }
+
+      const mergedPdf = await mergeLabelPdfs(pdfBatches);
+      openPdf(mergedPdf, `postex-labels-${printedTrackingNumbers.size}.pdf`, printPopup);
 
       const printedAt = new Date().toISOString();
       const printedRows = rows.filter((row) => row.tracking_number && printedTrackingNumbers.has(row.tracking_number));
@@ -1534,6 +1591,11 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       })));
 
       if (failedLabels.length > 0) {
+        setSelectedReadyIds((prev) => {
+          const next = new Set(prev);
+          printedRows.forEach((row) => next.delete(row.fulfillment_item_id));
+          return next;
+        });
         const sample = failedLabels.slice(0, 3).map((item) => item.tracking).join(", ");
         toast.warning(`Opened ${printedTrackingNumbers.size} labels. ${failedLabels.length} failed`, {
           description: sample ? `Failed tracking: ${sample}` : undefined,
@@ -1542,9 +1604,11 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         toast.success(`Opened ${printedTrackingNumbers.size} labels for printing`);
         setLabelDialogOpen(false);
         setSelectedLabelIds(new Set());
+        setSelectedReadyIds(new Set());
       }
       refreshWarehouse();
     } catch (error: any) {
+      if (printPopup && !printPopup.closed) printPopup.close();
       toast.error(error.message || "Label printing failed");
     } finally {
       setPrintingLabels(false);
@@ -2234,12 +2298,29 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                     Ready to Dispatch
                     <Badge variant="outline" className="text-[10px]">{filteredReady.length} orders</Badge>
                   </CardTitle>
-                  <Input className="h-8 w-[260px] text-xs" value={readySearch} onChange={(e) => setReadySearch(e.target.value)} placeholder="Filter ready orders..." />
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {selectedReadyRows.length > 0 && (
+                      <>
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setSelectedReadyIds(new Set())} disabled={printingLabels}>
+                          Clear {selectedReadyRows.length}
+                        </Button>
+                        <Button size="sm" className="h-8 text-xs" onClick={() => printLabels(selectedReadyRows)} disabled={printingLabels || !canReprint}>
+                          <Printer className="h-3.5 w-3.5 mr-1.5" /> Reprint selected ({selectedReadyRows.length})
+                        </Button>
+                      </>
+                    )}
+                    <Input className="h-8 w-[260px] text-xs" value={readySearch} onChange={(e) => setReadySearch(e.target.value)} placeholder="Filter ready orders..." />
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <DispatchTable
                     rows={filteredReady}
                     loading={loadingReady}
+                    selectedIds={selectedReadyIds}
+                    allSelected={allDisplayedReadySelected}
+                    onToggleAll={toggleDisplayedReady}
+                    onToggleRow={toggleReadyRow}
+                    selectable
                     showReadyAt
                     onPrintRow={(row) => printLabels([row])}
                     printingRow={printingLabels}
@@ -2792,13 +2873,22 @@ function DispatchTable({
   printingRow?: boolean;
 }) {
   const columnCount = (selectable ? 7 : 6) + (showReadyAt ? 1 : 0) + (onPrintRow ? 1 : 0);
+  const selectedDisplayedCount = selectable
+    ? rows.filter((row) => selectedIds?.has(row.fulfillment_item_id)).length
+    : 0;
+  const selectAllState = allSelected ? true : selectedDisplayedCount > 0 ? "indeterminate" : false;
   return (
     <Table>
       <TableHeader>
         <TableRow>
           {selectable && (
             <TableHead className="h-9 w-10">
-              <Checkbox checked={!!allSelected} onCheckedChange={onToggleAll} disabled={rows.length === 0} />
+              <Checkbox
+                checked={selectAllState}
+                onCheckedChange={onToggleAll}
+                disabled={rows.length === 0}
+                aria-label="Select all visible orders"
+              />
             </TableHead>
           )}
           <TableHead className="h-9 text-xs">Order</TableHead>
@@ -2820,7 +2910,12 @@ function DispatchTable({
           <TableRow key={row.fulfillment_item_id}>
             {selectable && (
               <TableCell>
-                <Checkbox checked={selectedIds?.has(row.fulfillment_item_id)} onCheckedChange={() => onToggleRow?.(row.fulfillment_item_id)} disabled={!row.tracking_number} />
+                <Checkbox
+                  checked={selectedIds?.has(row.fulfillment_item_id)}
+                  onCheckedChange={() => onToggleRow?.(row.fulfillment_item_id)}
+                  disabled={!row.tracking_number}
+                  aria-label={`Select order ${row.order_id}`}
+                />
               </TableCell>
             )}
             <TableCell>
