@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { confirmationRatePercent } from "@/lib/confirmation-rate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -239,6 +240,7 @@ export default function SellerProductAnalytics() {
     const delivered = base.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
     const wrongNumber = base.filter((o) => o.confirmation_status === "wrong_number" && inRangeByEvent(o, o.updated_at)).length;
     const unreachable = base.filter((o) => o.confirmation_status === "unreachable" && inRangeByEvent(o, o.updated_at)).length;
+    const newOrders = base.filter((o) => o.confirmation_status === "new" && inRangeByEvent(o, o.created_at)).length;
     return {
       total,
       confirmed,
@@ -246,7 +248,7 @@ export default function SellerProductAnalytics() {
       delivered,
       wrongNumber,
       unreachable,
-      confRate: pct(confirmed, total),
+      confRate: confirmationRatePercent(confirmed, total, newOrders),
       delRate: pct(delivered, confirmed),
       cancelRate: pct(cancelled, total),
       wrongNumberRate: pct(wrongNumber, total),
@@ -258,13 +260,14 @@ export default function SellerProductAnalytics() {
 
   const productRows = useMemo(() => {
     const map: Record<string, {
-      total: number; confirmed: number; delivered: number; cancelled: number; wrongNumber: number;
+      total: number; newOrders: number; confirmed: number; delivered: number; cancelled: number; wrongNumber: number;
       reasons: Record<string, number>;
     }> = {};
     base.forEach((o) => {
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { total: 0, confirmed: 0, delivered: 0, cancelled: 0, wrongNumber: 0, reasons: {} };
+      if (!map[name]) map[name] = { total: 0, newOrders: 0, confirmed: 0, delivered: 0, cancelled: 0, wrongNumber: 0, reasons: {} };
       if (inRangeByEvent(o, o.updated_at)) map[name].total++;
+      if (o.confirmation_status === "new" && inRangeByEvent(o, o.updated_at)) map[name].newOrders++;
       if (CONFIRMED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.confirmed_at)) map[name].confirmed++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) map[name].delivered++;
       if (CANCELLED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.updated_at)) {
@@ -281,7 +284,7 @@ export default function SellerProductAnalytics() {
       delivered: d.delivered,
       cancelled: d.cancelled,
       wrongNumber: d.wrongNumber,
-      confRate: pct(d.confirmed, d.total),
+      confRate: confirmationRatePercent(d.confirmed, d.total, d.newOrders),
       delRate: pct(d.delivered, d.confirmed),
       cancelRate: pct(d.cancelled, d.total),
       reasons: Object.entries(d.reasons)

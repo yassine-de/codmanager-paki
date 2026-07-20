@@ -7,6 +7,7 @@ import { isWithinInterval } from "date-fns";
 import { formatPKT as format, startOfDayPKT as startOfDay, endOfDayPKT as endOfDay } from "@/lib/timezone";
 import { CheckCircle2, Clock, PhoneOff, XCircle, TrendingUp, Trophy, Sparkles, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { confirmationRatePercent } from "@/lib/confirmation-rate";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { DatePresetFilter, getDateRangeFromPreset, type DatePresetValue } from "@/components/DatePresetFilter";
 import type { DateRange } from "react-day-picker";
@@ -175,6 +176,7 @@ const AgentDashboard = () => {
     const total = filteredOrders.length;
     const byStatus = (s: string) => filteredOrders.filter((o: any) => o.confirmation_status === s).length;
     const confirmed = byStatus("confirmed");
+    const newOrders = byStatus("new");
     const postponed = byStatus("postponed");
     const noAnswer = byStatus("no_answer");
     const cancelled = byStatus("cancelled");
@@ -183,7 +185,7 @@ const AgentDashboard = () => {
     return {
       total,
       confirmed,
-      confirmedPct: total > 0 ? Math.round((confirmed / total) * 100) : 0,
+      confirmedPct: confirmationRatePercent(confirmed, total, newOrders),
       postponed,
       postponedPct: total ? Math.round((postponed / total) * 100) : 0,
       noAnswer,
@@ -225,15 +227,16 @@ const AgentDashboard = () => {
 
   // Top products by confirmation rate
   const topByConfirmation = useMemo(() => {
-    const productMap = new Map<string, { total: number; confirmed: number }>();
+    const productMap = new Map<string, { total: number; confirmed: number; newOrders: number }>();
     filteredOrders.forEach((o) => {
-      const entry = productMap.get(o.product_name) || { total: 0, confirmed: 0 };
+      const entry = productMap.get(o.product_name) || { total: 0, confirmed: 0, newOrders: 0 };
       entry.total++;
       if (o.confirmation_status === "confirmed") entry.confirmed++;
+      if (o.confirmation_status === "new") entry.newOrders++;
       productMap.set(o.product_name, entry);
     });
     return Array.from(productMap.entries())
-      .map(([name, d]) => ({ name, rate: d.total ? Math.round((d.confirmed / d.total) * 100) : 0, total: d.total }))
+      .map(([name, d]) => ({ name, rate: confirmationRatePercent(d.confirmed, d.total, d.newOrders), total: d.total }))
       .filter((p) => p.total >= 2)
       .sort((a, b) => b.rate - a.rate)
       .slice(0, 8);

@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
+import { confirmationRatePercent } from "@/lib/confirmation-rate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -312,7 +313,7 @@ export default function SellerAnalytics() {
     const noAnswer = filteredOrders.filter((o) => o.confirmation_status === "no_answer").length;
     const postponed = filteredOrders.filter((o) => o.confirmation_status === "postponed").length;
     const cancelled = filteredOrders.filter((o) => o.confirmation_status === "cancelled").length;
-    const confRate = pct(confirmedCount, total);
+    const confRate = confirmationRatePercent(confirmedCount, total, newOrders);
     return { total, confirmedCount, whatsapp, agent, newOrders, noAnswer, postponed, cancelled, confRate };
   }, [filteredOrders, orders, dateRange, sellerFilter, productFilter, dateFieldMode]);
 
@@ -359,13 +360,14 @@ export default function SellerAnalytics() {
       return isWithinRange(new Date(d), dateRange);
     };
     const map: Record<string, {
-      orders: number; confirmed: number; shipped: number; delivered: number;
+      orders: number; newOrders: number; confirmed: number; shipped: number; delivered: number;
     }> = {};
 
     orders.filter(matchesFilters).forEach((o) => {
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { orders: 0, confirmed: 0, shipped: 0, delivered: 0 };
+      if (!map[name]) map[name] = { orders: 0, newOrders: 0, confirmed: 0, shipped: 0, delivered: 0 };
       if (inRangeByEvent(o, o.updated_at)) map[name].orders++;
+      if (o.confirmation_status === "new" && inRangeByEvent(o, o.updated_at)) map[name].newOrders++;
       if (reachedConfirmedStage(o) && inRangeByEvent(o, o.confirmed_at)) map[name].confirmed++;
       if (SHIPPED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.updated_at)) map[name].shipped++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) map[name].delivered++;
@@ -375,7 +377,7 @@ export default function SellerAnalytics() {
       name,
       orders: d.orders,
       confirmed: d.confirmed,
-      confRate: pct(d.confirmed, d.orders),
+      confRate: confirmationRatePercent(d.confirmed, d.orders, d.newOrders),
       shipped: d.shipped,
       delivered: d.delivered,
       delRate: pct(d.delivered, d.confirmed),

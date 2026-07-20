@@ -1051,7 +1051,13 @@ BEGIN
       postpone_date = COALESCE(p_postpone_date, postpone_date),
       postpone_note = COALESCE(p_postpone_note, postpone_note),
       confirmed_at = COALESCE(p_confirmed_at, confirmed_at),
-      delivery_status = COALESCE(p_delivery_status, delivery_status),
+      delivery_status = CASE
+        WHEN p_delivery_status IS NULL THEN delivery_status
+        WHEN p_delivery_status IN ('pending', 'booked')
+          AND delivery_status IN ('printed', 'dispatched', 'shipped', 'in_transit', 'with_courier', 'out_for_delivery', 'delivered', 'paid', 'returned', 'return_received')
+          THEN delivery_status
+        ELSE p_delivery_status
+      END,
       cancel_reason = COALESCE(p_cancel_reason, cancel_reason),
       updated_at = now()
   WHERE id = p_order_id
@@ -2699,7 +2705,13 @@ LEFT JOIN LATERAL (
     string_agg(DISTINCT oi.product_name, ', ' ORDER BY oi.product_name) AS product_names
   FROM public.order_items oi
   WHERE oi.order_id = o.id
-) items ON true;
+) items ON true
+WHERE o.confirmation_status = 'confirmed'
+  AND (
+    (fi.status = 'pending' AND o.delivery_status = 'booked')
+    OR (fi.status = 'label_printed' AND o.delivery_status = 'printed')
+    OR (fi.status = 'scanned' AND o.delivery_status IN ('dispatched', 'shipped', 'in_transit', 'with_courier', 'out_for_delivery', 'delivered', 'paid', 'returned', 'return_received'))
+  );
 
 CREATE OR REPLACE VIEW public.inventory_balance_view AS
 SELECT

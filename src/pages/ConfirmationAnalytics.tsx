@@ -12,6 +12,7 @@ import { startOfDayPKT as startOfDay, endOfDayPKT as endOfDay } from "@/lib/time
 import { supabase } from "@/integrations/supabase/client";
 import { SmartRecommendations } from "@/components/SmartRecommendations";
 import { DailyConfirmationReport } from "@/components/DailyConfirmationReport";
+import { confirmationRatePercent } from "@/lib/confirmation-rate";
 
 type DateField = "created" | "updated";
 
@@ -262,7 +263,6 @@ export default function ConfirmationAnalytics() {
       inSelectedRange(confirmedDate(o))
     ).length;
     const newOrders = denominatorOrders.filter(o => o.confirmation_status === "new").length;
-    const doubleOrders = denominatorOrders.filter(o => o.confirmation_status === "double").length;
     const cancelled = denominatorOrders.filter(o => o.confirmation_status === "cancelled").length;
     const postponed = denominatorOrders.filter(o => o.confirmation_status === "postponed").length;
     const unreachable = denominatorOrders.filter(o => o.confirmation_status === "unreachable").length;
@@ -285,8 +285,7 @@ export default function ConfirmationAnalytics() {
     // Claimed = orders that were touched by an agent (status not "new")
     const claimed = denominatorOrders.filter(o => (o.agent_id || o.original_agent_id) && o.confirmation_status !== "new").length;
 
-    const confirmableTotal = total - newOrders - doubleOrders;
-    const confirmationRate = confirmableTotal > 0 ? Math.round((confirmed / confirmableTotal) * 100) : 0;
+    const confirmationRate = confirmationRatePercent(confirmed, total, newOrders);
     const deliveryRate = confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0;
 
     return {

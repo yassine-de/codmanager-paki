@@ -2161,6 +2161,9 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
               >
                 <Printer className="h-4 w-4" />
                 Not Printed
+                <Badge variant="outline" className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
+                  {notPrintedRows.length}
+                </Badge>
               </TabsTrigger>
               <TabsTrigger
                 value="ready"
@@ -2168,6 +2171,9 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
               >
                 <Truck className="h-4 w-4" />
                 Ready to Dispatch
+                <Badge variant="outline" className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
+                  {readyRows.length}
+                </Badge>
               </TabsTrigger>
               <TabsTrigger
                 value="history"
@@ -2175,13 +2181,20 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Dispatched Today
+                <Badge variant="outline" className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
+                  {dispatchedRows.length}
+                </Badge>
               </TabsTrigger>
             </TabsList>
 
             <TabsContent value="not_printed">
               <Card className="border-border/60">
                 <CardHeader className="py-4 flex-row items-center justify-between">
-                  <CardTitle className="text-sm flex items-center gap-2"><Printer className="h-4 w-4" /> Not Printed</CardTitle>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Printer className="h-4 w-4" />
+                    Not Printed
+                    <Badge variant="outline" className="text-[10px]">{filteredNotPrinted.length} orders</Badge>
+                  </CardTitle>
                   <div className="flex flex-wrap items-center gap-2">
                     {selectedLabelIds.size > 0 && <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setSelectedLabelIds(new Set())}>Clear {selectedLabelIds.size}</Button>}
                     <Button size="sm" className="h-8 text-xs" onClick={openPrintDialog} disabled={printingLabels || baseLabelRows.length === 0}>
@@ -2217,11 +2230,20 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
               </Card>
               <Card className="border-border/60 mt-3">
                 <CardHeader className="py-3 flex-row items-center justify-between">
-                  <CardTitle className="text-sm">Ready to Dispatch</CardTitle>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    Ready to Dispatch
+                    <Badge variant="outline" className="text-[10px]">{filteredReady.length} orders</Badge>
+                  </CardTitle>
                   <Input className="h-8 w-[260px] text-xs" value={readySearch} onChange={(e) => setReadySearch(e.target.value)} placeholder="Filter ready orders..." />
                 </CardHeader>
                 <CardContent className="p-0">
-                  <DispatchTable rows={filteredReady} loading={loadingReady} showReadyAt />
+                  <DispatchTable
+                    rows={filteredReady}
+                    loading={loadingReady}
+                    showReadyAt
+                    onPrintRow={(row) => printLabels([row])}
+                    printingRow={printingLabels}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -2230,7 +2252,11 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
               <Card className="border-border/60">
                 <CardHeader className="py-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <CardTitle className="text-sm flex items-center gap-2"><History className="h-4 w-4" /> Dispatched Today</CardTitle>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <History className="h-4 w-4" />
+                      Dispatched Today
+                      <Badge variant="outline" className="text-[10px]">{filteredHistory.length} orders</Badge>
+                    </CardTitle>
                     <div className="flex flex-wrap gap-2">
                       {!hideSellerInfo && <Select value={historySellerFilter} onValueChange={setHistorySellerFilter}><SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All sellers</SelectItem></SelectContent></Select>}
                       <Select value={historyCourierFilter} onValueChange={setHistoryCourierFilter}><SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All couriers</SelectItem>{Array.from(new Set(dispatchedRows.map((r) => r.carrier_name))).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
@@ -2751,6 +2777,8 @@ function DispatchTable({
   onToggleRow,
   selectable = false,
   showReadyAt = false,
+  onPrintRow,
+  printingRow = false,
 }: {
   rows: FulfillmentRow[];
   loading: boolean;
@@ -2760,8 +2788,10 @@ function DispatchTable({
   onToggleRow?: (id: string) => void;
   selectable?: boolean;
   showReadyAt?: boolean;
+  onPrintRow?: (row: FulfillmentRow) => void;
+  printingRow?: boolean;
 }) {
-  const columnCount = (selectable ? 7 : 6) + (showReadyAt ? 1 : 0);
+  const columnCount = (selectable ? 7 : 6) + (showReadyAt ? 1 : 0) + (onPrintRow ? 1 : 0);
   return (
     <Table>
       <TableHeader>
@@ -2778,6 +2808,7 @@ function DispatchTable({
           <TableHead className="h-9 text-xs">Tracking</TableHead>
           {showReadyAt && <TableHead className="h-9 text-xs">Ready at</TableHead>}
           <TableHead className="h-9 text-xs">Stage</TableHead>
+          {onPrintRow && <TableHead className="h-9 text-xs text-right">Actions</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -2810,6 +2841,20 @@ function DispatchTable({
               </TableCell>
             )}
             <TableCell><StatusBadge value={row.fulfillment_item_status} /></TableCell>
+            {onPrintRow && (
+              <TableCell className="text-right">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8"
+                  onClick={() => onPrintRow(row)}
+                  disabled={printingRow || !row.tracking_number}
+                  title="Print label"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                </Button>
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>

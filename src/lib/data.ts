@@ -1,3 +1,5 @@
+import { confirmationRatePercent } from "@/lib/confirmation-rate";
+
 export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned' | 'postponed' | 'no_answer' | 'double' | 'wrong_number' | 'in_transit' | 'with_courier' | 'failed';
 
 export type ConfirmationStatus = 'new' | 'new_wts' | 'confirmed' | 'no_answer' | 'unreachable' | 'postponed' | 'cancelled' | 'wrong_number' | 'double';
@@ -217,7 +219,8 @@ export function getKPIs(orders: Order[]) {
   const revenue = orders.filter(o => o.status === 'delivered').reduce((s, o) => s + o.total, 0);
   const paidAmount = orders.reduce((s, o) => s + o.paidAmount, 0);
   const pendingAmount = revenue - paidAmount;
-  const confirmationRate = total > 0 ? Math.round((confirmed / total) * 100) : 0;
+  const newConfirmationOrders = orders.filter(o => o.confirmationStatus === 'new').length;
+  const confirmationRate = confirmationRatePercent(confirmed, total, newConfirmationOrders);
   const deliveryRate = shipped > 0 ? Math.round((delivered / shipped) * 100) : 0;
 
   const today = new Date();
@@ -232,11 +235,12 @@ export function getKPIs(orders: Order[]) {
 }
 
 export function getTopProductsByDeliveryRate(orders: Order[]) {
-  const productMap: Record<string, { total: number; delivered: number; confirmed: number }> = {};
+  const productMap: Record<string, { total: number; newOrders: number; delivered: number; confirmed: number }> = {};
   orders.forEach(o => {
     o.products.forEach(p => {
-      if (!productMap[p.name]) productMap[p.name] = { total: 0, delivered: 0, confirmed: 0 };
+      if (!productMap[p.name]) productMap[p.name] = { total: 0, newOrders: 0, delivered: 0, confirmed: 0 };
       productMap[p.name].total += p.qty;
+      if (o.confirmationStatus === 'new') productMap[p.name].newOrders += p.qty;
       if (o.status === 'delivered') productMap[p.name].delivered += p.qty;
       if (['confirmed', 'shipped', 'delivered', 'in_transit', 'with_courier'].includes(o.status)) productMap[p.name].confirmed += p.qty;
     });
@@ -248,7 +252,7 @@ export function getTopProductsByDeliveryRate(orders: Order[]) {
       delivered: d.delivered,
       confirmed: d.confirmed,
       deliveryRate: d.total > 0 ? Math.round((d.delivered / d.total) * 100) : 0,
-      confirmationRate: d.total > 0 ? Math.round((d.confirmed / d.total) * 100) : 0,
+      confirmationRate: confirmationRatePercent(d.confirmed, d.total, d.newOrders),
     }))
     .sort((a, b) => b.total - a.total);
 }

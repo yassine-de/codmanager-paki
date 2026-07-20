@@ -53,6 +53,18 @@ const phoneVariants = (raw: string | null | undefined): string[] => {
 };
 const RETRY_AGING_MS = 2 * 60 * 60 * 1000; // 2 hours → urgent
 const NEW_TO_RETRY_RATIO = 3; // 3 new then 1 retry
+const WAREHOUSE_PROGRESS_DELIVERY_STATUSES = new Set([
+  "printed",
+  "dispatched",
+  "shipped",
+  "in_transit",
+  "with_courier",
+  "out_for_delivery",
+  "delivered",
+  "paid",
+  "returned",
+  "return_received",
+]);
 
 const statusColors: Record<string, string> = {
   confirmed: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
@@ -654,7 +666,10 @@ const AgentOrders = () => {
 
       if (selectedStatus === "confirmed") {
         updateData.confirmed_at = new Date().toISOString();
-        updateData.delivery_status = shippingStatus === "shipped" ? "booked" : "pending";
+        const nextDeliveryStatus = shippingStatus === "shipped" ? "booked" : "pending";
+        if (!WAREHOUSE_PROGRESS_DELIVERY_STATUSES.has(currentOrder.delivery_status || "")) {
+          updateData.delivery_status = nextDeliveryStatus;
+        }
       }
       if (selectedStatus === "cancelled") {
         updateData.cancel_reason = cancelReason === "other" ? note.trim() : cancelReason;
@@ -778,7 +793,7 @@ const AgentOrders = () => {
       trackChange("quantity", currentOrder.quantity, activeItems.reduce((sum, item) => sum + item.qty, 0));
       trackChange("price", currentOrder.price, activeItems[0]?.price);
       trackChange("total_amount", currentOrder.total_amount, orderTotal);
-      if (selectedStatus === "confirmed") trackChange("delivery_status", currentOrder.delivery_status, shippingStatus === "shipped" ? "booked" : "pending");
+      if (selectedStatus === "confirmed" && updateData.delivery_status) trackChange("delivery_status", currentOrder.delivery_status, updateData.delivery_status);
       if (selectedStatus === "cancelled") trackChange("cancel_reason", currentOrder.cancel_reason, cancelReason === "other" ? note.trim() : cancelReason);
       if (note.trim() && note.trim() !== (currentOrder.note || "")) trackChange("note", currentOrder.note, note.trim());
       if (selectedStatus === "postponed") {

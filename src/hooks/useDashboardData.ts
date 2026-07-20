@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
 import { isWithinInterval } from "date-fns";
 import { formatPKT, startOfDayPKT, endOfDayPKT } from "@/lib/timezone";
+import { confirmationRatePercent } from "@/lib/confirmation-rate";
 import type { DateRange } from "react-day-picker";
 
 export interface DashboardOrder {
@@ -171,8 +172,7 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
   const deliveryPostponed = orders.filter(o => o.delivery_status === 'postponed').length;
 
   // Rates
-  const confirmableTotal = total - newOrders - doubleOrders;
-  const confirmationRate = confirmableTotal > 0 ? Math.round((confirmed / confirmableTotal) * 100) : 0;
+  const confirmationRate = confirmationRatePercent(confirmed, total, newOrders);
   const deliveryRate = confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0;
 
   // Financial — use delivered_at event date when filtering
@@ -259,6 +259,9 @@ function computeDailyData(orders: DashboardOrder[], numDays: number) {
     const dropped = orders.filter((o) =>
       isInDay(new Date(o.created_at), start, nextDay)
     ).length;
+    const newOrders = orders.filter((o) =>
+      o.confirmation_status === "new" && isInDay(new Date(o.created_at), start, nextDay)
+    ).length;
 
     // Confirmed = orders whose confirmation EVENT happened on this day (confirmed_at only — no updated_at fallback)
     const confirmed = orders.filter((o) => {
@@ -287,7 +290,7 @@ function computeDailyData(orders: DashboardOrder[], numDays: number) {
       confirmed,
       shipped,
       delivered,
-      confirmationRate: dropped > 0 ? Math.round((confirmed / dropped) * 100) : 0,
+      confirmationRate: confirmationRatePercent(confirmed, dropped, newOrders),
       deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
     };
   });
@@ -334,6 +337,9 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
         // Bucket each line by its own event date (per chosen basis) so the trend
         // matches the KPI cards: created → created_at; updated → confirmed_at / delivered_at.
         const dropped   = allOrders.filter(o => isInDay(eventDate(o, dateBasis, "generic"), start, nextDay)).length;
+        const newOrders = allOrders.filter(o =>
+          o.confirmation_status === "new" && isInDay(eventDate(o, dateBasis, "generic"), start, nextDay)
+        ).length;
         const confirmed = allOrders.filter(o => {
           if (!reachedConfirmedStage(o)) return false;
           return isInDay(eventDate(o, dateBasis, "confirmed"), start, nextDay);
@@ -349,7 +355,7 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
         return {
           day: `${formatPKT(start, "EEE")}\n${formatPKT(start, "dd/MM")}`,
           orders: dropped, dropped, confirmed, shipped, delivered,
-          confirmationRate: dropped > 0 ? Math.round((confirmed / dropped) * 100) : 0,
+          confirmationRate: confirmationRatePercent(confirmed, dropped, newOrders),
           deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
         };
       });
@@ -367,10 +373,11 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
   // Top products by delivery rate — system-wide standard: delivered / confirmed
   // Confirmed = strict confirmation_status === 'confirmed' (matches ConfirmationAnalytics)
   const topProducts = useMemo(() => {
-    const map: Record<string, { total: number; delivered: number; shipped: number; confirmed: number }> = {};
+    const map: Record<string, { total: number; newOrders: number; delivered: number; shipped: number; confirmed: number }> = {};
     orders.forEach(o => {
-      if (!map[o.product_name]) map[o.product_name] = { total: 0, delivered: 0, shipped: 0, confirmed: 0 };
+      if (!map[o.product_name]) map[o.product_name] = { total: 0, newOrders: 0, delivered: 0, shipped: 0, confirmed: 0 };
       map[o.product_name].total += o.quantity;
+      if (o.confirmation_status === "new") map[o.product_name].newOrders += o.quantity;
       if (['delivered', 'paid'].includes(o.delivery_status || '')) map[o.product_name].delivered += o.quantity;
       if (['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'].includes(o.delivery_status || '')) map[o.product_name].shipped += o.quantity;
       // Confirmed = strict confirmation_status === 'confirmed'
@@ -386,7 +393,7 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
         shipped: d.shipped,
         confirmed: d.confirmed,
         deliveryRate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
-        confirmationRate: d.total > 0 ? Math.round((d.confirmed / d.total) * 100) : 0,
+        confirmationRate: confirmationRatePercent(d.confirmed, d.total, d.newOrders),
       }))
       .filter(p => p.confirmed >= 5) // require minimum sample size for meaningful rate
       .sort((a, b) => b.deliveryRate - a.deliveryRate)

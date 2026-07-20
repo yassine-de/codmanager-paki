@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { confirmationRatePercent } from "@/lib/confirmation-rate";
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -183,6 +184,7 @@ export default function ProductDetail() {
       o.delivery_status === 'delivered' || o.delivery_status === 'paid'
     ).length;
     const cancelled = productOrders.filter(o => o.confirmation_status === 'cancelled').length;
+    const newOrders = productOrders.filter(o => o.confirmation_status === 'new').length;
     // Total sales = sum of total_amount for confirmed/shipped/delivered orders
     const activeSales = productOrders.filter(o =>
       !['cancelled', 'no_answer', 'wrong_number', 'double'].includes(o.confirmation_status)
@@ -196,7 +198,7 @@ export default function ProductDetail() {
       shipped,
       delivered,
       cancelled,
-      confirmationRate: totalOrders > 0 ? ((confirmed / totalOrders) * 100).toFixed(1) : "0.0",
+      confirmationRate: confirmationRatePercent(confirmed, totalOrders, newOrders).toFixed(1),
       deliveryRate: confirmed > 0 ? ((delivered / confirmed) * 100).toFixed(1) : "0.0",
       totalSales,
       avgOrderValue,

@@ -206,6 +206,12 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
     .eq("carrier_id", carrier.id)
     .maybeSingle();
   if (existing?.sync_status === "synced") {
+    await supabase.from("fulfillment_items").upsert({
+      order_uuid: order.id,
+      order_id: order.order_id,
+      shipment_id: existing.id,
+      status: "pending",
+    }, { onConflict: "shipment_id" });
     return { skipped: true, reason: "Already synced", shipment: existing };
   }
 
@@ -309,20 +315,18 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
 
   await supabase.from("orders").update({
     delivery_status: "booked",
-    fulfillment_status: carrier.fulfillment_mode === "self_fulfilled" ? "pending" : "carrier_managed",
+    fulfillment_status: "pending",
     shipping_company: carrier.name,
     shipping_status: carrierStatus,
     updated_at: new Date().toISOString(),
   }).eq("id", order.id);
 
-  if (carrier.fulfillment_mode === "self_fulfilled") {
-    await supabase.from("fulfillment_items").upsert({
-      order_uuid: order.id,
-      order_id: order.order_id,
-      shipment_id: shipment.id,
-      status: "pending",
-    }, { onConflict: "shipment_id" });
-  }
+  await supabase.from("fulfillment_items").upsert({
+    order_uuid: order.id,
+    order_id: order.order_id,
+    shipment_id: shipment.id,
+    status: "pending",
+  }, { onConflict: "shipment_id" });
 
   return { success: true, shipment, carrier_order_id: String(trackingNumber), tracking_number: String(trackingNumber), response: responseData };
 }

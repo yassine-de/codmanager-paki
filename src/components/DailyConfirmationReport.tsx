@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { confirmationRatePercent } from "@/lib/confirmation-rate";
 import {
   ShoppingCart, CheckCircle2, PhoneOff, Clock, XCircle,
   Users, TrendingUp, BarChart3, ClipboardCheck, Timer,
@@ -240,8 +241,9 @@ export function DailyConfirmationReport({
     const noAnswer  = waOrders.filter(o => o.confirmation_status === "no_answer").length;
     const postponed = waOrders.filter(o => o.postpone_date !== null || o.confirmation_status === "postponed").length;
     const cancelled = waOrders.filter(o => o.confirmation_status === "cancelled").length;
+    const newOrders = waOrders.filter(o => o.confirmation_status === "new").length;
     const total     = waOrders.length;
-    return { total, confirmed, noAnswer, postponed, cancelled, confirmRate: total > 0 ? Math.round((confirmed / total) * 100) : 0 };
+    return { total, confirmed, noAnswer, postponed, cancelled, confirmRate: confirmationRatePercent(confirmed, total, newOrders) };
   }, [orders]);
 
   const scoresMap = useMemo(() => {

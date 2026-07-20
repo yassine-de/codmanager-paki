@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { confirmationRateRatio } from "@/lib/confirmation-rate";
 
 /* ── Animated Number ── */
 function AnimatedNumber({ value, prefix = "", suffix = "", decimals = 2, className = "" }: { value: number; prefix?: string; suffix?: string; decimals?: number; className?: string }) {
@@ -154,10 +155,11 @@ export default function Simulation() {
 
       const total = orders.length;
       const confirmed = orders.filter(o => ['confirmed', 'shipped', 'delivered'].includes(o.confirmation_status)).length;
+      const newOrders = orders.filter(o => o.confirmation_status === 'new').length;
       const delivered = orders.filter(o => o.delivery_status === 'delivered').length;
 
       setOrderMetrics({
-        confirmationRate: total > 0 ? confirmed / total : 0,
+        confirmationRate: confirmationRateRatio(confirmed, total, newOrders),
         deliveryRate: confirmed > 0 ? delivered / confirmed : 0,
         totalLeads: total,
       });
