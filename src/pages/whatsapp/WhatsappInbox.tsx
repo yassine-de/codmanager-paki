@@ -470,6 +470,8 @@ const deliveryStatusCls = (s: string) => {
   const map: Record<string, string> = {
     pending: "bg-muted text-muted-foreground border-border",
     booked: "bg-sky-500/15 text-sky-500 border-sky-500/25",
+    printed: "bg-indigo-500/15 text-indigo-500 border-indigo-500/25",
+    dispatched: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25",
     shipped: "bg-blue-500/15 text-blue-500 border-blue-500/25",
     failed_attempt: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/25",
     delivered: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25",
@@ -479,6 +481,34 @@ const deliveryStatusCls = (s: string) => {
     cancelled: "bg-rose-500/15 text-rose-500 border-rose-500/25",
   };
   return map[s] ?? "bg-muted text-muted-foreground border-border";
+};
+
+const shouldShowShippingStatus = (deliveryStatus?: string | null, shippingStatus?: string | null) => {
+  if (!shippingStatus) return false;
+
+  const delivery = (deliveryStatus || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const shipping = shippingStatus.trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+  // Printed and dispatched are authoritative warehouse stages. Courier values at
+  // this point are often the older create-order response (for example UnBooked).
+  if (["printed", "dispatched"].includes(delivery)) return false;
+
+  const deliveryHasProgressed = [
+    "shipped",
+    "in_transit",
+    "with_courier",
+    "out_for_delivery",
+    "delivered",
+    "paid",
+    "failed_attempt",
+    "ready_for_return",
+    "return",
+    "returned",
+    "return_received",
+  ].includes(delivery);
+
+  if (deliveryHasProgressed && ["unbooked", "un_booked", "booked"].includes(shipping)) return false;
+  return shipping !== delivery;
 };
 
 function initials(name?: string | null, phone?: string) {
@@ -1572,7 +1602,7 @@ export default function WhatsappInbox() {
                             {order.delivery_status.replace(/_/g, " ")}
                           </span>
                         )}
-                        {order.shipping_status && (
+                        {shouldShowShippingStatus(order.delivery_status, order.shipping_status) && (
                           <span
                             className="hidden lg:inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted/50 text-muted-foreground px-1.5 py-px text-[10px] font-medium leading-none capitalize"
                             title={`Shipping: ${order.shipping_status.replace(/_/g, " ")}`}
@@ -2625,7 +2655,7 @@ export default function WhatsappInbox() {
                       Update Status
                     </Button>
                   )}
-                  {order.shipping_status && (
+                  {shouldShowShippingStatus(order.delivery_status, order.shipping_status) && (
                     <Badge variant="outline" className="text-[11px]">
                       Ship: {order.shipping_status.replace(/_/g, " ")}
                     </Badge>
