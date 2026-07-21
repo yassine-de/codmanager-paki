@@ -83,7 +83,10 @@ function normalizeStatus(status?: string | null, code?: string | null) {
   if (value === "out for delivery") return "out_for_delivery";
   if (["0003", "0004", "0015", "0018", "15", "18"].includes(messageCode)) return "in_transit";
   if (messageCode === "0001") return "booked";
-  if (["postex warehouse", "picked by postex", "en-route to postex warehouse", "package on root", "package on route"].includes(value)) return "in_transit";
+  if (
+    ["postex warehouse", "picked by postex", "en-route to postex warehouse", "package on root", "package on route"].includes(value) ||
+    value.includes("departed to postex")
+  ) return "in_transit";
   if (["unbooked", "un-booked", "booked", "at merchant's warehouse", "at merchant warehouse", "un-assigned by me"].includes(value)) return "booked";
   if (value === "delivery under review") return "failed_attempt";
   if (value === "expired") return "cancelled";
