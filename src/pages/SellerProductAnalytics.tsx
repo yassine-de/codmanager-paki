@@ -18,6 +18,7 @@ import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { confirmationRatePercent } from "@/lib/confirmation-rate";
+import { isInShippedDeliveryPool } from "@/lib/delivery-rate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -238,18 +239,20 @@ export default function SellerProductAnalytics() {
     ).length;
     const cancelled = base.filter((o) => CANCELLED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.updated_at)).length;
     const delivered = base.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
+    const shipped = base.filter((o) => isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)).length;
     const wrongNumber = base.filter((o) => o.confirmation_status === "wrong_number" && inRangeByEvent(o, o.updated_at)).length;
     const unreachable = base.filter((o) => o.confirmation_status === "unreachable" && inRangeByEvent(o, o.updated_at)).length;
     const newOrders = base.filter((o) => o.confirmation_status === "new" && inRangeByEvent(o, o.created_at)).length;
     return {
       total,
       confirmed,
+      shipped,
       cancelled,
       delivered,
       wrongNumber,
       unreachable,
       confRate: confirmationRatePercent(confirmed, total, newOrders),
-      delRate: pct(delivered, confirmed),
+      delRate: pct(delivered, shipped),
       cancelRate: pct(cancelled, total),
       wrongNumberRate: pct(wrongNumber, total),
       unreachableRate: pct(unreachable, total),
@@ -260,15 +263,16 @@ export default function SellerProductAnalytics() {
 
   const productRows = useMemo(() => {
     const map: Record<string, {
-      total: number; newOrders: number; confirmed: number; delivered: number; cancelled: number; wrongNumber: number;
+      total: number; newOrders: number; confirmed: number; shipped: number; delivered: number; cancelled: number; wrongNumber: number;
       reasons: Record<string, number>;
     }> = {};
     base.forEach((o) => {
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { total: 0, newOrders: 0, confirmed: 0, delivered: 0, cancelled: 0, wrongNumber: 0, reasons: {} };
+      if (!map[name]) map[name] = { total: 0, newOrders: 0, confirmed: 0, shipped: 0, delivered: 0, cancelled: 0, wrongNumber: 0, reasons: {} };
       if (inRangeByEvent(o, o.updated_at)) map[name].total++;
       if (o.confirmation_status === "new" && inRangeByEvent(o, o.updated_at)) map[name].newOrders++;
       if (CONFIRMED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.confirmed_at)) map[name].confirmed++;
+      if (isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)) map[name].shipped++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) map[name].delivered++;
       if (CANCELLED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.updated_at)) {
         map[name].cancelled++;
@@ -285,7 +289,7 @@ export default function SellerProductAnalytics() {
       cancelled: d.cancelled,
       wrongNumber: d.wrongNumber,
       confRate: confirmationRatePercent(d.confirmed, d.total, d.newOrders),
-      delRate: pct(d.delivered, d.confirmed),
+      delRate: pct(d.delivered, d.shipped),
       cancelRate: pct(d.cancelled, d.total),
       reasons: Object.entries(d.reasons)
         .map(([reason, count]) => ({ reason, count, pct: pct(count, d.cancelled) }))
@@ -446,13 +450,13 @@ export default function SellerProductAnalytics() {
             <KPICard
               title="Delivered"
               value={kpis.delivered}
-              subtitle={fmtPct(kpis.delRate) + " of confirmed"}
+              subtitle={fmtPct(kpis.delRate) + " of shipped"}
               icon={Truck}
               colorBg="bg-blue-100 dark:bg-blue-900/30"
               colorIcon="text-blue-600 dark:text-blue-300"
               gradient="from-blue-500 to-cyan-400"
               delay={100}
-              pool={kpis.confirmed}
+              pool={kpis.shipped}
             />
             <KPICard
               title="Cancelled"
@@ -493,7 +497,7 @@ export default function SellerProductAnalytics() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               { label: "Confirmation Rate", value: kpis.confRate, sub: `${kpis.confirmed} / ${kpis.total} orders`, icon: TrendingUp },
-              { label: "Delivery Rate", value: kpis.delRate, sub: `${kpis.delivered} / ${kpis.confirmed} confirmed`, icon: Truck },
+              { label: "Delivery Rate", value: kpis.delRate, sub: `${kpis.delivered} / ${kpis.shipped} shipped`, icon: Truck },
               { label: "Cancellation Rate", value: kpis.cancelRate, sub: `${kpis.cancelled} / ${kpis.total} orders`, icon: TrendingDown },
             ].map(({ label, value, sub, icon: Icon }) => (
               <div

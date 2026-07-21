@@ -208,7 +208,7 @@ export function getKPIs(orders: Order[]) {
   const delivered = orders.filter(o => o.status === 'delivered').length;
   const cancelled = orders.filter(o => o.status === 'cancelled').length;
   const returned = orders.filter(o => o.status === 'returned').length;
-  const shipped = orders.filter(o => ['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier', 'delivered'].includes(o.status)).length;
+  const shipped = orders.filter(o => ['shipped', 'in_transit', 'with_courier', 'delivered', 'returned'].includes(o.status)).length;
   const postponed = orders.filter(o => o.status === 'postponed').length;
   const noAnswer = orders.filter(o => o.status === 'no_answer').length;
   const doubleOrders = orders.filter(o => o.status === 'double').length;
@@ -235,13 +235,14 @@ export function getKPIs(orders: Order[]) {
 }
 
 export function getTopProductsByDeliveryRate(orders: Order[]) {
-  const productMap: Record<string, { total: number; newOrders: number; delivered: number; confirmed: number }> = {};
+  const productMap: Record<string, { total: number; newOrders: number; delivered: number; confirmed: number; shipped: number }> = {};
   orders.forEach(o => {
     o.products.forEach(p => {
-      if (!productMap[p.name]) productMap[p.name] = { total: 0, newOrders: 0, delivered: 0, confirmed: 0 };
+      if (!productMap[p.name]) productMap[p.name] = { total: 0, newOrders: 0, delivered: 0, confirmed: 0, shipped: 0 };
       productMap[p.name].total += p.qty;
       if (o.confirmationStatus === 'new') productMap[p.name].newOrders += p.qty;
       if (o.status === 'delivered') productMap[p.name].delivered += p.qty;
+      if (['shipped', 'in_transit', 'with_courier', 'delivered', 'returned'].includes(o.status)) productMap[p.name].shipped += p.qty;
       if (['confirmed', 'shipped', 'delivered', 'in_transit', 'with_courier'].includes(o.status)) productMap[p.name].confirmed += p.qty;
     });
   });
@@ -251,7 +252,7 @@ export function getTopProductsByDeliveryRate(orders: Order[]) {
       total: d.total,
       delivered: d.delivered,
       confirmed: d.confirmed,
-      deliveryRate: d.total > 0 ? Math.round((d.delivered / d.total) * 100) : 0,
+      deliveryRate: d.shipped > 0 ? Math.round((d.delivered / d.shipped) * 100) : 0,
       confirmationRate: confirmationRatePercent(d.confirmed, d.total, d.newOrders),
     }))
     .sort((a, b) => b.total - a.total);

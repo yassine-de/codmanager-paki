@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { SmartRecommendations } from "@/components/SmartRecommendations";
 import { DailyConfirmationReport } from "@/components/DailyConfirmationReport";
 import { confirmationRatePercent } from "@/lib/confirmation-rate";
+import { deliveryRatePercent, isDeliveredStatus, isInShippedDeliveryPool } from "@/lib/delivery-rate";
 
 type DateField = "created" | "updated";
 
@@ -252,7 +253,11 @@ export default function ConfirmationAnalytics() {
     const denominatorOrders = baseOrders.filter(o => inSelectedRange(genericDate(o)));
     const total = denominatorOrders.length;
     const delivered = baseOrders.filter(o =>
-      (o.delivery_status === "delivered" || o.delivery_status === "paid") &&
+      isDeliveredStatus(o.delivery_status) &&
+      inSelectedRange(deliveredDate(o))
+    ).length;
+    const shippedPool = baseOrders.filter(o =>
+      isInShippedDeliveryPool(o.delivery_status) &&
       inSelectedRange(deliveredDate(o))
     ).length;
 
@@ -286,7 +291,7 @@ export default function ConfirmationAnalytics() {
     const claimed = denominatorOrders.filter(o => (o.agent_id || o.original_agent_id) && o.confirmation_status !== "new").length;
 
     const confirmationRate = confirmationRatePercent(confirmed, total, newOrders);
-    const deliveryRate = confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0;
+    const deliveryRate = deliveryRatePercent(delivered, shippedPool);
 
     return {
       total,
@@ -421,24 +426,23 @@ export default function ConfirmationAnalytics() {
       }
     });
 
-    const map: Record<string, { total: number; answered: number; confirmed: number; delivered: number }> = {};
+    const map: Record<string, { total: number; answered: number; confirmed: number; shipped: number; delivered: number }> = {};
     filteredOrders.forEach(o => {
       // Use original_agent_id as fallback for released orders
       const agentId = o.agent_id || o.original_agent_id;
       if (!agentId || o.confirmation_status === "new") return;
-      if (!map[agentId]) map[agentId] = { total: 0, answered: 0, confirmed: 0, delivered: 0 };
+      if (!map[agentId]) map[agentId] = { total: 0, answered: 0, confirmed: 0, shipped: 0, delivered: 0 };
       map[agentId].total++;
       if (["confirmed", "cancelled", "wrong_number", "reported"].includes(o.confirmation_status)) map[agentId].answered++;
       if (o.confirmation_status === "confirmed") map[agentId].confirmed++;
     });
 
-    // Count delivered orders per confirming agent
+    // Count shipped-pool and delivered orders per confirming agent.
     filteredOrders.forEach(o => {
-      if (o.delivery_status === "delivered" || o.delivery_status === "paid") {
-        const confirmingAgent = confirmedByAgent[o.order_id] || o.agent_id || o.original_agent_id;
-        if (confirmingAgent && map[confirmingAgent]) {
-          map[confirmingAgent].delivered++;
-        }
+      const confirmingAgent = confirmedByAgent[o.order_id] || o.agent_id || o.original_agent_id;
+      if (confirmingAgent && map[confirmingAgent]) {
+        if (isInShippedDeliveryPool(o.delivery_status)) map[confirmingAgent].shipped++;
+        if (isDeliveredStatus(o.delivery_status)) map[confirmingAgent].delivered++;
       }
     });
 
@@ -450,7 +454,7 @@ export default function ConfirmationAnalytics() {
         confirmed: d.confirmed,
         confirmationRate: d.total > 0 ? Math.round((d.confirmed / d.total) * 100) : 0,
         delivered: d.delivered,
-        deliveryRate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
+        deliveryRate: deliveryRatePercent(d.delivered, d.shipped),
       }))
       .sort((a, b) => b.confirmationRate - a.confirmationRate);
   }, [filteredOrders, orderHistory, profileNameMap]);
@@ -535,7 +539,7 @@ export default function ConfirmationAnalytics() {
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
 
-  // Delivery rate by product — delivered / confirmed
+  // Delivery rate by product — delivered / shipped pool.
   const deliveryByProduct = useMemo(() => {
     const map: Record<string, { confirmed: number; shipped: number; delivered: number; returned: number; inTransit: number }> = {};
     filteredOrders.forEach(o => {
@@ -543,10 +547,8 @@ export default function ConfirmationAnalytics() {
       if (!map[name]) map[name] = { confirmed: 0, shipped: 0, delivered: 0, returned: 0, inTransit: 0 };
       if (o.confirmation_status === "confirmed") map[name].confirmed++;
       const ds = o.delivery_status;
-      if (ds === "shipped" || ds === "in_transit" || ds === "delivered" || ds === "paid" || ds === "returned" || ds === "cancelled") {
-        map[name].shipped++;
-      }
-      if (ds === "delivered" || ds === "paid") map[name].delivered++;
+      if (isInShippedDeliveryPool(ds)) map[name].shipped++;
+      if (isDeliveredStatus(ds)) map[name].delivered++;
       if (ds === "returned" || ds === "cancelled") map[name].returned++;
       if (ds === "shipped" || ds === "in_transit") map[name].inTransit++;
     });
@@ -558,7 +560,7 @@ export default function ConfirmationAnalytics() {
         delivered: d.delivered,
         returned: d.returned,
         inTransit: d.inTransit,
-        rate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
+        rate: deliveryRatePercent(d.delivered, d.shipped),
         returnRate: d.shipped > 0 ? Math.round((d.returned / d.shipped) * 100) : 0,
       }))
       .sort((a, b) => b.rate - a.rate);

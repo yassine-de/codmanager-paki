@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { isWithinInterval } from "date-fns";
 import { formatPKT, startOfDayPKT, endOfDayPKT } from "@/lib/timezone";
 import { confirmationRatePercent } from "@/lib/confirmation-rate";
+import { deliveryRatePercent, isDeliveredStatus, isInShippedDeliveryPool } from "@/lib/delivery-rate";
 import type { DateRange } from "react-day-picker";
 
 export interface DashboardOrder {
@@ -42,6 +43,7 @@ export interface DashboardKPIs {
   inTransit: number;
   withCourier: number;
   delivered: number;
+  deliveryPool: number;
   returned: number;
   paid: number;
   deliveryCancelled: number;
@@ -163,6 +165,9 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
   const delivered = dateRange
     ? source.filter(o => reachedDeliveredStage(o) && inRangeFor(o, "delivered")).length
     : orders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
+  const deliveryPool = dateRange
+    ? source.filter(o => isInShippedDeliveryPool(o.delivery_status) && inRangeFor(o, "delivered")).length
+    : orders.filter(o => isInShippedDeliveryPool(o.delivery_status)).length;
   const paid = orders.filter(o => o.delivery_status === 'paid').length;
   // Returned = courier return flow plus warehouse-received returns
   const returned = orders.filter(o => ['return', 'returned', 'ready_for_return', 'return_received'].includes(o.delivery_status || '')).length;
@@ -173,7 +178,7 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
 
   // Rates
   const confirmationRate = confirmationRatePercent(confirmed, total, newOrders);
-  const deliveryRate = confirmed > 0 ? Math.round((delivered / confirmed) * 100) : 0;
+  const deliveryRate = deliveryRatePercent(delivered, deliveryPool);
 
   // Financial — use delivered_at event date when filtering
   // Revenue (Delivered Amount) = total of orders delivered/paid in this period
@@ -203,7 +208,7 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
 
   return {
     total, newOrders, confirmed, noAnswer, unreachable, postponed, cancelled, doubleOrders, wrongNumber,
-    pending, printed, dispatched, shipped, inTransit, withCourier, delivered, paid, returned,
+    pending, printed, dispatched, shipped, inTransit, withCourier, delivered, deliveryPool, paid, returned,
     deliveryCancelled, deliveryNoAnswer, deliveryPostponed,
     confirmationRate, deliveryRate,
     revenue, paidAmount, pendingAmount,
@@ -234,8 +239,6 @@ function getDeliveredEventDate(o: DashboardOrder): Date | null {
 function reachedDeliveredStage(o: DashboardOrder): boolean {
   return o.delivery_status === 'delivered' || o.delivery_status === 'paid';
 }
-
-const SHIPPED_DELIVERY_STATUSES = ['printed', 'dispatched', 'shipped', 'booked', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'];
 
 function computeDailyData(orders: DashboardOrder[], numDays: number) {
   // Use startOfDayPKT(now) as the true UTC timestamp for midnight PKT today.
@@ -279,7 +282,7 @@ function computeDailyData(orders: DashboardOrder[], numDays: number) {
 
     // Shipped = orders currently in/past shipping pipeline (uses treatment date for trend visualisation)
     const shipped = orders.filter((o) => {
-      if (!o.delivery_status || !SHIPPED_DELIVERY_STATUSES.includes(o.delivery_status)) return false;
+      if (!isInShippedDeliveryPool(o.delivery_status)) return false;
       return isInDay(getTreatmentDate(o), start, nextDay);
     }).length;
 
@@ -291,7 +294,7 @@ function computeDailyData(orders: DashboardOrder[], numDays: number) {
       shipped,
       delivered,
       confirmationRate: confirmationRatePercent(confirmed, dropped, newOrders),
-      deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
+      deliveryRate: deliveryRatePercent(delivered, shipped),
     };
   });
 }
@@ -349,14 +352,14 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
           return isInDay(eventDate(o, dateBasis, "delivered"), start, nextDay);
         }).length;
         const shipped = allOrders.filter(o => {
-          if (!o.delivery_status || !SHIPPED_DELIVERY_STATUSES.includes(o.delivery_status)) return false;
+          if (!isInShippedDeliveryPool(o.delivery_status)) return false;
           return isInDay(eventDate(o, dateBasis, "delivered"), start, nextDay);
         }).length;
         return {
           day: `${formatPKT(start, "EEE")}\n${formatPKT(start, "dd/MM")}`,
           orders: dropped, dropped, confirmed, shipped, delivered,
           confirmationRate: confirmationRatePercent(confirmed, dropped, newOrders),
-          deliveryRate: shipped > 0 ? Math.round((delivered / shipped) * 100) : 0,
+          deliveryRate: deliveryRatePercent(delivered, shipped),
         };
       });
     }
@@ -370,16 +373,15 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
     delivered: last7.reduce((s, d) => s + d.delivered, 0),
   }), [last7]);
 
-  // Top products by delivery rate — system-wide standard: delivered / confirmed
-  // Confirmed = strict confirmation_status === 'confirmed' (matches ConfirmationAnalytics)
+  // Top products by delivery rate: delivered / orders that entered shipping.
   const topProducts = useMemo(() => {
     const map: Record<string, { total: number; newOrders: number; delivered: number; shipped: number; confirmed: number }> = {};
     orders.forEach(o => {
       if (!map[o.product_name]) map[o.product_name] = { total: 0, newOrders: 0, delivered: 0, shipped: 0, confirmed: 0 };
       map[o.product_name].total += o.quantity;
       if (o.confirmation_status === "new") map[o.product_name].newOrders += o.quantity;
-      if (['delivered', 'paid'].includes(o.delivery_status || '')) map[o.product_name].delivered += o.quantity;
-      if (['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier', 'delivered', 'paid', 'returned'].includes(o.delivery_status || '')) map[o.product_name].shipped += o.quantity;
+      if (isDeliveredStatus(o.delivery_status)) map[o.product_name].delivered += o.quantity;
+      if (isInShippedDeliveryPool(o.delivery_status)) map[o.product_name].shipped += o.quantity;
       // Confirmed = strict confirmation_status === 'confirmed'
       if (reachedConfirmedStage(o)) {
         map[o.product_name].confirmed += o.quantity;
@@ -392,10 +394,10 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
         delivered: d.delivered,
         shipped: d.shipped,
         confirmed: d.confirmed,
-        deliveryRate: d.confirmed > 0 ? Math.round((d.delivered / d.confirmed) * 100) : 0,
+        deliveryRate: deliveryRatePercent(d.delivered, d.shipped),
         confirmationRate: confirmationRatePercent(d.confirmed, d.total, d.newOrders),
       }))
-      .filter(p => p.confirmed >= 5) // require minimum sample size for meaningful rate
+      .filter(p => p.shipped >= 5) // require minimum shipped sample size for a meaningful rate
       .sort((a, b) => b.deliveryRate - a.deliveryRate)
       .slice(0, 5);
   }, [orders]);
@@ -403,19 +405,19 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
 
   // Top sellers by delivered - need profiles for names
   const topSellers = useMemo(() => {
-    const map: Record<string, { total: number; delivered: number }> = {};
+    const map: Record<string, { shipped: number; delivered: number }> = {};
     orders.forEach(o => {
-      if (!map[o.seller_id]) map[o.seller_id] = { total: 0, delivered: 0 };
-      map[o.seller_id].total++;
-      if (o.delivery_status === 'delivered') map[o.seller_id].delivered++;
+      if (!map[o.seller_id]) map[o.seller_id] = { shipped: 0, delivered: 0 };
+      if (isInShippedDeliveryPool(o.delivery_status)) map[o.seller_id].shipped++;
+      if (isDeliveredStatus(o.delivery_status)) map[o.seller_id].delivered++;
     });
     return Object.entries(map)
       .map(([sellerId, d]) => ({
         name: sellerId, // Will be replaced with profile name
         sellerId,
-        total: d.total,
+        total: d.shipped,
         delivered: d.delivered,
-        deliveryRate: d.total > 0 ? Math.round((d.delivered / d.total) * 100) : 0,
+        deliveryRate: deliveryRatePercent(d.delivered, d.shipped),
       }))
       .sort((a, b) => b.delivered - a.delivered)
       .slice(0, 5);

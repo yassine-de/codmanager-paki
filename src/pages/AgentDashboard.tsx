@@ -8,6 +8,7 @@ import { formatPKT as format, startOfDayPKT as startOfDay, endOfDayPKT as endOfD
 import { CheckCircle2, Clock, PhoneOff, XCircle, TrendingUp, Trophy, Sparkles, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { confirmationRatePercent } from "@/lib/confirmation-rate";
+import { deliveryRatePercent, isDeliveredStatus, isInShippedDeliveryPool } from "@/lib/delivery-rate";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { DatePresetFilter, getDateRangeFromPreset, type DatePresetValue } from "@/components/DatePresetFilter";
 import type { DateRange } from "react-day-picker";
@@ -247,12 +248,12 @@ const AgentDashboard = () => {
     const productMap = new Map<string, { shipped: number; delivered: number }>();
     filteredOrders.forEach((o) => {
       const entry = productMap.get(o.product_name) || { shipped: 0, delivered: 0 };
-      if (["printed", "dispatched", "shipped", "delivered", "in_transit", "with_courier", "returned", "paid"].includes(o.delivery_status || "")) entry.shipped++;
-      if (o.delivery_status === "delivered" || o.delivery_status === "paid") entry.delivered++;
+      if (isInShippedDeliveryPool(o.delivery_status)) entry.shipped++;
+      if (isDeliveredStatus(o.delivery_status)) entry.delivered++;
       productMap.set(o.product_name, entry);
     });
     return Array.from(productMap.entries())
-      .map(([name, d]) => ({ name, rate: d.shipped ? Math.round((d.delivered / d.shipped) * 100) : 0, shipped: d.shipped }))
+      .map(([name, d]) => ({ name, rate: deliveryRatePercent(d.delivered, d.shipped), shipped: d.shipped }))
       .filter((p) => p.shipped >= 2)
       .sort((a, b) => b.rate - a.rate)
       .slice(0, 8);

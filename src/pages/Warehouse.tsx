@@ -416,6 +416,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const [historyCourierFilter, setHistoryCourierFilter] = useState("all");
   const [historyCityFilter, setHistoryCityFilter] = useState("all");
   const [historyUserFilter, setHistoryUserFilter] = useState("all");
+  const [historySearch, setHistorySearch] = useState("");
 
   const isWarehouseUser = authUser?.role === "admin" || authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager";
   const canAdjustStock = authUser?.role === "admin" || authUser?.role === "warehouse_manager";
@@ -914,14 +915,22 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   }, [readyRows, readySearch]);
 
   const filteredHistory = useMemo(() => {
+    const q = historySearch.trim().toLowerCase();
     return dispatchedRows.filter((row) => {
       if (historyCourierFilter !== "all" && row.carrier_name !== historyCourierFilter) return false;
       if (historyCityFilter !== "all" && row.customer_city !== historyCityFilter) return false;
-      if (historySellerFilter !== "all") return true;
-      if (historyUserFilter !== "all") return true;
+      if (q && ![
+        row.order_id,
+        String(row.system_id || ""),
+        row.customer_name,
+        row.customer_city,
+        row.product_name || "",
+        row.carrier_name,
+        row.tracking_number || "",
+      ].join(" ").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [dispatchedRows, historyCityFilter, historyCourierFilter, historySellerFilter, historyUserFilter]);
+  }, [dispatchedRows, historyCityFilter, historyCourierFilter, historySearch, historySellerFilter, historyUserFilter]);
 
   const returnReceiptKeys = useMemo(() => {
     const shipmentIds = new Set<string>();
@@ -2339,6 +2348,15 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                       <Badge variant="outline" className="text-[10px]">{filteredHistory.length} orders</Badge>
                     </CardTitle>
                     <div className="flex flex-wrap gap-2">
+                      <div className="relative w-full sm:w-[260px]">
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={historySearch}
+                          onChange={(event) => setHistorySearch(event.target.value)}
+                          placeholder="Search dispatched orders..."
+                          className="h-8 pl-8 text-xs"
+                        />
+                      </div>
                       {!hideSellerInfo && <Select value={historySellerFilter} onValueChange={setHistorySellerFilter}><SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All sellers</SelectItem></SelectContent></Select>}
                       <Select value={historyCourierFilter} onValueChange={setHistoryCourierFilter}><SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All couriers</SelectItem>{Array.from(new Set(dispatchedRows.map((r) => r.carrier_name))).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>
                       <Select value={historyCityFilter} onValueChange={setHistoryCityFilter}><SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All cities</SelectItem>{Array.from(new Set(dispatchedRows.map((r) => r.customer_city))).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select>

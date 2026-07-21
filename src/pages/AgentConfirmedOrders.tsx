@@ -101,14 +101,38 @@ const AgentConfirmedOrders = () => {
     queryKey: ["agent-treated-orders", userId],
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase
-        .from("orders")
-        .select("*")
-        .or(`agent_id.eq.${userId},original_agent_id.eq.${userId}`)
-        .neq("confirmation_status", "new")
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
+
+      const [{ data: ownedOrders, error: ownedError }, { data: handledHistory, error: historyError }] = await Promise.all([
+        supabase
+          .from("orders")
+          .select("*")
+          .or(`agent_id.eq.${userId},original_agent_id.eq.${userId}`)
+          .neq("confirmation_status", "new"),
+        supabase
+          .from("order_history")
+          .select("order_id")
+          .eq("changed_by", userId),
+      ]);
+
+      if (ownedError) throw ownedError;
+      if (historyError) throw historyError;
+
+      const handledOrderIds = [...new Set((handledHistory || []).map((entry) => entry.order_id).filter(Boolean))];
+      let historicallyHandledOrders: any[] = [];
+
+      if (handledOrderIds.length > 0) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("*")
+          .in("order_id", handledOrderIds)
+          .neq("confirmation_status", "new");
+        if (error) throw error;
+        historicallyHandledOrders = data || [];
+      }
+
+      return [...(ownedOrders || []), ...historicallyHandledOrders]
+        .filter((order, index, allOrders) => allOrders.findIndex((candidate) => candidate.id === order.id) === index)
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
     },
     enabled: !!userId,
   });

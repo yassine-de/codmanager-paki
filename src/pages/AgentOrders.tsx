@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import { CitySelect } from "@/components/CitySelect";
+import { CitySelect, useCarrierCityValidation } from "@/components/CitySelect";
 import { formatPKT as format } from "@/lib/timezone";
 import { toast } from "sonner";
 import {
@@ -143,6 +143,8 @@ const AgentOrders = () => {
 
   // Status change form
   const [selectedStatus, setSelectedStatus] = useState<string>("")
+  const { isInvalid: cityNotFound } = useCarrierCityValidation(editCustomer.city);
+  const showCityWarning = selectedStatus === "confirmed" && cityNotFound;
   const [cancelReason, setCancelReason] = useState("");
   const [note, setNote] = useState("");
   const [postponeDate, setPostponeDate] = useState<Date | undefined>();
@@ -1091,12 +1093,19 @@ const AgentOrders = () => {
                     <Input className="h-8 text-xs" value={editCustomer.phone} onChange={(e) => setEditCustomer((c) => ({ ...c, phone: e.target.value }))} />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground">City</Label>
+                    <Label className={cn("text-[10px] text-muted-foreground", showCityWarning && "text-destructive")}>City</Label>
                     <CitySelect
                       value={editCustomer.city}
                       onValueChange={(city) => setEditCustomer((c) => ({ ...c, city }))}
                       triggerClassName="h-8 text-xs"
+                      highlightInvalid={showCityWarning}
                     />
+                    {showCityWarning && (
+                      <p className="flex items-center gap-1 text-[10px] font-medium text-destructive">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        City not found in the list. You can still confirm this order.
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">Address</Label>
@@ -1115,9 +1124,15 @@ const AgentOrders = () => {
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wide">City</p>
-                    <p className="text-sm font-medium flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-muted-foreground" /> {editCustomer.city}
+                    <p className={cn("text-sm font-medium flex items-center gap-1", showCityWarning && "text-destructive")}>
+                      <MapPin className={cn("h-3 w-3 text-muted-foreground", showCityWarning && "text-destructive")} /> {editCustomer.city || "No city"}
                     </p>
+                    {showCityWarning && (
+                      <p className="flex items-center gap-1 text-[10px] font-medium text-destructive">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        City not found in the list. You can still confirm this order.
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Address</p>

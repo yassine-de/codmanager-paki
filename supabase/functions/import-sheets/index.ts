@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0?no-check";
+import { parseSheetOrderItems } from "../_shared/sheet-order-items.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -206,12 +207,39 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: allProducts } = await supabase
+    const { data: allProducts, error: productsError } = await supabase
       .from("products")
-      .select("sku, seller_id, name, price, weight, product_url, video_url, active, whatsapp_confirmation_enabled");
+      .select("id, sku, seller_id, name, price, weight, weight_kg, product_url, video_url, active, whatsapp_confirmation_enabled");
+    if (productsError) throw productsError;
 
-    const skuMap = new Map<string, typeof allProducts extends (infer T)[] ? T : never>();
-    allProducts?.forEach((p) => skuMap.set(p.sku.toLowerCase(), p));
+    const { data: allVariants, error: variantsError } = await supabase
+      .from("product_variants")
+      .select("id, product_id, sku, name, price, weight_kg, active");
+    if (variantsError) throw variantsError;
+
+    const productById = new Map((allProducts || []).map((product) => [product.id, product]));
+    const variantsByProduct = new Map<string, any[]>();
+    for (const variant of allVariants || []) {
+      const variants = variantsByProduct.get(variant.product_id) || [];
+      variants.push(variant);
+      variantsByProduct.set(variant.product_id, variants);
+    }
+
+    const skuMap = new Map<string, { product: any; variant: any | null; requiresVariantSku: boolean }>();
+    for (const product of allProducts || []) {
+      const activeVariants = (variantsByProduct.get(product.id) || []).filter((variant) => variant.active);
+      skuMap.set(product.sku.toLowerCase(), {
+        product,
+        variant: activeVariants.length === 1 ? activeVariants[0] : null,
+        requiresVariantSku: activeVariants.length > 1,
+      });
+    }
+    for (const variant of allVariants || []) {
+      const product = productById.get(variant.product_id);
+      if (product) {
+        skuMap.set(variant.sku.toLowerCase(), { product, variant, requiresVariantSku: false });
+      }
+    }
 
     const results: Record<string, { imported: number; errors: number; skipped: number }> = {};
 
@@ -287,15 +315,7 @@ Deno.serve(async (req) => {
 
         if (!sku || !customerName || !phone) { skipped++; continue; }
 
-        // ── Phone validation & formatting ──
-        const phoneResult = normalizePhone(phone);
-
-        // ── Safe number parsing (handles "8,372.00" → 8372) ──
-        const parsedQty = parseSheetNumber(qtyStr);
-        const parsedPrice = parseSheetNumber(priceStr);
-        const parsedTotal = parseSheetNumber(totalStr);
-
-        const orderData = {
+        const rawOrderData = {
           order_id: orderId || "",
           customer_name: customerName || "",
           phone: phone || "",
@@ -303,15 +323,37 @@ Deno.serve(async (req) => {
           city: city || "",
           product_name: productName || "",
           sku: sku || "",
-          quantity: isFinite(parsedQty) && parsedQty > 0 ? Math.floor(parsedQty) : 1,
-          unit_price: isFinite(parsedPrice) ? parsedPrice : 0,
-          total_amount: isFinite(parsedTotal) ? parsedTotal : 0,
+          quantity: qtyStr || "",
+          unit_price: priceStr || "",
+          total_amount: totalStr || "",
         };
+
+        let rawItems;
+        try {
+          rawItems = parseSheetOrderItems({
+            productName,
+            sku,
+            quantity: qtyStr,
+            price: priceStr,
+          });
+        } catch (itemParseError) {
+          await supabase.from("integration_errors").insert({
+            sheet_id: sheet.id,
+            order_data: rawOrderData as any,
+            error_message: itemParseError instanceof Error ? itemParseError.message : "Invalid multi-item columns",
+          });
+          errorsCount++;
+          continue;
+        }
+
+        // ── Phone validation & formatting ──
+        const phoneResult = normalizePhone(phone);
+        const parsedTotal = parseSheetNumber(totalStr);
 
         if (!phoneResult.valid) {
           await supabase.from("integration_errors").insert({
             sheet_id: sheet.id,
-            order_data: orderData as any,
+            order_data: rawOrderData as any,
             error_message: phoneResult.reason,
           });
           errorsCount++;
@@ -319,54 +361,76 @@ Deno.serve(async (req) => {
         }
 
         const normalizedPhone = phoneResult.phone;
+        const resolvedItems: any[] = [];
+        let itemValidationError = "";
 
-        // Check SKU exists and belongs to this seller
-        const product = skuMap.get(sku.toLowerCase());
-        if (!product || product.seller_id !== sheet.seller_id) {
+        for (const rawItem of rawItems) {
+          const catalogItem = skuMap.get(rawItem.sku.toLowerCase());
+          if (!catalogItem) {
+            itemValidationError = `SKU "${rawItem.sku}" not found in system`;
+            break;
+          }
+
+          const { product, variant, requiresVariantSku } = catalogItem;
+          if (product.seller_id !== sheet.seller_id) {
+            itemValidationError = `SKU "${rawItem.sku}" does not belong to this seller`;
+            break;
+          }
+          if (!product.active) {
+            itemValidationError = `Product "${product.name}" (SKU: ${rawItem.sku}) is inactive — missing product link or video link`;
+            break;
+          }
+          if (variant && !variant.active) {
+            itemValidationError = `Variant SKU "${rawItem.sku}" is inactive`;
+            break;
+          }
+          if (requiresVariantSku) {
+            itemValidationError = `SKU "${rawItem.sku}" has multiple variants. Use the exact variant SKU in the sheet`;
+            break;
+          }
+
+          const parsedQty = parseSheetNumber(rawItem.quantity);
+          const parsedPrice = parseSheetNumber(rawItem.price);
+          const quantity = isFinite(parsedQty) && parsedQty > 0 ? Math.floor(parsedQty) : 1;
+          const catalogPrice = Number(variant?.price) || Number(product.price) || 0;
+          const unitPrice = isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : catalogPrice;
+
+          if (unitPrice > 0 && unitPrice < 50) {
+            itemValidationError = `Price "${rawItem.price}" for SKU "${rawItem.sku}" parsed as ${unitPrice} PKR and is suspiciously low (< 50)`;
+            break;
+          }
+          if (catalogPrice > 100 && unitPrice > 0 && unitPrice < catalogPrice * 0.1) {
+            itemValidationError = `Price ${unitPrice} PKR for SKU "${rawItem.sku}" is far below product price ${catalogPrice} PKR`;
+            break;
+          }
+
+          const weightKg = Number(variant?.weight_kg) || Number(product.weight_kg) || Number.parseFloat(product.weight || "0") || 0;
+          resolvedItems.push({
+            product,
+            variant,
+            sku: variant?.sku || product.sku,
+            quantity,
+            unitPrice,
+            totalPrice: quantity * unitPrice,
+            weightKg,
+          });
+        }
+
+        if (itemValidationError) {
           await supabase.from("integration_errors").insert({
             sheet_id: sheet.id,
-            order_data: orderData as any,
-            error_message: product
-              ? `SKU "${sku}" does not belong to this seller`
-              : `SKU "${sku}" not found in system`,
+            order_data: { ...rawOrderData, items: rawItems } as any,
+            error_message: itemValidationError,
           });
           errorsCount++;
           continue;
         }
 
-        // Check product is active (has product_url and video_url)
-        if (!product.active) {
-          await supabase.from("integration_errors").insert({
-            sheet_id: sheet.id,
-            order_data: orderData as any,
-            error_message: `Product "${product.name}" (SKU: ${sku}) is inactive — missing product link or video link`,
-          });
-          errorsCount++;
-          continue;
-        }
-
-        // ── Price sanity validation ──
-        // Block if unit price is suspiciously low (< 50 PKR) — almost certainly a parsing error
-        // or wildly off vs the product's configured price (e.g. parsed "8,372" as "8")
-        const productPrice = Number(product.price) || 0;
-        if (orderData.unit_price > 0 && orderData.unit_price < 50) {
-          await supabase.from("integration_errors").insert({
-            sheet_id: sheet.id,
-            order_data: orderData as any,
-            error_message: `Price "${priceStr}" parsed as ${orderData.unit_price} PKR is suspiciously low (< 50). Likely a number format issue (commas/separators). Please verify the sheet column for "Price".`,
-          });
-          errorsCount++;
-          continue;
-        }
-        if (productPrice > 100 && orderData.unit_price > 0 && orderData.unit_price < productPrice * 0.1) {
-          await supabase.from("integration_errors").insert({
-            sheet_id: sheet.id,
-            order_data: orderData as any,
-            error_message: `Price ${orderData.unit_price} PKR is far below product price ${productPrice} PKR. Likely a parsing or column mapping error.`,
-          });
-          errorsCount++;
-          continue;
-        }
+        const mainItem = resolvedItems[0];
+        const totalQuantity = resolvedItems.reduce((sum, item) => sum + item.quantity, 0);
+        const computedTotal = resolvedItems.reduce((sum, item) => sum + item.totalPrice, 0);
+        const totalAmount = isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : computedTotal;
+        const totalWeight = resolvedItems.reduce((sum, item) => sum + (item.weightKg * item.quantity), 0);
 
         // Duplicate check
         const today = new Date();
@@ -376,7 +440,7 @@ Deno.serve(async (req) => {
         const { data: existing } = await supabase
           .from("orders").select("id")
           .eq("customer_phone", normalizedPhone)
-          .eq("product_name", product.name)
+          .eq("product_name", mainItem.product.name)
           .eq("seller_id", sheet.seller_id)
           .gte("created_at", startOfDay)
           .lt("created_at", endOfDay)
@@ -385,8 +449,8 @@ Deno.serve(async (req) => {
         if (existing && existing.length > 0) {
           await supabase.from("integration_errors").insert({
             sheet_id: sheet.id,
-            order_data: orderData as any,
-            error_message: `Duplicate: same phone "${normalizedPhone}" + product "${product.name}" already exists today`,
+            order_data: { ...rawOrderData, items: rawItems } as any,
+            error_message: `Duplicate: same phone "${normalizedPhone}" + product "${mainItem.product.name}" already exists today`,
           });
           errorsCount++;
           continue;
@@ -395,33 +459,52 @@ Deno.serve(async (req) => {
         const { data: generatedId } = await supabase.rpc("generate_order_id", {
           p_seller_id: sheet.seller_id,
         });
-        const orderIdToInsert = generatedId || orderData.order_id;
-        const routeToWhatsapp = !!product.whatsapp_confirmation_enabled;
+        const orderIdToInsert = generatedId || rawOrderData.order_id;
+        const routeToWhatsapp = !!mainItem.product.whatsapp_confirmation_enabled;
 
-        const { error: insertError } = await supabase.from("orders").insert({
-          order_id: orderIdToInsert,
-          seller_id: sheet.seller_id,
-          customer_name: orderData.customer_name,
-          customer_phone: normalizedPhone,
-          customer_address: orderData.address,
-          customer_city: orderData.city,
-          product_name: product.name,
-          product_url: product.product_url || "",
-          video_url: product.video_url || "",
-          quantity: orderData.quantity,
-          price: orderData.unit_price || product.price,
-          total_amount: orderData.total_amount || (orderData.quantity * (orderData.unit_price || product.price)),
-          weight: product.weight ? parseFloat(product.weight) : 0,
-          source_sheet_id: sheet.id,
-          confirmation_status: routeToWhatsapp ? "new_wts" : "new",
-          confirmation_channel: routeToWhatsapp ? "whatsapp" : "agent",
-          whatsapp_status: routeToWhatsapp ? "pending" : null,
+        const { error: insertError } = await supabase.rpc("create_sheet_order_with_items", {
+          p_order: {
+            order_id: orderIdToInsert,
+            seller_id: sheet.seller_id,
+            customer_name: customerName,
+            customer_phone: normalizedPhone,
+            customer_address: address,
+            customer_city: city,
+            product_name: mainItem.product.name,
+            product_url: mainItem.product.product_url || "",
+            video_url: mainItem.product.video_url || "",
+            quantity: totalQuantity,
+            price: mainItem.unitPrice,
+            total_amount: totalAmount,
+            weight: totalWeight,
+            source_sheet_id: sheet.id,
+            confirmation_status: routeToWhatsapp ? "new_wts" : "new",
+            confirmation_channel: routeToWhatsapp ? "whatsapp" : "agent",
+            whatsapp_status: routeToWhatsapp ? "pending" : "",
+          },
+          p_items: resolvedItems.map((item, itemIndex) => ({
+            product_id: item.product.id,
+            product_variant_id: item.variant?.id || null,
+            sku: item.sku,
+            product_name: item.product.name,
+            variant_name: item.variant?.name || null,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            total_price: item.totalPrice,
+            weight_kg: item.weightKg || null,
+            metadata: {
+              source: "google_sheet",
+              source_sheet_id: sheet.id,
+              sheet_item_index: itemIndex,
+              sheet_item_count: resolvedItems.length,
+            },
+          })),
         });
 
         if (insertError) {
           await supabase.from("integration_errors").insert({
             sheet_id: sheet.id,
-            order_data: orderData as any,
+            order_data: { ...rawOrderData, items: rawItems } as any,
             error_message: `Insert failed: ${insertError.message}`,
           });
           errorsCount++;

@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { confirmationRatePercent } from "@/lib/confirmation-rate";
+import { isDeliveredStatus, isInShippedDeliveryPool } from "@/lib/delivery-rate";
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -177,12 +178,8 @@ export default function ProductDetail() {
     if (!product) return null;
     const totalOrders = productOrders.length;
     const confirmed = productOrders.filter(o => o.confirmation_status === 'confirmed').length;
-    const shipped = productOrders.filter(o =>
-      ['printed', 'dispatched', 'shipped', 'in_transit', 'with_courier'].includes(o.delivery_status || '')
-    ).length;
-    const delivered = productOrders.filter(o =>
-      o.delivery_status === 'delivered' || o.delivery_status === 'paid'
-    ).length;
+    const shipped = productOrders.filter(o => isInShippedDeliveryPool(o.delivery_status)).length;
+    const delivered = productOrders.filter(o => isDeliveredStatus(o.delivery_status)).length;
     const cancelled = productOrders.filter(o => o.confirmation_status === 'cancelled').length;
     const newOrders = productOrders.filter(o => o.confirmation_status === 'new').length;
     // Total sales = sum of total_amount for confirmed/shipped/delivered orders
@@ -199,7 +196,7 @@ export default function ProductDetail() {
       delivered,
       cancelled,
       confirmationRate: confirmationRatePercent(confirmed, totalOrders, newOrders).toFixed(1),
-      deliveryRate: confirmed > 0 ? ((delivered / confirmed) * 100).toFixed(1) : "0.0",
+      deliveryRate: shipped > 0 ? ((delivered / shipped) * 100).toFixed(1) : "0.0",
       totalSales,
       avgOrderValue,
     };

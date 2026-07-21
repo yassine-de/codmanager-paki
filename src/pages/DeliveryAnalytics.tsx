@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
+import { isDeliveredStatus, isInShippedDeliveryPool } from "@/lib/delivery-rate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ type DateField = "created" | "updated";
 
 type CourierSortField = "courier" | "total" | "delivered" | "failed" | "returned" | "rate";
 type CitySortField = "city" | "total" | "delivered" | "failed" | "returned" | "inProcess" | "rate";
-type AgentSortField = "name" | "confirmed" | "delivered" | "failed" | "rate";
+type AgentSortField = "name" | "shipped" | "delivered" | "failed" | "rate";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ const CONFIRMED_DELIVERY_STATUSES = [
   "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return", "return_received",
 ];
 const DELIVERED_STATUSES = ["delivered", "paid"];
-const SHIPPED_STATUSES = ["shipped", "in_transit", "with_courier", "out_for_delivery"];
+const ACTIVE_SHIPPING_STATUSES = ["shipped", "in_transit", "with_courier", "out_for_delivery"];
 const RETURNED_STATUSES = ["returned", "return", "return_received"];
 
 const DELIVERY_STATUS_OPTIONS = [
@@ -399,14 +400,12 @@ export default function DeliveryAnalytics() {
       return isWithinRange(new Date(o.confirmed_at ?? o.updated_at), dateRange);
     }).length;
 
-    const deliveryPool = filteredOrders.filter((o) =>
-      CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "")
-    );
+    const deliveryPool = filteredOrders.filter((o) => isInShippedDeliveryPool(o.delivery_status));
     const poolCount = deliveryPool.length;
     const booked  = filteredOrders.filter((o) => o.delivery_status === "booked").length;
     const printed = filteredOrders.filter((o) => o.delivery_status === "printed").length;
     const dispatched = filteredOrders.filter((o) => o.delivery_status === "dispatched").length;
-    const shipped = filteredOrders.filter((o) => SHIPPED_STATUSES.includes(o.delivery_status || "")).length;
+    const shipped = filteredOrders.filter((o) => ACTIVE_SHIPPING_STATUSES.includes(o.delivery_status || "")).length;
 
     // Delivered: use delivered_at if set, otherwise updated_at
     const delivered = pool.filter((o) => {
@@ -429,7 +428,7 @@ export default function DeliveryAnalytics() {
     return {
       total, confirmed, poolCount, booked, printed, dispatched, shipped, delivered,
       failedAttempt, returned, inReturnProcess,
-      deliveryRate: pct(delivered, confirmed),
+      deliveryRate: pct(delivered, poolCount),
       returnRate: pct(returned, poolCount),
       failedAttemptRate: pct(failedAttempt, poolCount),
     };
@@ -440,6 +439,7 @@ export default function DeliveryAnalytics() {
   const courierRows = useMemo(() => {
     const map: Record<string, { total: number; delivered: number; failed: number; returned: number }> = {};
     filteredOrders.forEach((o) => {
+      if (!isInShippedDeliveryPool(o.delivery_status)) return;
       const co = detectCourier(o);
       if (!map[co]) map[co] = { total: 0, delivered: 0, failed: 0, returned: 0 };
       map[co].total++;
@@ -475,6 +475,7 @@ export default function DeliveryAnalytics() {
   const cityRows = useMemo(() => {
     const map: Record<string, { total: number; delivered: number; failed: number; returned: number; inProcess: number }> = {};
     filteredOrders.forEach((o) => {
+      if (!isInShippedDeliveryPool(o.delivery_status)) return;
       const city = o.customer_city?.trim() || "Unknown";
       if (!map[city]) map[city] = { total: 0, delivered: 0, failed: 0, returned: 0, inProcess: 0 };
       map[city].total++;
@@ -483,8 +484,7 @@ export default function DeliveryAnalytics() {
       if (RETURNED_STATUSES.includes(o.delivery_status || "")) map[city].returned++;
       // In Process = booked + shipped/in_transit + failed_attempt (can still be delivered)
       if (
-        o.delivery_status === "booked" ||
-        SHIPPED_STATUSES.includes(o.delivery_status || "") ||
+        ACTIVE_SHIPPING_STATUSES.includes(o.delivery_status || "") ||
         o.delivery_status === "failed_attempt"
       ) map[city].inProcess++;
     });
@@ -567,19 +567,17 @@ export default function DeliveryAnalytics() {
   // ── By Product ───────────────────────────────────────────────────────────────
 
   const productRows = useMemo(() => {
-    const map: Record<string, { confirmed: number; delivered: number; failed: number }> = {};
+    const map: Record<string, { shipped: number; delivered: number; failed: number }> = {};
     filteredOrders.forEach((o) => {
       const name = o.product_name || "Unknown";
-      if (!map[name]) map[name] = { confirmed: 0, delivered: 0, failed: 0 };
-      if (o.confirmation_status === "confirmed" || CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "")) {
-        map[name].confirmed++;
-      }
+      if (!map[name]) map[name] = { shipped: 0, delivered: 0, failed: 0 };
+      if (isInShippedDeliveryPool(o.delivery_status)) map[name].shipped++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "")) map[name].delivered++;
       if (o.delivery_status === "failed_attempt") map[name].failed++;
     });
     return Object.entries(map)
-      .filter(([, d]) => d.confirmed > 0)
-      .map(([name, d]) => ({ name, confirmed: d.confirmed, delivered: d.delivered, failed: d.failed, rate: pct(d.delivered, d.confirmed) }))
+      .filter(([, d]) => d.shipped > 0)
+      .map(([name, d]) => ({ name, shipped: d.shipped, delivered: d.delivered, failed: d.failed, rate: pct(d.delivered, d.shipped) }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);
 
@@ -589,52 +587,52 @@ export default function DeliveryAnalytics() {
 
   const agentRows = useMemo(() => {
     // Per-agent stats (phone/manual confirmations)
-    const map: Record<string, { confirmed: number; delivered: number; failed: number }> = {};
+    const map: Record<string, { shipped: number; delivered: number; failed: number }> = {};
     // WhatsApp synthetic agent
-    const wa = { confirmed: 0, delivered: 0, failed: 0 };
+    const wa = { shipped: 0, delivered: 0, failed: 0 };
 
     filteredOrders.forEach((o) => {
       const isWa = o.confirmation_channel === "whatsapp";
-      const isConfirmed = o.confirmation_status === "confirmed" || CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "");
-      const isDelivered = DELIVERED_STATUSES.includes(o.delivery_status || "");
+      const isShipped = isInShippedDeliveryPool(o.delivery_status);
+      const isDelivered = isDeliveredStatus(o.delivery_status);
       const isFailed = o.delivery_status === "failed_attempt";
 
       if (isWa) {
         // WhatsApp row: count all WA-confirmed orders regardless of agent
-        if (isConfirmed) wa.confirmed++;
+        if (isShipped) wa.shipped++;
         if (isDelivered) wa.delivered++;
         if (isFailed) wa.failed++;
       } else {
         const agentId = o.agent_id || o.original_agent_id;
         if (!agentId) return;
-        if (!map[agentId]) map[agentId] = { confirmed: 0, delivered: 0, failed: 0 };
-        if (isConfirmed) map[agentId].confirmed++;
+        if (!map[agentId]) map[agentId] = { shipped: 0, delivered: 0, failed: 0 };
+        if (isShipped) map[agentId].shipped++;
         if (isDelivered) map[agentId].delivered++;
         if (isFailed) map[agentId].failed++;
       }
     });
 
     const rows = Object.entries(map)
-      .filter(([, d]) => d.confirmed > 0)
+      .filter(([, d]) => d.shipped > 0)
       .map(([id, d]) => ({
         id,
         name: profileMap[id] || id.slice(0, 8),
-        confirmed: d.confirmed,
+        shipped: d.shipped,
         delivered: d.delivered,
         failed: d.failed,
-        rate: pct(d.delivered, d.confirmed),
+        rate: pct(d.delivered, d.shipped),
         isWhatsApp: false,
       }));
 
     // Add WhatsApp as a standalone row if it has any data
-    if (wa.confirmed > 0) {
+    if (wa.shipped > 0) {
       rows.push({
         id: "__whatsapp__",
         name: "WhatsApp",
-        confirmed: wa.confirmed,
+        shipped: wa.shipped,
         delivered: wa.delivered,
         failed: wa.failed,
-        rate: pct(wa.delivered, wa.confirmed),
+        rate: pct(wa.delivered, wa.shipped),
         isWhatsApp: true,
       });
     }
@@ -840,7 +838,7 @@ export default function DeliveryAnalytics() {
               colorIcon="text-green-600 dark:text-green-300"
               gradient="from-green-500 to-emerald-400"
               delay={200}
-              pool={kpis.confirmed}
+              pool={kpis.poolCount}
             />
             <KPICard
               title="Failed Attempt"
@@ -880,7 +878,7 @@ export default function DeliveryAnalytics() {
               {
                 label: "Delivery Rate",
                 value: kpis.deliveryRate,
-                sub: `${kpis.delivered.toLocaleString()} delivered / ${kpis.confirmed.toLocaleString()} confirmed`,
+                sub: `${kpis.delivered.toLocaleString()} delivered / ${kpis.poolCount.toLocaleString()} shipped`,
                 icon: TrendingUp,
               },
               {
@@ -934,7 +932,7 @@ export default function DeliveryAnalytics() {
               <SectionHeader
                 icon={Users}
                 title="Delivery by Agent"
-                subtitle="Confirmed, delivered & failed per agent — WhatsApp included as a source"
+                subtitle="Shipped, delivered & failed per agent — WhatsApp included as a source"
                 iconBg="bg-indigo-100 dark:bg-indigo-900/30"
                 iconColor="text-indigo-600 dark:text-indigo-300"
               />
@@ -946,7 +944,7 @@ export default function DeliveryAnalytics() {
                       {(
                         [
                           { key: "name",      label: "Agent / Source", align: "left"  },
-                          { key: "confirmed", label: "Confirmed",      align: "right" },
+                          { key: "shipped",   label: "Shipped",        align: "right" },
                           { key: "delivered", label: "Delivered",      align: "right" },
                           { key: "failed",    label: "Failed Attempt", align: "right" },
                           { key: "rate",      label: "Delivery Rate",  align: "right" },
@@ -1018,7 +1016,7 @@ export default function DeliveryAnalytics() {
                             )}
                           </td>
                           <td className="py-3 px-3 text-right tabular-nums font-medium">
-                            {row.confirmed.toLocaleString()}
+                            {row.shipped.toLocaleString()}
                           </td>
                           <td className="py-3 px-3 text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
                             {row.delivered.toLocaleString()}
@@ -1347,7 +1345,7 @@ export default function DeliveryAnalytics() {
                     <tr className="border-b border-border/60 text-xs text-muted-foreground">
                       <th className="text-left py-2.5 w-8 font-semibold">#</th>
                       <th className="text-left py-2.5 pr-4 font-semibold">Product</th>
-                      <th className="text-right py-2.5 px-3 font-semibold">Confirmed</th>
+                      <th className="text-right py-2.5 px-3 font-semibold">Shipped</th>
                       <th className="text-right py-2.5 px-3 font-semibold">Delivered</th>
                       <th className="text-right py-2.5 px-3 font-semibold">Failed</th>
                       <th className="text-right py-2.5 pl-3 font-semibold min-w-[180px]">Delivery Rate</th>
@@ -1370,7 +1368,7 @@ export default function DeliveryAnalytics() {
                           </div>
                         </td>
                         <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">
-                          {row.confirmed.toLocaleString()}
+                          {row.shipped.toLocaleString()}
                         </td>
                         <td className="py-2.5 px-3 text-right tabular-nums font-medium text-emerald-600 dark:text-emerald-400">
                           {row.delivered.toLocaleString()}

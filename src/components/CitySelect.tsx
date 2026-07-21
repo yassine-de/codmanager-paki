@@ -81,6 +81,50 @@ const pakistanCities = [
   "Wazirabad",
 ];
 
+function normalizeCityName(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+export function isCarrierCityValueValid(value: string, cityNames: string[]): boolean {
+  if (!value.trim()) return false;
+  const normalizedValue = normalizeCityName(value);
+  return cityNames.some((cityName) => normalizeCityName(cityName) === normalizedValue);
+}
+
+function useCityOptions() {
+  const { data: cities = [], isLoading } = useCarrierCities();
+  const cityOptions = React.useMemo(() => {
+    const cityMap = new Map<string, { carrier_city_id: string | null; city_name: string; province_name: string | null }>();
+    pakistanCities.forEach((city) => cityMap.set(normalizeCityName(city), { carrier_city_id: null, city_name: city, province_name: null }));
+    cities.forEach((city) => {
+      const name = (city.city_name || "").trim();
+      if (name) cityMap.set(normalizeCityName(name), city);
+    });
+    return Array.from(cityMap.values()).sort((a, b) => a.city_name.localeCompare(b.city_name));
+  }, [cities]);
+
+  return { cityOptions, isLoading };
+}
+
+function cityIsInvalid(
+  value: string,
+  cityOptions: Array<{ city_name: string }>,
+  isLoading: boolean,
+): boolean {
+  if (isLoading || cityOptions.length === 0) return false;
+  return !isCarrierCityValueValid(value, cityOptions.map((city) => city.city_name || ""));
+}
+
+export function useCarrierCityValidation(value: string) {
+  const { cityOptions, isLoading } = useCityOptions();
+  const isInvalid = React.useMemo(
+    () => cityIsInvalid(value, cityOptions, isLoading),
+    [value, cityOptions, isLoading],
+  );
+
+  return { isInvalid, isLoading };
+}
+
 interface CitySelectProps {
   value: string;
   onValueChange: (value: string) => void;
@@ -93,22 +137,8 @@ interface CitySelectProps {
 
 export function CitySelect({ value, onValueChange, className, triggerClassName, highlightInvalid, modal }: CitySelectProps) {
   const [open, setOpen] = React.useState(false);
-  const { data: cities = [], isLoading } = useCarrierCities();
-  const cityOptions = React.useMemo(() => {
-    const cityMap = new Map<string, { carrier_city_id: string | null; city_name: string; province_name: string | null }>();
-    pakistanCities.forEach((city) => cityMap.set(city.trim().toLowerCase(), { carrier_city_id: null, city_name: city, province_name: null }));
-    cities.forEach((city) => {
-      const name = (city.city_name || "").trim();
-      if (name) cityMap.set(name.toLowerCase(), city);
-    });
-    return Array.from(cityMap.values()).sort((a, b) => a.city_name.localeCompare(b.city_name));
-  }, [cities]);
-
-  const isInvalid = React.useMemo(() => {
-    if (!highlightInvalid || !value || isLoading || cityOptions.length === 0) return false;
-    const v = value.trim().toLowerCase().replace(/\s+/g, "");
-    return !cityOptions.some((c) => (c.city_name || "").trim().toLowerCase().replace(/\s+/g, "") === v);
-  }, [highlightInvalid, value, cityOptions, isLoading]);
+  const { cityOptions, isLoading } = useCityOptions();
+  const isInvalid = Boolean(highlightInvalid && cityIsInvalid(value, cityOptions, isLoading));
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal={modal}>

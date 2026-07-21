@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { confirmationRatePercent } from "@/lib/confirmation-rate";
+import { isInShippedDeliveryPool } from "@/lib/delivery-rate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,6 @@ const ORDER_SELECT =
   "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, price, quantity, created_at, confirmed_at, delivered_at, updated_at";
 const PAGE_SIZE = 1000;
 const DELIVERED_STATUSES = ["delivered", "paid"];
-const SHIPPED_STATUSES = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery"];
 
 // ─── Data Fetching ────────────────────────────────────────────────────────────
 
@@ -337,15 +337,14 @@ export default function SellerAnalytics() {
     // Returned uses delivered_at as its closest event proxy; the rest have no event
     // timestamp, so fall back to updated_at (when the status was last set).
     const booked = base.filter((o) => o.delivery_status === "booked" && inRangeByEvent(o, o.updated_at)).length;
-    const shipped = base.filter((o) => SHIPPED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.updated_at)).length;
+    const shipped = base.filter((o) => isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)).length;
     const failedAttempt = base.filter((o) => o.delivery_status === "failed_attempt" && inRangeByEvent(o, o.updated_at)).length;
     const returned = base.filter((o) => o.delivery_status === "returned" && inRangeByEvent(o, o.delivered_at)).length;
     const inReturnProcess = base.filter((o) => o.delivery_status === "ready_for_return" && inRangeByEvent(o, o.updated_at)).length;
-    // Delivery rate denominator = confirmed orders in the period (matches the Confirmed card).
-    const poolCount = confirmationKPIs.confirmedCount;
+    const poolCount = shipped;
     const delRate = pct(delivered, poolCount);
     return { poolCount, booked, shipped, delivered, failedAttempt, returned, inReturnProcess, delRate };
-  }, [orders, sellerFilter, productFilter, dateFieldMode, dateRange, confirmationKPIs]);
+  }, [orders, sellerFilter, productFilter, dateFieldMode, dateRange]);
 
   // ── Product Performance ──────────────────────────────────────────────────────
 
@@ -369,7 +368,7 @@ export default function SellerAnalytics() {
       if (inRangeByEvent(o, o.updated_at)) map[name].orders++;
       if (o.confirmation_status === "new" && inRangeByEvent(o, o.updated_at)) map[name].newOrders++;
       if (reachedConfirmedStage(o) && inRangeByEvent(o, o.confirmed_at)) map[name].confirmed++;
-      if (SHIPPED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.updated_at)) map[name].shipped++;
+      if (isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)) map[name].shipped++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) map[name].delivered++;
     });
 
@@ -380,7 +379,7 @@ export default function SellerAnalytics() {
       confRate: confirmationRatePercent(d.confirmed, d.orders, d.newOrders),
       shipped: d.shipped,
       delivered: d.delivered,
-      delRate: pct(d.delivered, d.confirmed),
+      delRate: pct(d.delivered, d.shipped),
     }));
   }, [orders, sellerFilter, productFilter, dateFieldMode, dateRange]);
 
@@ -412,7 +411,7 @@ export default function SellerAnalytics() {
       if (!map[id]) map[id] = { orders: 0, confirmed: 0, shipped: 0, delivered: 0, revenue: 0 };
       if (inRangeByEvent(o, o.updated_at)) map[id].orders++;
       if (reachedConfirmedStage(o) && inRangeByEvent(o, o.confirmed_at)) map[id].confirmed++;
-      if (SHIPPED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.updated_at)) map[id].shipped++;
+      if (isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)) map[id].shipped++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) {
         map[id].delivered++;
         map[id].revenue += (o.price || 0) * (o.quantity || 1);
@@ -427,7 +426,7 @@ export default function SellerAnalytics() {
       confPct: pct(d.confirmed, d.orders),
       shipped: d.shipped,
       delivered: d.delivered,
-      delPct: pct(d.delivered, d.confirmed),
+      delPct: pct(d.delivered, d.shipped),
       revenue: d.revenue,
     }));
   }, [orders, productFilter, dateFieldMode, dateRange, profileMap]);

@@ -39,6 +39,7 @@ import {
   ArrowLeft,
   MapPin,
   Pencil,
+  Truck,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1494,12 +1495,12 @@ export default function WhatsappInbox() {
           ) : (
             <>
               {/* Chat header */}
-              <div className="border-b border-border px-3 sm:px-4 py-2 flex items-center gap-2.5 shrink-0 bg-card">
+              <div className="border-b border-border px-2.5 sm:px-4 py-2 flex flex-wrap md:flex-nowrap items-start gap-x-2.5 gap-y-1.5 shrink-0 bg-card">
                 {/* Mobile back button */}
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-8 w-8 shrink-0 md:hidden -ml-1"
+                  className="h-8 w-8 shrink-0 md:hidden -ml-1 mt-0.5"
                   onClick={() => setSelected(null)}
                   title="Back to inbox"
                 >
@@ -1515,12 +1516,12 @@ export default function WhatsappInbox() {
                       setOrderInfoOpen(true);
                     }
                   }}
-                  className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer rounded-md hover:bg-muted/50 transition-colors py-1 px-1 -mx-1"
+                  className="flex items-start gap-2 min-w-0 flex-1 cursor-pointer rounded-md hover:bg-muted/50 transition-colors py-1 px-1 -mx-1"
                   title="View customer & order info"
                 >
                   <div
                     className={cn(
-                      "h-9 w-9 rounded-full grid place-items-center text-sm font-semibold shrink-0",
+                      "h-8 w-8 sm:h-9 sm:w-9 rounded-full grid place-items-center text-sm font-semibold shrink-0",
                       colorFor(conv.customer_phone),
                     )}
                   >
@@ -1555,8 +1556,8 @@ export default function WhatsappInbox() {
                       title={windowExpired ? "24h window expired" : "Window open"}
                     />
                   </div>
-                  {/* Row 2: phone + order + status pills */}
-                  <div className="text-[11px] text-muted-foreground truncate flex items-center gap-1.5 flex-wrap">
+                  {/* Row 2: phone + order */}
+                  <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 min-w-0">
                     <span className="shrink-0">{conv.customer_phone}</span>
                     {order && (
                       <>
@@ -1577,7 +1578,12 @@ export default function WhatsappInbox() {
                         >
                           #{order.order_id}
                         </button>
-                        {/* Status pills — compact, color-coded */}
+                      </>
+                    )}
+                  </div>
+                  {/* Row 3: statuses remain visible on narrow mobile screens */}
+                  {order && (
+                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
                         {order.confirmation_status && (
                           <span
                             className={cn(
@@ -1593,30 +1599,30 @@ export default function WhatsappInbox() {
                         {order.delivery_status && (
                           <span
                             className={cn(
-                              "hidden md:inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[10px] font-medium leading-none capitalize",
+                              "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px text-[10px] font-medium leading-none capitalize",
                               deliveryStatusCls(order.delivery_status),
                             )}
                             title={`Delivery: ${order.delivery_status.replace(/_/g, " ")}`}
                           >
-                            <span className="h-1 w-1 rounded-full bg-current opacity-70" />
+                            <Truck className="h-2.5 w-2.5" />
                             {order.delivery_status.replace(/_/g, " ")}
                           </span>
                         )}
                         {shouldShowShippingStatus(order.delivery_status, order.shipping_status) && (
                           <span
-                            className="hidden lg:inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted/50 text-muted-foreground px-1.5 py-px text-[10px] font-medium leading-none capitalize"
+                            className="hidden sm:inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-muted/50 text-muted-foreground px-1.5 py-px text-[10px] font-medium leading-none capitalize"
                             title={`Shipping: ${order.shipping_status.replace(/_/g, " ")}`}
                           >
                             <span className="h-1 w-1 rounded-full bg-current opacity-70" />
                             {order.shipping_status.replace(/_/g, " ")}
                           </span>
                         )}
-                      </>
-                    )}
-                  </div>
+                    </div>
+                  )}
                   </div>
                 </div>
 
+                <div className="flex w-full md:w-auto items-center justify-end gap-1 pl-10 md:pl-0">
                 {/* Mark as resolved (only when conversation needs review) */}
                 {conv?.status === "manual_review_needed" && (
                   <Button
@@ -1624,7 +1630,7 @@ export default function WhatsappInbox() {
                     variant="outline"
                     size="sm"
                     onClick={() => setResolveOpen(true)}
-                    className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs font-medium border-sky-500/30 bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 hover:text-sky-700 dark:text-sky-400"
+                    className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-sky-500/30 bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 hover:text-sky-700 dark:text-sky-400"
                     title="Mark this conversation as resolved"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />
@@ -1640,7 +1646,7 @@ export default function WhatsappInbox() {
                     size="sm"
                     onClick={forceToAgent}
                     disabled={forcingAgent}
-                    className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs font-medium border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 hover:text-orange-700 dark:text-orange-400"
+                    className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 hover:text-orange-700 dark:text-orange-400"
                     title="Stop AI and send this order to the agent queue"
                   >
                     {forcingAgent ? (
@@ -1659,7 +1665,7 @@ export default function WhatsappInbox() {
                   size="sm"
                   onClick={toggleAi}
                   className={cn(
-                    "h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs font-medium",
+                    "h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium",
                     aiEnabled
                       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:text-emerald-700 dark:text-emerald-400"
                       : "border-rose-500/30 bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 hover:text-rose-700 dark:text-rose-400",
@@ -1677,7 +1683,7 @@ export default function WhatsappInbox() {
                   size="sm"
                   onClick={forceAiReply}
                   disabled={forcingAi}
-                  className="h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs font-medium border-violet-500/30 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 hover:text-violet-700 dark:text-violet-400"
+                  className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-violet-500/30 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 hover:text-violet-700 dark:text-violet-400"
                   title="Force AI to read the conversation and reply now"
                 >
                   {forcingAi ? (
@@ -1687,6 +1693,8 @@ export default function WhatsappInbox() {
                   )}
                   <span className="hidden md:inline">Force AI</span>
                 </Button>
+
+                </div>
 
                 {/* Status indicators removed per request */}
               </div>
