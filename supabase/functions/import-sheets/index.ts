@@ -278,6 +278,8 @@ Deno.serve(async (req) => {
       let skipped = 0;
       let consecutiveEmptyRows = 0;
       let stoppedAtEmptyGap = false;
+      let stoppedAtInsertFailure = false;
+      let insertFailureRowIndex = -1;
       let lastNonEmptyRowIndex = -1;
 
       // Resolve per-sheet column mapping (falls back to defaults)
@@ -508,6 +510,11 @@ Deno.serve(async (req) => {
             error_message: `Insert failed: ${insertError.message}`,
           });
           errorsCount++;
+          // A system/database failure is retryable. Stop here and keep the
+          // cursor before this row so the next sync cannot silently skip it.
+          stoppedAtInsertFailure = true;
+          insertFailureRowIndex = i;
+          break;
         } else {
           imported++;
           if (routeToWhatsapp) {
@@ -531,9 +538,11 @@ Deno.serve(async (req) => {
         }
       }
 
-      const newLastRow = stoppedAtEmptyGap
-        ? (lastNonEmptyRowIndex >= 0 ? startRow + lastNonEmptyRowIndex : sheet.last_imported_row)
-        : startRow + rows.length - 1;
+      const newLastRow = stoppedAtInsertFailure
+        ? Math.max(sheet.last_imported_row, startRow + insertFailureRowIndex - 1)
+        : stoppedAtEmptyGap
+          ? (lastNonEmptyRowIndex >= 0 ? startRow + lastNonEmptyRowIndex : sheet.last_imported_row)
+          : startRow + rows.length - 1;
       await supabase.from("integration_sheets")
         .update({
           last_imported_row: newLastRow,
@@ -543,7 +552,7 @@ Deno.serve(async (req) => {
         })
         .eq("id", sheet.id);
 
-      results[sheet.id] = { imported, errors: errorsCount, skipped, stoppedAtEmptyGap };
+      results[sheet.id] = { imported, errors: errorsCount, skipped, stoppedAtEmptyGap, stoppedAtInsertFailure };
     }
 
     return new Response(

@@ -11,6 +11,25 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { CitySelect } from "@/components/CitySelect";
 
+async function getFunctionErrorMessage(error: any) {
+  const response = error?.context;
+  if (response && typeof response.clone === "function") {
+    try {
+      const payload = await response.clone().json();
+      if (payload?.error) return payload.error;
+      if (payload?.message) return payload.message;
+    } catch {
+      try {
+        const text = await response.clone().text();
+        if (text) return text;
+      } catch {
+        // Keep the Supabase client message below.
+      }
+    }
+  }
+  return error?.message || "Edge Function failed";
+}
+
 interface FailedSyncModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,7 +75,7 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
       const { data, error } = await supabase.functions.invoke("shipping-sync", {
         body: { action: "sync-order", order_id: orderId },
       });
-      if (error) throw error;
+      if (error) throw new Error(await getFunctionErrorMessage(error));
       if (data?.error) throw new Error(data.error);
       if (data?.skipped) {
         toast.info(data.reason || "Order skipped");

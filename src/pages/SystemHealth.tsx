@@ -30,6 +30,25 @@ interface SyncIssueOrder {
   created_at: string;
 }
 
+async function getFunctionErrorMessage(error: any) {
+  const response = error?.context;
+  if (response && typeof response.clone === "function") {
+    try {
+      const payload = await response.clone().json();
+      if (payload?.error) return payload.error;
+      if (payload?.message) return payload.message;
+    } catch {
+      try {
+        const text = await response.clone().text();
+        if (text) return text;
+      } catch {
+        // Keep the Supabase client message below.
+      }
+    }
+  }
+  return error?.message || "Edge Function failed";
+}
+
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
@@ -142,7 +161,7 @@ export default function SystemHealth() {
       const { error } = await supabase.functions.invoke("shipping-sync", {
         body: { action: "sync-order", order_id: order.order_id },
       });
-      if (error) throw error;
+      if (error) throw new Error(await getFunctionErrorMessage(error));
       toast.success(`Retry triggered for ${order.order_id}`);
       refetchSyncErrors();
     } catch (e: any) {

@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { CitySelect } from "@/components/CitySelect";
 
 const confirmationBadge: Record<string, { label: string; className: string }> = {
   confirmed: { label: "✅ Confirmed", className: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" },
@@ -546,11 +547,12 @@ const AgentConfirmedOrders = () => {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">City</Label>
-                  <Input
-                    className="h-9 text-sm"
+                  <CitySelect
                     value={editForm.customer_city}
-                    onChange={(e) => updateField("customer_city", e.target.value)}
-                    maxLength={100}
+                    onValueChange={(value) => updateField("customer_city", value)}
+                    triggerClassName="h-9 w-full text-sm px-3"
+                    className="w-[320px]"
+                    modal
                   />
                 </div>
                 <div className="space-y-1.5">
