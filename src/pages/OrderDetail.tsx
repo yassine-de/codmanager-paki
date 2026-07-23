@@ -1,7 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Phone, MapPin, Calendar, StickyNote, Loader2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/StatusBadge";
 import { mockOrders } from "@/lib/data";
 import { formatPKT as format } from "@/lib/timezone";
 import { useQuery } from "@tanstack/react-query";
@@ -40,6 +39,16 @@ export default function OrderDetail() {
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
+      let orderItems = Array.isArray((data as any).order_items) ? (data as any).order_items : [];
+      if (orderItems.length === 0) {
+        const { data: fallbackItems } = await supabase
+          .from("order_items" as any)
+          .select("id, sku, product_name, quantity, unit_price, total_price, created_at")
+          .eq("order_id", data.id)
+          .order("created_at", { ascending: true });
+        orderItems = fallbackItems || [];
+      }
+      const orderWithItems = { ...data, order_items: orderItems };
       const latestShipment = [...((data as any).shipments || [])].sort((a, b) =>
         String(b.created_at || "").localeCompare(String(a.created_at || ""))
       )[0];
@@ -62,7 +71,7 @@ export default function OrderDetail() {
         phone: data.customer_phone,
         city: data.customer_city,
         address: data.customer_address || "",
-        products: mapOrderProducts(data),
+        products: mapOrderProducts(orderWithItems),
         total: Number(data.total_amount),
         confirmationStatus: data.confirmation_status,
         deliveryStatus: data.delivery_status || "pending",
@@ -138,6 +147,9 @@ export default function OrderDetail() {
   const shipmentSyncStatus = isDbOrder ? dbOrder.shipmentSyncStatus : undefined;
   const shipmentSyncError = isDbOrder ? dbOrder.shipmentSyncError : undefined;
   const shipmentSyncedAt = isDbOrder ? dbOrder.shipmentSyncedAt : undefined;
+  const visibleConfirmationStatus = authUser?.role === 'seller' && confirmationStatus === 'new_wts'
+    ? 'new'
+    : confirmationStatus;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -151,12 +163,12 @@ export default function OrderDetail() {
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-semibold">{order.id}</h1>
           <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
-            confirmationStatus === 'confirmed' ? 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' :
-            confirmationStatus === 'cancelled' ? 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' :
-            confirmationStatus === 'new' ? 'bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20' :
+            visibleConfirmationStatus === 'confirmed' ? 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' :
+            visibleConfirmationStatus === 'cancelled' ? 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' :
+            visibleConfirmationStatus === 'new' ? 'bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)] border-[hsl(210,60%,52%)]/20' :
             'bg-[hsl(38,90%,55%)]/12 text-[hsl(38,90%,55%)] border-[hsl(38,90%,55%)]/20'
           }`}>
-            {confirmationStatus}
+            {visibleConfirmationStatus}
           </span>
           {deliveryStatus && deliveryStatus !== 'pending' && (
             <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${

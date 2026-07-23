@@ -1187,7 +1187,12 @@ export default function Orders() {
               <div className="text-xs text-muted-foreground mb-2">{order.products.map(p => p.name).join(', ')}</div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <StatusBadge {...confirmationConfig[order.confirmationStatus]} attemptCount={order.confirmationStatus === 'no_answer' ? order.attemptCount : undefined} />
+                  {(() => {
+                    const effectiveStatus = (!isAdmin && order.confirmationStatus === 'new_wts')
+                      ? 'new' as ConfirmationStatus
+                      : order.confirmationStatus;
+                    return <StatusBadge {...confirmationConfig[effectiveStatus]} attemptCount={effectiveStatus === 'no_answer' ? order.attemptCount : undefined} />;
+                  })()}
                   <StatusBadge {...deliveryConfig[order.deliveryStatus]} />
                   {order.carrierShippingStatus && (
                     <StatusBadge label={subStatusLabel(order.carrierShippingStatus)!} cls={subStatusClass(order.carrierShippingStatus)} />
