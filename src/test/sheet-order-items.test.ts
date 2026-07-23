@@ -21,6 +21,18 @@ describe("parseSheetOrderItems", () => {
     ]);
   });
 
+  it("accepts explicit same-row upsell separators", () => {
+    expect(parseSheetOrderItems({
+      productName: "Main product; Upsell product",
+      sku: "SKU-1; SKU-2",
+      quantity: "1; 2",
+      price: "6400; 3000",
+    })).toEqual([
+      { productName: "Main product", sku: "SKU-1", quantity: "1", price: "6400" },
+      { productName: "Upsell product", sku: "SKU-2", quantity: "2", price: "3000" },
+    ]);
+  });
+
   it("rejects misaligned multi-line columns", () => {
     expect(() => parseSheetOrderItems({
       sku: "A\nB",

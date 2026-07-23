@@ -5,9 +5,18 @@ export type RawSheetOrderItem = {
   price: string;
 };
 
-function splitLines(value: string | null | undefined): string[] {
-  return String(value || "")
-    .split(/\r?\n/)
+function splitItemValues(value: string | null | undefined, options: { comma?: boolean } = {}): string[] {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+
+  const separator = /\r?\n/.test(raw)
+    ? /\r?\n/
+    : options.comma && raw.includes(",")
+      ? /,/
+      : /[|;]/;
+
+  return raw
+    .split(separator)
     .map((line) => line.trim())
     .filter(Boolean);
 }
@@ -30,12 +39,12 @@ export function parseSheetOrderItems(input: {
   quantity?: string;
   price?: string;
 }): RawSheetOrderItem[] {
-  const skus = splitLines(input.sku);
+  const skus = splitItemValues(input.sku, { comma: true });
   if (skus.length === 0) throw new Error("SKU is empty");
 
-  const productNames = alignLines(splitLines(input.productName), skus.length, "Product Name");
-  const quantities = alignLines(splitLines(input.quantity), skus.length, "Quantity");
-  const prices = alignLines(splitLines(input.price), skus.length, "Price");
+  const productNames = alignLines(splitItemValues(input.productName), skus.length, "Product Name");
+  const quantities = alignLines(splitItemValues(input.quantity, { comma: true }), skus.length, "Quantity");
+  const prices = alignLines(splitItemValues(input.price, { comma: true }), skus.length, "Price");
 
   return skus.map((sku, index) => ({
     sku,

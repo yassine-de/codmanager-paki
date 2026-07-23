@@ -125,6 +125,14 @@ function latestTrackingStatus(payload: any) {
 }
 
 function buildOrderDetail(order: any) {
+  const items = Array.isArray(order.order_items) ? order.order_items : [];
+  if (items.length > 0) {
+    const itemText = items
+      .map((item: any) => `${item.product_name || item.sku || "Product"} x ${item.quantity || 1}`)
+      .join(" | ");
+    return order.order_id ? `${itemText} | Ref: ${order.order_id}` : itemText;
+  }
+
   const parts = [];
   if (order.product_name) parts.push(`${order.product_name} x ${order.quantity || 1}`);
   if (order.order_id) parts.push(`Ref: ${order.order_id}`);
@@ -340,9 +348,17 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
 }
 
 async function syncConfirmedOrder(supabase: ReturnType<typeof createClient>, orderIdOrDbId: string) {
-  let { data: order } = await supabase.from("orders").select("*").eq("id", orderIdOrDbId).maybeSingle();
+  let { data: order } = await supabase
+    .from("orders")
+    .select("*, order_items(id, sku, product_name, quantity, unit_price)")
+    .eq("id", orderIdOrDbId)
+    .maybeSingle();
   if (!order) {
-    const result = await supabase.from("orders").select("*").eq("order_id", orderIdOrDbId).maybeSingle();
+    const result = await supabase
+      .from("orders")
+      .select("*, order_items(id, sku, product_name, quantity, unit_price)")
+      .eq("order_id", orderIdOrDbId)
+      .maybeSingle();
     order = result.data;
   }
   if (!order) throw new Error(`Order not found: ${orderIdOrDbId}`);
@@ -474,7 +490,7 @@ Deno.serve(async (req) => {
       case "sync-all-pending": {
         const { data: pending, error } = await supabase
           .from("orders")
-          .select("*")
+          .select("*, order_items(id, sku, product_name, quantity, unit_price)")
           .eq("confirmation_status", "confirmed")
           .eq("delivery_status", "booked")
           .limit(50);

@@ -462,7 +462,7 @@ Deno.serve(async (req) => {
           p_seller_id: sheet.seller_id,
         });
         const orderIdToInsert = generatedId || rawOrderData.order_id;
-        const routeToWhatsapp = !!mainItem.product.whatsapp_confirmation_enabled;
+        const routeToWhatsapp = resolvedItems.some((item) => !!item.product.whatsapp_confirmation_enabled);
 
         const { error: insertError } = await supabase.rpc("create_sheet_order_with_items", {
           p_order: {

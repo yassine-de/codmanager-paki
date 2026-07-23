@@ -8,6 +8,19 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
+function mapOrderProducts(order: any) {
+  const items = Array.isArray(order.order_items) ? order.order_items : [];
+  if (items.length > 0) {
+    return items.map((item: any) => ({
+      name: item.product_name || item.sku || "Product",
+      qty: Number(item.quantity || 1),
+      price: Number(item.unit_price || 0),
+    }));
+  }
+
+  return [{ name: order.product_name, qty: order.quantity, price: Number(order.price) }];
+}
+
 export default function OrderDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -22,7 +35,7 @@ export default function OrderDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("*, shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, sync_status, sync_error, last_synced_at, created_at, carriers(code, name))")
+        .select("*, order_items(id, sku, product_name, quantity, unit_price, total_price, created_at), shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, sync_status, sync_error, last_synced_at, created_at, carriers(code, name))")
         .eq("order_id", id!)
         .maybeSingle();
       if (error) throw error;
@@ -49,7 +62,7 @@ export default function OrderDetail() {
         phone: data.customer_phone,
         city: data.customer_city,
         address: data.customer_address || "",
-        products: [{ name: data.product_name, qty: data.quantity, price: Number(data.price) }],
+        products: mapOrderProducts(data),
         total: Number(data.total_amount),
         confirmationStatus: data.confirmation_status,
         deliveryStatus: data.delivery_status || "pending",

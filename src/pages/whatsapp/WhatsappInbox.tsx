@@ -538,6 +538,18 @@ function dayLabel(d: Date) {
   return format(d, "dd/MM/yyyy");
 }
 
+function getOrderItems(order: any) {
+  const items = Array.isArray(order?.order_items) ? order.order_items : [];
+  if (items.length > 0) return items;
+  if (!order) return [];
+  return [{
+    product_name: order.product_name,
+    quantity: order.quantity,
+    unit_price: order.price,
+    total_price: Number(order.quantity || 1) * Number(order.price || 0),
+  }];
+}
+
 export default function WhatsappInbox() {
   const { authUser, hasPermission } = useAuth();
   const isAdmin = authUser?.role === "admin";
@@ -584,6 +596,10 @@ export default function WhatsappInbox() {
   const [editingCity, setEditingCity] = useState(false);
   const [cityDraft, setCityDraft] = useState("");
   const [savingCity, setSavingCity] = useState(false);
+  const [editingPricing, setEditingPricing] = useState(false);
+  const [quantityDraft, setQuantityDraft] = useState("");
+  const [priceDraft, setPriceDraft] = useState("");
+  const [savingPricing, setSavingPricing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveNote, setResolveNote] = useState("");
@@ -678,7 +694,7 @@ export default function WhatsappInbox() {
       if (!conv?.order_id) return null;
       const { data } = await supabase
         .from("orders")
-        .select("*")
+        .select("*, order_items(id, sku, product_name, quantity, unit_price, total_price, created_at)")
         .eq("order_id", conv.order_id)
         .maybeSingle();
       return data;
@@ -2335,6 +2351,7 @@ export default function WhatsappInbox() {
         if (!o) {
           setEditingCity(false);
           setEditingAddress(false);
+          setEditingPricing(false);
         }
       }}>
         <DialogContent className="max-w-lg">
@@ -2410,15 +2427,131 @@ export default function WhatsappInbox() {
                   </div>
                   <div className="col-span-2">
                     <div className="text-[11px] text-muted-foreground">Product</div>
-                    <div className="font-medium">{order.product_name}</div>
+                    <div className="space-y-1">
+                      {getOrderItems(order).map((item: any, index: number) => (
+                        <div key={item.id || `${item.product_name}-${index}`} className="flex items-start justify-between gap-2">
+                          <div className="font-medium">{item.product_name || item.sku || "Product"}</div>
+                          {getOrderItems(order).length > 1 && (
+                            <div className="text-xs text-muted-foreground whitespace-nowrap">
+                              {Number(item.quantity || 1)} x Rs {Number(item.unit_price || 0).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-[11px] text-muted-foreground">Quantity</div>
-                    <div>{order.quantity}</div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] text-muted-foreground">Total</div>
-                    <div className="font-semibold">Rs {Number(order.total_amount || 0).toLocaleString()}</div>
+                  <div className="col-span-2 rounded-md border border-border/70 bg-background/70 p-2">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="text-[11px] text-muted-foreground">Quantity & Price</div>
+                      {!editingPricing && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[11px]"
+                          onClick={() => {
+                            setQuantityDraft(String(order.quantity || 1));
+                            setPriceDraft(String(order.price || 0));
+                            setEditingPricing(true);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                    </div>
+                    {editingPricing ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <div className="text-[10px] text-muted-foreground">Quantity</div>
+                            <Input
+                              type="number"
+                              min={1}
+                              step={1}
+                              className="h-8 text-sm"
+                              value={quantityDraft}
+                              onChange={(e) => setQuantityDraft(e.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-[10px] text-muted-foreground">Price (PKR)</div>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              className="h-8 text-sm"
+                              value={priceDraft}
+                              onChange={(e) => setPriceDraft(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs text-muted-foreground">
+                            Total: <span className="font-semibold text-foreground">Rs {(Number(quantityDraft || 0) * Number(priceDraft || 0)).toLocaleString()}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs"
+                              disabled={savingPricing}
+                              onClick={async () => {
+                                const quantity = Math.max(1, Math.trunc(Number(quantityDraft)));
+                                const price = Number(priceDraft);
+                                if (!Number.isFinite(quantity) || quantity < 1 || !Number.isFinite(price) || price < 0) {
+                                  toast.error("Enter a valid quantity and price");
+                                  return;
+                                }
+                                setSavingPricing(true);
+                                const { error } = await supabase
+                                  .from("orders")
+                                  .update({
+                                    quantity,
+                                    price,
+                                    total_amount: quantity * price,
+                                    is_manual_price: true,
+                                    updated_at: new Date().toISOString(),
+                                  })
+                                  .eq("order_id", order.order_id);
+                                setSavingPricing(false);
+                                if (error) {
+                                  toast.error("Failed to update quantity and price");
+                                  return;
+                                }
+                                qc.invalidateQueries({ queryKey: ["wts-order", order.order_id] });
+                                toast.success("Quantity and price updated");
+                                setEditingPricing(false);
+                              }}
+                            >
+                              {savingPricing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                              Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              disabled={savingPricing}
+                              onClick={() => setEditingPricing(false)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <div className="text-[10px] text-muted-foreground">Qty</div>
+                          <div>{order.quantity}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-muted-foreground">Price</div>
+                          <div>Rs {Number(order.price || 0).toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-muted-foreground">Total</div>
+                          <div className="font-semibold">Rs {Number(order.total_amount || 0).toLocaleString()}</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="text-[11px] text-muted-foreground mb-0.5">City</div>

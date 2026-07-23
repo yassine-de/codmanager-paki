@@ -108,6 +108,19 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
   );
 }
 
+function mapOrderProducts(row: any): { name: string; qty: number; price: number }[] {
+  const items = Array.isArray(row.order_items) ? row.order_items : [];
+  if (items.length > 0) {
+    return items.map((item: any) => ({
+      name: item.product_name || item.sku || "Product",
+      qty: Number(item.quantity || 1),
+      price: Number(item.unit_price || 0),
+    }));
+  }
+
+  return [{ name: row.product_name, qty: row.quantity, price: Number(row.price) }];
+}
+
 /* ── Column definitions ── */
 type ColumnKey = 'systemId' | 'id' | 'carrierId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'channel' | 'deliveryStatus' | 'subStatus' | 'attempts' | 'financial';
 
@@ -343,7 +356,7 @@ export default function Orders() {
       while (from < MAX_ROWS) {
         const { data, error } = await supabase
           .from("orders")
-          .select("*, shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, created_at, carriers(code, name))")
+          .select("*, order_items(id, sku, product_name, quantity, unit_price, created_at), shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, created_at, carriers(code, name))")
           .order("created_at", { ascending: false })
           .order("id", { ascending: false })
           .range(from, from + PAGE - 1);
@@ -404,7 +417,7 @@ export default function Orders() {
         phone: o.customer_phone,
         city: o.customer_city,
         address: o.customer_address || "",
-        products: [{ name: o.product_name, qty: o.quantity, price: Number(o.price) }],
+        products: mapOrderProducts(o),
         total: Number(o.total_amount),
         paidAmount: 0,
         status: (o.confirmation_status === "confirmed" ? o.delivery_status : o.confirmation_status) as any,
