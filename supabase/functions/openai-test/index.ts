@@ -7,6 +7,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function normalizeModel(model: string): string {
+  if (!model) return "gpt-4o-mini";
+  if (model.startsWith("openai/")) return model.replace("openai/", "");
+  if (model.includes("gemini-2.5-pro") || model.includes("gemini-3.1-pro")) return "gpt-4o";
+  if (model.includes("gemini")) return "gpt-4o-mini";
+  return model;
+}
+
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -31,24 +43,58 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, configured: false, error: "No API key configured. Add one in the Connection tab." }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Test with a tiny call to /models which is cheap and fast
-    const r = await fetch("https://api.openai.com/v1/models", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    const { data: aiSettings } = await admin
+      .from("whatsapp_ai_settings")
+      .select("model")
+      .eq("singleton", true)
+      .maybeSingle();
+    const model = normalizeModel((aiSettings?.model as string) || Deno.env.get("OPENAI_TEST_MODEL") || "gpt-4o-mini");
 
-    if (!r.ok) {
-      const txt = await r.text();
+    let r: Response | null = null;
+    let txt = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: "Reply with OK only." }],
+          temperature: 0,
+          max_tokens: 5,
+        }),
+      });
+      txt = await r.text();
+      if (r.ok || r.status < 500) break;
+      await sleep(300 * (attempt + 1));
+    }
+
+    if (!r?.ok) {
       let msg = `OpenAI returned ${r.status}`;
       if (r.status === 401) msg = "Invalid API key (401). Check your OpenAI API key.";
       else if (r.status === 429) msg = "Rate limited (429). Try again later.";
       else if (/insufficient_quota|billing/i.test(txt)) msg = "Quota exhausted. Add credits to your OpenAI account.";
-      return new Response(JSON.stringify({ ok: false, configured: true, error: msg, status: r.status }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      else if (r.status >= 500) msg = "OpenAI is returning a temporary server error (5xx). The key is configured; try again in a few minutes.";
+      else {
+        try {
+          const parsed = JSON.parse(txt);
+          msg = parsed?.error?.message || msg;
+        } catch {
+          if (txt) msg = txt.slice(0, 240);
+        }
+      }
+      return new Response(JSON.stringify({ ok: false, configured: true, error: msg, status: r.status, model }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const data = await r.json();
-    const modelCount = Array.isArray(data?.data) ? data.data.length : 0;
+    const data = JSON.parse(txt);
     const keyMasked = `sk-...${apiKey.slice(-4)}`;
-    return new Response(JSON.stringify({ ok: true, configured: true, key_masked: keyMasked, model_count: modelCount }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({
+      ok: true,
+      configured: true,
+      key_masked: keyMasked,
+      model,
+      model_count: 1,
+      sample: data?.choices?.[0]?.message?.content || "OK",
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: (e as Error).message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }

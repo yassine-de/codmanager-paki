@@ -78,7 +78,7 @@ export default function WhatsappAI() {
   const [memory, setMemory] = useState<Memory[]>([]);
   const [memSearch, setMemSearch] = useState("");
   const [connTesting, setConnTesting] = useState(false);
-  const [connStatus, setConnStatus] = useState<{ ok: boolean; configured?: boolean; key_masked?: string; model_count?: number; error?: string } | null>(null);
+  const [connStatus, setConnStatus] = useState<{ ok: boolean; configured?: boolean; key_masked?: string; model_count?: number; model?: string; error?: string } | null>(null);
   const [keyInput, setKeyInput] = useState("");
   const [savingKey, setSavingKey] = useState(false);
   const [storedKey, setStoredKey] = useState<{ configured: boolean; key_masked?: string | null; updated_at?: string | null } | null>(null);
@@ -130,7 +130,7 @@ export default function WhatsappAI() {
       const { data, error } = await supabase.functions.invoke("openai-test", { body: {} });
       if (error) throw error;
       setConnStatus(data);
-      if (data?.ok) toast.success(`Connected to OpenAI (${data.model_count} models available)`);
+      if (data?.ok) toast.success(`Connected to OpenAI (${data.model || "model tested"})`);
       else toast.error(data?.error || "Connection failed");
     } catch (e: any) {
       setConnStatus({ ok: false, error: e.message });
@@ -234,7 +234,7 @@ export default function WhatsappAI() {
                     {connStatus?.ok && (
                       <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                         <div>API Key: <span className="font-mono">{connStatus.key_masked}</span></div>
-                        <div>{connStatus.model_count} models available</div>
+                        <div>Model tested: <span className="font-mono">{connStatus.model || "gpt-4o-mini"}</span></div>
                       </div>
                     )}
                     {!connStatus?.ok && connStatus?.error && (

@@ -51,7 +51,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   order: Order;
-  onSave: (updated: Order) => void;
+  onSave: (updated: Order) => void | Promise<void>;
 }
 
 export default function EditOrderModal({ open, onOpenChange, order, onSave }: Props) {
@@ -79,7 +79,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
   const [confirmationStatus, setConfirmationStatus] = useState<ConfirmationStatus>('new');
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>('pending');
   const [notes, setNotes] = useState('');
-  const [products, setProducts] = useState<{ name: string; qty: number; price: number }[]>([]);
+  const [products, setProducts] = useState<Order["products"]>([]);
   const [upsell, setUpsell] = useState(false);
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
 
   const total = products.reduce((s, p) => s + p.qty * p.price, 0);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!customer.trim() || !phone.trim()) {
       toast.error('Name and phone are required');
       return;
@@ -159,9 +159,13 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
       history: historyEvents,
     };
 
-    onSave(updated);
-    toast.success('Order updated successfully');
-    onOpenChange(false);
+    try {
+      await onSave(updated);
+      toast.success('Order updated successfully');
+      onOpenChange(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update order');
+    }
   };
 
   const fieldLabel = "text-xs font-medium text-muted-foreground mb-1.5";

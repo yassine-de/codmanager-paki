@@ -17,12 +17,22 @@ export interface OrderHistoryEvent {
 
 export interface Order {
   id: string;
+  dbId?: string;
   systemId?: number;
   customer: string;
   phone: string;
   city: string;
   address: string;
-  products: { name: string; qty: number; price: number }[];
+  products: {
+    id?: string;
+    productId?: string | null;
+    productVariantId?: string | null;
+    sku?: string | null;
+    variantName?: string | null;
+    name: string;
+    qty: number;
+    price: number;
+  }[];
   total: number;
   paidAmount: number;
   status: OrderStatus;

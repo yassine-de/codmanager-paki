@@ -40,6 +40,8 @@ import {
   MapPin,
   Pencil,
   Truck,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -95,6 +97,27 @@ type Msg = {
   status: string | null;
   created_at: string;
   payload?: any;
+};
+
+type ProductOption = {
+  key: string;
+  productId: string;
+  variantId: string | null;
+  name: string;
+  sku: string | null;
+  variantName: string | null;
+  price: number;
+};
+
+type OrderItemDraft = {
+  id?: string;
+  product_id?: string | null;
+  product_variant_id?: string | null;
+  sku?: string | null;
+  product_name: string;
+  variant_name?: string | null;
+  quantity: string;
+  unit_price: string;
 };
 
 const getFreshAccessToken = async () => {
@@ -543,11 +566,28 @@ function getOrderItems(order: any) {
   if (items.length > 0) return items;
   if (!order) return [];
   return [{
+    id: undefined,
+    product_id: order.product_id || null,
+    product_variant_id: order.product_variant_id || null,
+    sku: order.sku || null,
     product_name: order.product_name,
     quantity: order.quantity,
     unit_price: order.price,
     total_price: Number(order.quantity || 1) * Number(order.price || 0),
   }];
+}
+
+function buildOrderItemDrafts(order: any): OrderItemDraft[] {
+  return getOrderItems(order).map((item: any) => ({
+    id: item.id,
+    product_id: item.product_id || null,
+    product_variant_id: item.product_variant_id || null,
+    sku: item.sku || null,
+    product_name: item.product_name || item.sku || "Product",
+    variant_name: item.variant_name || null,
+    quantity: String(Number(item.quantity || 1)),
+    unit_price: String(Number(item.unit_price || 0)),
+  }));
 }
 
 export default function WhatsappInbox() {
@@ -597,8 +637,7 @@ export default function WhatsappInbox() {
   const [cityDraft, setCityDraft] = useState("");
   const [savingCity, setSavingCity] = useState(false);
   const [editingPricing, setEditingPricing] = useState(false);
-  const [quantityDraft, setQuantityDraft] = useState("");
-  const [priceDraft, setPriceDraft] = useState("");
+  const [itemDrafts, setItemDrafts] = useState<OrderItemDraft[]>([]);
   const [savingPricing, setSavingPricing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [resolveOpen, setResolveOpen] = useState(false);
@@ -694,13 +733,240 @@ export default function WhatsappInbox() {
       if (!conv?.order_id) return null;
       const { data } = await supabase
         .from("orders")
-        .select("*, order_items(id, sku, product_name, quantity, unit_price, total_price, created_at)")
+        .select("*, order_items(id, product_id, product_variant_id, sku, product_name, variant_name, quantity, unit_price, total_price, weight_kg, created_at)")
         .eq("order_id", conv.order_id)
         .maybeSingle();
       return data;
     },
     enabled: !!conv?.order_id,
   });
+
+  const { data: productOptions = [] } = useQuery<ProductOption[]>({
+    queryKey: ["wts-product-options", order?.seller_id],
+    queryFn: async () => {
+      if (!order?.seller_id) return [];
+
+      const { data: products, error: productsError } = await supabase
+        .from("products")
+        .select("id, name, sku, price")
+        .eq("seller_id", order.seller_id)
+        .eq("active", true)
+        .order("name", { ascending: true });
+      if (productsError) throw productsError;
+
+      const productIds = (products || []).map((p: any) => p.id);
+      const { data: variants, error: variantsError } = productIds.length
+        ? await supabase
+            .from("product_variants")
+            .select("id, product_id, sku, name, price")
+            .in("product_id", productIds)
+            .eq("active", true)
+            .order("name", { ascending: true })
+        : { data: [], error: null };
+      if (variantsError) throw variantsError;
+
+      const variantsByProduct = new Map<string, any[]>();
+      for (const variant of variants || []) {
+        const list = variantsByProduct.get(variant.product_id) || [];
+        list.push(variant);
+        variantsByProduct.set(variant.product_id, list);
+      }
+
+      return (products || []).flatMap((product: any) => {
+        const productVariants = variantsByProduct.get(product.id) || [];
+        if (productVariants.length === 0) {
+          return [{
+            key: `product:${product.id}`,
+            productId: product.id,
+            variantId: null,
+            name: product.name,
+            sku: product.sku || null,
+            variantName: null,
+            price: Number(product.price || 0),
+          }];
+        }
+
+        return productVariants.map((variant) => ({
+          key: `variant:${variant.id}`,
+          productId: product.id,
+          variantId: variant.id,
+          name: productVariants.length > 1 && variant.name ? `${product.name} - ${variant.name}` : product.name,
+          sku: variant.sku || product.sku || null,
+          variantName: variant.name || null,
+          price: Number(variant.price || product.price || 0),
+        }));
+      });
+    },
+    enabled: !!order?.seller_id && orderInfoOpen,
+    staleTime: 5 * 60_000,
+  });
+
+  useEffect(() => {
+    if (orderInfoOpen && order && !editingPricing) {
+      setItemDrafts(buildOrderItemDrafts(order));
+    }
+  }, [orderInfoOpen, order, editingPricing]);
+
+  const productKeyForDraft = (draft: OrderItemDraft, index: number) => {
+    if (draft.product_variant_id) return `variant:${draft.product_variant_id}`;
+    if (draft.product_id) return `product:${draft.product_id}`;
+    return `current:${index}`;
+  };
+
+  const applyProductOption = (index: number, key: string) => {
+    const option = productOptions.find((p) => p.key === key);
+    if (!option) return;
+    setItemDrafts((prev) => prev.map((item, i) => (
+      i === index
+        ? {
+            ...item,
+            product_id: option.productId,
+            product_variant_id: option.variantId,
+            sku: option.sku,
+            product_name: option.name,
+            variant_name: option.variantName,
+            unit_price: String(option.price),
+          }
+        : item
+    )));
+  };
+
+  const addProductDraft = () => {
+    const first = productOptions[0];
+    setItemDrafts((prev) => [
+      ...prev,
+      first
+        ? {
+            product_id: first.productId,
+            product_variant_id: first.variantId,
+            sku: first.sku,
+            product_name: first.name,
+            variant_name: first.variantName,
+            quantity: "1",
+            unit_price: String(first.price),
+          }
+        : {
+            product_id: null,
+            product_variant_id: null,
+            sku: null,
+            product_name: "",
+            variant_name: null,
+            quantity: "1",
+            unit_price: "0",
+          },
+    ]);
+  };
+
+  const removeProductDraft = (index: number) => {
+    if (itemDrafts.length <= 1) {
+      toast.error("Order must have at least one product");
+      return;
+    }
+    setItemDrafts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const itemDraftTotal = itemDrafts.reduce((sum, item) => {
+    return sum + Math.max(1, Math.trunc(Number(item.quantity || 1))) * Math.max(0, Number(item.unit_price || 0));
+  }, 0);
+
+  const saveProductItems = async () => {
+    if (!order?.id) return;
+    const normalized = itemDrafts.map((item) => ({
+      ...item,
+      product_name: (item.product_name || "").trim(),
+      quantity: Math.max(1, Math.trunc(Number(item.quantity))),
+      unit_price: Number(item.unit_price),
+    }));
+
+    if (normalized.some((item) => !item.product_name)) {
+      toast.error("Product name is required");
+      return;
+    }
+    if (normalized.some((item) => !Number.isFinite(item.quantity) || item.quantity < 1 || !Number.isFinite(item.unit_price) || item.unit_price < 0)) {
+      toast.error("Enter valid quantity and price for every product");
+      return;
+    }
+
+    setSavingPricing(true);
+    try {
+      const existingIds = new Set((Array.isArray(order.order_items) ? order.order_items : []).map((item: any) => item.id).filter(Boolean));
+      const keptIds = new Set(normalized.map((item) => item.id).filter(Boolean));
+      const removedIds = [...existingIds].filter((id) => !keptIds.has(id));
+
+      if (removedIds.length > 0) {
+        const { error } = await supabase.from("order_items" as any).delete().in("id", removedIds);
+        if (error) throw error;
+      }
+
+      for (const item of normalized) {
+        const payload = {
+          product_id: item.product_id || null,
+          product_variant_id: item.product_variant_id || null,
+          sku: item.sku || null,
+          product_name: item.product_name,
+          variant_name: item.variant_name || null,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+        };
+
+        if (item.id) {
+          const { error } = await supabase.from("order_items" as any).update(payload).eq("id", item.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from("order_items" as any).insert({ ...payload, order_id: order.id });
+          if (error) throw error;
+        }
+      }
+
+      const main = normalized[0];
+      const totalQuantity = normalized.reduce((sum, item) => sum + item.quantity, 0);
+      const totalAmount = normalized.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
+      const { error: orderError } = await supabase
+        .from("orders")
+        .update({
+          product_name: main.product_name,
+          quantity: totalQuantity,
+          price: main.unit_price,
+          total_amount: totalAmount,
+          is_manual_price: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+      if (orderError) throw orderError;
+
+      if (authUser?.id) {
+        await supabase.from("order_history").insert({
+          order_id: order.order_id,
+          changed_by: authUser.id,
+          changed_by_role: isAdmin ? "admin" : "agent",
+          field_changed: "order_items",
+          old_value: JSON.stringify(getOrderItems(order).map((item: any) => ({
+            name: item.product_name,
+            qty: item.quantity,
+            price: item.unit_price,
+          }))),
+          new_value: JSON.stringify(normalized.map((item) => ({
+            name: item.product_name,
+            qty: item.quantity,
+            price: item.unit_price,
+          }))),
+          action_type: "order_items_update",
+        } as any);
+      }
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["wts-order", order.order_id] }),
+        qc.invalidateQueries({ queryKey: ["wts-convos"] }),
+        qc.invalidateQueries({ queryKey: ["orders"] }),
+      ]);
+      toast.success("Products updated");
+      setEditingPricing(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update products");
+    } finally {
+      setSavingPricing(false);
+    }
+  };
 
   // Realtime subscriptions
   useEffect(() => {
@@ -2425,101 +2691,140 @@ export default function WhatsappInbox() {
                     <div className="text-[11px] text-muted-foreground">Order ID</div>
                     <div className="font-mono font-semibold">#{order.order_id}</div>
                   </div>
-                  <div className="col-span-2">
-                    <div className="text-[11px] text-muted-foreground">Product</div>
-                    <div className="space-y-1">
-                      {getOrderItems(order).map((item: any, index: number) => (
-                        <div key={item.id || `${item.product_name}-${index}`} className="flex items-start justify-between gap-2">
-                          <div className="font-medium">{item.product_name || item.sku || "Product"}</div>
-                          {getOrderItems(order).length > 1 && (
-                            <div className="text-xs text-muted-foreground whitespace-nowrap">
-                              {Number(item.quantity || 1)} x Rs {Number(item.unit_price || 0).toLocaleString()}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                   <div className="col-span-2 rounded-md border border-border/70 bg-background/70 p-2">
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="text-[11px] text-muted-foreground">Quantity & Price</div>
-                      {!editingPricing && (
+                      <div>
+                        <div className="text-[11px] text-muted-foreground">Products</div>
+                        {!editingPricing && getOrderItems(order).length > 1 && (
+                          <div className="text-[10px] text-muted-foreground">
+                            {getOrderItems(order).length} products in this order
+                          </div>
+                        )}
+                      </div>
+                      {editingPricing ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={savingPricing}
+                          onClick={addProductDraft}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Add Product
+                        </Button>
+                      ) : (
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-6 px-2 text-[11px]"
                           onClick={() => {
-                            setQuantityDraft(String(order.quantity || 1));
-                            setPriceDraft(String(order.price || 0));
+                            setItemDrafts(buildOrderItemDrafts(order));
                             setEditingPricing(true);
                           }}
                         >
-                          Edit
+                          <Pencil className="h-3 w-3 mr-1" />
+                          Edit Products
                         </Button>
                       )}
                     </div>
                     {editingPricing ? (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <div className="text-[10px] text-muted-foreground">Quantity</div>
-                            <Input
-                              type="number"
-                              min={1}
-                              step={1}
-                              className="h-8 text-sm"
-                              value={quantityDraft}
-                              onChange={(e) => setQuantityDraft(e.target.value)}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <div className="text-[10px] text-muted-foreground">Price (PKR)</div>
-                            <Input
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              className="h-8 text-sm"
-                              value={priceDraft}
-                              onChange={(e) => setPriceDraft(e.target.value)}
-                            />
-                          </div>
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          {itemDrafts.map((item, index) => {
+                            const currentKey = productKeyForDraft(item, index);
+                            const hasCurrentOption = productOptions.some((option) => option.key === currentKey);
+                            return (
+                              <div key={item.id || `new-${index}`} className="rounded-md border border-border/70 bg-muted/25 p-2 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1">
+                                    <div className="text-[10px] text-muted-foreground mb-1">Product</div>
+                                    <Select value={currentKey} onValueChange={(value) => applyProductOption(index, value)}>
+                                      <SelectTrigger className="h-8 text-xs">
+                                        <SelectValue placeholder="Select product" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {!hasCurrentOption && (
+                                          <SelectItem value={currentKey} className="text-xs">
+                                            {item.product_name || "Current product"}
+                                          </SelectItem>
+                                        )}
+                                        {productOptions.map((option) => (
+                                          <SelectItem key={option.key} value={option.key} className="text-xs">
+                                            {option.name}{option.sku ? ` · ${option.sku}` : ""}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 mt-4 text-destructive hover:text-destructive"
+                                    disabled={savingPricing || itemDrafts.length <= 1}
+                                    onClick={() => removeProductDraft(index)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                                {!item.product_id && (
+                                  <Input
+                                    className="h-8 text-xs"
+                                    placeholder="Product name"
+                                    value={item.product_name}
+                                    onChange={(e) => setItemDrafts((prev) => prev.map((draft, i) => (
+                                      i === index ? { ...draft, product_name: e.target.value } : draft
+                                    )))}
+                                  />
+                                )}
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] text-muted-foreground">Qty</div>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      step={1}
+                                      className="h-8 text-sm"
+                                      value={item.quantity}
+                                      onChange={(e) => setItemDrafts((prev) => prev.map((draft, i) => (
+                                        i === index ? { ...draft, quantity: e.target.value } : draft
+                                      )))}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] text-muted-foreground">Price</div>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      step="0.01"
+                                      className="h-8 text-sm"
+                                      value={item.unit_price}
+                                      onChange={(e) => setItemDrafts((prev) => prev.map((draft, i) => (
+                                        i === index ? { ...draft, unit_price: e.target.value } : draft
+                                      )))}
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <div className="text-[10px] text-muted-foreground">Line</div>
+                                    <div className="h-8 flex items-center text-sm font-medium tabular-nums">
+                                      Rs {(Math.max(1, Math.trunc(Number(item.quantity || 1))) * Math.max(0, Number(item.unit_price || 0))).toLocaleString()}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-xs text-muted-foreground">
-                            Total: <span className="font-semibold text-foreground">Rs {(Number(quantityDraft || 0) * Number(priceDraft || 0)).toLocaleString()}</span>
+                            Total: <span className="font-semibold text-foreground">Rs {itemDraftTotal.toLocaleString()}</span>
                           </div>
                           <div className="flex gap-2">
                             <Button
                               size="sm"
                               className="h-7 text-xs"
                               disabled={savingPricing}
-                              onClick={async () => {
-                                const quantity = Math.max(1, Math.trunc(Number(quantityDraft)));
-                                const price = Number(priceDraft);
-                                if (!Number.isFinite(quantity) || quantity < 1 || !Number.isFinite(price) || price < 0) {
-                                  toast.error("Enter a valid quantity and price");
-                                  return;
-                                }
-                                setSavingPricing(true);
-                                const { error } = await supabase
-                                  .from("orders")
-                                  .update({
-                                    quantity,
-                                    price,
-                                    total_amount: quantity * price,
-                                    is_manual_price: true,
-                                    updated_at: new Date().toISOString(),
-                                  })
-                                  .eq("order_id", order.order_id);
-                                setSavingPricing(false);
-                                if (error) {
-                                  toast.error("Failed to update quantity and price");
-                                  return;
-                                }
-                                qc.invalidateQueries({ queryKey: ["wts-order", order.order_id] });
-                                toast.success("Quantity and price updated");
-                                setEditingPricing(false);
-                              }}
+                              onClick={saveProductItems}
                             >
                               {savingPricing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
                               Save
@@ -2537,18 +2842,21 @@ export default function WhatsappInbox() {
                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <div className="text-[10px] text-muted-foreground">Qty</div>
-                          <div>{order.quantity}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-muted-foreground">Price</div>
-                          <div>Rs {Number(order.price || 0).toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-muted-foreground">Total</div>
-                          <div className="font-semibold">Rs {Number(order.total_amount || 0).toLocaleString()}</div>
+                      <div className="space-y-2">
+                        {getOrderItems(order).map((item: any, index: number) => (
+                          <div key={item.id || `${item.product_name}-${index}`} className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-medium">{item.product_name || item.sku || "Product"}</div>
+                              {item.sku && <div className="text-[10px] text-muted-foreground">{item.sku}</div>}
+                            </div>
+                            <div className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
+                              {Number(item.quantity || 1)} x Rs {Number(item.unit_price || 0).toLocaleString()}
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between border-t border-border/70 pt-2">
+                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</span>
+                          <span className="font-semibold tabular-nums">Rs {Number(order.total_amount || 0).toLocaleString()}</span>
                         </div>
                       </div>
                     )}

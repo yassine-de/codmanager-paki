@@ -3253,7 +3253,10 @@ BEGIN
     )
     VALUES (
       v_item.product_variant_id, v_shipment.order_uuid, v_shipment.order_id, v_shipment.id, v_scan_id,
-      CASE WHEN p_condition = 'sellable' THEN 'restock' ELSE 'return_received' END,
+      CASE
+        WHEN p_condition = 'sellable' THEN 'restock'::public.inventory_movement_type
+        ELSE 'return_received'::public.inventory_movement_type
+      END,
       v_item.quantity, v_location, p_scanned_by
     );
 

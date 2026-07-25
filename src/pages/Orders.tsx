@@ -108,10 +108,15 @@ function StatusBadge({ label, cls, attemptCount }: { label: string; cls: string;
   );
 }
 
-function mapOrderProducts(row: any): { name: string; qty: number; price: number }[] {
+function mapOrderProducts(row: any): Order["products"] {
   const items = Array.isArray(row.order_items) ? row.order_items : [];
   if (items.length > 0) {
     return items.map((item: any) => ({
+      id: item.id,
+      productId: item.product_id || null,
+      productVariantId: item.product_variant_id || null,
+      sku: item.sku || null,
+      variantName: item.variant_name || null,
       name: item.product_name || item.sku || "Product",
       qty: Number(item.quantity || 1),
       price: Number(item.unit_price || 0),
@@ -356,7 +361,7 @@ export default function Orders() {
       while (from < MAX_ROWS) {
         const { data, error } = await supabase
           .from("orders")
-          .select("*, order_items(id, sku, product_name, quantity, unit_price, created_at), shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, created_at, carriers(code, name))")
+          .select("*, order_items(id, product_id, product_variant_id, sku, product_name, variant_name, quantity, unit_price, created_at), shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, created_at, carriers(code, name))")
           .order("created_at", { ascending: false })
           .order("id", { ascending: false })
           .range(from, from + PAGE - 1);
@@ -412,6 +417,7 @@ export default function Orders() {
         )[0];
         return {
         id: o.order_id,
+        dbId: o.id,
         systemId: o.system_id || undefined,
         customer: o.customer_name,
         phone: o.customer_phone,
@@ -1257,6 +1263,16 @@ export default function Orders() {
           onOpenChange={(open) => !open && setEditOrder(null)}
           order={editOrder}
           onSave={async (updated) => {
+            const normalizedProducts = updated.products.map((product) => ({
+              ...product,
+              name: product.name.trim(),
+              qty: Math.max(1, Math.trunc(Number(product.qty || 1))),
+              price: Math.max(0, Number(product.price || 0)),
+            }));
+            if (normalizedProducts.some((product) => !product.name)) {
+              throw new Error("Product name is required");
+            }
+
             // Update in DB
             const dbUpdate: any = {
               customer_name: updated.customer,
@@ -1266,10 +1282,10 @@ export default function Orders() {
               confirmation_status: updated.confirmationStatus,
               delivery_status: updated.deliveryStatus,
               note: updated.notes || '',
-              quantity: updated.products.reduce((s, p) => s + p.qty, 0),
-              price: updated.products[0]?.price || 0,
-              total_amount: updated.total,
-              product_name: updated.products[0]?.name || '',
+              quantity: normalizedProducts.reduce((s, p) => s + p.qty, 0),
+              price: normalizedProducts[0]?.price || 0,
+              total_amount: normalizedProducts.reduce((s, p) => s + p.qty * p.price, 0),
+              product_name: normalizedProducts[0]?.name || '',
               updated_at: new Date().toISOString(),
             };
 
@@ -1280,6 +1296,46 @@ export default function Orders() {
 
             if (error) {
               console.error('Failed to update order in DB:', error);
+              throw error;
+            }
+
+            if (updated.dbId) {
+              const existingIds = new Set((editOrder.products || []).map((product) => product.id).filter(Boolean));
+              const keptIds = new Set(normalizedProducts.map((product) => product.id).filter(Boolean));
+              const removedIds = [...existingIds].filter((id) => !keptIds.has(id));
+
+              if (removedIds.length > 0) {
+                const { error: deleteError } = await supabase
+                  .from("order_items" as any)
+                  .delete()
+                  .in("id", removedIds);
+                if (deleteError) throw deleteError;
+              }
+
+              for (const product of normalizedProducts) {
+                const payload = {
+                  product_id: product.productId || null,
+                  product_variant_id: product.productVariantId || null,
+                  sku: product.sku || null,
+                  product_name: product.name,
+                  variant_name: product.variantName || null,
+                  quantity: product.qty,
+                  unit_price: product.price,
+                };
+
+                if (product.id) {
+                  const { error: itemUpdateError } = await supabase
+                    .from("order_items" as any)
+                    .update(payload)
+                    .eq("id", product.id);
+                  if (itemUpdateError) throw itemUpdateError;
+                } else {
+                  const { error: itemInsertError } = await supabase
+                    .from("order_items" as any)
+                    .insert({ ...payload, order_id: updated.dbId });
+                  if (itemInsertError) throw itemInsertError;
+                }
+              }
             }
 
             // Track history
@@ -1305,13 +1361,22 @@ export default function Orders() {
             trackChange('customer_phone', editOrder.phone, updated.phone);
             trackChange('customer_city', editOrder.city, updated.city);
             trackChange('total_amount', editOrder.total, updated.total);
+            trackChange(
+              'order_items',
+              JSON.stringify(editOrder.products.map(({ name, qty, price }) => ({ name, qty, price }))),
+              JSON.stringify(normalizedProducts.map(({ name, qty, price }) => ({ name, qty, price }))),
+            );
             trackChange('note', editOrder.notes, updated.notes);
 
             if (historyEntries.length > 0) {
               await supabase.from('order_history').insert(historyEntries);
             }
 
-            setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
+            setOrders(prev => prev.map(o => o.id === updated.id ? {
+              ...updated,
+              products: normalizedProducts,
+              total: dbUpdate.total_amount,
+            } : o));
             setEditOrder(null);
           }}
         />
