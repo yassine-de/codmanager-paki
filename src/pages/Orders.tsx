@@ -680,7 +680,7 @@ export default function Orders() {
           <h1 className="text-xl font-bold tracking-tight leading-tight">Orders</h1>
           <p className="text-muted-foreground text-xs">Manage all your COD orders</p>
         </div>
-        {!isAdmin && (
+        {(isAdmin || authUser?.role === "seller") && (
           <Button size="sm" className="gap-1.5 h-8" onClick={() => setShowCreateModal(true)}>
             <Plus className="w-3.5 h-3.5" /> Create Order
           </Button>
@@ -1392,7 +1392,7 @@ export default function Orders() {
         />
       )}
 
-      {/* Create Order Modal - Seller only */}
+      {/* Create Order Modal - Seller/Admin */}
       <CreateOrderModal
         open={showCreateModal}
         onOpenChange={setShowCreateModal}

@@ -17,11 +17,41 @@ interface CreateOrderModalProps {
   onCreated?: () => void;
 }
 
+type SellerOption = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+type ProductOption = {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  product_url: string | null;
+  video_url: string | null;
+  weight: string | null;
+  weight_kg: number | null;
+  whatsapp_confirmation_enabled?: boolean;
+};
+
+type OrderItemDraft = {
+  productId: string;
+  productName: string;
+  quantity: number;
+  price: number;
+};
+
 
 export default function CreateOrderModal({ open, onOpenChange, onCreated }: CreateOrderModalProps) {
   const { authUser } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [products, setProducts] = useState<{ id: string; name: string; price: number; whatsapp_confirmation_enabled?: boolean }[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [sellers, setSellers] = useState<SellerOption[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
+  const [selectedSellerId, setSelectedSellerId] = useState("");
+  const isAdmin = authUser?.role === "admin";
+  const effectiveSellerId = isAdmin ? selectedSellerId : authUser?.id;
 
   // Form state
   const [customerName, setCustomerName] = useState("");
@@ -29,34 +59,106 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
   const [customerCity, setCustomerCity] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [note, setNote] = useState("");
-  const [items, setItems] = useState<{ productName: string; quantity: number; price: number }[]>([
-    { productName: "", quantity: 1, price: 0 },
+  const [items, setItems] = useState<OrderItemDraft[]>([
+    { productId: "", productName: "", quantity: 1, price: 0 },
   ]);
 
-  // Fetch seller's products
+  // Fetch seller list for admins.
+  useEffect(() => {
+    if (!authUser || !open || !isAdmin) return;
+
+    const fetchSellers = async () => {
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "seller");
+
+      if (rolesError) {
+        console.error("Error fetching sellers:", rolesError);
+        toast.error("Could not load sellers");
+        return;
+      }
+
+      const sellerIds = (roles || []).map((role) => role.user_id).filter(Boolean);
+      if (sellerIds.length === 0) {
+        setSellers([]);
+        return;
+      }
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("user_id, name, email")
+        .in("user_id", sellerIds)
+        .order("name", { ascending: true });
+
+      if (profilesError) {
+        console.error("Error fetching seller profiles:", profilesError);
+        toast.error("Could not load seller profiles");
+        return;
+      }
+
+      setSellers((profiles || []).map((profile) => ({
+        id: profile.user_id,
+        name: profile.name || profile.email || "Seller",
+        email: profile.email || "",
+      })));
+    };
+
+    fetchSellers();
+  }, [authUser, isAdmin, open]);
+
+  // Fetch products for the current seller.
   useEffect(() => {
     if (!authUser || !open) return;
+    if (!effectiveSellerId) {
+      setProducts([]);
+      return;
+    }
+
     const fetchProducts = async () => {
-      const { data } = await supabase
+      setLoadingProducts(true);
+      const { data, error } = await supabase
         .from("products")
-        .select("id, name, price, whatsapp_confirmation_enabled")
-        .eq("seller_id", authUser.id);
-      setProducts(data || []);
+        .select("id, name, sku, price, product_url, video_url, weight, weight_kg, whatsapp_confirmation_enabled")
+        .eq("seller_id", effectiveSellerId)
+        .eq("active", true)
+        .order("name", { ascending: true });
+
+      if (error) {
+        console.error("Error fetching products:", error);
+        toast.error("Could not load products");
+        setProducts([]);
+      } else {
+        setProducts(data || []);
+      }
+      setLoadingProducts(false);
     };
+
     fetchProducts();
-  }, [authUser, open]);
+  }, [authUser, effectiveSellerId, open]);
 
   const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const handleProductChange = (index: number, productName: string) => {
-    const product = products.find(p => p.name === productName);
+  const handleSellerChange = (sellerId: string) => {
+    setSelectedSellerId(sellerId);
+    setProducts([]);
+    setItems([{ productId: "", productName: "", quantity: 1, price: 0 }]);
+  };
+
+  const handleProductChange = (index: number, productId: string) => {
+    const product = products.find(p => p.id === productId);
     setItems(prev => prev.map((item, i) =>
-      i === index ? { ...item, productName, price: product ? Number(product.price) : item.price } : item
+      i === index ? {
+        ...item,
+        productId,
+        productName: product?.name || "",
+        price: product ? Number(product.price) : item.price,
+      } : item
     ));
   };
 
   const addItem = () => {
-    setItems(prev => [...prev, { productName: "", quantity: 1, price: 0 }]);
+    setItems(prev => [...prev, { productId: "", productName: "", quantity: 1, price: 0 }]);
   };
 
   const removeItem = (index: number) => {
@@ -70,17 +172,22 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
     setCustomerCity("");
     setCustomerAddress("");
     setNote("");
-    setItems([{ productName: "", quantity: 1, price: 0 }]);
+    setItems([{ productId: "", productName: "", quantity: 1, price: 0 }]);
+    if (isAdmin) setSelectedSellerId("");
   };
 
   const handleSubmit = async () => {
     if (!authUser) return;
+    if (!effectiveSellerId) {
+      toast.error("Please select a seller");
+      return;
+    }
     if (!customerName.trim() || !customerPhone.trim() || !customerCity) {
       toast.error("Please fill in customer name, phone and city");
       return;
     }
-    if (!items[0]?.productName) {
-      toast.error("Please select at least one product");
+    if (items.some((item) => !item.productId || !item.productName)) {
+      toast.error("Please select every product");
       return;
     }
 
@@ -88,31 +195,57 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
     try {
       // Generate order ID
       const { data: orderId, error: idError } = await supabase.rpc("generate_order_id", {
-        p_seller_id: authUser.id,
+        p_seller_id: effectiveSellerId,
       });
       if (idError) throw idError;
 
-      // For now, create one order row per item (first item as main)
       const mainItem = items[0];
-      const selectedProduct = products.find((p) => p.name === mainItem.productName);
-      const routeToWhatsapp = !!selectedProduct?.whatsapp_confirmation_enabled;
+      const selectedProducts = items.map((item) => products.find((product) => product.id === item.productId)).filter(Boolean) as ProductOption[];
+      const mainProduct = selectedProducts[0];
+      const routeToWhatsapp = selectedProducts.some((product) => !!product.whatsapp_confirmation_enabled);
       const totalQty = items.reduce((s, i) => s + i.quantity, 0);
+      const totalWeight = items.reduce((sum, item) => {
+        const product = products.find((entry) => entry.id === item.productId);
+        return sum + (Number(product?.weight_kg) || 0) * item.quantity;
+      }, 0);
 
-      const { error } = await supabase.from("orders").insert({
-        order_id: orderId,
-        seller_id: authUser.id,
-        customer_name: customerName.trim(),
-        customer_phone: customerPhone.trim(),
-        customer_city: customerCity,
-        customer_address: customerAddress.trim(),
-        product_name: mainItem.productName,
-        quantity: totalQty,
-        price: mainItem.price,
-        total_amount: totalAmount,
-        note: note.trim() || null,
-        confirmation_status: routeToWhatsapp ? "new_wts" : "new",
-        confirmation_channel: routeToWhatsapp ? "whatsapp" : "agent",
-        whatsapp_status: routeToWhatsapp ? "pending" : null,
+      const { error } = await (supabase.rpc as any)("create_manual_order_with_items", {
+        p_order: {
+          order_id: orderId,
+          seller_id: effectiveSellerId,
+          customer_name: customerName.trim(),
+          customer_phone: customerPhone.trim(),
+          customer_city: customerCity,
+          customer_address: customerAddress.trim(),
+          product_name: mainItem.productName,
+          product_url: mainProduct?.product_url || null,
+          video_url: mainProduct?.video_url || null,
+          quantity: totalQty,
+          price: mainItem.price,
+          total_amount: totalAmount,
+          weight: totalWeight,
+          note: note.trim() || null,
+          confirmation_status: routeToWhatsapp ? "new_wts" : "new",
+          confirmation_channel: routeToWhatsapp ? "whatsapp" : "agent",
+          whatsapp_status: routeToWhatsapp ? "pending" : null,
+        },
+        p_items: items.map((item) => {
+          const product = products.find((entry) => entry.id === item.productId);
+          return {
+            product_id: item.productId,
+            product_variant_id: null,
+            sku: product?.sku || null,
+            product_name: item.productName,
+            variant_name: null,
+            quantity: item.quantity,
+            unit_price: item.price,
+            weight_kg: product?.weight_kg || 0,
+            metadata: {
+              source: "manual_order_ui",
+              seller_created_by: authUser.id,
+            },
+          };
+        }),
       });
 
       if (error) throw error;
@@ -157,6 +290,24 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
         </DialogHeader>
 
         <div className="space-y-4 mt-2">
+          {isAdmin && (
+            <div className="space-y-1">
+              <Label className="text-xs">Seller *</Label>
+              <Select value={selectedSellerId} onValueChange={handleSellerChange}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Select seller" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sellers.map((seller) => (
+                    <SelectItem key={seller.id} value={seller.id}>
+                      {seller.name}{seller.email ? ` - ${seller.email}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Customer Info */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Customer Info</h3>
@@ -186,7 +337,7 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Products</h3>
-              <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={addItem}>
+              <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={addItem} disabled={!effectiveSellerId}>
                 <Plus className="w-3 h-3" /> Add
               </Button>
             </div>
@@ -194,13 +345,13 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
               <div key={i} className="flex items-end gap-2 bg-muted/30 rounded-lg p-3">
                 <div className="flex-1 space-y-1">
                   <Label className="text-xs">Product</Label>
-                  <Select value={item.productName} onValueChange={v => handleProductChange(i, v)}>
+                  <Select value={item.productId} onValueChange={v => handleProductChange(i, v)} disabled={!effectiveSellerId || loadingProducts}>
                     <SelectTrigger className="h-9 text-sm">
-                      <SelectValue placeholder="Select product" />
+                      <SelectValue placeholder={!effectiveSellerId ? "Choose seller first" : loadingProducts ? "Loading products..." : "Select product"} />
                     </SelectTrigger>
                     <SelectContent>
                       {products.map(p => (
-                        <SelectItem key={p.id} value={p.name}>{p.name}</SelectItem>
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
