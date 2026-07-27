@@ -597,6 +597,125 @@ CREATE TABLE public.order_follow_ups (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE OR REPLACE FUNCTION public.normalize_seller_code_name(p_name text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT upper(regexp_replace(coalesce(p_name, ''), '[^A-Za-z ]', '', 'g'));
+$$;
+
+CREATE OR REPLACE FUNCTION public.seller_code_is_available(
+  p_code text,
+  p_seller_id uuid DEFAULT NULL
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_code text := upper(btrim(coalesce(p_code, '')));
+BEGIN
+  IF length(v_code) < 2 THEN
+    RETURN false;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.seller_order_prefixes sop
+    WHERE upper(sop.prefix) = v_code
+      AND (p_seller_id IS NULL OR sop.seller_id <> p_seller_id)
+  ) THEN
+    RETURN false;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.profiles p
+    WHERE upper(NULLIF(split_part(p.display_id, '-', 1), '')) = v_code
+      AND (p_seller_id IS NULL OR p.user_id <> p_seller_id)
+  ) THEN
+    RETURN false;
+  END IF;
+
+  RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.generate_unique_seller_code(
+  p_name text,
+  p_seller_id uuid DEFAULT NULL
+)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_clean_name text := regexp_replace(coalesce(trim(p_name), ''), '\s+', ' ', 'g');
+  v_parts text[];
+  v_first text;
+  v_last text;
+  v_letters text;
+  v_candidate text;
+  v_base text;
+  i integer;
+  j integer;
+BEGIN
+  v_letters := regexp_replace(public.normalize_seller_code_name(v_clean_name), '[^A-Z]', '', 'g');
+
+  IF v_letters = '' THEN
+    v_first := 'S';
+    v_last := 'L';
+  ELSE
+    v_parts := string_to_array(public.normalize_seller_code_name(v_clean_name), ' ');
+    v_first := regexp_replace(coalesce(v_parts[1], v_letters), '[^A-Z]', '', 'g');
+    v_last := regexp_replace(coalesce(v_parts[array_length(v_parts, 1)], v_first), '[^A-Z]', '', 'g');
+
+    IF v_first = '' THEN
+      v_first := left(v_letters, 1);
+    END IF;
+    IF v_last = '' THEN
+      v_last := v_first;
+    END IF;
+  END IF;
+
+  FOR j IN 1..greatest(length(v_last), 1) LOOP
+    v_candidate := upper(substr(v_first, 1, 1) || substr(v_last, j, 1));
+    IF public.seller_code_is_available(v_candidate, p_seller_id) THEN
+      RETURN v_candidate;
+    END IF;
+  END LOOP;
+
+  FOR i IN 1..greatest(length(v_first), 1) LOOP
+    FOR j IN 1..greatest(length(v_last), 1) LOOP
+      v_candidate := upper(substr(v_first, i, 1) || substr(v_last, j, 1));
+      IF public.seller_code_is_available(v_candidate, p_seller_id) THEN
+        RETURN v_candidate;
+      END IF;
+    END LOOP;
+  END LOOP;
+
+  FOR i IN 1..greatest(length(v_letters) - 1, 1) LOOP
+    v_candidate := upper(substr(v_letters, i, 2));
+    IF public.seller_code_is_available(v_candidate, p_seller_id) THEN
+      RETURN v_candidate;
+    END IF;
+  END LOOP;
+
+  v_base := upper(left(coalesce(nullif(v_letters, ''), 'SL') || 'SL', 2));
+  FOR i IN 2..99 LOOP
+    v_candidate := v_base || i::text;
+    IF public.seller_code_is_available(v_candidate, p_seller_id) THEN
+      RETURN v_candidate;
+    END IF;
+  END LOOP;
+
+  RAISE EXCEPTION 'Could not generate unique seller code for %', p_name;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.generate_order_id(p_seller_id uuid)
 RETURNS text
 LANGUAGE plpgsql
@@ -605,25 +724,36 @@ SET search_path = public
 AS $$
 DECLARE
   v_counter integer;
+  v_prefix text;
+  v_name text;
 BEGIN
-  SELECT current_counter + 1
-    INTO v_counter
+  SELECT prefix, current_counter + 1
+    INTO v_prefix, v_counter
   FROM public.seller_order_prefixes
   WHERE seller_id = p_seller_id
   FOR UPDATE;
 
-  IF v_counter IS NULL THEN
-    INSERT INTO public.seller_order_prefixes (seller_id, prefix, current_counter)
-    VALUES (p_seller_id, 'TZ', 1)
-    ON CONFLICT (seller_id) DO UPDATE SET prefix = 'TZ', current_counter = public.seller_order_prefixes.current_counter + 1
-    RETURNING current_counter INTO v_counter;
-  ELSE
+  IF v_counter IS NOT NULL THEN
     UPDATE public.seller_order_prefixes
-    SET prefix = 'TZ', current_counter = v_counter
+    SET current_counter = v_counter
     WHERE seller_id = p_seller_id;
+
+    RETURN v_prefix || '-' || v_counter::text;
   END IF;
 
-  RETURN 'TZ-' || v_counter::text;
+  SELECT name INTO v_name
+  FROM public.profiles
+  WHERE user_id = p_seller_id;
+
+  v_prefix := public.generate_unique_seller_code(coalesce(v_name, 'Seller'), p_seller_id);
+
+  INSERT INTO public.seller_order_prefixes (seller_id, prefix, current_counter)
+  VALUES (p_seller_id, v_prefix, 1)
+  ON CONFLICT (seller_id)
+  DO UPDATE SET current_counter = public.seller_order_prefixes.current_counter + 1
+  RETURNING prefix, current_counter INTO v_prefix, v_counter;
+
+  RETURN v_prefix || '-' || v_counter::text;
 END;
 $$;
 
@@ -951,33 +1081,8 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-  v_clean_name text := regexp_replace(coalesce(trim(p_name), ''), '\s+', ' ', 'g');
-  v_parts text[];
-  v_first text;
-  v_last text;
-  v_prefix text;
-  v_counter integer;
 BEGIN
-  IF v_clean_name = '' THEN
-    v_prefix := 'SE';
-  ELSE
-    v_parts := string_to_array(v_clean_name, ' ');
-    v_first := v_parts[1];
-    v_last := COALESCE(v_parts[array_length(v_parts, 1)], v_first);
-    v_prefix := upper(left(regexp_replace(v_first, '[^A-Za-z]', '', 'g'), 1) || left(regexp_replace(v_last, '[^A-Za-z]', '', 'g'), 1));
-    IF length(v_prefix) < 2 THEN
-      v_prefix := upper(left(regexp_replace(v_clean_name, '[^A-Za-z]', '', 'g') || 'SE', 2));
-    END IF;
-  END IF;
-
-  INSERT INTO public.seller_display_id_counters (prefix, current_counter)
-  VALUES (v_prefix, 1)
-  ON CONFLICT (prefix)
-  DO UPDATE SET current_counter = public.seller_display_id_counters.current_counter + 1
-  RETURNING current_counter INTO v_counter;
-
-  RETURN v_prefix || '-' || lpad(v_counter::text, 2, '0');
+  RETURN public.generate_unique_seller_code(p_name, NULL);
 END;
 $$;
 

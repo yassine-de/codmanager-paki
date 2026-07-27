@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Zap, Sparkles, Send, Warehouse, Truck, PackageCheck, Boxes, RotateCcw } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -7,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import {
   Sidebar,
   SidebarContent,
@@ -85,6 +87,62 @@ const warehouseSubItems = [
 ];
 
 const warehouseReceivingStatuses = ["ordered", "shipped", "arrived", "ready_to_receive", "ready_to_receive_in_warehouse"];
+
+const iconToneByUrl: Record<string, string> = {
+  "/": "from-sky-500/25 via-blue-500/15 to-cyan-400/10 text-sky-200 ring-sky-400/25",
+  "/orders": "from-blue-500/30 via-indigo-500/18 to-violet-400/12 text-blue-100 ring-blue-400/30",
+  "/seller-analytics": "from-violet-500/28 via-fuchsia-500/16 to-purple-400/10 text-violet-100 ring-violet-400/25",
+  "/follow-ups": "from-emerald-500/25 via-teal-500/15 to-cyan-400/10 text-emerald-100 ring-emerald-400/25",
+  "/products": "from-amber-500/25 via-orange-500/15 to-yellow-400/10 text-amber-100 ring-amber-400/25",
+  "/warehouse": "from-cyan-500/25 via-sky-500/15 to-blue-400/10 text-cyan-100 ring-cyan-400/25",
+  "/sourcing": "from-orange-500/26 via-amber-500/16 to-yellow-400/10 text-orange-100 ring-orange-400/25",
+  "/support": "from-teal-500/25 via-emerald-500/15 to-green-400/10 text-teal-100 ring-teal-400/25",
+  "/alerts": "from-rose-500/28 via-red-500/16 to-orange-400/10 text-rose-100 ring-rose-400/25",
+  "/invoices": "from-lime-500/24 via-emerald-500/14 to-green-400/10 text-lime-100 ring-lime-400/25",
+  "/adjustments": "from-purple-500/25 via-indigo-500/15 to-blue-400/10 text-purple-100 ring-purple-400/25",
+  "/seller-sourcing": "from-orange-500/26 via-amber-500/16 to-yellow-400/10 text-orange-100 ring-orange-400/25",
+  "/sheets": "from-green-500/25 via-emerald-500/15 to-teal-400/10 text-green-100 ring-green-400/25",
+  "/simulation": "from-fuchsia-500/25 via-pink-500/15 to-rose-400/10 text-fuchsia-100 ring-fuchsia-400/25",
+  "/seller-settings": "from-slate-400/20 via-slate-500/12 to-blue-400/10 text-slate-100 ring-slate-400/20",
+  "/agent-dashboard": "from-sky-500/25 via-blue-500/15 to-cyan-400/10 text-sky-200 ring-sky-400/25",
+  "/agent-orders": "from-indigo-500/28 via-blue-500/16 to-cyan-400/10 text-indigo-100 ring-indigo-400/25",
+  "/agent-confirmed": "from-emerald-500/25 via-green-500/15 to-lime-400/10 text-emerald-100 ring-emerald-400/25",
+  "/agent-whatsapp": "from-green-500/25 via-emerald-500/15 to-teal-400/10 text-green-100 ring-green-400/25",
+  "/follow-up/dashboard": "from-sky-500/25 via-blue-500/15 to-cyan-400/10 text-sky-200 ring-sky-400/25",
+  "/follow-up/queue": "from-emerald-500/25 via-teal-500/15 to-cyan-400/10 text-emerald-100 ring-emerald-400/25",
+  "/follow-up/control": "from-amber-500/25 via-orange-500/15 to-yellow-400/10 text-amber-100 ring-amber-400/25",
+  "/whatsapp": "from-green-500/28 via-emerald-500/18 to-teal-400/10 text-green-100 ring-green-400/25",
+  "/analytics": "from-violet-500/28 via-purple-500/16 to-fuchsia-400/10 text-violet-100 ring-violet-400/25",
+  "/settings": "from-slate-400/22 via-blue-500/12 to-indigo-400/10 text-slate-100 ring-slate-400/20",
+};
+
+const iconToneFor = (url: string) => iconToneByUrl[url] || "from-slate-400/20 via-slate-500/10 to-white/5 text-slate-200 ring-white/10";
+
+const navIconTileClass = (tone: string, isActive: boolean, compact = false) =>
+  cn(
+    "relative grid shrink-0 place-items-center rounded-xl bg-gradient-to-br ring-1 transition-all duration-200",
+    compact ? "h-6 w-6" : "h-7 w-7",
+    tone,
+    isActive
+      ? "opacity-100 shadow-[0_10px_22px_-14px_rgba(96,165,250,0.9)] ring-white/25"
+      : "opacity-75 grayscale-[15%] group-hover/nav:opacity-100 group-hover/nav:grayscale-0 group-hover/nav:ring-white/20"
+  );
+
+const NavIcon = ({
+  icon: Icon,
+  url,
+  active,
+  compact = false,
+}: {
+  icon: LucideIcon;
+  url: string;
+  active: boolean;
+  compact?: boolean;
+}) => (
+  <span className={navIconTileClass(iconToneFor(url), active, compact)}>
+    <Icon className={cn(compact ? "h-3.5 w-3.5" : "h-4 w-4", "drop-shadow-sm")} />
+  </span>
+);
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -351,10 +409,10 @@ export function AppSidebar() {
                       <SidebarMenuButton asChild isActive={isDashboardActive} className="h-9 text-[13px] rounded-lg transition-all duration-150">
                         <NavLink
                           to="/warehouse/dashboard"
-                          className="hover:bg-sidebar-accent/70"
-                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          className="group/nav hover:bg-sidebar-accent/70"
+                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
                         >
-                          <LayoutDashboard className="mr-2 h-4 w-4 opacity-70" />
+                          <NavIcon icon={LayoutDashboard} url="/" active={isDashboardActive} />
                           {!collapsed && <span className="flex-1">Dashboard</span>}
                         </NavLink>
                       </SidebarMenuButton>
@@ -371,7 +429,7 @@ export function AppSidebar() {
                             isActive={isWarehouseActive}
                             className="h-9 text-[13px] cursor-pointer rounded-lg"
                           >
-                            <Warehouse className="mr-2 h-4 w-4 opacity-70" />
+                            <NavIcon icon={Warehouse} url="/warehouse" active={isWarehouseActive} />
                             {!collapsed && (
                               <>
                                 <span className="flex-1">Warehouse</span>
@@ -389,10 +447,10 @@ export function AppSidebar() {
                                   <SidebarMenuSubButton asChild isActive={isSubActive} className="text-[13px] h-8 rounded-lg">
                                     <NavLink
                                       to={sub.url}
-                                      className="hover:bg-sidebar-accent/70"
+                                      className="group/nav hover:bg-sidebar-accent/70"
                                       activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                                     >
-                                      <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
+                                      <NavIcon icon={sub.icon} url={sub.url} active={isSubActive} compact />
                                       <span className="flex-1">{sub.title}</span>
                                       {!collapsed && sub.url === "/warehouse/receiving" && warehouseReceivingCount > 0 && (
                                         <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground">
@@ -417,10 +475,10 @@ export function AppSidebar() {
                         <NavLink
                           to={item.url}
                           end={item.url === '/'}
-                          className="hover:bg-sidebar-accent/70"
-                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                          className="group/nav hover:bg-sidebar-accent/70"
+                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]"
                         >
-                          <item.icon className="mr-2 h-4 w-4 opacity-70" />
+                          <NavIcon icon={item.icon} url={item.url} active={isActive} />
                           {!collapsed && <span className="flex-1">{t(item.title)}</span>}
                           {!collapsed && item.badge != null && (
                             <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
@@ -450,7 +508,7 @@ export function AppSidebar() {
                               isActive={location.pathname.startsWith("/whatsapp")}
                               className="h-9 text-[13px] cursor-pointer rounded-lg"
                             >
-                              <MessageSquare className="mr-2 h-4 w-4 opacity-70" />
+                              <NavIcon icon={MessageSquare} url="/whatsapp" active={location.pathname.startsWith("/whatsapp")} />
                               {!collapsed && (
                                 <>
                                   <span className="flex-1">WhatsApp</span>
@@ -481,10 +539,10 @@ export function AppSidebar() {
                                       <NavLink
                                         to={sub.url}
                                         end={sub.end}
-                                        className="hover:bg-sidebar-accent/70"
+                                        className="group/nav hover:bg-sidebar-accent/70"
                                         activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                                       >
-                                        <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
+                                        <NavIcon icon={sub.icon} url={sub.url} active={isSubActive} compact />
                                         <span className="flex-1">{sub.title}</span>
                                         {(sub as any).badge != null && (
                                           <span className="ml-auto inline-flex items-center justify-center rounded-md bg-primary/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground min-w-[20px]">
@@ -514,7 +572,7 @@ export function AppSidebar() {
                         isActive={isAnalyticsActive}
                         className="h-9 text-[13px] cursor-pointer rounded-lg"
                       >
-                        <BarChart3 className="mr-2 h-4 w-4 opacity-70" />
+                        <NavIcon icon={BarChart3} url="/analytics" active={isAnalyticsActive} />
                         {!collapsed && (
                           <>
                             <span className="flex-1">{t("analytics")}</span>
@@ -532,10 +590,10 @@ export function AppSidebar() {
                               <SidebarMenuSubButton asChild isActive={isSubActive} className="text-[13px] h-8 rounded-lg">
                                 <NavLink
                                   to={sub.url}
-                                  className="hover:bg-sidebar-accent/70"
+                                  className="group/nav hover:bg-sidebar-accent/70"
                                   activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                                 >
-                                  <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
+                                  <NavIcon icon={sub.icon} url={sub.url} active={isSubActive} compact />
                                   <span>{t(sub.title)}</span>
                                 </NavLink>
                               </SidebarMenuSubButton>
@@ -557,7 +615,7 @@ export function AppSidebar() {
                         isActive={isSettingsActive}
                         className="h-9 text-[13px] cursor-pointer rounded-lg"
                       >
-                        <Settings className="mr-2 h-4 w-4 opacity-70" />
+                        <NavIcon icon={Settings} url="/settings" active={isSettingsActive} />
                         {!collapsed && (
                           <>
                             <span className="flex-1">{t("settings")}</span>
@@ -575,10 +633,10 @@ export function AppSidebar() {
                               <SidebarMenuSubButton asChild isActive={isSubActive} className="text-[13px] h-8 rounded-lg">
                                 <NavLink
                                   to={sub.url}
-                                  className="hover:bg-sidebar-accent/70"
+                                  className="group/nav hover:bg-sidebar-accent/70"
                                   activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                                 >
-                                  <sub.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
+                                  <NavIcon icon={sub.icon} url={sub.url} active={isSubActive} compact />
                                   <span>{t(sub.title)}</span>
                                 </NavLink>
                               </SidebarMenuSubButton>

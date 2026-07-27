@@ -60,26 +60,43 @@ const seedUsers = [
 ] as const;
 
 function generatePrefix(name: string, existingPrefixes: string[]) {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0] || "";
-  const last = parts[parts.length - 1] || "";
+  const used = new Set(existingPrefixes.map((prefix) => prefix.trim().toUpperCase()).filter(Boolean));
+  const cleanName = name.replace(/[^A-Za-z ]/g, " ").replace(/\s+/g, " ").trim().toUpperCase();
+  const parts = cleanName.split(/\s+/).filter(Boolean);
+  const allLetters = cleanName.replace(/[^A-Z]/g, "");
+  const first = parts[0] || allLetters || "S";
+  const last = parts[parts.length - 1] || first || "L";
+
+  const isFree = (candidate: string) => candidate.length >= 2 && !used.has(candidate);
 
   // Strategy 1: first letter of first name + iterate each letter of last name
   for (let i = 0; i < last.length; i++) {
     const candidate = (first[0] + last[i]).toUpperCase();
-    if (candidate.length === 2 && !existingPrefixes.includes(candidate)) return candidate;
+    if (isFree(candidate)) return candidate;
   }
 
   // Strategy 2: iterate all combinations
   for (let i = 0; i < first.length; i++) {
     for (let j = 0; j < last.length; j++) {
       const candidate = (first[i] + last[j]).toUpperCase();
-      if (candidate.length === 2 && !existingPrefixes.includes(candidate)) return candidate;
+      if (isFree(candidate)) return candidate;
     }
   }
 
-  // Fallback: first two letters of first name
-  return first.substring(0, 2).toUpperCase() || "SL";
+  // Strategy 3: adjacent letters from the full name
+  for (let i = 0; i < Math.max(allLetters.length - 1, 1); i++) {
+    const candidate = allLetters.slice(i, i + 2).toUpperCase();
+    if (isFree(candidate)) return candidate;
+  }
+
+  // Final fallback: keep a readable name base and add a numeric suffix
+  const base = (allLetters || "SL").padEnd(2, "L").slice(0, 2).toUpperCase();
+  for (let i = 2; i < 100; i++) {
+    const candidate = `${base}${i}`;
+    if (isFree(candidate)) return candidate;
+  }
+
+  return `${base}${Date.now().toString(36).slice(-3).toUpperCase()}`;
 }
 
 async function getAllPermissionKeys(supabaseAdmin: ReturnType<typeof createClient>) {
