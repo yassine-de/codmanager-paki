@@ -47,11 +47,11 @@ input[type="number"] {
     --radius: 0.75rem;
 
     --sidebar-background: 224 14% 10%;
-    --sidebar-foreground: 220 10% 62%;
+    --sidebar-foreground: 0 0% 88%;
     --sidebar-primary: 220 65% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 224 12% 15%;
-    --sidebar-accent-foreground: 220 14% 92%;
+    --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 224 12% 16%;
     --sidebar-ring: 220 65% 58%;
 
@@ -98,11 +98,11 @@ input[type="number"] {
     --ring: 220 65% 58%;
 
     --sidebar-background: 224 16% 6%;
-    --sidebar-foreground: 220 10% 55%;
+    --sidebar-foreground: 0 0% 88%;
     --sidebar-primary: 220 65% 58%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 224 14% 12%;
-    --sidebar-accent-foreground: 220 14% 88%;
+    --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 224 12% 14%;
     --sidebar-ring: 220 65% 58%;
 
