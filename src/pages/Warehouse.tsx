@@ -2015,8 +2015,24 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 	                      <TableCell className="font-mono text-xs">{row.display_id || row.id.slice(0, 8)}</TableCell>
 	                      {!hideSellerInfo && <TableCell className="text-sm">{sellerName(profileMap, row.seller_id)}</TableCell>}
 	                      <TableCell>
-                        <div className="text-sm font-medium">{row.product_name}</div>
-	                        <div className="text-[11px] text-muted-foreground">{row.tracking_id || "No tracking"}</div>
+                        <div className="flex items-center gap-3">
+                          {row.product_image_url ? (
+                            <img
+                              src={row.product_image_url}
+                              alt={row.product_name}
+                              className="h-10 w-10 shrink-0 rounded-md border border-border/70 object-cover bg-muted"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/60 text-muted-foreground">
+                              <Package className="h-4 w-4" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium leading-snug">{row.product_name}</div>
+	                          <div className="text-[11px] text-muted-foreground">{row.tracking_id || "No tracking"}</div>
+                          </div>
+                        </div>
 	                      </TableCell>
 	                      <TableCell className="text-right font-semibold">{row.quantity}</TableCell>
 	                      <TableCell>
