@@ -33,6 +33,17 @@ describe("parseSheetOrderItems", () => {
     ]);
   });
 
+  it("does not split a single price on thousands commas", () => {
+    expect(parseSheetOrderItems({
+      productName: "Car Door light",
+      sku: "WH-9EFD15",
+      quantity: "1",
+      price: "$6,700.00 PKR",
+    })).toEqual([
+      { productName: "Car Door light", sku: "WH-9EFD15", quantity: "1", price: "$6,700.00 PKR" },
+    ]);
+  });
+
   it("rejects misaligned multi-line columns", () => {
     expect(() => parseSheetOrderItems({
       sku: "A\nB",

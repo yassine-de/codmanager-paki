@@ -44,7 +44,7 @@ export function parseSheetOrderItems(input: {
 
   const productNames = alignLines(splitItemValues(input.productName), skus.length, "Product Name");
   const quantities = alignLines(splitItemValues(input.quantity, { comma: true }), skus.length, "Quantity");
-  const prices = alignLines(splitItemValues(input.price, { comma: true }), skus.length, "Price");
+  const prices = alignLines(splitItemValues(input.price), skus.length, "Price");
 
   return skus.map((sku, index) => ({
     sku,
