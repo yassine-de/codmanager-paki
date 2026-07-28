@@ -36,6 +36,13 @@ function normalizePhone(phone: string, defaultCC: string) {
   return p;
 }
 
+function isWithinCustomerServiceWindow(lastInboundAt?: string | null) {
+  if (!lastInboundAt) return false;
+  const lastInbound = new Date(lastInboundAt).getTime();
+  if (!Number.isFinite(lastInbound)) return false;
+  return Date.now() - lastInbound < 24 * 60 * 60 * 1000;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -218,6 +225,21 @@ Deno.serve(async (req) => {
     let bodyText = body.body ?? "";
     let sentTemplateId: string | null = null;
     let sentTemplateName: string | null = null;
+
+    const requiresCustomerServiceWindow = ["text", "image", "document", "audio", "order"].includes(mode);
+    if (requiresCustomerServiceWindow && !isWithinCustomerServiceWindow(conv?.last_inbound_at)) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          window_expired: true,
+          error: "24h WhatsApp window is closed. Send an approved template first, then wait for the customer to reply before sending free-text messages.",
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     if (mode === "text") {
       if (!bodyText.trim()) throw new Error("Empty message");

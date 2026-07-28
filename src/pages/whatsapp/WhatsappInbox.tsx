@@ -1166,17 +1166,15 @@ export default function WhatsappInbox() {
     }
   };
 
-  // The WhatsApp 24h customer-service window opens whenever the CUSTOMER
-  // sends a message (inbound). Find the most recent inbound message for
-  // the selected conversation. Fall back to conv.last_message_at.
+  // The WhatsApp 24h customer-service window opens only when the CUSTOMER
+  // sends a message (inbound). Outbound templates do not open this window.
   const lastInboundAt = useMemo(() => {
     const lastInboundMsg = [...messages]
       .reverse()
       .find((m) => m.direction === "in" || m.direction === "inbound");
     if (lastInboundMsg) return new Date(lastInboundMsg.created_at);
-    if (conv?.last_message_at) return new Date(conv.last_message_at);
     return null;
-  }, [messages, conv]);
+  }, [messages]);
 
   const windowExpired = useMemo(() => {
     if (!lastInboundAt) return true;

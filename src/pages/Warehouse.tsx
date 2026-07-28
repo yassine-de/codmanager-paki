@@ -144,6 +144,11 @@ interface ProfileRow {
   email: string;
 }
 
+interface SellerPrefixRow {
+  seller_id: string;
+  prefix: string;
+}
+
 interface ReceiveForm {
   sourcingId: string;
   expectedQuantity: number;
@@ -167,8 +172,16 @@ interface ReceiveLine {
 
 const sourcingReceiveStatuses = ["ordered", "shipped", "arrived", "ready_to_receive", "ready_to_receive_in_warehouse"];
 
-function buildInternalSku(row: Pick<SourcingReceiveRow, "id">) {
-  return `WH-${row.id.slice(0, 6).toUpperCase()}`;
+function normalizeSkuPrefix(prefix?: string | null) {
+  const clean = (prefix || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "")
+    .slice(0, 6);
+  return clean || "WH";
+}
+
+function buildInternalSku(row: Pick<SourcingReceiveRow, "id">, sellerPrefix?: string | null) {
+  return `${normalizeSkuPrefix(sellerPrefix)}-${row.id.slice(0, 6).toUpperCase()}`;
 }
 
 function skuSuffix(value: string, fallback: string) {
@@ -438,6 +451,23 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   });
 
   const profileMap = useMemo(() => new Map(profiles.map((p) => [p.user_id, p])), [profiles]);
+
+  const { data: sellerPrefixes = [] } = useQuery({
+    queryKey: ["warehouse-seller-prefixes"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("seller_order_prefixes" as any)
+        .select("seller_id, prefix")
+        .order("prefix", { ascending: true });
+      if (error) throw error;
+      return (data || []) as SellerPrefixRow[];
+    },
+    enabled: isWarehouseUser,
+  });
+
+  const sellerPrefixMap = useMemo(() => {
+    return new Map(sellerPrefixes.map((row) => [row.seller_id, row.prefix]));
+  }, [sellerPrefixes]);
 
   const { data: receivingRows = [], isLoading: loadingReceiving } = useQuery({
     queryKey: ["warehouse-receiving"],
@@ -1071,6 +1101,24 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     setReceiveLines((lines) => lines.map((line) => line.key === key ? { ...line, ...patch } : line));
   };
 
+  const resolveSellerPrefix = async (sellerId: string) => {
+    const cached = sellerPrefixMap.get(sellerId);
+    if (cached) return cached;
+    const { data, error } = await supabase
+      .from("seller_order_prefixes" as any)
+      .select("prefix")
+      .eq("seller_id", sellerId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as { prefix?: string | null } | null)?.prefix || null;
+  };
+
+  const buildReceiveSku = (row: Pick<SourcingReceiveRow, "id" | "seller_id">, line?: Pick<ReceiveLine, "key" | "label">) => {
+    const baseSku = buildInternalSku(row, sellerPrefixMap.get(row.seller_id));
+    if (!line || line.key === "default") return baseSku;
+    return `${baseSku}-${skuSuffix(line.label, line.key.toUpperCase())}`;
+  };
+
   async function ensureLocation(code: string, type: "sellable" | "damaged") {
     const { data: existing, error: selectError } = await supabase
       .from("inventory_locations" as any)
@@ -1103,7 +1151,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       productId = existingProduct?.id || null;
     }
 
-    const baseSku = buildInternalSku(row);
+    const sellerPrefix = await resolveSellerPrefix(row.seller_id);
+    const baseSku = buildInternalSku(row, sellerPrefix);
     const isDefaultLine = line.key === "default";
     const variantSku = isDefaultLine ? baseSku : `${baseSku}-${skuSuffix(line.label, line.key.toUpperCase())}`;
 
@@ -1756,6 +1805,9 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
   const activeBarcodeSize = barcodeLabelSizes[barcodePrintSize];
   const activeBarcodeValue = barcodeDialogRow ? (barcodeDialogRow.sku || barcodeDialogRow.product_variant_id) : "";
+  const activeSellerReference = barcodeDialogRow
+    ? (sellerPrefixMap.get(barcodeDialogRow.seller_id) || "SELLER").toUpperCase()
+    : "";
 
   return (
     <div className="space-y-5">
@@ -1819,9 +1871,14 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
             overflow: "hidden",
           }}
         >
-          <div style={{ display: "flex", height: "100%", flexDirection: "column", justifyContent: "center", gap: "1.2mm" }}>
-            <div style={{ fontSize: activeBarcodeSize.fontSize + 4, fontWeight: 900, lineHeight: 1.02, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {barcodeDialogRow.product_name}
+          <div style={{ display: "flex", height: "100%", flexDirection: "column", justifyContent: "center", gap: "1.1mm" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "2mm" }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: activeBarcodeSize.fontSize + 4, fontWeight: 900, lineHeight: 1.02, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {barcodeDialogRow.product_name}
+              </div>
+              <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", fontSize: activeBarcodeSize.fontSize + 4, fontWeight: 950, lineHeight: 1, letterSpacing: ".4px", whiteSpace: "nowrap" }}>
+                {activeSellerReference}
+              </div>
             </div>
             <div
               style={{ width: "100%", height: `${Math.max(9, activeBarcodeSize.height * 0.42)}mm` }}
@@ -2040,7 +2097,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 	                        <div className="text-[11px] text-muted-foreground">{row.tracking_id || "Waiting tracking"}</div>
 	                      </TableCell>
 	                      <TableCell>
-                        <div className="font-mono text-xs font-semibold">{buildInternalSku(row)}</div>
+                        <div className="font-mono text-xs font-semibold">{buildReceiveSku(row)}</div>
 	                        <div className="text-[11px] text-muted-foreground">Auto after receiving</div>
 	                      </TableCell>
 	                      <TableCell><StatusBadge value={row.status} /></TableCell>
@@ -2511,6 +2568,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                 <div className="text-sm font-semibold">{barcodeDialogRow.product_name}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span className="font-mono text-foreground">{barcodeDialogRow.sku || barcodeDialogRow.product_variant_id}</span>
+                  <Badge className="bg-foreground text-background text-[10px]">{sellerPrefixMap.get(barcodeDialogRow.seller_id) || "SELLER"}</Badge>
                   <Badge variant="outline" className="text-[10px]">{barcodeDialogRow.location_code || "UNASSIGNED"}</Badge>
                 </div>
                 <div
@@ -2579,8 +2637,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                   Auto-generated product barcode
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
-                  <InfoLine label="Internal SKU" value={buildInternalSku(receiveDialogRow)} />
-                  <InfoLine label="Barcode" value={buildInternalSku(receiveDialogRow)} />
+                  <InfoLine label="Internal SKU" value={buildReceiveSku(receiveDialogRow)} />
+                  <InfoLine label="Barcode" value={buildReceiveSku(receiveDialogRow)} />
                 </div>
               </div>
               <div className="rounded-md border overflow-hidden">
@@ -2597,7 +2655,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                       <div>
                         <p className="text-sm font-medium text-foreground">{line.label}</p>
                         {line.key !== "default" && (
-                          <p className="text-[11px] text-muted-foreground">SKU: {buildInternalSku(receiveDialogRow)}-{skuSuffix(line.label, line.key.toUpperCase())}</p>
+                          <p className="text-[11px] text-muted-foreground">SKU: {buildReceiveSku(receiveDialogRow, line)}</p>
                         )}
                       </div>
                       <div className="text-right text-sm font-semibold tabular-nums">{line.expectedQuantity}</div>
