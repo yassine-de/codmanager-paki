@@ -31,7 +31,7 @@ interface EditProductModalProps {
 }
 
 export function EditProductModal({ product, open, onOpenChange, onSave }: EditProductModalProps) {
-  const { authUser } = useAuth();
+  const { authUser, hasPermission } = useAuth();
   const isSeller = authUser?.role === "seller";
   const isAdmin = authUser?.role === "admin";
   const queryClient = useQueryClient();
@@ -56,7 +56,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
 
   // Check if this is a DB product (UUID format)
   const isDbProduct = product ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(product.id) : false;
-  const isAdminDbProduct = isAdmin && isDbProduct;
+  const canEditAvailableQuantity = isDbProduct && !isSeller && (isAdmin || hasPermission("manage_inventory"));
 
   const applyProductToForm = (nextProduct: Product) => {
     setName(nextProduct.name);
@@ -64,7 +64,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     setSku(nextProduct.sku);
     setImage(nextProduct.image);
     setPrice(nextProduct.price);
-    setTotalQty(nextProduct.totalQty);
+    setTotalQty(canEditAvailableQuantity ? nextProduct.available : nextProduct.totalQty);
     setVariants(nextProduct.variants.map(v => ({ ...v })));
     setStoreLink(nextProduct.storeLink || "");
     setVideoLink(nextProduct.videoLink || "");
@@ -95,7 +95,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
         sku: data.sku || product.sku,
         image: data.image_url || product.image,
         price: Number(data.landed_price) || 0,
-        totalQty: product.totalQty || Number(data.quantity || 0),
+        totalQty: canEditAvailableQuantity ? product.available : product.totalQty || Number(data.quantity || 0),
         storeLink: data.product_url || "",
         videoLink: data.video_url || "",
         lastSellingPrice: Number(data.price) || 0,
@@ -106,7 +106,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     })();
 
     return () => { cancelled = true; };
-  }, [open, product?.id, isDbProduct]);
+  }, [open, product?.id, isDbProduct, canEditAvailableQuantity]);
 
   // Fetch current whatsapp_confirmation_enabled value when opening a DB product (admin only)
   useEffect(() => {
@@ -125,7 +125,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
 
   const dbUpdateMutation = useMutation({
     mutationFn: async () => {
-      if (isAdminDbProduct && totalQty !== product!.available) {
+      if (canEditAvailableQuantity && totalQty !== product!.available) {
         const { error: stockError } = await (supabase as any).rpc("set_product_available_quantity", {
           p_product_id: product!.id,
           p_available_quantity: totalQty,
@@ -243,7 +243,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
 
   const handleSave = () => {
     if (!validate()) return;
-    if (isAdminDbProduct && product.variants.length > 1 && totalQty !== product.available) {
+    if (canEditAvailableQuantity && product.variants.length > 1 && totalQty !== product.available) {
       toast.error("This product has multiple variants. Adjust each variant from Warehouse Inventory.");
       return;
     }
@@ -278,8 +278,8 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
   };
 
   const sectionTitle = "text-xs font-semibold text-foreground uppercase tracking-wider mb-2";
-  const quantityLabel = isAdminDbProduct ? "Available Quantity *" : "Total Quantity *";
-  const projectedAvailable = isAdminDbProduct
+  const quantityLabel = canEditAvailableQuantity ? "Available Quantity *" : "Total Quantity *";
+  const projectedAvailable = canEditAvailableQuantity
     ? Math.max(0, totalQty)
     : Math.max(0, product.available + (totalQty - product.totalQty));
 
@@ -425,7 +425,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                   <Label className="text-xs">{quantityLabel}</Label>
                   <Input type="number" min={0} step={1} value={totalQty} onChange={e => setTotalQty(Number(e.target.value))} className={`h-9 text-sm ${errors.totalQty ? "border-destructive" : ""}`} disabled={isSeller} />
                   {errors.totalQty && <p className="text-[11px] text-destructive">{errors.totalQty}</p>}
-                  {isAdminDbProduct && (
+                  {canEditAvailableQuantity && (
                     <p className="text-[11px] text-muted-foreground">
                       Saves a manual stock adjustment for the available warehouse quantity.
                     </p>

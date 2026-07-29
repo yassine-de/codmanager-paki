@@ -2913,8 +2913,16 @@ DECLARE
   v_target_quantity integer := 0;
   v_delta integer;
 BEGIN
-  IF NOT public.is_admin(auth.uid()) THEN
-    RAISE EXCEPTION 'Only admins can manually set product available quantity';
+  IF NOT (
+    public.is_admin(auth.uid())
+    OR EXISTS (
+      SELECT 1
+      FROM public.user_permissions up
+      WHERE up.user_id = auth.uid()
+        AND up.permission_key = 'manage_inventory'
+    )
+  ) THEN
+    RAISE EXCEPTION 'Only admins or inventory managers can manually set product available quantity';
   END IF;
 
   IF p_available_quantity IS NULL OR p_available_quantity < 0 THEN
