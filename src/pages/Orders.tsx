@@ -1070,7 +1070,27 @@ export default function Orders() {
                   {isCol('seller') && <td className="py-2.5 px-4 text-xs">{order.seller}</td>}
                   {isCol('customer') && <td className="py-2.5 px-4 text-xs">{order.customer}</td>}
                   {isCol('city') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.city}</td>}
-                  {isCol('phone') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{order.phone}</td>}
+                  {isCol('phone') && (
+                    <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums" onClick={(e) => e.stopPropagation()}>
+                      {order.phone ? (
+                        <button
+                          type="button"
+                          className="rounded-sm text-left transition hover:text-[hsl(210,60%,52%)] hover:underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                          title="Click to copy phone number"
+                          onClick={() => {
+                            void navigator.clipboard
+                              .writeText(order.phone)
+                              .then(() => toast.success("Phone copied"))
+                              .catch(() => toast.error("Could not copy phone"));
+                          }}
+                        >
+                          {order.phone}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </td>
+                  )}
                   {isCol('product') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.products.map(p => p.qty > 1 ? `${p.qty}x ${p.name}` : p.name).join(', ')}</td>}
                   {isCol('amount') && <td className="py-2.5 px-4 text-xs font-medium tabular-nums text-right">{order.total.toLocaleString()} PKR</td>}
 {isCol('confirmationStatus') && <td className="py-2.5 px-4">{(() => {

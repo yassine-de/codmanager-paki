@@ -1467,9 +1467,20 @@ function renderCell(
     case "tracking":
       return row.tracking_number ? (
         <div className="flex flex-col gap-0.5">
-          <span className="text-[hsl(210,60%,52%)] font-semibold text-xs tabular-nums">
+          <button
+            type="button"
+            className="w-fit text-left text-[hsl(210,60%,52%)] font-semibold text-xs tabular-nums underline-offset-2 transition hover:underline focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-sm"
+            title="Click to copy tracking number"
+            onClick={(event) => {
+              event.stopPropagation();
+              void navigator.clipboard
+                .writeText(row.tracking_number || "")
+                .then(() => toast.success("Tracking copied"))
+                .catch(() => toast.error("Could not copy tracking"));
+            }}
+          >
             {row.tracking_number}
-          </span>
+          </button>
           {row.shipping_company && (
             <span className="text-[9px] font-semibold text-muted-foreground/60 leading-none truncate max-w-[100px]">
               {row.shipping_company}

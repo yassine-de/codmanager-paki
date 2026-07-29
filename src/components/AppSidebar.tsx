@@ -367,7 +367,7 @@ export function AppSidebar() {
             {!collapsed && (
               <div className="flex flex-col">
                 <span className="text-sm font-bold text-sidebar-accent-foreground tracking-tight leading-none">
-                  COD Manager
+                  SCALERS
                 </span>
                 <span className="text-[10px] text-sidebar-foreground/50 mt-0.5">Business Suite</span>
               </div>
