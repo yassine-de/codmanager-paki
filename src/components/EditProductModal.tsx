@@ -56,6 +56,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
 
   // Check if this is a DB product (UUID format)
   const isDbProduct = product ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(product.id) : false;
+  const isAdminDbProduct = isAdmin && isDbProduct;
 
   const applyProductToForm = (nextProduct: Product) => {
     setName(nextProduct.name);
@@ -124,6 +125,15 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
 
   const dbUpdateMutation = useMutation({
     mutationFn: async () => {
+      if (isAdminDbProduct && totalQty !== product!.available) {
+        const { error: stockError } = await (supabase as any).rpc("set_product_available_quantity", {
+          p_product_id: product!.id,
+          p_available_quantity: totalQty,
+          p_reason: "Manual quantity change from product edit",
+        });
+        if (stockError) throw stockError;
+      }
+
       const { error } = await supabase
         .from("products")
         .update({
@@ -158,12 +168,15 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["db-products"] });
+      queryClient.invalidateQueries({ queryKey: ["products-inventory-stock"] });
+      queryClient.invalidateQueries({ queryKey: ["warehouse-inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["warehouse-dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["sourcing-requests"] });
       onOpenChange(false);
       toast.success("Product updated");
     },
-    onError: () => {
-      toast.error("Failed to update product");
+    onError: (error: any) => {
+      toast.error(error?.message || "Failed to update product");
     },
   });
 
@@ -189,7 +202,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
     if (!name.trim()) errs.name = "Required";
     if (!sku.trim()) errs.sku = "Required";
     if (price <= 0) errs.price = "Must be > 0";
-    if (totalQty <= 0) errs.totalQty = "Must be > 0";
+    if (totalQty < 0) errs.totalQty = "Must be 0 or greater";
     if (isDbProduct) {
       if (isSeller) {
         if (!storeLink.trim()) {
@@ -230,6 +243,10 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
 
   const handleSave = () => {
     if (!validate()) return;
+    if (isAdminDbProduct && product.variants.length > 1 && totalQty !== product.available) {
+      toast.error("This product has multiple variants. Adjust each variant from Warehouse Inventory.");
+      return;
+    }
     if (isDbProduct) {
       dbUpdateMutation.mutate();
     } else {
@@ -261,6 +278,10 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
   };
 
   const sectionTitle = "text-xs font-semibold text-foreground uppercase tracking-wider mb-2";
+  const quantityLabel = isAdminDbProduct ? "Available Quantity *" : "Total Quantity *";
+  const projectedAvailable = isAdminDbProduct
+    ? Math.max(0, totalQty)
+    : Math.max(0, product.available + (totalQty - product.totalQty));
 
   const confirmWhatsappChange = async () => {
     if (pendingWhatsappValue === null || !product) return;
@@ -401,9 +422,14 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                   {errors.sellingPrice && <p className="text-[11px] text-destructive">{errors.sellingPrice}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Total Quantity *</Label>
-                  <Input type="number" min={1} step={1} value={totalQty} onChange={e => setTotalQty(Number(e.target.value))} className={`h-9 text-sm ${errors.totalQty ? "border-destructive" : ""}`} disabled={isSeller} />
+                  <Label className="text-xs">{quantityLabel}</Label>
+                  <Input type="number" min={0} step={1} value={totalQty} onChange={e => setTotalQty(Number(e.target.value))} className={`h-9 text-sm ${errors.totalQty ? "border-destructive" : ""}`} disabled={isSeller} />
                   {errors.totalQty && <p className="text-[11px] text-destructive">{errors.totalQty}</p>}
+                  {isAdminDbProduct && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Saves a manual stock adjustment for the available warehouse quantity.
+                    </p>
+                  )}
                 </div>
               </div>
               {/* Stock summary */}
@@ -418,7 +444,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-2.5 text-center">
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Available</p>
-                  <p className="text-sm font-semibold tabular-nums mt-0.5">{Math.max(0, product.available + (totalQty - product.totalQty))}</p>
+                  <p className="text-sm font-semibold tabular-nums mt-0.5">{projectedAvailable}</p>
                 </div>
               </div>
             </div>
