@@ -13,10 +13,11 @@ DECLARE
   v_variant_id uuid;
   v_variant_count integer;
   v_location_id uuid;
-  v_balance_id uuid;
   v_current_quantity integer := 0;
-  v_target_quantity integer := 0;
   v_delta integer;
+  v_remaining_reduction integer;
+  v_reduce_quantity integer;
+  v_balance record;
 BEGIN
   IF NOT (
     public.is_admin(auth.uid())
@@ -42,7 +43,7 @@ BEGIN
     RAISE EXCEPTION 'Product not found';
   END IF;
 
-  SELECT COUNT(*), MIN(id)
+  SELECT COUNT(*), MIN(id::text)::uuid
   INTO v_variant_count, v_variant_id
   FROM public.product_variants
   WHERE product_id = p_product_id
@@ -101,13 +102,6 @@ BEGIN
   )
   ON CONFLICT (product_variant_id, location_id) DO NOTHING;
 
-  SELECT id, quantity_on_hand
-  INTO v_balance_id, v_target_quantity
-  FROM public.inventory_balances
-  WHERE product_variant_id = v_variant_id
-    AND location_id = v_location_id
-  FOR UPDATE;
-
   SELECT COALESCE(SUM(ib.quantity_on_hand), 0)::integer
   INTO v_current_quantity
   FROM public.inventory_balances ib
@@ -117,21 +111,13 @@ BEGIN
 
   v_delta := p_available_quantity - COALESCE(v_current_quantity, 0);
 
-  IF v_target_quantity + v_delta < 0 THEN
-    RAISE EXCEPTION 'Adjustment would make MAIN stock negative. Adjust variants/locations from Warehouse Inventory.';
-  END IF;
+  IF v_delta > 0 THEN
+    UPDATE public.inventory_balances
+    SET quantity_on_hand = quantity_on_hand + v_delta,
+        updated_at = now()
+    WHERE product_variant_id = v_variant_id
+      AND location_id = v_location_id;
 
-  UPDATE public.inventory_balances
-  SET quantity_on_hand = v_target_quantity + v_delta,
-      updated_at = now()
-  WHERE id = v_balance_id;
-
-  UPDATE public.products
-  SET quantity = p_available_quantity,
-      updated_at = now()
-  WHERE id = p_product_id;
-
-  IF v_delta <> 0 THEN
     INSERT INTO public.inventory_movements (
       product_variant_id,
       movement_type,
@@ -145,8 +131,8 @@ BEGIN
       v_variant_id,
       'adjustment'::public.inventory_movement_type,
       v_delta,
-      CASE WHEN v_delta < 0 THEN v_location_id ELSE NULL END,
-      CASE WHEN v_delta > 0 THEN v_location_id ELSE NULL END,
+      NULL,
+      v_location_id,
       auth.uid(),
       jsonb_build_object(
         'reason', COALESCE(NULLIF(trim(p_reason), ''), 'Manual product edit available quantity'),
@@ -156,7 +142,67 @@ BEGIN
         'new_available_quantity', p_available_quantity
       )
     );
+  ELSIF v_delta < 0 THEN
+    v_remaining_reduction := ABS(v_delta);
+
+    FOR v_balance IN
+      SELECT ib.id, ib.location_id, ib.quantity_on_hand
+      FROM public.inventory_balances ib
+      JOIN public.inventory_locations il ON il.id = ib.location_id
+      WHERE ib.product_variant_id = v_variant_id
+        AND il.type <> 'damaged'
+        AND ib.quantity_on_hand > 0
+      ORDER BY
+        CASE WHEN il.code = 'MAIN' THEN 0 ELSE 1 END,
+        ib.quantity_on_hand DESC,
+        ib.updated_at DESC
+      FOR UPDATE OF ib
+    LOOP
+      EXIT WHEN v_remaining_reduction <= 0;
+      v_reduce_quantity := LEAST(v_remaining_reduction, v_balance.quantity_on_hand);
+
+      UPDATE public.inventory_balances
+      SET quantity_on_hand = quantity_on_hand - v_reduce_quantity,
+          updated_at = now()
+      WHERE id = v_balance.id;
+
+      INSERT INTO public.inventory_movements (
+        product_variant_id,
+        movement_type,
+        quantity_change,
+        from_location_id,
+        to_location_id,
+        created_by,
+        metadata
+      )
+      VALUES (
+        v_variant_id,
+        'adjustment'::public.inventory_movement_type,
+        -v_reduce_quantity,
+        v_balance.location_id,
+        NULL,
+        auth.uid(),
+        jsonb_build_object(
+          'reason', COALESCE(NULLIF(trim(p_reason), ''), 'Manual product edit available quantity'),
+          'source', 'product_edit_available_quantity',
+          'product_id', p_product_id,
+          'previous_available_quantity', COALESCE(v_current_quantity, 0),
+          'new_available_quantity', p_available_quantity
+        )
+      );
+
+      v_remaining_reduction := v_remaining_reduction - v_reduce_quantity;
+    END LOOP;
+
+    IF v_remaining_reduction > 0 THEN
+      RAISE EXCEPTION 'Adjustment would make available stock negative';
+    END IF;
   END IF;
+
+  UPDATE public.products
+  SET quantity = p_available_quantity,
+      updated_at = now()
+  WHERE id = p_product_id;
 
   RETURN p_available_quantity;
 END;
