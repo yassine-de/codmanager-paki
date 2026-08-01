@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { type ConfirmationStatus, type DeliveryStatus, type Order } from "@/lib/data";
 import { formatPKT as format } from "@/lib/timezone";
+import { exactOrderIdMatch, isOrderIdSearch } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
@@ -628,6 +629,9 @@ export default function Orders() {
         }
         
         if (search) {
+          if (isOrderIdSearch(search)) {
+            return exactOrderIdMatch(o.id, search);
+          }
           const s = search.toLowerCase();
           return o.id.toLowerCase().includes(s) || o.customer.toLowerCase().includes(s) ||
             o.phone.includes(s) || o.city.toLowerCase().includes(s);

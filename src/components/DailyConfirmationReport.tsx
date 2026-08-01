@@ -30,6 +30,7 @@ interface DailyConfirmationReportProps {
   agentIds: string[];
   agentScores?: AgentScore[];
   treatedOrders?: number;
+  claimedOrders?: number;
   firstCallAvg?: string;
   handlingTime?: string;
   /** Override for the hero "Confirmed" count — uses dashboard-aligned confirmed_at logic */
@@ -156,7 +157,7 @@ function ConfRatePill({ rate }: { rate: number }) {
 /* ── Main component ── */
 
 export function DailyConfirmationReport({
-  orders, profileNameMap, profilePhoneMap = {}, agentIds, agentScores = [], treatedOrders, firstCallAvg, handlingTime,
+  orders, profileNameMap, profilePhoneMap = {}, agentIds, agentScores = [], treatedOrders, claimedOrders, firstCallAvg, handlingTime,
   totalConfirmed, totalByWhatsApp, confirmationRate,
 }: DailyConfirmationReportProps) {
 
@@ -260,6 +261,8 @@ export function DailyConfirmationReport({
     }),
   [agentRows, scoresMap]);
 
+  const claimedTotal = claimedOrders ?? s.total;
+
   if (orders.length === 0) {
     return (
       <div className="bg-card rounded-2xl border p-12 text-center">
@@ -283,7 +286,7 @@ export function DailyConfirmationReport({
         <div>
           <h2 className="text-base font-bold leading-tight">Daily Performance Overview</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {s.total.toLocaleString()} orders handled
+            {claimedTotal.toLocaleString()} orders claimed
             {treatedOrders !== undefined && ` · ${treatedOrders.toLocaleString()} treated`}
           </p>
         </div>
@@ -291,11 +294,11 @@ export function DailyConfirmationReport({
 
       {/* ── Hero row: 3 big coloured cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Handled */}
+        {/* Claimed */}
         <BigStat
-          label="Handled"
-          value={s.total}
-          sub={treatedOrders !== undefined ? `${treatedOrders} treated · ${s.total > 0 ? Math.round((treatedOrders / s.total) * 100) : 0}% rate` : undefined}
+          label="Claimed"
+          value={claimedTotal}
+          sub={treatedOrders !== undefined ? `${treatedOrders} treated · ${claimedTotal > 0 ? Math.round((treatedOrders / claimedTotal) * 100) : 0}% rate` : undefined}
           icon={ShoppingCart}
           accent="bg-[hsl(215,55%,30%)] text-white border-[hsl(215,55%,25%)] shadow-[0_2px_16px_hsl(215,55%,30%)/25]"
         />
@@ -304,7 +307,7 @@ export function DailyConfirmationReport({
           <BigStat
             label="Treated"
             value={treatedOrders}
-            sub={`${s.total > 0 ? Math.round((treatedOrders / s.total) * 100) : 0}% of handled orders`}
+            sub={`${claimedTotal > 0 ? Math.round((treatedOrders / claimedTotal) * 100) : 0}% of claimed orders`}
             icon={ClipboardCheck}
             accent="bg-[hsl(250,45%,38%)] text-white border-[hsl(250,45%,30%)] shadow-[0_2px_16px_hsl(250,45%,38%)/25]"
           />

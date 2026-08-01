@@ -61,6 +61,7 @@ const isYesterday = (date: Date) => {
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { exactOrderIdMatch, isOrderIdSearch, normalizeOrderIdSearch } from "@/lib/search";
 import { SendTemplateModal } from "@/components/whatsapp/SendTemplateModal";
 import { useCarrierCities } from "@/hooks/useCarrierCities";
 import { CitySelect } from "@/components/CitySelect";
@@ -118,6 +119,43 @@ type OrderItemDraft = {
   variant_name?: string | null;
   quantity: string;
   unit_price: string;
+};
+
+type DuplicateOrderWarning = {
+  id: string;
+  order_id: string;
+  confirmation_status: string | null;
+  delivery_status: string | null;
+  product_name: string | null;
+  customer_city: string | null;
+  created_at: string | null;
+  order_items?: { product_name: string | null }[] | null;
+};
+
+const CANCEL_REASONS = [
+  { value: "high_price", label: "High Price" },
+  { value: "product_issue", label: "Product Issue" },
+  { value: "not_convinced", label: "Not Convinced" },
+  { value: "quality_issue", label: "Quality Issue" },
+  { value: "other", label: "Other" },
+];
+
+const CANCEL_REASON_VALUES = new Set(CANCEL_REASONS.map((reason) => reason.value));
+
+const getCancelReasonDraft = (reason?: string | null) => {
+  if (!reason) return { reason: "", note: "" };
+  return CANCEL_REASON_VALUES.has(reason)
+    ? { reason, note: "" }
+    : { reason: "other", note: reason };
+};
+
+const phoneVariants = (raw: string | null | undefined): string[] => {
+  const digits = (raw || "").replace(/\D/g, "");
+  const last10 = digits.slice(-10);
+  if (!last10) return [];
+  return Array.from(
+    new Set([raw || "", digits, `+${digits}`, `92${last10}`, `+92${last10}`, `0${last10}`, last10]),
+  ).filter(Boolean);
 };
 
 const getFreshAccessToken = async () => {
@@ -486,6 +524,7 @@ const confirmationStatusCls = (s: string) => {
     postponed: "bg-violet-500/15 text-violet-500 border-violet-500/25",
     cancelled: "bg-rose-500/15 text-rose-500 border-rose-500/25",
     new_wts: "bg-cyan-500/15 text-cyan-500 border-cyan-500/25",
+    double: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/30",
   };
   return map[s] ?? "bg-muted text-muted-foreground border-border";
 };
@@ -630,6 +669,8 @@ export default function WhatsappInbox() {
   };
   const [editConfStatus, setEditConfStatus] = useState("");
   const [editDelStatus, setEditDelStatus] = useState("");
+  const [editCancelReason, setEditCancelReason] = useState("");
+  const [editCancelNote, setEditCancelNote] = useState("");
   const [editingAddress, setEditingAddress] = useState(false);
   const [addressDraft, setAddressDraft] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
@@ -740,6 +781,56 @@ export default function WhatsappInbox() {
     },
     enabled: !!conv?.order_id,
   });
+
+  const { data: duplicateMatches = [] } = useQuery<DuplicateOrderWarning[]>({
+    queryKey: ["wts-order-duplicates", order?.id, order?.customer_phone],
+    queryFn: async () => {
+      if (!order?.id || !order.customer_phone) return [];
+      const currentNames = new Set(
+        [
+          order.product_name,
+          ...getOrderItems(order).map((item: any) => item.product_name),
+        ]
+          .filter(Boolean)
+          .map((name: string) => name.trim().toLowerCase()),
+      );
+      if (currentNames.size === 0) return [];
+
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_id, confirmation_status, delivery_status, product_name, customer_city, created_at, order_items(product_name)")
+        .in("customer_phone", phoneVariants(order.customer_phone))
+        .neq("id", order.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+
+      return ((data ?? []) as DuplicateOrderWarning[]).filter((candidate) => {
+        const candidateNames = [
+          candidate.product_name,
+          ...(candidate.order_items || []).map((item) => item.product_name),
+        ]
+          .filter(Boolean)
+          .map((name: string) => name.trim().toLowerCase());
+        return candidateNames.some((name) => currentNames.has(name));
+      });
+    },
+    enabled: !!order?.id && !!order?.customer_phone,
+  });
+
+  const selectedConfirmationStatus = editConfStatus || order?.confirmation_status || "new";
+  const selectedDeliveryStatus = editDelStatus || order?.delivery_status || "pending";
+  const hasDuplicateWarning = duplicateMatches.length > 0;
+  const cancelReasonValue = editCancelReason === "other" ? editCancelNote.trim() : editCancelReason;
+  const statusHasChanges = !!order && (
+    selectedConfirmationStatus !== (order.confirmation_status || "new") ||
+    selectedDeliveryStatus !== (order.delivery_status || "pending")
+  );
+  const cancelReasonHasChanges = !!order &&
+    selectedConfirmationStatus === "cancelled" &&
+    cancelReasonValue !== (order.cancel_reason || "");
+  const needsCancelReason = selectedConfirmationStatus === "cancelled";
+  const canUpdateOrderStatus = (statusHasChanges || cancelReasonHasChanges) && (!needsCancelReason || !!cancelReasonValue);
 
   const { data: productOptions = [] } = useQuery<ProductOption[]>({
     queryKey: ["wts-product-options", order?.seller_id],
@@ -1065,13 +1156,17 @@ export default function WhatsappInbox() {
   const filteredConvos = useMemo(() => {
     let list = convos.slice();
     if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (c) =>
-          (c.customer_name || "").toLowerCase().includes(q) ||
-          c.customer_phone.toLowerCase().includes(q) ||
-          (c.order_id || "").toLowerCase().includes(q),
-      );
+      if (isOrderIdSearch(search)) {
+        list = list.filter((c) => exactOrderIdMatch(c.order_id, search));
+      } else {
+        const q = search.toLowerCase();
+        list = list.filter(
+          (c) =>
+            (c.customer_name || "").toLowerCase().includes(q) ||
+            c.customer_phone.toLowerCase().includes(q) ||
+            (c.order_id || "").toLowerCase().includes(q),
+        );
+      }
     }
     if (filter === "unread") {
       list = list.filter((c) => (unreadMap[c.id] ?? 0) > 0);
@@ -1116,11 +1211,16 @@ export default function WhatsappInbox() {
     const timer = setTimeout(async () => {
       setDbSearching(true);
       try {
-        const { data } = await supabase
+        let query = supabase
           .from("whatsapp_conversations")
           .select("*")
-          .or(`customer_name.ilike.%${q}%,customer_phone.ilike.%${q}%,order_id.ilike.%${q}%`)
-          .order("updated_at", { ascending: false })
+          .order("updated_at", { ascending: false });
+
+        query = isOrderIdSearch(q)
+          ? query.eq("order_id", normalizeOrderIdSearch(q))
+          : query.or(`customer_name.ilike.%${q}%,customer_phone.ilike.%${q}%,order_id.ilike.%${q}%`);
+
+        const { data } = await query
           .limit(50);
         setDbSearchResults((data ?? []) as Conv[]);
       } finally {
@@ -1899,6 +1999,14 @@ export default function WhatsappInbox() {
                         )}
                     </div>
                   )}
+                  {hasDuplicateWarning && (
+                    <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-2 py-1 text-[11px] font-semibold text-orange-700 shadow-sm dark:text-orange-300">
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">
+                        Possible duplicate - {duplicateMatches.length} previous matching order{duplicateMatches.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                  )}
                   </div>
                 </div>
 
@@ -2611,11 +2719,16 @@ export default function WhatsappInbox() {
         if (o && order) {
           setEditConfStatus(order.confirmation_status || "new");
           setEditDelStatus(order.delivery_status || "pending");
+          const cancelDraft = getCancelReasonDraft(order.cancel_reason);
+          setEditCancelReason(cancelDraft.reason);
+          setEditCancelNote(cancelDraft.note);
         }
         if (!o) {
           setEditingCity(false);
           setEditingAddress(false);
           setEditingPricing(false);
+          setEditCancelReason("");
+          setEditCancelNote("");
         }
       }}>
         <DialogContent className="max-w-lg">
@@ -2663,6 +2776,61 @@ export default function WhatsappInbox() {
                 {windowExpired ? "🔒 24h Expired" : "Window Open"}
               </Badge>
             </div>
+            {hasDuplicateWarning && (
+              <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 p-3 text-orange-800 shadow-sm dark:text-orange-200">
+                <div className="flex items-start gap-2">
+                  <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-orange-500/15">
+                    <AlertCircle className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold">Possible Duplicate Order</div>
+                    <div className="mt-0.5 text-xs leading-relaxed text-orange-700/85 dark:text-orange-200/80">
+                      Same customer phone and product were found in previous orders. Check them before sending messages or changing status.
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {duplicateMatches.map((match) => (
+                        <button
+                          key={match.id}
+                          type="button"
+                          onClick={() => window.open(`/orders/${match.order_id}`, "_blank")}
+                          className="flex w-full items-center justify-between gap-2 rounded-lg border border-orange-500/20 bg-background/70 px-2 py-1.5 text-left text-xs transition-colors hover:bg-orange-500/10"
+                          title={`Open #${match.order_id}`}
+                        >
+                          <span className="min-w-0">
+                            <span className="font-mono font-bold text-orange-800 dark:text-orange-200">
+                              #{match.order_id}
+                            </span>
+                            {match.customer_city && (
+                              <span className="ml-1 text-muted-foreground">· {match.customer_city}</span>
+                            )}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-1">
+                            <span
+                              className={cn(
+                                "rounded-full border px-1.5 py-0.5 text-[10px] capitalize",
+                                confirmationStatusCls(match.confirmation_status || ""),
+                              )}
+                            >
+                              {(match.confirmation_status || "unknown").replace(/_/g, " ")}
+                            </span>
+                            {match.delivery_status && (
+                              <span
+                                className={cn(
+                                  "rounded-full border px-1.5 py-0.5 text-[10px] capitalize",
+                                  deliveryStatusCls(match.delivery_status),
+                                )}
+                              >
+                                {match.delivery_status.replace(/_/g, " ")}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Order section */}
             {order ? (
@@ -3014,7 +3182,16 @@ export default function WhatsappInbox() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <div className="text-[11px] text-muted-foreground mb-1">Confirmation</div>
-                      <Select value={editConfStatus || order.confirmation_status || "new"} onValueChange={setEditConfStatus}>
+                      <Select
+                        value={selectedConfirmationStatus}
+                        onValueChange={(value) => {
+                          setEditConfStatus(value);
+                          if (value !== "cancelled") {
+                            setEditCancelReason("");
+                            setEditCancelNote("");
+                          }
+                        }}
+                      >
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {["new","confirmed","no_answer","postponed","cancelled","wrong_number","double"].map(s => (
@@ -3025,7 +3202,7 @@ export default function WhatsappInbox() {
                     </div>
                     <div>
                       <div className="text-[11px] text-muted-foreground mb-1">Delivery</div>
-                      <Select value={editDelStatus || order.delivery_status || "pending"} onValueChange={setEditDelStatus}>
+                      <Select value={selectedDeliveryStatus} onValueChange={setEditDelStatus}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {(isAdmin
@@ -3040,26 +3217,66 @@ export default function WhatsappInbox() {
                       </Select>
                     </div>
                   </div>
-                  {((editConfStatus && editConfStatus !== (order.confirmation_status || "new")) || (editDelStatus && editDelStatus !== (order.delivery_status || "pending"))) && (
+                  {selectedConfirmationStatus === "cancelled" && (
+                    <div className="space-y-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                      <div className="flex items-center gap-1 text-xs font-semibold text-destructive">
+                        <AlertCircle className="h-3 w-3" />
+                        Cancellation Reason *
+                      </div>
+                      <Select value={editCancelReason} onValueChange={setEditCancelReason}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select reason..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CANCEL_REASONS.map((reason) => (
+                            <SelectItem key={reason.value} value={reason.value} className="text-xs">
+                              {reason.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {editCancelReason === "other" && (
+                        <Textarea
+                          value={editCancelNote}
+                          onChange={(e) => setEditCancelNote(e.target.value)}
+                          placeholder="Write the cancellation reason..."
+                          className="min-h-[60px] resize-none text-xs"
+                        />
+                      )}
+                    </div>
+                  )}
+                  {(statusHasChanges || cancelReasonHasChanges) && (
                     <Button
                       size="sm"
                       className="w-full h-8 text-xs"
-                      disabled={updatingStatus}
+                      disabled={updatingStatus || !canUpdateOrderStatus}
                       onClick={async () => {
+                        if (needsCancelReason && !cancelReasonValue) {
+                          toast.error("Please select a cancellation reason");
+                          return;
+                        }
                         setUpdatingStatus(true);
-                        const updates: { updated_at: string; confirmation_status?: string; delivery_status?: string; agent_id?: null; assigned_at?: null } = { updated_at: new Date().toISOString() };
-                        if (editConfStatus && editConfStatus !== (order.confirmation_status || "new")) updates.confirmation_status = editConfStatus;
-                        if (editDelStatus && editDelStatus !== (order.delivery_status || "pending")) {
-                          if (editDelStatus === "new") {
+                        const updates: { updated_at: string; confirmation_status?: string; delivery_status?: string; cancel_reason?: string; agent_id?: null; assigned_at?: null } = { updated_at: new Date().toISOString() };
+                        if (selectedConfirmationStatus !== (order.confirmation_status || "new")) updates.confirmation_status = selectedConfirmationStatus;
+                        if (selectedConfirmationStatus === "cancelled" && cancelReasonValue !== (order.cancel_reason || "")) {
+                          updates.cancel_reason = cancelReasonValue;
+                        }
+                        if (selectedDeliveryStatus !== (order.delivery_status || "pending")) {
+                          if (selectedDeliveryStatus === "new") {
                             // "New (force to agent)" — push the order back to the agent queue
                             updates.confirmation_status = "new";
                             updates.agent_id = null;
                             updates.assigned_at = null;
                           } else {
-                            updates.delivery_status = editDelStatus;
+                            updates.delivery_status = selectedDeliveryStatus;
                           }
                         }
-                        await supabase.from("orders").update(updates).eq("order_id", order.order_id);
+                        const { error } = await supabase.from("orders").update(updates).eq("order_id", order.order_id);
+                        if (error) {
+                          setUpdatingStatus(false);
+                          toast.error(error.message || "Failed to update status");
+                          return;
+                        }
 
                         // Log to order_history so the action counts on the agent dashboard
                         // (the dashboard derives all its stats from order_history, not the orders table).
@@ -3085,6 +3302,17 @@ export default function WhatsappInbox() {
                               field_changed: "delivery_status",
                               old_value: order.delivery_status || "pending",
                               new_value: updates.delivery_status,
+                              action_type: "status_change",
+                            });
+                          }
+                          if (updates.cancel_reason) {
+                            histEntries.push({
+                              order_id: order.order_id,
+                              changed_by: authUser.id,
+                              changed_by_role: role,
+                              field_changed: "cancel_reason",
+                              old_value: order.cancel_reason || "",
+                              new_value: updates.cancel_reason,
                               action_type: "status_change",
                             });
                           }

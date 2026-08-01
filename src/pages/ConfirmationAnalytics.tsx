@@ -660,6 +660,7 @@ export default function ConfirmationAnalytics() {
         totalByWhatsApp={confirmedForDisplay.byWhatsApp}
         confirmationRate={stats.confirmationRate}
         treatedOrders={stats.treated}
+        claimedOrders={stats.claimed}
         firstCallAvg={timeStats.firstCallAvg}
         handlingTime={timeStats.handlingTime}
         agentScores={agentScores.map(a => ({
