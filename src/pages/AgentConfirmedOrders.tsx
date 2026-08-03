@@ -54,6 +54,8 @@ const CONFIRMATION_OPTIONS = [
   { value: "wrong_number", label: "Wrong Number" },
 ];
 
+const AGENT_EDITABLE_DELIVERY_STATUSES = ["", "pending", "booked"];
+
 interface EditForm {
   customer_name: string;
   customer_phone: string;
@@ -161,7 +163,9 @@ const AgentConfirmedOrders = () => {
     mutationFn: async () => {
       if (!editOrder) return;
       const totalAmount = editForm.price * editForm.quantity;
-      const confirmed_at = editForm.confirmation_status === "confirmed" ? new Date().toISOString() : null;
+      const confirmed_at = editForm.confirmation_status === "confirmed"
+        ? (editOrder.confirmation_status === "confirmed" && editOrder.confirmed_at ? editOrder.confirmed_at : new Date().toISOString())
+        : null;
 
       // Build postpone_date ISO from date + time
       let postpone_date: string | null = null;
@@ -174,10 +178,12 @@ const AgentConfirmedOrders = () => {
         postpone_date = d.toISOString();
       }
 
-      // Only set delivery_status if agent is booking a confirmed order with no existing shipping status
-      const shouldSetDelivery = editForm.confirmation_status === "confirmed"
-        && !editOrder.delivery_status
-        && editForm.delivery_status === "booked";
+      const canSetDeliveryFromEdit = editForm.confirmation_status === "confirmed"
+        && AGENT_EDITABLE_DELIVERY_STATUSES.includes(editOrder.delivery_status || "");
+
+      if (canSetDeliveryFromEdit && !["booked", "pending"].includes(editForm.delivery_status)) {
+        throw new Error("Please choose Shipped or Not Yet");
+      }
 
       const updatePayload: any = {
           customer_name: editForm.customer_name.trim(),
@@ -195,8 +201,8 @@ const AgentConfirmedOrders = () => {
           postpone_note: editForm.confirmation_status === "postponed" ? editForm.postpone_note.trim() : null,
       };
 
-      if (shouldSetDelivery) {
-        updatePayload.delivery_status = "booked";
+      if (canSetDeliveryFromEdit) {
+        updatePayload.delivery_status = editForm.delivery_status;
       }
 
       const { error } = await supabase
@@ -208,7 +214,7 @@ const AgentConfirmedOrders = () => {
       // Log changed fields
       if (userId) {
         const changes: { field: string; old_val: string; new_val: string }[] = [];
-        const fields: (keyof EditForm)[] = ["customer_name", "customer_phone", "customer_city", "product_name", "price", "quantity", "confirmation_status"];
+        const fields: (keyof EditForm)[] = ["customer_name", "customer_phone", "customer_city", "product_name", "price", "quantity", "confirmation_status", "delivery_status"];
         for (const f of fields) {
           if (String(editOrder[f]) !== String(editForm[f])) {
             changes.push({ field: f, old_val: String(editOrder[f]), new_val: String(editForm[f]) });
@@ -237,7 +243,7 @@ const AgentConfirmedOrders = () => {
       toast.success("Order updated successfully");
       setEditOrder(null);
     },
-    onError: () => toast.error("Failed to update order"),
+    onError: (error: any) => toast.error(error?.message || "Failed to update order"),
   });
 
   const filteredOrders = useMemo(() => {
@@ -290,6 +296,10 @@ const AgentConfirmedOrders = () => {
   };
 
   const openEdit = (order: any) => {
+    const deliveryStatus = AGENT_EDITABLE_DELIVERY_STATUSES.includes(order.delivery_status || "")
+      ? (order.delivery_status || "pending")
+      : (order.delivery_status || "");
+
     setEditOrder(order);
     setEditForm({
       customer_name: order.customer_name || "",
@@ -304,7 +314,7 @@ const AgentConfirmedOrders = () => {
       postpone_date: order.postpone_date ? new Date(order.postpone_date) : null,
       postpone_time: order.postpone_date ? format(new Date(order.postpone_date), "HH:mm") : "",
       postpone_note: order.postpone_note || "",
-      delivery_status: order.delivery_status || "",
+      delivery_status: deliveryStatus,
     });
     // Fetch seller's products for links and add-item
     supabase
@@ -700,17 +710,16 @@ const AgentConfirmedOrders = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Show editable "Booked" option only for confirmed orders with no shipping status */}
-                {editForm.confirmation_status === "confirmed" && !editOrder?.delivery_status ? (
+                {editForm.confirmation_status === "confirmed" && AGENT_EDITABLE_DELIVERY_STATUSES.includes(editOrder?.delivery_status || "") ? (
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Shipping Status</Label>
+                    <Label className="text-xs">Shipping Status *</Label>
                     <Select value={editForm.delivery_status} onValueChange={(v) => updateField("delivery_status", v)}>
                       <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="No status" />
+                        <SelectValue placeholder="Select shipping status..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">No Status</SelectItem>
-                        <SelectItem value="booked">📦 Booked</SelectItem>
+                        <SelectItem value="booked">📦 Shipped — Ready for shipping</SelectItem>
+                        <SelectItem value="pending">⏳ Not Yet — Pending shipment</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
