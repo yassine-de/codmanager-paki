@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import {
   Select,
   SelectContent,
@@ -211,6 +212,14 @@ function formatStatus(status: string | null): string {
   return status.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
+function formatPostexSubStatus(status: string | null): string {
+  if (!status) return "—";
+  return status
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function StatusPill({ value, styleMap }: { value: string | null; styleMap: Record<string, string> }) {
   if (!value) return <span className="text-muted-foreground text-xs">—</span>;
   const cls = styleMap[value] ?? "bg-muted text-muted-foreground border-border";
@@ -236,7 +245,7 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "product",   label: "Product"    },
   { key: "price",     label: "Price"      },
   { key: "delivery",  label: "Delivery"   },
-  { key: "segment",   label: "Sub Status" },
+  { key: "segment",   label: "PostEx Sub-status" },
   { key: "days",      label: "Days"       },
   { key: "follow_up", label: "Follow Up"  },
   { key: "note",      label: "FU Note"    },
@@ -354,15 +363,18 @@ export default function FollowUps() {
     const sellers = new Map<string, string>();
     const agents  = new Map<string, string>();
     const deliveries = new Set<string>();
+    const postexSubStatuses = new Set<string>();
     for (const r of enriched) {
       if (r.seller_id && r.seller_name) sellers.set(r.seller_id, r.seller_name);
       if (r.agent_id  && r.agent_name)  agents.set(r.agent_id,   r.agent_name);
       if (r.delivery_status) deliveries.add(r.delivery_status);
+      if (r.shipping_status) postexSubStatuses.add(r.shipping_status);
     }
     return {
       sellers:    Array.from(sellers.entries()).sort((a, b) => a[1].localeCompare(b[1])),
       agents:     Array.from(agents.entries()).sort((a, b) => a[1].localeCompare(b[1])),
       deliveries: Array.from(deliveries).sort(),
+      postexSubStatuses: Array.from(postexSubStatuses).sort((a, b) => formatPostexSubStatus(a).localeCompare(formatPostexSubStatus(b))),
     };
   }, [enriched]);
 
@@ -375,7 +387,7 @@ export default function FollowUps() {
       else if (r.segment !== segment) return false;
     }
     if (filterDelivery   !== "all" && r.delivery_status !== filterDelivery)   return false;
-    if (filterSubStatus  !== "all" && r.segment         !== filterSubStatus)  return false;
+    if (filterSubStatus  !== "all" && r.shipping_status !== filterSubStatus)  return false;
     if (filterSeller     !== "all" && r.seller_id       !== filterSeller)     return false;
     if (filterAgent    !== "all" && r.agent_id        !== filterAgent)    return false;
     if (filterFollowUp !== "all" && r.follow_up_status !== filterFollowUp) return false;
@@ -678,17 +690,17 @@ export default function FollowUps() {
             </SelectContent>
           </Select>
 
-          <Select value={filterSubStatus} onValueChange={setFilterSubStatus}>
-            <SelectTrigger className="h-8 text-xs w-[140px]">
-              <SelectValue placeholder="Sub Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sub Status</SelectItem>
-              <SelectItem value="on_going">On Going</SelectItem>
-              <SelectItem value="delayed">Delayed</SelectItem>
-              <SelectItem value="failed_attempt">Failed Attempt</SelectItem>
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={filterSubStatus}
+            onValueChange={setFilterSubStatus}
+            options={filterOptions.postexSubStatuses.map((status) => ({
+              value: status,
+              label: formatPostexSubStatus(status),
+            }))}
+            placeholder="PostEx Sub-status"
+            allLabel="All PostEx Sub-status"
+            className="h-8 w-[170px]"
+          />
 
           <Select value={filterFollowUp} onValueChange={setFilterFollowUp}>
             <SelectTrigger className="h-8 text-xs w-[140px]">
