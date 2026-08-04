@@ -42,6 +42,27 @@ const statusBadge = (status: string) => {
   }
 };
 
+const reasonLabel = (reason: string) => {
+  switch (reason) {
+    case "courier_delivery_reversal":
+      return "Courier reversed delivery";
+    case "delivery_status_change":
+      return "Delivery status changed";
+    case "shipping_reversal":
+      return "Shipping reversed";
+    case "confirmation_status_change":
+      return "Confirmation changed";
+    case "price_quantity_change":
+      return "Price & quantity changed";
+    case "price_change":
+      return "Price changed";
+    case "quantity_change":
+      return "Quantity changed";
+    default:
+      return reason.replace(/_/g, " ");
+  }
+};
+
 export default function Adjustments() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -132,7 +153,7 @@ export default function Adjustments() {
             <AlertTriangle className="h-5 w-5 text-warning shrink-0" />
             <div>
               <p className="text-sm font-semibold text-warning">⚠️ {pendingCount} Adjustment{pendingCount > 1 ? "s" : ""} Pending Review</p>
-              <p className="text-xs text-muted-foreground">Order status changes detected on closed invoices. Please review and approve or reject.</p>
+              <p className="text-xs text-muted-foreground">Courier delivery reversals and invoice-impacting order changes need admin review.</p>
             </div>
           </CardContent>
         </Card>
@@ -148,6 +169,7 @@ export default function Adjustments() {
                 <TableHead className="text-xs">Seller</TableHead>
                 <TableHead className="text-xs">Old Status</TableHead>
                 <TableHead className="text-xs">New Status</TableHead>
+                <TableHead className="text-xs">Reason</TableHead>
                 <TableHead className="text-xs text-right">Revenue Δ (PKR)</TableHead>
                 <TableHead className="text-xs text-right">Shipping Δ</TableHead>
                 <TableHead className="text-xs text-right">Total Δ (PKR)</TableHead>
@@ -158,9 +180,9 @@ export default function Adjustments() {
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground text-xs">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground text-xs">Loading...</TableCell></TableRow>
               ) : adjustments.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground text-xs">No adjustments found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground text-xs">No adjustments found</TableCell></TableRow>
               ) : adjustments.map((adj) => {
                 const totalDiff = getTotalDiff(adj);
                 const shippingDiff = adj.shipping_difference || 0;
@@ -170,6 +192,7 @@ export default function Adjustments() {
                     <TableCell>{sellerMap[adj.seller_id] || "Unknown"}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px]">{adj.old_status}</Badge></TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px]">{adj.new_status}</Badge></TableCell>
+                    <TableCell className="capitalize">{reasonLabel(adj.reason)}</TableCell>
                     <TableCell className={`text-right tabular-nums font-semibold ${adj.difference >= 0 ? "text-success" : "text-destructive"}`}>
                       {adj.difference !== 0 ? (adj.difference >= 0 ? "+" : "") + formatPKR(adj.difference) : "—"}
                     </TableCell>
@@ -256,7 +279,7 @@ function AdjustmentDetail({ adj, sellerMap, onApprove, onReject }: {
         </div>
         <div>
           <span className="text-muted-foreground">Reason</span>
-          <p className="font-semibold capitalize">{adj.reason.replace(/_/g, " ")}</p>
+          <p className="font-semibold capitalize">{reasonLabel(adj.reason)}</p>
         </div>
         <div>
           <span className="text-muted-foreground">Date</span>

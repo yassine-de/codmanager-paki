@@ -52,6 +52,7 @@ interface SourcingReceiveRow {
   product_weight?: string | null;
   status: string;
   source_product_id: string | null;
+  source_product_sku?: string | null;
   variants: any[] | null;
   tracking_id: string | null;
   freight_forwarder: string | null;
@@ -191,6 +192,13 @@ function skuSuffix(value: string, fallback: string) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 10);
   return clean || fallback;
+}
+
+function normalizeVariantName(value?: string | null) {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
 }
 
 function flattenReceiveLines(row: SourcingReceiveRow): ReceiveLine[] {
@@ -478,7 +486,25 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         .in("status", sourcingReceiveStatuses)
         .order("updated_at", { ascending: false });
       if (error) throw error;
-      return (data || []) as SourcingReceiveRow[];
+      const rows = (data || []) as SourcingReceiveRow[];
+      const sourceProductIds = Array.from(new Set(rows.map((row) => row.source_product_id).filter(Boolean)));
+      if (sourceProductIds.length === 0) return rows;
+
+      const { data: products, error: productsError } = await supabase
+        .from("products")
+        .select("id, sku, image_url, scraped_image_url")
+        .in("id", sourceProductIds);
+      if (productsError) throw productsError;
+
+      const productMap = new Map((products || []).map((product: any) => [product.id, product]));
+      return rows.map((row) => {
+        const sourceProduct = row.source_product_id ? productMap.get(row.source_product_id) : null;
+        return {
+          ...row,
+          product_image_url: row.product_image_url || sourceProduct?.image_url || sourceProduct?.scraped_image_url || null,
+          source_product_sku: sourceProduct?.sku || null,
+        };
+      });
     },
     enabled: isWarehouseUser,
   });
@@ -1113,7 +1139,11 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     return (data as { prefix?: string | null } | null)?.prefix || null;
   };
 
-  const buildReceiveSku = (row: Pick<SourcingReceiveRow, "id" | "seller_id">, line?: Pick<ReceiveLine, "key" | "label">) => {
+  const buildReceiveSku = (row: Pick<SourcingReceiveRow, "id" | "seller_id" | "source_product_sku">, line?: Pick<ReceiveLine, "key" | "label">) => {
+    if (row.source_product_sku) {
+      if (!line || line.key === "default") return row.source_product_sku;
+      return `${row.source_product_sku}-${skuSuffix(line.label, line.key.toUpperCase())}`;
+    }
     const baseSku = buildInternalSku(row, sellerPrefixMap.get(row.seller_id));
     if (!line || line.key === "default") return baseSku;
     return `${baseSku}-${skuSuffix(line.label, line.key.toUpperCase())}`;
@@ -1142,6 +1172,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     const sourceImage = row.product_image_url || null;
     const buyingPrice = Number(row.seller_price ?? row.landed_price ?? 0) || 0;
     const weightText = row.product_weight || null;
+    const isExistingProductRestock = Boolean(row.source_product_id);
     if (!productId) {
       const { data: existingProduct } = await supabase
         .from("products" as any)
@@ -1149,6 +1180,88 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         .eq("sourcing_request_id", row.id)
         .maybeSingle();
       productId = existingProduct?.id || null;
+    }
+
+    if (isExistingProductRestock && productId) {
+      const { data: sourceProduct, error: sourceProductError } = await supabase
+        .from("products" as any)
+        .select("id, sku, price, landed_price, weight_kg, image_url, scraped_image_url, product_url")
+        .eq("id", productId)
+        .maybeSingle();
+      if (sourceProductError) throw sourceProductError;
+      if (!sourceProduct?.id) throw new Error("Linked product not found for this sourcing request");
+
+      const productPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (buyingPrice > 0) productPatch.landed_price = buyingPrice;
+      if (sourceImage && !sourceProduct.image_url) productPatch.image_url = sourceImage;
+      if (sourceImage && !sourceProduct.scraped_image_url) productPatch.scraped_image_url = sourceImage;
+      if (row.product_url && !sourceProduct.product_url) productPatch.product_url = row.product_url;
+      if (weightText) productPatch.weight = weightText;
+
+      if (Object.keys(productPatch).length > 1) {
+        const { error: updateProductError } = await supabase
+          .from("products" as any)
+          .update(productPatch)
+          .eq("id", productId);
+        if (updateProductError) throw updateProductError;
+      }
+
+      const sourceSku = String(sourceProduct.sku || row.source_product_sku || buildInternalSku(row, await resolveSellerPrefix(row.seller_id))).trim();
+      const { data: variants, error: variantsError } = await supabase
+        .from("product_variants" as any)
+        .select("id, sku, name")
+        .eq("product_id", productId)
+        .eq("active", true)
+        .order("created_at", { ascending: true });
+      if (variantsError) throw variantsError;
+
+      const isDefaultLine = line.key === "default";
+      const normalizedLine = normalizeVariantName(line.label);
+      const normalizedDefaultSku = normalizeVariantName(sourceSku);
+      const expectedVariantSku = isDefaultLine ? sourceSku : `${sourceSku}-${skuSuffix(line.label, line.key.toUpperCase())}`;
+      const normalizedExpectedSku = normalizeVariantName(expectedVariantSku);
+      const existingVariant = (variants || []).find((variant: any) => {
+        const variantName = normalizeVariantName(variant.name);
+        const variantSku = normalizeVariantName(variant.sku);
+        if (isDefaultLine) {
+          return variantName === "default" || variantSku === normalizedDefaultSku;
+        }
+        return (
+          variantName === normalizedLine ||
+          normalizedLine.includes(variantName) ||
+          variantName.includes(normalizedLine) ||
+          variantSku === normalizedExpectedSku
+        );
+      }) || (isDefaultLine && (variants || []).length === 1 ? (variants || [])[0] : null);
+
+      if (existingVariant?.id) {
+        return { productId, variantId: existingVariant.id as string, sku: existingVariant.sku as string };
+      }
+
+      const { data: variantBySku, error: variantBySkuError } = await supabase
+        .from("product_variants" as any)
+        .select("id, sku")
+        .eq("product_id", productId)
+        .eq("sku", expectedVariantSku)
+        .maybeSingle();
+      if (variantBySkuError) throw variantBySkuError;
+      if (variantBySku?.id) return { productId, variantId: variantBySku.id as string, sku: variantBySku.sku as string };
+
+      const { data: createdVariant, error: variantError } = await supabase
+        .from("product_variants" as any)
+        .insert({
+          product_id: productId,
+          sku: expectedVariantSku,
+          name: line.label || "Default",
+          price: sourceProduct.price || 0,
+          landed_cost: buyingPrice || sourceProduct.landed_price || 0,
+          weight_kg: sourceProduct.weight_kg || null,
+          attributes: { source: "warehouse_restock", sourcing_request_id: row.id, receive_line_key: line.key },
+        })
+        .select("id, sku")
+        .single();
+      if (variantError) throw variantError;
+      return { productId, variantId: createdVariant.id as string, sku: createdVariant.sku as string };
     }
 
     const sellerPrefix = await resolveSellerPrefix(row.seller_id);
@@ -1240,6 +1353,23 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     if (error) throw error;
   }
 
+  async function addProductQuantity(productId: string, quantity: number) {
+    if (quantity <= 0) return;
+    const { data: product, error: productError } = await supabase
+      .from("products" as any)
+      .select("quantity")
+      .eq("id", productId)
+      .maybeSingle();
+    if (productError) throw productError;
+
+    const nextQuantity = Number(product?.quantity || 0) + quantity;
+    const { error } = await supabase
+      .from("products" as any)
+      .update({ quantity: nextQuantity, updated_at: new Date().toISOString() })
+      .eq("id", productId);
+    if (error) throw error;
+  }
+
   const saveReceive = async () => {
     if (!receiveDialogRow) return;
     if (receiveLines.length === 0) {
@@ -1267,7 +1397,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       const damagedLocationId = hasDamaged ? await ensureLocation("DAMAGED", "damaged") : null;
 
       for (const line of receiveLines) {
-        const { variantId } = await ensureProductVariant(receiveDialogRow, line);
+        const { productId, variantId } = await ensureProductVariant(receiveDialogRow, line);
         const received = Number(line.receivedQuantity || 0);
         const good = Number(line.goodQuantity || 0);
         const damaged = Number(line.damagedQuantity || 0);
@@ -1275,6 +1405,9 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
         if (good > 0) {
           await addInventoryBalance(variantId, sellableLocationId, good);
+          if (receiveDialogRow.source_product_id) {
+            await addProductQuantity(productId, good);
+          }
           const { error: movementError } = await supabase.from("inventory_movements" as any).insert({
             product_variant_id: variantId,
             movement_type: "restock",

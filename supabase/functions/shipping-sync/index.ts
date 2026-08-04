@@ -200,7 +200,7 @@ async function findShipmentByTracking(supabase: ReturnType<typeof createClient>,
   const carrier = await getCarrier(supabase);
   const { data, error } = await supabase
     .from("shipments")
-    .select("*, carriers(*), orders(delivery_status, shipped_at)")
+    .select("*, carriers(*), orders(delivery_status, shipped_at, delivered_at)")
     .eq("carrier_id", carrier.id)
     .or(`tracking_number.eq.${trackingNumber},carrier_order_id.eq.${trackingNumber}`)
     .maybeSingle();
@@ -408,8 +408,24 @@ async function trackByTrackingNumber(supabase: ReturnType<typeof createClient>, 
       updated_at: now,
     };
     if (normalized === "delivered") orderUpdate.delivered_at = now;
+    if (shipment.orders?.delivery_status === "delivered" && !["delivered", "paid"].includes(nextDeliveryStatus)) {
+      orderUpdate.delivered_at = null;
+    }
     if (shouldSetShippedAt(nextDeliveryStatus)) orderUpdate.shipped_at = shipment.orders?.shipped_at || now;
     await supabase.from("orders").update(orderUpdate).eq("id", shipment.order_uuid);
+
+    if (nextDeliveryStatus !== shipment.orders?.delivery_status) {
+      await supabase.from("order_history").insert({
+        order_id: shipment.order_id,
+        field_changed: "delivery_status",
+        old_value: shipment.orders?.delivery_status,
+        new_value: nextDeliveryStatus,
+        changed_by: "00000000-0000-0000-0000-000000000000",
+        changed_by_role: "system",
+        action_type: "carrier_status_sync",
+        created_at: now,
+      });
+    }
   }
 
   return payload;

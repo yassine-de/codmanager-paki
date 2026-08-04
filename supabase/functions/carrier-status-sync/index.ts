@@ -108,7 +108,8 @@ Deno.serve(async (req) => {
     if (!carrier) throw new Error(`Default carrier is not configured: ${DEFAULT_CARRIER_CODE}`);
 
     const staleBefore = new Date(Date.now() - 12 * 60 * 1000).toISOString();
-    const terminal = ["delivered", "returned", "return_received", "cancelled"];
+    const deliveredWatchAfter = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString();
+    const terminal = ["returned", "return_received", "cancelled"];
 
     const { data: shipments, error } = await supabase
       .from("shipments")
@@ -116,6 +117,7 @@ Deno.serve(async (req) => {
       .eq("carrier_id", carrier.id)
       .not("tracking_number", "is", null)
       .not("normalized_status", "in", `(${terminal.join(",")})`)
+      .or(`normalized_status.neq.delivered,created_at.gte.${deliveredWatchAfter}`)
       .or(`last_synced_at.is.null,last_synced_at.lt.${staleBefore}`)
       .order("last_synced_at", { ascending: true, nullsFirst: true })
       .limit(500);
@@ -168,6 +170,9 @@ Deno.serve(async (req) => {
             updated_at: now,
           };
           if (deliveryStatus === "delivered") orderUpdate.delivered_at = now;
+          if (shipment.orders?.delivery_status === "delivered" && !["delivered", "paid"].includes(deliveryStatus)) {
+            orderUpdate.delivered_at = null;
+          }
           if (shouldSetShippedAt(deliveryStatus)) orderUpdate.shipped_at = shipment.orders?.shipped_at || now;
           await supabase.from("orders").update(orderUpdate).eq("id", shipment.order_uuid);
 
