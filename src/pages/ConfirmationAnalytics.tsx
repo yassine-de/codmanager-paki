@@ -509,7 +509,8 @@ export default function ConfirmationAnalytics() {
       .sort((a, b) => b.count - a.count);
   }, [filteredOrders]);
 
-  // Confirmation rate by product — based on claimed orders (not total)
+  // Confirmation rate by product — same formula as dashboard/summary:
+  // confirmed / (all leads - new pending leads).
   const confirmByProduct = useMemo(() => {
     const map: Record<string, { leads: number; claimed: number; confirmed: number; cancelled: number; pending: number }> = {};
     filteredOrders.forEach(o => {
@@ -533,8 +534,8 @@ export default function ConfirmationAnalytics() {
         confirmed: d.confirmed,
         cancelled: d.cancelled,
         pending: d.pending,
-        rate: d.claimed > 0 ? Math.round((d.confirmed / d.claimed) * 100) : 0,
-        total: d.claimed,
+        rate: confirmationRatePercent(d.confirmed, d.leads, d.pending),
+        total: d.leads,
       }))
       .sort((a, b) => b.rate - a.rate);
   }, [filteredOrders]);

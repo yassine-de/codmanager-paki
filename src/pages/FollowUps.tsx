@@ -342,11 +342,18 @@ export default function FollowUps() {
       .channel("follow-ups-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "order_follow_ups" },
         () => queryClient.invalidateQueries({ queryKey: ["follow-ups-data"] }))
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" },
+        () => queryClient.invalidateQueries({ queryKey: ["follow-ups-data"] }))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [queryClient]);
 
-  const enriched = useMemo(() => rows.map((r) => ({ ...r, segment: computeSegment(r) })), [rows]);
+  const scopedRows = useMemo(() => {
+    if (authUser?.role !== "follow_up") return rows;
+    return rows.filter((r) => r.follow_up_assigned_to === authUser.id);
+  }, [rows, authUser?.role, authUser?.id]);
+
+  const enriched = useMemo(() => scopedRows.map((r) => ({ ...r, segment: computeSegment(r) })), [scopedRows]);
 
   const segCounts = useMemo(() => {
     const c = { failed_attempt: 0, delayed: 0, on_going: 0, none: 0, returned: 0, re_attempted: 0, no_answer: 0 };
@@ -543,7 +550,7 @@ export default function FollowUps() {
             <div>
               <h1 className="text-xl font-bold leading-tight tracking-tight">Follow Ups</h1>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {isLoading ? "Loading…" : `${(totalCount ?? enriched.length).toLocaleString()} orders tracked in real-time`}
+                {isLoading ? "Loading…" : `${(authUser?.role === "follow_up" ? enriched.length : (totalCount ?? enriched.length)).toLocaleString()} orders tracked in real-time`}
               </p>
             </div>
           </div>

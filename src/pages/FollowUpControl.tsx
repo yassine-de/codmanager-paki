@@ -103,8 +103,13 @@ export default function FollowUpControl() {
     refetchInterval: 30000,
   });
 
+  const assignedRows = useMemo(
+    () => rows.filter((r) => r.follow_up_assigned_to === authUser?.id),
+    [rows, authUser?.id],
+  );
+
   // Only treated orders (status != pending)
-  const treated = useMemo(() => rows.filter((r) => r.follow_up_status !== "pending"), [rows]);
+  const treated = useMemo(() => assignedRows.filter((r) => r.follow_up_status !== "pending"), [assignedRows]);
 
   const filtered = useMemo(() => {
     return treated.filter((r) => {

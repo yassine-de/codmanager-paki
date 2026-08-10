@@ -300,7 +300,20 @@ export function AppSidebar() {
       const { count, error } = await supabase
         .from("orders")
         .select("*", { count: "exact", head: true })
-        .eq("follow_up_assigned_to", authUser!.id);
+        .eq("follow_up_assigned_to", authUser!.id)
+        .in("delivery_status", [
+          "shipped",
+          "in_transit",
+          "out_for_delivery",
+          "with_courier",
+          "delivered",
+          "paid",
+          "failed_attempt",
+          "returned",
+          "return",
+          "ready_for_return",
+          "return_received",
+        ]);
       if (error) throw error;
       return count || 0;
     },

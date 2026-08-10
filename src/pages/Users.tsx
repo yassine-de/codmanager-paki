@@ -36,6 +36,13 @@ interface Permission {
   description: string | null;
 }
 
+interface ProductOption {
+  id: string;
+  name: string;
+  sku: string;
+  seller_id: string;
+}
+
 const roleConfig: Record<string, { label: string; icon: typeof Shield; color: string }> = {
   admin: { label: "Admin", icon: Shield, color: "bg-primary/10 text-primary border-primary/20" },
   seller: { label: "Seller", icon: Store, color: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
@@ -84,6 +91,9 @@ const Users = () => {
     customRoleName: "",
     agentProductScope: "all" as "all" | "specific",
     agentProducts: [] as string[],
+    followUpReceivesNewOrders: true,
+    followUpProductScope: "all" as "all" | "specific",
+    followUpProducts: [] as string[],
   });
 
   const { data: users = [], isLoading: loading } = useQuery({
@@ -107,6 +117,20 @@ const Users = () => {
     staleTime: 300000,
   });
 
+  const { data: products = [] } = useQuery({
+    queryKey: ["products-for-follow-up-assignment"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, name, sku, seller_id")
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      return (data || []) as ProductOption[];
+    },
+    staleTime: 300000,
+  });
+
   const refetchUsers = () => queryClient.invalidateQueries({ queryKey: ["manage-users-list"] });
 
   const openCreate = () => {
@@ -116,6 +140,8 @@ const Users = () => {
       role: "seller", ...defaultSellerRateFields,
       selectedPermissions: [], customRoleName: "",
       agentProductScope: "all", agentProducts: [],
+      followUpReceivesNewOrders: true,
+      followUpProductScope: "all", followUpProducts: [],
     });
     setModalOpen(true);
   };
@@ -137,6 +163,26 @@ const Users = () => {
       }
     }
 
+    let followUpReceivesNewOrders = true;
+    let followUpProductScope: "all" | "specific" = "all";
+    let followUpProducts: string[] = [];
+    if (user.role === "follow_up") {
+      const [{ data: settings }, { data: assignments }] = await Promise.all([
+        (supabase as any)
+          .from("follow_up_agent_settings")
+          .select("receives_new_orders")
+          .eq("follow_up_user_id", user.user_id)
+          .maybeSingle(),
+        (supabase as any)
+          .from("follow_up_product_assignments")
+          .select("product_id")
+          .eq("follow_up_user_id", user.user_id),
+      ]);
+      followUpReceivesNewOrders = settings?.receives_new_orders ?? true;
+      followUpProducts = (assignments || []).map((row: { product_id: string }) => row.product_id);
+      followUpProductScope = followUpProducts.length > 0 ? "specific" : "all";
+    }
+
     setForm({
       name: user.name,
       email: user.email,
@@ -153,6 +199,9 @@ const Users = () => {
       customRoleName: "",
       agentProductScope,
       agentProducts,
+      followUpReceivesNewOrders,
+      followUpProductScope,
+      followUpProducts,
     });
     setModalOpen(true);
   };
@@ -165,6 +214,32 @@ const Users = () => {
       await supabase.from("agent_products").insert(
         form.agentProducts.map(name => ({ agent_id: agentId, product_name: name }))
       );
+    }
+  };
+
+  const saveFollowUpSettings = async (followUpUserId: string) => {
+    const { error: settingsError } = await (supabase as any)
+      .from("follow_up_agent_settings")
+      .upsert({
+        follow_up_user_id: followUpUserId,
+        receives_new_orders: form.followUpReceivesNewOrders,
+      }, { onConflict: "follow_up_user_id" });
+    if (settingsError) throw settingsError;
+
+    const { error: deleteError } = await (supabase as any)
+      .from("follow_up_product_assignments")
+      .delete()
+      .eq("follow_up_user_id", followUpUserId);
+    if (deleteError) throw deleteError;
+
+    if (form.followUpProductScope === "specific" && form.followUpProducts.length > 0) {
+      const { error: insertError } = await (supabase as any)
+        .from("follow_up_product_assignments")
+        .insert(form.followUpProducts.map((productId) => ({
+          follow_up_user_id: followUpUserId,
+          product_id: productId,
+        })));
+      if (insertError) throw insertError;
     }
   };
 
@@ -203,6 +278,9 @@ const Users = () => {
         if (form.role === "agent") {
           await saveAgentProducts(editingUser.user_id);
         }
+        if (form.role === "follow_up") {
+          await saveFollowUpSettings(editingUser.user_id);
+        }
 
         toast.success("Utilisateur modifié");
       } else {
@@ -233,6 +311,9 @@ const Users = () => {
         // Save agent product assignments for new user
         if (form.role === "agent" && data?.userId) {
           await saveAgentProducts(data.userId);
+        }
+        if (form.role === "follow_up" && data?.userId) {
+          await saveFollowUpSettings(data.userId);
         }
 
         toast.success("Utilisateur créé");
@@ -490,6 +571,11 @@ const Users = () => {
                   ...f,
                   role: v,
                   ...(v === "seller" && !editingUser ? defaultSellerRateFields : {}),
+                  ...(v === "follow_up" ? {
+                    followUpReceivesNewOrders: f.followUpReceivesNewOrders ?? true,
+                    followUpProductScope: f.followUpProductScope ?? "all",
+                    followUpProducts: f.followUpProducts ?? [],
+                  } : {}),
                 }))}>
                   <SelectTrigger className="h-9 text-xs">
                     <SelectValue />
@@ -593,6 +679,73 @@ const Users = () => {
                     </p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {form.role === "follow_up" && (
+              <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <Label className="text-xs font-semibold">Receive new follow-up orders</Label>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      When off, this user keeps old assigned orders but receives no new shipped orders.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.followUpReceivesNewOrders}
+                    onCheckedChange={(checked) => setForm((f) => ({ ...f, followUpReceivesNewOrders: checked }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Product assignment</Label>
+                  <Select
+                    value={form.followUpProductScope}
+                    onValueChange={(v: "all" | "specific") => setForm((f) => ({
+                      ...f,
+                      followUpProductScope: v,
+                      followUpProducts: v === "all" ? [] : f.followUpProducts,
+                    }))}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">All products</SelectItem>
+                      <SelectItem value="specific" className="text-xs">Specific products</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {form.followUpProductScope === "specific" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] text-muted-foreground">Select products</Label>
+                      <ScrollArea className="h-48 rounded-md border border-input bg-background p-2">
+                        {products.map((product) => (
+                          <label key={product.id} className="flex items-start gap-2 py-1.5 px-1 rounded hover:bg-accent cursor-pointer">
+                            <Checkbox
+                              checked={form.followUpProducts.includes(product.id)}
+                              onCheckedChange={(checked) => {
+                                setForm((f) => ({
+                                  ...f,
+                                  followUpProducts: checked
+                                    ? [...f.followUpProducts, product.id]
+                                    : f.followUpProducts.filter((id) => id !== product.id),
+                                }));
+                              }}
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-xs font-medium truncate">{product.name}</span>
+                              <span className="block text-[10px] text-muted-foreground font-mono truncate">{product.sku}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </ScrollArea>
+                      <p className="text-[10px] text-muted-foreground">
+                        {form.followUpProducts.length} product(s) selected
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

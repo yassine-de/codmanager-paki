@@ -56,23 +56,28 @@ export default function FollowUpDashboard() {
     refetchInterval: 30000,
   });
 
+  const assignedRows = useMemo(
+    () => rows.filter((r) => r.follow_up_assigned_to === userId),
+    [rows, userId],
+  );
+
   const kpis = useMemo(() => {
-    const total = rows.length;
-    const pending = rows.filter((r) => r.follow_up_status === "pending").length;
-    const treated = rows.filter((r) => r.follow_up_status !== "pending").length;
-    const closed = rows.filter((r) => r.follow_up_status === "closed").length;
-    const delivered = rows.filter((r) => r.delivery_status === "delivered").length;
+    const total = assignedRows.length;
+    const pending = assignedRows.filter((r) => r.follow_up_status === "pending").length;
+    const treated = assignedRows.filter((r) => r.follow_up_status !== "pending").length;
+    const closed = assignedRows.filter((r) => r.follow_up_status === "closed").length;
+    const delivered = assignedRows.filter((r) => r.delivery_status === "delivered").length;
     const conversionRate = treated > 0 ? Math.round((delivered / treated) * 100) : 0;
 
     const today = startOfDay(new Date());
-    const treatedToday = rows.filter((r) => {
+    const treatedToday = assignedRows.filter((r) => {
       if (!r.follow_up_updated_at) return false;
       const d = new Date(r.follow_up_updated_at);
       return d >= today && d <= endOfDay(new Date()) && r.follow_up_status !== "pending";
     }).length;
 
     return { total, pending, treated, closed, delivered, conversionRate, treatedToday };
-  }, [rows]);
+  }, [assignedRows]);
 
   const last7Days = useMemo(() => {
     const days: { date: string; label: string; treated: number }[] = [];
@@ -80,7 +85,7 @@ export default function FollowUpDashboard() {
       const day = subDays(new Date(), i);
       const start = startOfDay(day);
       const end = endOfDay(day);
-      const count = rows.filter((r) => {
+      const count = assignedRows.filter((r) => {
         if (!r.follow_up_updated_at || r.follow_up_status === "pending") return false;
         const d = new Date(r.follow_up_updated_at);
         return d >= start && d <= end;
@@ -88,18 +93,18 @@ export default function FollowUpDashboard() {
       days.push({ date: format(day, "yyyy-MM-dd"), label: format(day, "EEE"), treated: count });
     }
     return days;
-  }, [rows]);
+  }, [assignedRows]);
 
   const statusBreakdown = useMemo(() => {
     const buckets: Record<string, number> = {};
-    rows.forEach((r) => {
+    assignedRows.forEach((r) => {
       buckets[r.follow_up_status] = (buckets[r.follow_up_status] || 0) + 1;
     });
     return Object.entries(buckets).map(([status, count]) => ({
       status: status.replace(/_/g, " "),
       count,
     }));
-  }, [rows]);
+  }, [assignedRows]);
 
   if (!authLoading && authUser && authUser.role !== "follow_up") {
     return <Navigate to="/" replace />;
