@@ -11,6 +11,7 @@ import {
   TrendingUp,
   PhoneCall,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { formatPKT as format, startOfDayPKT as startOfDay, endOfDayPKT as endOfDay, subDaysPKT as subDays } from "@/lib/timezone";
 import {
@@ -37,6 +38,7 @@ interface FollowUpRow {
   follow_up_updated_at: string | null;
   follow_up_assigned_to: string | null;
   delivery_status: string | null;
+  order_updated_at: string;
 }
 
 export default function FollowUpDashboard() {
@@ -61,6 +63,63 @@ export default function FollowUpDashboard() {
     [rows, userId],
   );
 
+  const reAttemptedRows = useMemo(
+    () => assignedRows.filter((r) => r.follow_up_status === "re_attempted"),
+    [assignedRows],
+  );
+
+  const reAttemptedOrderIds = useMemo(
+    () => reAttemptedRows.map((r) => r.order_id),
+    [reAttemptedRows],
+  );
+
+  const savedOrdersRefreshKey = useMemo(() => {
+    return reAttemptedRows
+      .map((r) => `${r.order_id}:${r.delivery_status ?? ""}:${r.follow_up_updated_at ?? ""}:${r.order_updated_at ?? ""}`)
+      .join("|");
+  }, [reAttemptedRows]);
+
+  const { data: savedOrdersCount = 0 } = useQuery({
+    queryKey: ["follow-up-saved-orders", userId, savedOrdersRefreshKey],
+    queryFn: async () => {
+      if (reAttemptedOrderIds.length === 0) return 0;
+
+      const reAttemptedByOrder = new Map(
+        reAttemptedRows.map((r) => [r.order_id, r.follow_up_updated_at ? new Date(r.follow_up_updated_at).getTime() : 0]),
+      );
+
+      const { data, error } = await supabase
+        .from("order_history")
+        .select("order_id, created_at")
+        .eq("field_changed", "delivery_status")
+        .in("new_value", ["delivered", "paid"])
+        .in("order_id", reAttemptedOrderIds);
+
+      if (error) throw error;
+
+      const savedOrderIds = new Set<string>();
+      (data ?? []).forEach((event) => {
+        const reAttemptedAt = reAttemptedByOrder.get(event.order_id);
+        if (!reAttemptedAt) return;
+        if (new Date(event.created_at).getTime() >= reAttemptedAt) {
+          savedOrderIds.add(event.order_id);
+        }
+      });
+
+      reAttemptedRows.forEach((row) => {
+        if (savedOrderIds.has(row.order_id)) return;
+        if (!["delivered", "paid"].includes(row.delivery_status ?? "")) return;
+        const reAttemptedAt = row.follow_up_updated_at ? new Date(row.follow_up_updated_at).getTime() : 0;
+        const lastOrderUpdate = new Date(row.order_updated_at).getTime();
+        if (lastOrderUpdate >= reAttemptedAt) savedOrderIds.add(row.order_id);
+      });
+
+      return savedOrderIds.size;
+    },
+    enabled: !!userId && authUser?.role === "follow_up" && reAttemptedOrderIds.length > 0,
+    refetchInterval: 30000,
+  });
+
   const kpis = useMemo(() => {
     const total = assignedRows.length;
     const pending = assignedRows.filter((r) => r.follow_up_status === "pending").length;
@@ -76,8 +135,8 @@ export default function FollowUpDashboard() {
       return d >= today && d <= endOfDay(new Date()) && r.follow_up_status !== "pending";
     }).length;
 
-    return { total, pending, treated, closed, delivered, conversionRate, treatedToday };
-  }, [assignedRows]);
+    return { total, pending, treated, closed, delivered, conversionRate, treatedToday, savedOrders: savedOrdersCount };
+  }, [assignedRows, savedOrdersCount]);
 
   const last7Days = useMemo(() => {
     const days: { date: string; label: string; treated: number }[] = [];
@@ -122,7 +181,7 @@ export default function FollowUpDashboard() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
         <KPICard
           icon={Hourglass}
           label="Pending"
@@ -142,6 +201,13 @@ export default function FollowUpDashboard() {
           label="Delivered"
           value={kpis.delivered}
           sub={`${kpis.conversionRate}% conversion`}
+          tone="success"
+        />
+        <KPICard
+          icon={ShieldCheck}
+          label="Saved Orders"
+          value={kpis.savedOrders}
+          sub="Delivered after re-attempt"
           tone="success"
         />
         <KPICard
