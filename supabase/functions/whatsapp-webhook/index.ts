@@ -518,9 +518,11 @@ async function applyOutcome(
     log("button confirm gated: awaiting AI address validation", order.order_id);
     return;
   } else if (outcome === "more_info") {
-    updates.confirmation_status = "new";
+    updates.confirmation_status = String(order.confirmation_status || "").toLowerCase() === "no_answer" ? "no_answer" : "new";
     updates.confirmation_channel = "agent";
     updates.agent_id = null;
+    updates.assigned_at = null;
+    updates.last_activity_at = null;
   } else if (outcome === "canceled") {
     // IMPORTANT: WhatsApp button can only confirm orders, NEVER cancel them.
     // We only flag the conversation/order so a human agent can decide.
@@ -1579,7 +1581,7 @@ async function aiContinueReply(args: {
   }
 
   // Handle handoff_to_agent tool call: route the order to the agent queue
-  // (confirmation_status='new', agent_id=null, channel='agent') and turn AI
+  // without turning no_answer into new, and turn AI
   // off on this conversation so a human takes over.
   const handoffCall = toolCalls.find(
     (c: any) => c?.function?.name === "handoff_to_agent",
@@ -1606,12 +1608,15 @@ async function aiContinueReply(args: {
         .includes(String(order.confirmation_status || "").toLowerCase());
 
       if (releasable) {
+        const nextConfirmationStatus = String(beforeStatus || "").toLowerCase() === "no_answer" ? "no_answer" : "new";
         await admin
           .from("orders")
           .update({
-            confirmation_status: "new",
+            confirmation_status: nextConfirmationStatus,
             confirmation_channel: "agent",
             agent_id: null,
+            assigned_at: null,
+            last_activity_at: null,
             whatsapp_status: "handoff_to_agent",
             whatsapp_note: `AI handoff to human agent. ${reason ? `Reason: ${reason}` : ""}`.slice(0, 500),
             whatsapp_last_reply_at: new Date().toISOString(),
@@ -1624,7 +1629,7 @@ async function aiContinueReply(args: {
             actionType: "whatsapp_handoff",
             role: "ai",
             before: { confirmation_status: beforeStatus, agent_id: beforeAgent ?? null },
-            after: { confirmation_status: "new", agent_id: null },
+            after: { confirmation_status: nextConfirmationStatus, agent_id: null },
             fields: ["confirmation_status", "agent_id"],
           });
         } catch { /* non-fatal */ }

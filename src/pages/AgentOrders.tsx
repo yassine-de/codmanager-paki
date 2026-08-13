@@ -157,8 +157,8 @@ const AgentOrders = () => {
   const currentOrderRef = useRef<DbOrder | null>(null);
   const [orderElapsedSec, setOrderElapsedSec] = useState(0);
   const orderTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const ORDER_WARNING_SEC = 5 * 60; // 5 minutes warning threshold
-  const ORDER_AUTO_RELEASE_SEC = 6 * 60; // 6 minutes auto-release
+  const ORDER_WARNING_SEC = 12 * 60; // 12 minutes warning threshold
+  const ORDER_AUTO_RELEASE_SEC = 15 * 60; // 15 minutes auto-release
   const releasedRef = useRef(false);
 
   const resetForm = useCallback(() => {
@@ -611,10 +611,6 @@ const AgentOrders = () => {
         selectedStatus !== "postponed"
       ) {
         await supabase.rpc("release_order_lock" as any, { p_order_id: currentOrder.id, p_agent_id: authUser.id });
-        // For non-new orders, also un-assign agent
-        if (currentOrder.confirmation_status !== "new") {
-          await supabase.from("orders").update({ agent_id: null, assigned_at: null, last_activity_at: null } as any).eq("id", currentOrder.id);
-        }
         toast.info(`Order ${currentOrder.order_id} released — no status change`);
         await loadNextOrder();
         return;

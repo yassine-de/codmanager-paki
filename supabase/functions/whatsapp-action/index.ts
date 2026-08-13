@@ -66,9 +66,11 @@ Deno.serve(async (req) => {
       convStatus = "confirmed";
     } else if (action === "to_agent") {
       updates = {
-        confirmation_status: "new",
+        confirmation_status: String(order.confirmation_status || "").toLowerCase() === "no_answer" ? "no_answer" : "new",
         confirmation_channel: "agent",
         agent_id: null,
+        assigned_at: null,
+        last_activity_at: null,
         whatsapp_status: "more_info",
       };
       convStatus = "more_info";

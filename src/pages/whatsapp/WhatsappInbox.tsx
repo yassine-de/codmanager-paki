@@ -1399,20 +1399,61 @@ export default function WhatsappInbox() {
         .eq("id", selected);
       if (convErr) throw convErr;
 
-      // 2) Reset order back into the agent queue (unassign + status=new + channel=agent)
+      const { data: currentOrder, error: currentOrderErr } = await supabase
+        .from("orders")
+        .select("confirmation_status, agent_id")
+        .eq("order_id", conv.order_id)
+        .maybeSingle();
+      if (currentOrderErr) throw currentOrderErr;
+
+      const previousConfirmationStatus = currentOrder?.confirmation_status || "new";
+      const nextConfirmationStatus = previousConfirmationStatus === "no_answer" ? "no_answer" : "new";
+      const previousAgentId = currentOrder?.agent_id || null;
+
+      // 2) Reset order back into the agent queue without turning no_answer into new.
       const { error: ordErr } = await supabase
         .from("orders")
         .update({
           confirmation_channel: "agent",
-          confirmation_status: "new",
+          confirmation_status: nextConfirmationStatus,
           agent_id: null,
           assigned_at: null,
           postpone_date: null,
           whatsapp_status: "handed_to_agent",
-          last_activity_at: new Date().toISOString(),
+          last_activity_at: null,
         })
         .eq("order_id", conv.order_id);
       if (ordErr) throw ordErr;
+
+      if (authUser?.id) {
+        const role = isAdmin ? "admin" : "agent";
+        const histEntries: any[] = [];
+        if (previousConfirmationStatus !== nextConfirmationStatus) {
+          histEntries.push({
+            order_id: conv.order_id,
+            changed_by: authUser.id,
+            changed_by_role: role,
+            field_changed: "confirmation_status",
+            old_value: previousConfirmationStatus,
+            new_value: nextConfirmationStatus,
+            action_type: "force_to_agent",
+          });
+        }
+        if (previousAgentId) {
+          histEntries.push({
+            order_id: conv.order_id,
+            changed_by: authUser.id,
+            changed_by_role: role,
+            field_changed: "agent_lock",
+            old_value: previousAgentId,
+            new_value: null,
+            action_type: "force_to_agent",
+          });
+        }
+        if (histEntries.length > 0) {
+          await supabase.from("order_history").insert(histEntries);
+        }
+      }
 
       qc.invalidateQueries({ queryKey: ["wts-convos"] });
       qc.invalidateQueries({ queryKey: ["wts-order", conv.order_id] });
@@ -3256,17 +3297,34 @@ export default function WhatsappInbox() {
                           return;
                         }
                         setUpdatingStatus(true);
-                        const updates: { updated_at: string; confirmation_status?: string; delivery_status?: string; cancel_reason?: string; agent_id?: null; assigned_at?: null } = { updated_at: new Date().toISOString() };
+                        const updates: {
+                          updated_at: string;
+                          confirmation_status?: string;
+                          delivery_status?: string;
+                          cancel_reason?: string;
+                          agent_id?: null;
+                          assigned_at?: null;
+                          last_activity_at?: null;
+                        } = { updated_at: new Date().toISOString() };
+                        let forcedToAgent = false;
                         if (selectedConfirmationStatus !== (order.confirmation_status || "new")) updates.confirmation_status = selectedConfirmationStatus;
                         if (selectedConfirmationStatus === "cancelled" && cancelReasonValue !== (order.cancel_reason || "")) {
                           updates.cancel_reason = cancelReasonValue;
                         }
                         if (selectedDeliveryStatus !== (order.delivery_status || "pending")) {
                           if (selectedDeliveryStatus === "new") {
-                            // "New (force to agent)" — push the order back to the agent queue
-                            updates.confirmation_status = "new";
+                            // "New (force to agent)" — push back without turning no_answer into new.
+                            forcedToAgent = true;
+                            const currentConfirmationStatus = order.confirmation_status || "new";
+                            const nextConfirmationStatus = currentConfirmationStatus === "no_answer" ? "no_answer" : "new";
+                            if (nextConfirmationStatus !== currentConfirmationStatus) {
+                              updates.confirmation_status = nextConfirmationStatus;
+                            } else {
+                              delete updates.confirmation_status;
+                            }
                             updates.agent_id = null;
                             updates.assigned_at = null;
+                            updates.last_activity_at = null;
                           } else {
                             updates.delivery_status = selectedDeliveryStatus;
                           }
@@ -3291,7 +3349,18 @@ export default function WhatsappInbox() {
                               field_changed: "confirmation_status",
                               old_value: order.confirmation_status || "new",
                               new_value: updates.confirmation_status,
-                              action_type: "status_change",
+                              action_type: forcedToAgent ? "force_to_agent" : "status_change",
+                            });
+                          }
+                          if (forcedToAgent && order.agent_id) {
+                            histEntries.push({
+                              order_id: order.order_id,
+                              changed_by: authUser.id,
+                              changed_by_role: role,
+                              field_changed: "agent_lock",
+                              old_value: order.agent_id,
+                              new_value: null,
+                              action_type: "force_to_agent",
                             });
                           }
                           if (updates.delivery_status) {

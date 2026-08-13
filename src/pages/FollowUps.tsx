@@ -536,6 +536,7 @@ export default function FollowUps() {
 
   const isSeller = authUser?.role === "seller";
   const visibleColumns = columns.filter((c) => c.visible && !(isSeller && c.key === "note"));
+  const scopedTotalCount = authUser?.role === "follow_up" ? enriched.length : (totalCount ?? enriched.length);
 
   return (
     <TooltipProvider>
@@ -550,7 +551,7 @@ export default function FollowUps() {
             <div>
               <h1 className="text-xl font-bold leading-tight tracking-tight">Follow Ups</h1>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {isLoading ? "Loading…" : `${(authUser?.role === "follow_up" ? enriched.length : (totalCount ?? enriched.length)).toLocaleString()} orders tracked in real-time`}
+                {isLoading ? "Loading…" : `${scopedTotalCount.toLocaleString()} orders tracked in real-time`}
               </p>
             </div>
           </div>
@@ -576,7 +577,7 @@ export default function FollowUps() {
             All orders
             <span className={`tabular-nums text-[10px] rounded-full px-1.5 py-0.5 font-semibold ${
               segment === "all" ? "bg-white/20" : "bg-muted"
-            }`}>{(totalCount ?? enriched.length).toLocaleString()}</span>
+            }`}>{scopedTotalCount.toLocaleString()}</span>
           </button>
 
           {(["failed_attempt", "delayed", "on_going"] as const).map((seg) => {
