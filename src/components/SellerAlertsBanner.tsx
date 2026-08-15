@@ -26,12 +26,13 @@ export function SellerAlertsBanner() {
   const { data: alerts = [] } = useQuery({
     queryKey: ["seller-alerts"],
     queryFn: async () => {
+      const nowIso = new Date().toISOString();
       const { data, error } = await supabase
         .from("alerts")
         .select("id, title, message, urgency")
         .eq("is_active", true)
-        .or("start_date.is.null,start_date.lte.now()")
-        .or("end_date.is.null,end_date.gte.now()")
+        .or(`start_date.is.null,start_date.lte.${nowIso}`)
+        .or(`end_date.is.null,end_date.gte.${nowIso}`)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as Alert[];
