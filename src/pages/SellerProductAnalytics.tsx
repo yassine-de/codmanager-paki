@@ -338,7 +338,7 @@ export default function SellerProductAnalytics() {
   if (!sellerId) return null;
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 w-full max-w-none">
 
       {/* ── Page Header ────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3">

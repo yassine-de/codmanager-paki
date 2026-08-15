@@ -578,7 +578,7 @@ export default function ConfirmationAnalytics() {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl">
+    <div className="space-y-6 w-full max-w-none">
       <div className="animate-fade-in">
         <h1 className="text-2xl font-semibold">Confirmation Analytics</h1>
         <p className="text-muted-foreground text-sm mt-1">Agent performance & confirmation insights</p>

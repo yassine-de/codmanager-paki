@@ -384,7 +384,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="max-w-[1400px]">
+    <div className="w-full max-w-none">
       <div className="sticky top-0 z-30 -mx-5 lg:-mx-6 px-5 lg:px-6 py-3 bg-background/80 glass border-b mb-1 flex flex-wrap items-center gap-3">
         <DatePresetFilter
           dateRange={dateRange}

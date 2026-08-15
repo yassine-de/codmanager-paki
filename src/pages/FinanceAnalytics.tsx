@@ -396,7 +396,7 @@ export default function FinanceAnalytics() {
   ];
 
   return (
-    <div className="space-y-6 max-w-7xl">
+    <div className="space-y-6 w-full max-w-none">
       <div className="animate-fade-in">
         <h1 className="text-2xl font-semibold">Finance</h1>
         <p className="text-muted-foreground text-sm mt-1">Exact revenue breakdown from shipping, call center, COD fees & sourcing</p>

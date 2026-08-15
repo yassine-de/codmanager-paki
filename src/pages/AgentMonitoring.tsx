@@ -156,7 +156,7 @@ export default function AgentMonitoring() {
   const rangeLabel = days === 1 ? "Today" : `Last ${days} days`;
 
   return (
-    <div className="space-y-6 max-w-7xl">
+    <div className="space-y-6 w-full max-w-none">
       <div className="animate-fade-in flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Agent Monitoring</h1>

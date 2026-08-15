@@ -316,7 +316,7 @@ const Integrations = () => {
   const activeSheets = sheets.filter((s) => s.active).length;
 
   return (
-    <div className="max-w-[1200px] space-y-6">
+    <div className="w-full max-w-none space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

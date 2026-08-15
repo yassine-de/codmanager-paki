@@ -536,7 +536,7 @@ export default function SellerAnalytics() {
 
   if (isLoading) {
     return (
-      <div className="space-y-8 max-w-7xl p-1">
+      <div className="space-y-8 w-full max-w-none p-1">
         {/* Header skeleton */}
         <div className="space-y-2 animate-pulse">
           <div className="h-7 w-48 rounded-lg bg-muted" />
@@ -561,7 +561,7 @@ export default function SellerAnalytics() {
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-8 max-w-7xl p-1">
+    <div className="space-y-8 w-full max-w-none p-1">
 
       {/* ── Page Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 animate-fade-in">
