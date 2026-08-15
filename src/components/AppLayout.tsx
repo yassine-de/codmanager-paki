@@ -43,7 +43,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Pages that benefit from full-width layout (no max-width constraint)
   const isFullWidthRoute =
     location.pathname.startsWith("/whatsapp/inbox") ||
-    location.pathname.startsWith("/products");
+    location.pathname.startsWith("/products") ||
+    // Dashboard (shared by admin & seller)
+    location.pathname === "/" ||
+    // Admin: Orders, Follow Ups, all Analytics pages, Settings/Integrations
+    location.pathname === "/orders" ||
+    location.pathname === "/follow-ups" ||
+    location.pathname.startsWith("/analytics") ||
+    location.pathname === "/settings" ||
+    location.pathname === "/integrations" ||
+    // Seller: Analytics, Sheets, Settings
+    location.pathname === "/seller-analytics" ||
+    location.pathname === "/sheets" ||
+    location.pathname === "/seller-settings";
   const { authUser, signOut } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const { language, setLanguage, t } = useLanguage();
