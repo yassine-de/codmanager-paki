@@ -357,30 +357,8 @@ export default function Finance2() {
         </div>
       </div>
 
-      <section className="space-y-3">
-        <SectionTitle title="Financial Overview" />
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-          <MetricCard title="Next Payout" value={formatUSD(mainTotals.nextPayout)} helper="Open + ready invoices from main sellers" icon={Wallet} tone="green" large />
-          <MetricCard title="Fee Revenue" value={formatUSD(mainTotals.feeRevenue)} helper="Shipping + COD + call center + invoice fee impact" icon={DollarSign} tone="rose" large />
-          <MetricCard title="Gross Revenue" value={formatUSD(mainTotals.revenue)} helper="Delivered revenue for main sellers" icon={ReceiptText} tone="blue" large />
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Shipping Fees" value={formatUSD(mainTotals.shipping)} helper={`${mainTotals.delivered} delivered · ${mainTotals.totalOrders} orders`} icon={Truck} tone="green" />
-          <MetricCard title="COD Fees" value={formatUSD(mainTotals.cod)} helper="Charged only to main sellers" icon={CreditCard} tone="rose" />
-          <MetricCard title="Call Center Fees" value={formatUSD(mainTotals.callCenter)} helper="Confirmed + dropped lead fees" icon={Phone} tone="amber" />
-          <MetricCard title="Paid" value={formatUSD(mainTotals.paid)} helper="Already paid to main sellers" icon={Banknote} tone="green" />
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <SectionTitle title="Anwar Separate" badge="No fees charged" />
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Anwar Next Payout" value={formatUSD(anwarTotals.nextPayout)} helper="Open + ready Anwar invoices" icon={Wallet} tone="blue" />
-          <MetricCard title="Anwar Revenue" value={formatUSD(anwarTotals.revenue)} helper={`${anwarTotals.delivered} delivered orders`} icon={ReceiptText} tone="blue" />
-          <MetricCard title="Anwar Fees" value={formatUSD(0)} helper="Anwar is excluded from fee revenue" icon={DollarSign} tone="muted" />
-          <MetricCard title="Anwar Paid" value={formatUSD(anwarTotals.paid)} helper="Already paid Anwar invoices" icon={Banknote} tone="green" />
-        </div>
-      </section>
+      <FinanceOverviewGrid title="All Sellers Without Anwar" totals={mainTotals} />
+      <FinanceOverviewGrid title="Anwar" totals={anwarTotals} anwar />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.55fr)]">
         <section className="overflow-hidden rounded-xl border bg-card">
@@ -463,9 +441,104 @@ export default function Finance2() {
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        Next Payout includes every non-paid invoice, including open invoices. Anwar is shown separately and excluded from all fee revenue.
+        Next Payout includes every non-paid invoice, including open invoices. Anwar is shown separately and no fees are counted for Anwar.
       </p>
     </div>
+  );
+}
+
+function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; totals: FinanceTotals; anwar?: boolean }) {
+  const operatingCosts = anwar ? 0 : totals.shipping + totals.callCenter + totals.cod + Math.max(0, totals.otherImpact);
+  const netProfit = anwar ? 0 : totals.feeRevenue;
+
+  return (
+    <section className="space-y-3">
+      <SectionTitle title={title} badge={anwar ? "No fees charged" : undefined} />
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+        <MetricCard
+          title="Net Profit"
+          value={formatUSD(netProfit)}
+          helper={anwar ? "Anwar is not charged fees" : "Invoice fee revenue from sellers"}
+          icon={BadgeDollarSign}
+          tone="green"
+          large
+        />
+        <MetricCard
+          title="Gross Revenue"
+          value={formatUSD(totals.revenue)}
+          helper="Delivered revenue from invoice summaries"
+          icon={DollarSign}
+          tone="rose"
+          large
+        />
+        <MetricCard
+          title="Next Payout"
+          value={formatUSD(totals.nextPayout)}
+          helper="All non-paid invoices, including open invoices"
+          icon={Wallet}
+          tone="amber"
+          large
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Delivery Revenue"
+          value={formatUSD(totals.revenue)}
+          helper={`${totals.delivered} delivered orders`}
+          icon={Truck}
+          tone="green"
+        />
+        <MetricCard
+          title="COD Fee Revenue"
+          value={formatUSD(anwar ? 0 : totals.cod)}
+          helper={anwar ? "No COD fee for Anwar" : "COD fees charged to sellers"}
+          icon={CreditCard}
+          tone="rose"
+        />
+        <MetricCard
+          title="Operating Costs"
+          value={formatUSD(operatingCosts)}
+          helper={anwar ? "No fees counted for Anwar" : "Shipping, COD, call center, other fee impact"}
+          icon={ReceiptText}
+          tone="blue"
+        />
+        <MetricCard
+          title="Shipping Cost"
+          value={formatUSD(anwar ? 0 : totals.shipping)}
+          helper={anwar ? "No shipping fee for Anwar" : `${totals.totalOrders} invoiced orders`}
+          icon={Truck}
+          tone="rose"
+        />
+        <MetricCard
+          title="Fulfillment Cost"
+          value={formatUSD(0)}
+          helper="Not tracked in invoice summaries yet"
+          icon={Banknote}
+          tone="amber"
+        />
+        <MetricCard
+          title="Packaging Cost"
+          value={formatUSD(0)}
+          helper="Not tracked in invoice summaries yet"
+          icon={ReceiptText}
+          tone="amber"
+        />
+        <MetricCard
+          title="Paid"
+          value={formatUSD(totals.paid)}
+          helper="Already paid invoices"
+          icon={Banknote}
+          tone="green"
+        />
+        <MetricCard
+          title="Call Center Cost"
+          value={formatUSD(anwar ? 0 : totals.callCenter)}
+          helper={anwar ? "No call center fee for Anwar" : "Confirmed + dropped lead fees"}
+          icon={Phone}
+          tone="rose"
+        />
+      </div>
+    </section>
   );
 }
 
