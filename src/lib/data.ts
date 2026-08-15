@@ -3,7 +3,7 @@ import { confirmationRatePercent } from "@/lib/confirmation-rate";
 export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | 'returned' | 'postponed' | 'no_answer' | 'double' | 'wrong_number' | 'in_transit' | 'with_courier' | 'failed';
 
 export type ConfirmationStatus = 'new' | 'new_wts' | 'confirmed' | 'no_answer' | 'unreachable' | 'postponed' | 'cancelled' | 'wrong_number' | 'double';
-export type DeliveryStatus = 'pending' | 'booked' | 'printed' | 'dispatched' | 'shipped' | 'in_transit' | 'with_courier' | 'delivered' | 'returned' | 'cancelled' | 'no_answer' | 'postponed' | 'failed' | 'failed_attempt' | 'ready_for_return' | 'rejected' | 'return' | 'return_received';
+export type DeliveryStatus = 'pending' | 'booked' | 'printed' | 'dispatched' | 'shipped' | 'in_transit' | 'with_courier' | 'delivered' | 'returned' | 'cancelled' | 'no_answer' | 'postponed' | 'failed' | 'failed_attempt' | 'ready_for_return' | 'rejected' | 'return' | 'return_received' | 'out_of_stock';
 
 export interface OrderHistoryEvent {
   id: string;

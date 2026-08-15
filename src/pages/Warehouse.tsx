@@ -14,6 +14,7 @@ import {
   MapPin,
   Package,
   PackageCheck,
+  PackageX,
   Printer,
   RotateCcw,
   ScanLine,
@@ -429,6 +430,9 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const [readyScan, setReadyScan] = useState("");
   const [dispatchCandidate, setDispatchCandidate] = useState<FulfillmentRow | null>(null);
 
+  const [outOfStockSearch, setOutOfStockSearch] = useState("");
+  const [restockingId, setRestockingId] = useState<string | null>(null);
+
   const [returnScan, setReturnScan] = useState("");
   const [returnCondition, setReturnCondition] = useState<ReturnCondition>("sellable");
   const [returnDialogOrder, setReturnDialogOrder] = useState<FulfillmentRow | null>(null);
@@ -587,6 +591,44 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       if (error) throw error;
       const start = dateTodayStart();
       return ((data || []) as FulfillmentRow[]).filter((row) => row.updated_at >= start);
+    },
+    enabled: isWarehouseUser,
+    refetchInterval: 15000,
+  });
+
+  const { data: outOfStockRows = [], isLoading: loadingOutOfStock } = useQuery({
+    queryKey: ["warehouse-out-of-stock"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_id, system_id, customer_name, customer_city, total_amount, product_name, quantity, updated_at, created_at, fulfillment_items(id, status), shipments(id, tracking_number, created_at, carriers(name))")
+        .eq("delivery_status", "out_of_stock")
+        .order("updated_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return ((data || []) as any[]).map((row): FulfillmentRow => {
+        const latestShipment = [...(row.shipments || [])].sort((a: any, b: any) =>
+          String(b.created_at || "").localeCompare(String(a.created_at || ""))
+        )[0];
+        const item = (row.fulfillment_items || [])[0];
+        return {
+          fulfillment_item_id: item?.id || row.id,
+          fulfillment_item_status: item?.status || "pending",
+          batch_number: null,
+          order_id: row.order_id,
+          system_id: row.system_id,
+          customer_name: row.customer_name,
+          customer_city: row.customer_city,
+          total_amount: Number(row.total_amount || 0),
+          shipment_id: latestShipment?.id || "",
+          tracking_number: latestShipment?.tracking_number || null,
+          carrier_name: latestShipment?.carriers?.name || "-",
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          product_name: row.product_name || null,
+          item_count: row.quantity || 1,
+        };
+      });
     },
     enabled: isWarehouseUser,
     refetchInterval: 15000,
@@ -970,6 +1012,19 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     ].join(" ").toLowerCase().includes(q));
   }, [readyRows, readySearch]);
 
+  const filteredOutOfStock = useMemo(() => {
+    const q = outOfStockSearch.trim().toLowerCase();
+    if (!q) return outOfStockRows;
+    return outOfStockRows.filter((row) => [
+      row.order_id,
+      row.customer_name,
+      row.customer_city,
+      row.product_name || "",
+      row.carrier_name,
+      row.tracking_number || "",
+    ].join(" ").toLowerCase().includes(q));
+  }, [outOfStockRows, outOfStockSearch]);
+
   const filteredHistory = useMemo(() => {
     const q = historySearch.trim().toLowerCase();
     return dispatchedRows.filter((row) => {
@@ -1090,6 +1145,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     queryClient.invalidateQueries({ queryKey: ["warehouse-not-printed"] });
     queryClient.invalidateQueries({ queryKey: ["warehouse-ready-dispatch"] });
     queryClient.invalidateQueries({ queryKey: ["warehouse-dispatched-today"] });
+    queryClient.invalidateQueries({ queryKey: ["warehouse-out-of-stock"] });
     queryClient.invalidateQueries({ queryKey: ["warehouse-audit-scans"] });
     queryClient.invalidateQueries({ queryKey: ["warehouse-return-receipts"] });
     queryClient.invalidateQueries({ queryKey: ["warehouse-returned-orders"] });
@@ -1661,7 +1717,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     return error?.message || "Label printing failed";
   };
 
-  const updateOrderDeliveryStatus = async (rows: FulfillmentRow[], nextStatus: "printed" | "dispatched", actionType: string) => {
+  const updateOrderDeliveryStatus = async (rows: FulfillmentRow[], nextStatus: "printed" | "dispatched" | "out_of_stock", actionType: string) => {
     const orderIds = Array.from(new Set(rows.map((row) => row.order_id).filter(Boolean)));
     if (orderIds.length === 0) return;
 
@@ -1852,6 +1908,56 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       toast.error(error.message || "Dispatch failed");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const markOutOfStock = async () => {
+    if (!dispatchCandidate) return;
+    setBusy(true);
+    try {
+      await updateOrderDeliveryStatus([dispatchCandidate], "out_of_stock", "warehouse_out_of_stock");
+      if (dispatchCandidate.tracking_number) {
+        await supabase.from("scan_events" as any).insert({
+          shipment_id: dispatchCandidate.shipment_id || null,
+          tracking_number: dispatchCandidate.tracking_number,
+          scan_type: "audit",
+          result: "ok",
+          message: "Marked out of stock at dispatch",
+          scanned_by: authUser?.id,
+        });
+      }
+      toast.success("Order moved to Out of Stock");
+      setReadyScan("");
+      setDispatchCandidate(null);
+      refreshWarehouse();
+      setTimeout(() => readyScanInput.current?.focus(), 50);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to mark out of stock");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const restockAndRetry = async (row: FulfillmentRow) => {
+    setRestockingId(row.fulfillment_item_id);
+    try {
+      await updateOrderDeliveryStatus([row], "printed", "warehouse_restock_retry");
+      if (row.tracking_number) {
+        await supabase.from("scan_events" as any).insert({
+          shipment_id: row.shipment_id || null,
+          tracking_number: row.tracking_number,
+          scan_type: "audit",
+          result: "ok",
+          message: "Restocked — returned to dispatch queue",
+          scanned_by: authUser?.id,
+        });
+      }
+      toast.success("Order returned to Ready to Dispatch");
+      refreshWarehouse();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to restock order");
+    } finally {
+      setRestockingId(null);
     }
   };
 
@@ -2455,6 +2561,16 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                 </Badge>
               </TabsTrigger>
               <TabsTrigger
+                value="out_of_stock"
+                className="h-10 gap-2 rounded-md border border-transparent px-4 text-sm font-semibold text-muted-foreground data-[state=active]:border-destructive/30 data-[state=active]:bg-destructive/12 data-[state=active]:text-destructive data-[state=active]:shadow-none"
+              >
+                <PackageX className="h-4 w-4" />
+                Out of Stock
+                <Badge variant="outline" className="ml-1 h-5 min-w-5 justify-center rounded-full px-1.5 text-[10px]">
+                  {outOfStockRows.length}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger
                 value="history"
                 className="h-10 gap-2 rounded-md border border-transparent px-4 text-sm font-semibold text-muted-foreground data-[state=active]:border-success/30 data-[state=active]:bg-success/12 data-[state=active]:text-success data-[state=active]:shadow-none"
               >
@@ -2539,6 +2655,27 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                     showReadyAt
                     onPrintRow={(row) => printLabels([row])}
                     printingRow={printingLabels}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="out_of_stock">
+              <Card className="border-destructive/30 bg-destructive/[0.03]">
+                <CardHeader className="py-4 flex-row items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <PackageX className="h-4 w-4 text-destructive" />
+                    Out of Stock
+                    <Badge variant="outline" className="text-[10px]">{filteredOutOfStock.length} orders</Badge>
+                  </CardTitle>
+                  <Input className="h-8 w-[260px] text-xs" value={outOfStockSearch} onChange={(e) => setOutOfStockSearch(e.target.value)} placeholder="Search out-of-stock orders..." />
+                </CardHeader>
+                <CardContent className="p-0">
+                  <DispatchTable
+                    rows={filteredOutOfStock}
+                    loading={loadingOutOfStock}
+                    onRestockRow={restockAndRetry}
+                    restockingId={restockingId}
                   />
                 </CardContent>
               </Card>
@@ -2974,6 +3111,9 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDispatchCandidate(null)} disabled={busy}>Cancel</Button>
+            <Button variant="destructive" onClick={markOutOfStock} disabled={busy}>
+              <PackageX className="h-4 w-4 mr-1.5" /> Out of Stock
+            </Button>
             <Button onClick={dispatchOrder} disabled={busy}>Dispatch</Button>
           </DialogFooter>
         </DialogContent>
@@ -3085,6 +3225,8 @@ function DispatchTable({
   showReadyAt = false,
   onPrintRow,
   printingRow = false,
+  onRestockRow,
+  restockingId = null,
 }: {
   rows: FulfillmentRow[];
   loading: boolean;
@@ -3096,8 +3238,11 @@ function DispatchTable({
   showReadyAt?: boolean;
   onPrintRow?: (row: FulfillmentRow) => void;
   printingRow?: boolean;
+  onRestockRow?: (row: FulfillmentRow) => void;
+  restockingId?: string | null;
 }) {
-  const columnCount = (selectable ? 7 : 6) + (showReadyAt ? 1 : 0) + (onPrintRow ? 1 : 0);
+  const showActions = !!onPrintRow || !!onRestockRow;
+  const columnCount = (selectable ? 7 : 6) + (showReadyAt ? 1 : 0) + (showActions ? 1 : 0);
   const selectedDisplayedCount = selectable
     ? rows.filter((row) => selectedIds?.has(row.fulfillment_item_id)).length
     : 0;
@@ -3123,7 +3268,7 @@ function DispatchTable({
           <TableHead className="h-9 text-xs">Tracking</TableHead>
           {showReadyAt && <TableHead className="h-9 text-xs">Ready at</TableHead>}
           <TableHead className="h-9 text-xs">Stage</TableHead>
-          {onPrintRow && <TableHead className="h-9 text-xs text-right">Actions</TableHead>}
+          {showActions && <TableHead className="h-9 text-xs text-right">Actions</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -3161,18 +3306,33 @@ function DispatchTable({
               </TableCell>
             )}
             <TableCell><StatusBadge value={row.fulfillment_item_status} /></TableCell>
-            {onPrintRow && (
+            {showActions && (
               <TableCell className="text-right">
-                <Button
-                  size="icon"
-                  variant="outline"
-                  className="h-8 w-8"
-                  onClick={() => onPrintRow(row)}
-                  disabled={printingRow || !row.tracking_number}
-                  title="Print label"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                </Button>
+                {onPrintRow && (
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8"
+                    onClick={() => onPrintRow(row)}
+                    disabled={printingRow || !row.tracking_number}
+                    title="Print label"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+                {onRestockRow && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => onRestockRow(row)}
+                    disabled={restockingId === row.fulfillment_item_id}
+                    title="Restock & return to dispatch queue"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                    Restock & Retry
+                  </Button>
+                )}
               </TableCell>
             )}
           </TableRow>

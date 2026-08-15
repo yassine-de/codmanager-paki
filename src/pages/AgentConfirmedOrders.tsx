@@ -43,7 +43,7 @@ const deliveryBadge: Record<string, { label: string; className: string }> = {
   postponed: { label: "⏰ Postponed", className: "bg-amber-500/10 text-amber-600 border-amber-500/20" },
 };
 
-const SHIPPED_STATUSES = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "delivered", "paid", "returned"];
+const SHIPPED_STATUSES = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "delivered", "paid", "returned", "out_of_stock"];
 
 const CONFIRMATION_OPTIONS = [
   { value: "confirmed", label: "Confirmed" },

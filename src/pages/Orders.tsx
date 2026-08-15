@@ -76,6 +76,7 @@ const deliveryConfig: Record<DeliveryStatus, { label: string; cls: string }> = {
   rejected: { label: 'Rejected', cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
   return: { label: 'Return', cls: 'bg-[hsl(340,65%,52%)]/12 text-[hsl(340,65%,52%)] border-[hsl(340,65%,52%)]/20' },
   return_received: { label: 'Return Received', cls: 'bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20' },
+  out_of_stock: { label: 'Out of Stock', cls: 'bg-[hsl(0,65%,52%)]/12 text-[hsl(0,65%,52%)] border-[hsl(0,65%,52%)]/20' },
 };
 
 // Pretty label for carrier sub-status (kept verbatim from carrier API)

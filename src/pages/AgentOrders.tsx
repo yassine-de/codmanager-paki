@@ -65,6 +65,7 @@ const WAREHOUSE_PROGRESS_DELIVERY_STATUSES = new Set([
   "paid",
   "returned",
   "return_received",
+  "out_of_stock",
 ]);
 
 const statusColors: Record<string, string> = {
