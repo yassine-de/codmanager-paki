@@ -76,7 +76,7 @@ function mapDeliveryStatus(normalizedStatus: string, currentStatus?: string | nu
   if (normalizedStatus === "out_for_delivery") return "with_courier";
   if (normalizedStatus === "in_transit") return "shipped";
   if (normalizedStatus === "booked" || normalizedStatus === "carrier_unknown") {
-    const lockedWarehouseStatuses = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery", "delivered", "failed_attempt", "ready_for_return", "return", "returned", "cancelled"];
+    const lockedWarehouseStatuses = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery", "delivered", "failed_attempt", "ready_for_return", "return", "returned", "cancelled", "out_of_stock"];
     return currentStatus && lockedWarehouseStatuses.includes(currentStatus) ? currentStatus : "booked";
   }
   return currentStatus || "booked";
