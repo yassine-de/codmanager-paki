@@ -20,7 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { type ConfirmationStatus, type DeliveryStatus, type Order } from "@/lib/data";
 import { formatPKT as format } from "@/lib/timezone";
-import { exactOrderIdMatch, isOrderIdSearch } from "@/lib/search";
+import { isOrderIdSearch, normalizeOrderIdSearch } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
@@ -154,36 +154,15 @@ const channelConfig: Record<string, { label: string; cls: string }> = {
   whatsapp: { label: 'WhatsApp', cls: 'bg-[hsl(142,71%,45%)]/12 text-[hsl(142,71%,45%)] border-[hsl(142,71%,45%)]/20' },
 };
 
-/* ── Sparkline KPI Cards ── */
-function OrderSparklineCards({ orders }: { orders: Order[] }) {
-  const { isDataVisible } = useDataVisibility();
-  const sparkData = useMemo(() => {
-    const days = eachDayOfInterval({
-      start: startOfDay(subDays(new Date(), 6)),
-      end: startOfDay(new Date()),
-    });
-    return days.map((date) => {
-      const next = new Date(date); next.setDate(next.getDate() + 1);
-      const dayOrders = orders.filter(o => {
-        const c = new Date(o.createdAt);
-        return isAfter(c, date) && !isAfter(c, next);
-      });
-      return {
-        d: fmtDate(date, "dd"),
-        total: dayOrders.length,
-        shipped: dayOrders.filter(o => shippedDeliveryStatuses.includes(o.deliveryStatus)).length,
-        delivered: dayOrders.filter(o => o.deliveryStatus === "delivered").length,
-        returned: dayOrders.filter(o => ["returned", "return", "ready_for_return", "return_received"].includes(o.deliveryStatus)).length,
-      };
-    });
-  }, [orders]);
+/* ── Sparkline KPI Cards ──
+ * Totals/sparkline reflect ALL orders in the database (not just the currently
+ * loaded page), so the parent computes them via lightweight aggregate queries
+ * and passes the results in — this component only renders them. */
+type SparklineTotals = { total: number; shipped: number; delivered: number; returned: number };
+type SparklineDay = { d: string; total: number; shipped: number; delivered: number; returned: number };
 
-  const totals = useMemo(() => ({
-    total: orders.length,
-    shipped: orders.filter(o => shippedDeliveryStatuses.includes(o.deliveryStatus)).length,
-    delivered: orders.filter(o => o.deliveryStatus === "delivered").length,
-    returned: orders.filter(o => ["returned", "return", "ready_for_return", "return_received"].includes(o.deliveryStatus)).length,
-  }), [orders]);
+function OrderSparklineCards({ totals, sparkData }: { totals: SparklineTotals; sparkData: SparklineDay[] }) {
+  const { isDataVisible } = useDataVisibility();
 
   const cards = [
     { title: "Total Orders", value: totals.total, dataKey: "total", color: "hsl(210,60%,52%)" },
@@ -238,12 +217,16 @@ export default function Orders() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [trackingTarget, setTrackingTarget] = useState<{ carrierId: string; systemId?: number | null; sellerId?: string | null } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // `orders` holds only the currently loaded page (server-side pagination) — never the whole table.
   const [orders, setOrders] = useState<Order[]>([]);
-  const [sellerNames, setSellerNames] = useState<string[]>([]);
-  const [agentNames, setAgentNames] = useState<string[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [sellerOptions, setSellerOptions] = useState<{ id: string; name: string }[]>([]);
+  const [agentOptions, setAgentOptions] = useState<{ id: string; name: string }[]>([]);
   const [productNames, setProductNames] = useState<string[]>([]);
+  const [subStatusOptions, setSubStatusOptions] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(50);
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
@@ -338,129 +321,13 @@ export default function Orders() {
     setRefreshKey(k => k + 1);
   };
 
-  // Fetch orders from database
+  // Debounce free-text search before it drives a server request, so typing
+  // doesn't fire a query per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
-    const fetchOrders = async () => {
-      // Paginate using `.range()` to bypass PostgREST's `db-max-rows` cap
-      // (commonly 1000). Page size is intentionally kept below that cap so
-      // each request returns a full page when more rows exist — otherwise
-      // the loop would stop one page early and the UI would freeze at e.g.
-      // 999/1000 even when the database has more rows.
-      //
-      // Order by a stable, unique secondary key (`id`) so pagination is
-      // deterministic. Without it, rows that share the same `created_at`
-      // can shift between offset windows and we lose count (e.g. 1,050 → 999).
-      // We also de-duplicate by `id` as a final safety net in case a row
-      // is re-inserted between fetches.
-      const PAGE = 500;
-      let from = 0;
-      const seen = new Set<string>();
-      const all: any[] = [];
-      // Hard ceiling to prevent runaway loops — bump if the system grows past this.
-      const MAX_ROWS = 200000;
-
-      while (from < MAX_ROWS) {
-        const { data, error } = await supabase
-          .from("orders")
-          .select("*, order_items(id, product_id, product_variant_id, sku, product_name, variant_name, quantity, unit_price, created_at), shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, created_at, carriers(code, name))")
-          .order("created_at", { ascending: false })
-          .order("id", { ascending: false })
-          .range(from, from + PAGE - 1);
-
-        if (error) {
-          console.error("Error fetching orders:", error);
-          return;
-        }
-
-        const batch = data || [];
-        for (const row of batch) {
-          if (!seen.has(row.id)) {
-            seen.add(row.id);
-            all.push(row);
-          }
-        }
-        if (batch.length < PAGE) break;
-        from += PAGE;
-      }
-
-      const data = all;
-
-      // Fetch seller & agent names for display
-      const sellerIds = [...new Set((data || []).map(o => o.seller_id))];
-      const agentIdsSet = new Set<string>();
-      (data || []).forEach(o => {
-        if (o.agent_id) agentIdsSet.add(o.agent_id);
-        if (o.original_agent_id) agentIdsSet.add(o.original_agent_id);
-      });
-      const allUserIds = [...new Set([...sellerIds, ...agentIdsSet])];
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("user_id, name")
-        .in("user_id", allUserIds);
-
-      const profileMap = new Map((profiles || []).map(p => [p.user_id, p.name]));
-
-      // Fetch invoice statuses for all orders that have an invoice_id
-      const invoiceIds = [...new Set((data || []).map(o => o.invoice_id).filter(Boolean))];
-      const invoiceMap = new Map<string, { status: string; finalized_at: string | null }>();
-      if (invoiceIds.length > 0) {
-        const { data: invoices } = await supabase
-          .from("invoices")
-          .select("id, status, finalized_at")
-          .in("id", invoiceIds);
-        (invoices || []).forEach(inv => invoiceMap.set(inv.id, { status: inv.status, finalized_at: inv.finalized_at || null }));
-      }
-
-      const mapped: Order[] = (data || []).map(o => {
-        const latestShipment = [...((o as any).shipments || [])].sort((a, b) =>
-          String(b.created_at || "").localeCompare(String(a.created_at || ""))
-        )[0];
-        return {
-        id: o.order_id,
-        dbId: o.id,
-        systemId: o.system_id || undefined,
-        customer: o.customer_name,
-        phone: o.customer_phone,
-        city: o.customer_city,
-        address: o.customer_address || "",
-        products: mapOrderProducts(o),
-        total: Number(o.total_amount),
-        paidAmount: 0,
-        status: (o.confirmation_status === "confirmed" ? o.delivery_status : o.confirmation_status) as any,
-        confirmationStatus: o.confirmation_status as ConfirmationStatus,
-        deliveryStatus: (o.delivery_status || "pending") as DeliveryStatus,
-        createdAt: o.created_at,
-        updatedAt: o.updated_at,
-        confirmedAt: o.confirmed_at || undefined,
-        deliveredAt: o.delivered_at || undefined,
-        notes: o.note || undefined,
-        seller: profileMap.get(o.seller_id) || "Unknown",
-        agentName: o.agent_id ? (profileMap.get(o.agent_id) || undefined) : (o.original_agent_id ? (profileMap.get(o.original_agent_id) || undefined) : undefined),
-        upsell: false,
-        warehouseState: "in_stock" as const,
-        history: [],
-        attemptCount: o.attempt_count || 0,
-        carrierOrderId: latestShipment?.carrier_order_id || null,
-        carrierShippingStatus: latestShipment?.carrier_status || latestShipment?.normalized_status || null,
-        trackingNumber: latestShipment?.tracking_number || null,
-        carrierName: latestShipment?.carriers?.name || null,
-        confirmationChannel: o.confirmation_channel || 'agent',
-        whatsappStatus: o.whatsapp_status || null,
-        invoiceId: o.invoice_id || null,
-        invoiceStatus: o.invoice_id ? (invoiceMap.get(o.invoice_id)?.status || null) : null,
-        invoiceFinalizedAt: o.invoice_id ? (invoiceMap.get(o.invoice_id)?.finalized_at || null) : null,
-        };
-      });
-
-      setOrders(mapped);
-      setSellerNames([...new Set(mapped.map(o => o.seller))]);
-      setProductNames([...new Set(mapped.flatMap(o => o.products.map(p => p.name)))]);
-      setAgentNames([...new Set(mapped.map(o => o.agentName).filter(Boolean) as string[])]);
-    };
-
-    fetchOrders();
-  }, [refreshKey]);
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // Filters state
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
@@ -537,12 +404,301 @@ export default function Orders() {
     new Set(allColumns.filter(c => c.defaultVisible).map(c => c.key))
   );
 
-  // Unique sub-statuses present in current orders (for filter dropdown)
-  const subStatusOptions = useMemo(() => {
-    const set = new Set<string>();
-    orders.forEach(o => { if (o.carrierShippingStatus) set.add(o.carrierShippingStatus); });
-    return Array.from(set).sort();
-  }, [orders]);
+  // Filter dropdown option lists — fetched once (not tied to pagination/search),
+  // since they represent the full universe of values, not just the loaded page.
+  useEffect(() => {
+    let cancelled = false;
+    const loadOptions = async () => {
+      const { data: prods } = await supabase.from("products").select("name").eq("active", true).order("name");
+      if (!cancelled) setProductNames([...new Set((prods || []).map((p: any) => p.name))]);
+
+      if (!isAdmin) return;
+
+      const [{ data: sellerRoles }, { data: agentRoles }] = await Promise.all([
+        supabase.from("user_roles").select("user_id").eq("role", "seller"),
+        supabase.from("user_roles").select("user_id").eq("role", "agent"),
+      ]);
+      const sellerIds = (sellerRoles || []).map((r: any) => r.user_id);
+      const agentIds = (agentRoles || []).map((r: any) => r.user_id);
+      const allIds = [...new Set([...sellerIds, ...agentIds])];
+
+      const { data: allProfiles } = allIds.length > 0
+        ? await supabase.from("profiles").select("user_id, name").in("user_id", allIds)
+        : { data: [] as any[] };
+      const nameOf = (id: string) => (allProfiles || []).find((p: any) => p.user_id === id)?.name || "Unknown";
+
+      if (!cancelled) {
+        setSellerOptions(sellerIds.map((id: string) => ({ id, name: nameOf(id) })).sort((a, b) => a.name.localeCompare(b.name)));
+        setAgentOptions(agentIds.map((id: string) => ({ id, name: nameOf(id) })).sort((a, b) => a.name.localeCompare(b.name)));
+      }
+
+      // Bounded sample of the most recent shipments — the carrier-status vocabulary
+      // is small and fixed, so this reliably covers every value without scanning
+      // the whole shipments table.
+      const { data: recentShipments } = await supabase
+        .from("shipments" as any)
+        .select("carrier_status, normalized_status")
+        .order("created_at", { ascending: false })
+        .limit(3000);
+      const set = new Set<string>();
+      (recentShipments || []).forEach((s: any) => {
+        const v = s.normalized_status || s.carrier_status;
+        if (v) set.add(v);
+      });
+      if (!cancelled) setSubStatusOptions([...set].sort());
+    };
+    loadOptions();
+    return () => { cancelled = true; };
+  }, [isAdmin, refreshKey]);
+
+  // Sparkline / summary KPI cards reflect ALL orders (all-time totals + last 7
+  // days), independent of the table's active filters — matches prior behavior,
+  // computed via lightweight aggregate queries instead of loading every order.
+  const [sparklineData, setSparklineData] = useState<{ totals: SparklineTotals; spark: SparklineDay[] }>({
+    totals: { total: 0, shipped: 0, delivered: 0, returned: 0 },
+    spark: [],
+  });
+  useEffect(() => {
+    let cancelled = false;
+    const loadSparkline = async () => {
+      const countWhere = async (build: (q: any) => any) => {
+        const { count } = await build(supabase.from("orders").select("*", { count: "exact", head: true }));
+        return count || 0;
+      };
+
+      const [total, delivered, shipped, returned] = await Promise.all([
+        countWhere((q) => q),
+        countWhere((q) => q.eq("delivery_status", "delivered")),
+        countWhere((q) => q.in("delivery_status", shippedDeliveryStatuses)),
+        countWhere((q) => q.in("delivery_status", ["returned", "return", "ready_for_return", "return_received"])),
+      ]);
+
+      const rangeStart = startOfDay(subDays(new Date(), 6));
+      const { data: recent } = await supabase
+        .from("orders")
+        .select("created_at, delivery_status")
+        .gte("created_at", rangeStart.toISOString());
+
+      const days = eachDayOfInterval({ start: rangeStart, end: startOfDay(new Date()) });
+      const spark: SparklineDay[] = days.map((date) => {
+        const next = new Date(date); next.setDate(next.getDate() + 1);
+        const dayOrders = (recent || []).filter((o: any) => {
+          const c = new Date(o.created_at);
+          return isAfter(c, date) && !isAfter(c, next);
+        });
+        return {
+          d: fmtDate(date, "dd"),
+          total: dayOrders.length,
+          shipped: dayOrders.filter((o: any) => shippedDeliveryStatuses.includes(o.delivery_status)).length,
+          delivered: dayOrders.filter((o: any) => o.delivery_status === "delivered").length,
+          returned: dayOrders.filter((o: any) => ["returned", "return", "ready_for_return", "return_received"].includes(o.delivery_status)).length,
+        };
+      });
+
+      if (!cancelled) setSparklineData({ totals: { total, delivered, shipped, returned }, spark });
+    };
+    loadSparkline();
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  // Fetch orders from database — server-side filtered, sorted and paginated,
+  // so only the current page (never the whole table) is transferred.
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchOrders = async () => {
+      setLoadingOrders(true);
+      try {
+        const f = appliedFilters;
+
+        // The "Upsell" filter is a legacy field the app never actually populates
+        // (every order maps `upsell: false` below), so "Yes" has always matched
+        // zero rows. Preserve that exact behavior without hitting the database.
+        if (f.upsell === 'yes') {
+          if (!cancelled) { setOrders([]); setTotalCount(0); }
+          return;
+        }
+
+        // Product / carrier-substatus filters need a join the REST client can't
+        // express as a plain column filter without also truncating the embedded
+        // order_items/shipments arrays used for display. Resolve matching order
+        // ids first, then restrict the main (fully-joined) query with `.in()`.
+        const idFilterSets: string[][] = [];
+
+        if (f.product !== 'all') {
+          const [itemMatches, directMatches] = await Promise.all([
+            supabase.from("order_items" as any).select("order_id").eq("product_name", f.product),
+            supabase.from("orders").select("id").eq("product_name", f.product),
+          ]);
+          const ids = new Set<string>();
+          (itemMatches.data || []).forEach((r: any) => ids.add(r.order_id));
+          (directMatches.data || []).forEach((r: any) => ids.add(r.id));
+          idFilterSets.push([...ids]);
+        }
+
+        if (isAdmin && f.subStatus !== 'all') {
+          const { data } = await supabase
+            .from("shipments" as any)
+            .select("order_uuid")
+            .or(`normalized_status.eq.${f.subStatus},carrier_status.eq.${f.subStatus}`);
+          idFilterSets.push([...new Set((data || []).map((r: any) => r.order_uuid))]);
+        }
+
+        let restrictToIds: string[] | null = null;
+        if (idFilterSets.length > 0) {
+          restrictToIds = idFilterSets.reduce((acc, ids) => acc.filter((id) => ids.includes(id)));
+          if (restrictToIds.length === 0) {
+            if (!cancelled) { setOrders([]); setTotalCount(0); }
+            return;
+          }
+        }
+
+        const term = debouncedSearch.trim();
+        const isIdSearch = term ? isOrderIdSearch(term) : false;
+        // Strip characters that have structural meaning in a PostgREST `.or()`
+        // filter string so a stray comma/paren in the search box can't malform it.
+        const looseTerm = term && !isIdSearch ? term.replace(/[,()%_]/g, ' ').trim() : '';
+
+        const applyCommonFilters = (query: any) => {
+          let q = query;
+          if (restrictToIds) q = q.in('id', restrictToIds);
+          if (f.dateRange?.from) {
+            q = q.gte('created_at', startOfDay(f.dateRange.from).toISOString())
+                 .lte('created_at', endOfDayPKT(f.dateRange.to ?? f.dateRange.from).toISOString());
+          }
+          if (f.deliveredRange?.from) {
+            q = q.gte('delivered_at', startOfDay(f.deliveredRange.from).toISOString())
+                 .lte('delivered_at', endOfDayPKT(f.deliveredRange.to ?? f.deliveredRange.from).toISOString());
+          }
+          if (f.seller !== 'all') q = q.eq('seller_id', f.seller);
+          if (f.agent !== 'all') {
+            q = q.or(`agent_id.eq.${f.agent},and(agent_id.is.null,original_agent_id.eq.${f.agent})`);
+          }
+          if (f.confirmation !== 'all') {
+            // Sellers see WhatsApp orders as plain "New" — match both statuses for them.
+            if (!isAdmin && f.confirmation === 'new') q = q.in('confirmation_status', ['new', 'new_wts']);
+            else q = q.eq('confirmation_status', f.confirmation);
+          }
+          if (f.delivery !== 'all') q = q.eq('delivery_status', f.delivery);
+          if (f.channel !== 'all') {
+            q = f.channel === 'agent'
+              ? q.or('confirmation_channel.eq.agent,confirmation_channel.is.null')
+              : q.eq('confirmation_channel', f.channel);
+          }
+          if (isIdSearch) {
+            q = q.ilike('order_id', normalizeOrderIdSearch(term));
+          } else if (looseTerm) {
+            q = q.or(`order_id.ilike.%${looseTerm}%,customer_name.ilike.%${looseTerm}%,customer_phone.ilike.%${looseTerm}%,customer_city.ilike.%${looseTerm}%`);
+          }
+          return q;
+        };
+
+        // Exact total count matching every active filter.
+        const { count, error: countError } = await applyCommonFilters(
+          supabase.from("orders").select("*", { count: "exact", head: true })
+        );
+        if (countError) {
+          console.error("Error counting orders:", countError);
+          return;
+        }
+
+        const sortColumn = sortKey === 'systemId' ? 'system_id' : sortKey === 'updatedAt' ? 'updated_at' : 'created_at';
+        const ascending = sortDir === 'asc';
+        const rangeFrom = (currentPage - 1) * pageSize;
+
+        const { data, error } = await applyCommonFilters(
+          supabase
+            .from("orders")
+            .select("*, order_items(id, product_id, product_variant_id, sku, product_name, variant_name, quantity, unit_price, created_at), shipments(id, carrier_order_id, tracking_number, carrier_status, normalized_status, created_at, carriers(code, name))")
+        )
+          .order(sortColumn, { ascending })
+          .order('id', { ascending })
+          .range(rangeFrom, rangeFrom + pageSize - 1);
+
+        if (error) {
+          console.error("Error fetching orders:", error);
+          return;
+        }
+
+        const rows = data || [];
+
+        // Enrich only the current page — seller/agent names & invoice status.
+        const sellerIds = [...new Set(rows.map((o: any) => o.seller_id))];
+        const agentIdsSet = new Set<string>();
+        rows.forEach((o: any) => {
+          if (o.agent_id) agentIdsSet.add(o.agent_id);
+          if (o.original_agent_id) agentIdsSet.add(o.original_agent_id);
+        });
+        const allUserIds = [...new Set([...sellerIds, ...agentIdsSet])];
+
+        const { data: profiles } = allUserIds.length > 0
+          ? await supabase.from("profiles").select("user_id, name").in("user_id", allUserIds as string[])
+          : { data: [] as any[] };
+        const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p.name]));
+
+        const invoiceIds = [...new Set(rows.map((o: any) => o.invoice_id).filter(Boolean))];
+        const invoiceMap = new Map<string, { status: string; finalized_at: string | null }>();
+        if (invoiceIds.length > 0) {
+          const { data: invoices } = await supabase
+            .from("invoices")
+            .select("id, status, finalized_at")
+            .in("id", invoiceIds as string[]);
+          (invoices || []).forEach((inv: any) => invoiceMap.set(inv.id, { status: inv.status, finalized_at: inv.finalized_at || null }));
+        }
+
+        const mapped: Order[] = rows.map((o: any) => {
+          const latestShipment = [...((o as any).shipments || [])].sort((a: any, b: any) =>
+            String(b.created_at || "").localeCompare(String(a.created_at || ""))
+          )[0];
+          return {
+            id: o.order_id,
+            dbId: o.id,
+            systemId: o.system_id || undefined,
+            customer: o.customer_name,
+            phone: o.customer_phone,
+            city: o.customer_city,
+            address: o.customer_address || "",
+            products: mapOrderProducts(o),
+            total: Number(o.total_amount),
+            paidAmount: 0,
+            status: (o.confirmation_status === "confirmed" ? o.delivery_status : o.confirmation_status) as any,
+            confirmationStatus: o.confirmation_status as ConfirmationStatus,
+            deliveryStatus: (o.delivery_status || "pending") as DeliveryStatus,
+            createdAt: o.created_at,
+            updatedAt: o.updated_at,
+            confirmedAt: o.confirmed_at || undefined,
+            deliveredAt: o.delivered_at || undefined,
+            notes: o.note || undefined,
+            seller: profileMap.get(o.seller_id) || "Unknown",
+            agentName: o.agent_id ? (profileMap.get(o.agent_id) || undefined) : (o.original_agent_id ? (profileMap.get(o.original_agent_id) || undefined) : undefined),
+            upsell: false,
+            warehouseState: "in_stock" as const,
+            history: [],
+            attemptCount: o.attempt_count || 0,
+            carrierOrderId: latestShipment?.carrier_order_id || null,
+            carrierShippingStatus: latestShipment?.carrier_status || latestShipment?.normalized_status || null,
+            trackingNumber: latestShipment?.tracking_number || null,
+            carrierName: latestShipment?.carriers?.name || null,
+            confirmationChannel: o.confirmation_channel || 'agent',
+            whatsappStatus: o.whatsapp_status || null,
+            invoiceId: o.invoice_id || null,
+            invoiceStatus: o.invoice_id ? (invoiceMap.get(o.invoice_id)?.status || null) : null,
+            invoiceFinalizedAt: o.invoice_id ? (invoiceMap.get(o.invoice_id)?.finalized_at || null) : null,
+          };
+        });
+
+        if (!cancelled) {
+          setOrders(mapped);
+          setTotalCount(count || 0);
+        }
+      } finally {
+        if (!cancelled) setLoadingOrders(false);
+      }
+    };
+
+    fetchOrders();
+    return () => { cancelled = true; };
+  }, [debouncedSearch, appliedFilters, sortKey, sortDir, currentPage, pageSize, refreshKey, isAdmin]);
 
   const applyFilters = useCallback(() => {
     setAppliedFilters({
@@ -585,84 +741,31 @@ export default function Orders() {
   }, [appliedFilters]);
 
   // Count of orders actually delivered within the selected "Delivered At" range (admin filter).
-  const deliveredInRangeCount = useMemo(() => {
+  const [deliveredInRangeCount, setDeliveredInRangeCount] = useState<number | null>(null);
+  useEffect(() => {
     const r = appliedFilters.deliveredRange;
-    if (!r?.from) return null;
-    return orders.filter(o => {
-      if (!o.deliveredAt) return false;
-      const d = new Date(o.deliveredAt);
-      if (d < startOfDay(r.from!)) return false;
-      if (d > endOfDayPKT(r.to ?? r.from!)) return false;
-      return true;
-    }).length;
-  }, [orders, appliedFilters.deliveredRange]);
+    if (!r?.from) { setDeliveredInRangeCount(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { count } = await supabase
+        .from("orders")
+        .select("*", { count: "exact", head: true })
+        .gte("delivered_at", startOfDay(r.from!).toISOString())
+        .lte("delivered_at", endOfDayPKT(r.to ?? r.from!).toISOString());
+      if (!cancelled) setDeliveredInRangeCount(count ?? 0);
+    })();
+    return () => { cancelled = true; };
+  }, [appliedFilters.deliveredRange]);
 
-  const filtered = useMemo(() => {
-    const f = appliedFilters;
-    return orders
-      .filter(o => {
-        if (f.dateRange?.from) {
-          const d = new Date(o.createdAt);
-          if (d < startOfDay(f.dateRange.from)) return false;
-          if (d > endOfDayPKT(f.dateRange.to ?? f.dateRange.from)) return false;
-        }
-        if (f.deliveredRange?.from) {
-          if (!o.deliveredAt) return false;
-          const d = new Date(o.deliveredAt);
-          if (d < startOfDay(f.deliveredRange.from)) return false;
-          if (d > endOfDayPKT(f.deliveredRange.to ?? f.deliveredRange.from)) return false;
-        }
-        if (f.product !== 'all' && !o.products.some(p => p.name === f.product)) return false;
-        if (f.seller !== 'all' && o.seller !== f.seller) return false;
-        if (f.agent !== 'all' && o.agentName !== f.agent) return false;
-        if (f.confirmation !== 'all') {
-          // For sellers, "new" filter also matches new_wts (WhatsApp pipeline is hidden as plain New)
-          const effective = (!isAdmin && o.confirmationStatus === 'new_wts') ? 'new' : o.confirmationStatus;
-          if (effective !== f.confirmation) return false;
-        }
-        if (f.delivery !== 'all' && o.deliveryStatus !== f.delivery) return false;
-        if (f.subStatus !== 'all' && (o.carrierShippingStatus || '') !== f.subStatus) return false;
-        if (f.channel !== 'all' && (o.confirmationChannel || 'agent') !== f.channel) return false;
-        if (f.upsell !== 'all') {
-          if (f.upsell === 'yes' && !o.upsell) return false;
-          if (f.upsell === 'no' && o.upsell) return false;
-        }
-        
-        if (search) {
-          if (isOrderIdSearch(search)) {
-            return exactOrderIdMatch(o.id, search);
-          }
-          const s = search.toLowerCase();
-          return o.id.toLowerCase().includes(s) || o.customer.toLowerCase().includes(s) ||
-            o.phone.includes(s) || o.city.toLowerCase().includes(s);
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        let valA: number, valB: number;
-        if (sortKey === 'systemId') {
-          valA = a.systemId ?? 0;
-          valB = b.systemId ?? 0;
-        } else if (sortKey === 'updatedAt') {
-          valA = new Date(a.updatedAt).getTime();
-          valB = new Date(b.updatedAt).getTime();
-        } else {
-          valA = new Date(a.createdAt).getTime();
-          valB = new Date(b.createdAt).getTime();
-        }
-        return sortDir === 'asc' ? valA - valB : valB - valA;
-      });
-  }, [search, appliedFilters, orders, sortKey, sortDir]);
+  // Search, filters and sorting are now applied server-side (see the fetch
+  // effect above), so `orders` already IS the current page's final result set.
+  const paginatedOrders = orders;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, currentPage, pageSize]);
-
-  // Reset to page 1 when filters/search change
-  const prevFilteredLen = filtered.length;
-  useMemo(() => { setCurrentPage(1); }, [search, appliedFilters, pageSize]);
+  // Reset to page 1 when filters/search/page size change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, appliedFilters, pageSize]);
 
   const toggleColumn = (key: ColumnKey) => {
     setVisibleColumns(prev => {
@@ -692,7 +795,7 @@ export default function Orders() {
       </div>
 
       {/* Mini Sparkline KPIs */}
-      <OrderSparklineCards orders={orders} />
+      <OrderSparklineCards totals={sparklineData.totals} sparkData={sparklineData.spark} />
 
       {/* Search & Filters */}
       <div className="flex items-center justify-end gap-2">
@@ -782,7 +885,7 @@ export default function Orders() {
               <SearchableSelect
                 value={filterSeller}
                 onValueChange={setFilterSeller}
-                options={sellerNames.map(s => ({ value: s, label: s }))}
+                options={sellerOptions.map(s => ({ value: s.id, label: s.name }))}
                 placeholder="Seller"
                 allLabel="All Sellers"
                 className="w-full"
@@ -796,7 +899,7 @@ export default function Orders() {
               <SearchableSelect
                 value={filterAgent}
                 onValueChange={setFilterAgent}
-                options={agentNames.map(a => ({ value: a, label: a }))}
+                options={agentOptions.map(a => ({ value: a.id, label: a.name }))}
                 placeholder="Agent"
                 allLabel="All Agents"
                 className="w-full"
@@ -932,7 +1035,7 @@ export default function Orders() {
         <div className="flex items-center justify-between px-4 py-2.5 border-b">
           <div className="flex items-center gap-3">
             <p className="text-sm font-medium">
-              {filtered.length} <span className="text-muted-foreground font-normal">order{filtered.length !== 1 ? 's' : ''}</span>
+              {totalCount} <span className="text-muted-foreground font-normal">order{totalCount !== 1 ? 's' : ''}</span>
             </p>
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Show</span>
@@ -1187,7 +1290,7 @@ export default function Orders() {
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {paginatedOrders.length === 0 && (
                 <tr>
                   <td colSpan={visibleColumns.size + (isAdmin ? 2 : 1)} className="py-16 text-center text-muted-foreground text-sm">
                     No orders found matching your criteria
@@ -1239,7 +1342,7 @@ export default function Orders() {
               </div>
             </div>
           ))}
-          {filtered.length === 0 && (
+          {paginatedOrders.length === 0 && (
             <div className="py-16 text-center text-muted-foreground text-sm">No orders found</div>
           )}
         </div>
@@ -1248,21 +1351,21 @@ export default function Orders() {
         <div className="flex items-center justify-end px-4 py-2.5 border-t">
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground tabular-nums mr-2">
-              {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)} of {filtered.length}
+              {totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalCount)} of {totalCount}
             </span>
-            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}>
+            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={currentPage <= 1 || loadingOrders} onClick={() => setCurrentPage(1)}>
               <span className="text-xs">«</span>
             </Button>
-            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>
+            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={currentPage <= 1 || loadingOrders} onClick={() => setCurrentPage(p => p - 1)}>
               <span className="text-xs">‹</span>
             </Button>
             <span className="text-xs text-muted-foreground tabular-nums px-1.5">
               {currentPage} / {totalPages}
             </span>
-            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>
+            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={currentPage >= totalPages || loadingOrders} onClick={() => setCurrentPage(p => p + 1)}>
               <span className="text-xs">›</span>
             </Button>
-            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>
+            <Button variant="outline" size="sm" className="h-7 w-7 p-0" disabled={currentPage >= totalPages || loadingOrders} onClick={() => setCurrentPage(totalPages)}>
               <span className="text-xs">»</span>
             </Button>
           </div>
