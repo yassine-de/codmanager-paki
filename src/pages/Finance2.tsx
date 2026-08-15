@@ -92,7 +92,8 @@ interface FinanceTotals {
   nextPayout: number;
 }
 
-const ESTIMATED_SHIPPING_COST_USD = 0.7;
+const CUSTOMER_SHIPPING_CHARGE_USD = 3;
+const ANWAR_SHIPPING_COST_USD = 0.7;
 
 const zeroTotals: FinanceTotals = {
   invoices: 0,
@@ -510,7 +511,8 @@ export default function Finance2() {
 }
 
 function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; totals: FinanceTotals; anwar?: boolean }) {
-  const shippingCost = totals.totalOrders * ESTIMATED_SHIPPING_COST_USD;
+  const shippingRate = anwar ? ANWAR_SHIPPING_COST_USD : CUSTOMER_SHIPPING_CHARGE_USD;
+  const shippingCost = totals.totalOrders * shippingRate;
   const feeRevenue = anwar ? 0 : totals.feeRevenue;
   const operatingCosts = shippingCost + (anwar ? 0 : totals.callCenter + totals.cod + Math.max(0, totals.otherImpact));
   const netProfit = feeRevenue + totals.sourcingProfit - operatingCosts;
@@ -523,7 +525,7 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
         <MetricCard
           title="Net Profit"
           value={formatUSD(netProfit)}
-          helper={anwar ? "Sourcing profit minus estimated shipping cost" : "Fee revenue + sourcing profit minus operating costs"}
+          helper={anwar ? "Sourcing profit minus Anwar shipping cost" : "Fee revenue + sourcing profit minus operating costs"}
           icon={BadgeDollarSign}
           tone="green"
           large
@@ -563,7 +565,7 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
         <MetricCard
           title="Shipping Cost"
           value={formatUSD(shippingCost)}
-          helper={`${totals.totalOrders} invoiced orders x ${formatUSD(ESTIMATED_SHIPPING_COST_USD)}`}
+          helper={`${totals.totalOrders} invoiced orders x ${formatUSD(shippingRate)}`}
           icon={Truck}
           tone="rose"
         />
