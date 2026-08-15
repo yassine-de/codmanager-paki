@@ -55,6 +55,7 @@ const analyticsSubItems = [
   { title: "delivery", url: "/analytics/delivery", icon: Package, permission: "access_to_analytics" },
   { title: "seller", url: "/analytics/seller", icon: Store, permission: "access_to_analytics" },
   { title: "finance", url: "/analytics/finance", icon: DollarSign, permission: "access_to_analytics" },
+  { title: "Finance2", url: "/analytics/finance2", icon: BadgeDollarSign, permission: "access_to_analytics" },
   { title: "follow_up", url: "/analytics/follow-up", icon: PhoneForwarded, permission: "access_to_analytics" },
   { title: "Agent Monitoring", url: "/analytics/agent-monitoring", icon: Activity, permission: "access_to_analytics" },
 ];

@@ -16,6 +16,7 @@ import ProductDetail from "./pages/ProductDetail";
 import ConfirmationAnalytics from "./pages/ConfirmationAnalytics";
 import SellerAnalytics from "./pages/SellerAnalytics";
 import FinanceAnalytics from "./pages/FinanceAnalytics";
+import Finance2 from "./pages/Finance2";
 import FollowUpAnalytics from "./pages/FollowUpAnalytics";
 import DeliveryAnalytics from "./pages/DeliveryAnalytics";
 import AgentMonitoring from "./pages/AgentMonitoring";
@@ -159,6 +160,7 @@ function AppRoutes() {
         <Route path="/analytics/delivery" element={<ProtectedRoute permission="access_to_analytics"><DeliveryAnalytics /></ProtectedRoute>} />
         <Route path="/analytics/seller" element={<ProtectedRoute permission="access_to_analytics"><SellerAnalytics /></ProtectedRoute>} />
         <Route path="/analytics/finance" element={<ProtectedRoute permission="access_to_analytics"><FinanceAnalytics /></ProtectedRoute>} />
+        <Route path="/analytics/finance2" element={<ProtectedRoute permission="access_to_analytics"><Finance2 /></ProtectedRoute>} />
         <Route path="/analytics/follow-up" element={<ProtectedRoute permission="access_to_analytics"><FollowUpAnalytics /></ProtectedRoute>} />
         <Route path="/analytics/agent-monitoring" element={<ProtectedRoute permission="access_to_analytics"><AgentMonitoring /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute permission="access_to_settings"><SettingsPage /></ProtectedRoute>} />
