@@ -92,6 +92,8 @@ interface FinanceTotals {
   nextPayout: number;
 }
 
+const ESTIMATED_SHIPPING_COST_USD = 0.7;
+
 const zeroTotals: FinanceTotals = {
   invoices: 0,
   sellers: 0,
@@ -434,7 +436,7 @@ export default function Finance2() {
                 <tr>
                   <th className="px-4 py-3 text-left">Seller</th>
                   <th className="px-4 py-3 text-right">Revenue</th>
-                  <th className="px-4 py-3 text-right">Shipping</th>
+                  <th className="px-4 py-3 text-right">Shipping Fee Rev.</th>
                   <th className="px-4 py-3 text-right">Call Center</th>
                   <th className="px-4 py-3 text-right">COD</th>
                   <th className="px-4 py-3 text-right">Fee Revenue</th>
@@ -508,8 +510,10 @@ export default function Finance2() {
 }
 
 function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; totals: FinanceTotals; anwar?: boolean }) {
-  const operatingCosts = anwar ? 0 : totals.shipping + totals.callCenter + totals.cod + Math.max(0, totals.otherImpact);
-  const netProfit = anwar ? 0 : totals.feeRevenue;
+  const shippingCost = totals.totalOrders * ESTIMATED_SHIPPING_COST_USD;
+  const feeRevenue = anwar ? 0 : totals.feeRevenue;
+  const operatingCosts = shippingCost + (anwar ? 0 : totals.callCenter + totals.cod + Math.max(0, totals.otherImpact));
+  const netProfit = feeRevenue + totals.sourcingProfit - operatingCosts;
   const grossRevenue = totals.revenue + totals.sourcingProfit;
 
   return (
@@ -519,7 +523,7 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
         <MetricCard
           title="Net Profit"
           value={formatUSD(netProfit)}
-          helper={anwar ? "Anwar is not charged fees" : "Invoice fee revenue from sellers"}
+          helper={anwar ? "Sourcing profit minus estimated shipping cost" : "Fee revenue + sourcing profit minus operating costs"}
           icon={BadgeDollarSign}
           tone="green"
           large
@@ -559,14 +563,14 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
         <MetricCard
           title="Operating Costs"
           value={formatUSD(operatingCosts)}
-          helper={anwar ? "No fees counted for Anwar" : "Shipping, COD, call center, other fee impact"}
+          helper={anwar ? "Estimated shipping cost only" : "Shipping cost, COD, call center, other fee impact"}
           icon={ReceiptText}
           tone="blue"
         />
         <MetricCard
           title="Shipping Cost"
-          value={formatUSD(anwar ? 0 : totals.shipping)}
-          helper={anwar ? "No shipping fee for Anwar" : `${totals.totalOrders} invoiced orders`}
+          value={formatUSD(shippingCost)}
+          helper={`${totals.totalOrders} invoiced orders x ${formatUSD(ESTIMATED_SHIPPING_COST_USD)}`}
           icon={Truck}
           tone="rose"
         />
