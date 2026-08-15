@@ -310,10 +310,35 @@ Deno.serve(async (req) => {
       const language = tpl.language || "en_US";
       sentTemplateId = String(tpl.id);
       sentTemplateName = String(templateName);
+
+      // `orders.product_name` only holds the first line item — summarize all
+      // order_items instead so a multi-item order doesn't under-report what
+      // the customer bought (grouping same-named items, showing qty when >1).
+      let productSummary = order?.product_name ?? "";
+      if (order?.id) {
+        const { data: items } = await admin
+          .from("order_items")
+          .select("product_name, quantity")
+          .eq("order_id", order.id);
+        if (items && items.length > 0) {
+          const byName = new Map<string, number>();
+          for (const item of items) {
+            const name = String(item.product_name || "").trim();
+            if (!name) continue;
+            byName.set(name, (byName.get(name) || 0) + Number(item.quantity || 1));
+          }
+          if (byName.size > 0) {
+            productSummary = [...byName.entries()]
+              .map(([name, qty]) => (qty > 1 ? `${name} x${qty}` : name))
+              .join(", ");
+          }
+        }
+      }
+
       const vars: Record<string, any> = order
         ? {
             customer_name: order.customer_name,
-            product_name: order.product_name,
+            product_name: productSummary,
             price: order.total_amount,
             city: order.customer_city,
             address: order.customer_address,
@@ -341,14 +366,14 @@ Deno.serve(async (req) => {
 
       const positionalFallback = [
         (order?.customer_name && String(order.customer_name).trim()) || "",
-        (order?.product_name && String(order.product_name).trim()) || "",
+        (productSummary && String(productSummary).trim()) || "",
         (order?.total_amount != null && String(order.total_amount)) || "",
         (order?.customer_city && String(order.customer_city).trim()) || "",
         (order?.order_id && String(order.order_id)) || "",
       ];
       const finalFallback =
         (order?.customer_name && String(order.customer_name).trim()) ||
-        (order?.product_name && String(order.product_name).trim()) ||
+        (productSummary && String(productSummary).trim()) ||
         (order?.order_id && String(order.order_id)) ||
         "-";
       const resolvePlaceholder = (name: string, idx: number) => {
@@ -358,7 +383,7 @@ Deno.serve(async (req) => {
         if (!val && (lower.includes("customer") || lower === "name" || lower.includes("customer_name"))) {
           val = (order?.customer_name && String(order.customer_name).trim()) || "";
         } else if (!val && lower.includes("product")) {
-          val = (order?.product_name && String(order.product_name).trim()) || "";
+          val = (productSummary && String(productSummary).trim()) || "";
         } else if (!val && lower.includes("city")) {
           val = (order?.customer_city && String(order.customer_city).trim()) || "";
         } else if (!val && (lower.includes("amount") || lower.includes("price") || lower.includes("total"))) {
@@ -405,9 +430,27 @@ Deno.serve(async (req) => {
           .eq("id", body.template_id)
           .maybeSingle();
         if (tpl) {
+          let orderModeProductSummary = order.product_name ?? "";
+          const { data: orderModeItems } = await admin
+            .from("order_items")
+            .select("product_name, quantity")
+            .eq("order_id", order.id);
+          if (orderModeItems && orderModeItems.length > 0) {
+            const byName = new Map<string, number>();
+            for (const item of orderModeItems) {
+              const name = String(item.product_name || "").trim();
+              if (!name) continue;
+              byName.set(name, (byName.get(name) || 0) + Number(item.quantity || 1));
+            }
+            if (byName.size > 0) {
+              orderModeProductSummary = [...byName.entries()]
+                .map(([name, qty]) => (qty > 1 ? `${name} x${qty}` : name))
+                .join(", ");
+            }
+          }
           text = render(tpl.body, {
             customer_name: order.customer_name,
-            product_name: order.product_name,
+            product_name: orderModeProductSummary,
             price: order.total_amount,
             city: order.customer_city,
             address: order.customer_address,

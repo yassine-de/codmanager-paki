@@ -414,9 +414,34 @@ async function executeFlow(args: {
   const defaultCC = settings?.default_country_code || "92";
   const normalizedPhone = normalizePhone(order?.customer_phone || conversation?.customer_phone || "", defaultCC);
 
+  // `orders.product_name` only ever holds the first line item — for a multi-item
+  // order (multiple order_items rows) that under-reports what the customer
+  // actually bought. Summarize all line items instead, grouping same-named
+  // items and showing quantity when >1 (e.g. "Doorbell Camera x2").
+  let productSummary = order?.product_name ?? "";
+  if (order?.id) {
+    const { data: items } = await admin
+      .from("order_items")
+      .select("product_name, quantity")
+      .eq("order_id", order.id);
+    if (items && items.length > 0) {
+      const byName = new Map<string, number>();
+      for (const item of items) {
+        const name = String(item.product_name || "").trim();
+        if (!name) continue;
+        byName.set(name, (byName.get(name) || 0) + Number(item.quantity || 1));
+      }
+      if (byName.size > 0) {
+        productSummary = [...byName.entries()]
+          .map(([name, qty]) => (qty > 1 ? `${name} x${qty}` : name))
+          .join(", ");
+      }
+    }
+  }
+
   const vars = {
     customer_name: order?.customer_name ?? "",
-    product_name: order?.product_name ?? "",
+    product_name: productSummary,
     price: order?.total_amount ?? "",
     city: order?.customer_city ?? "",
     address: order?.customer_address ?? "",
