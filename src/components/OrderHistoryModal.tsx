@@ -164,6 +164,10 @@ function buildReadableMessage(group: GroupedEntry): string {
     return `${actor} updated pricing`;
   }
 
+  if (action_type === "manual_create") {
+    return `${actor} added this order`;
+  }
+
   // Generic edit
   if (entries.length === 1) {
     const e = entries[0];

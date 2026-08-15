@@ -18,10 +18,11 @@ import { cn } from "@/lib/utils";
 import { CitySelect, useCarrierCityValidation } from "@/components/CitySelect";
 import { formatPKT as format } from "@/lib/timezone";
 import { toast } from "sonner";
+import AgentCreateOrderModal from "@/components/AgentCreateOrderModal";
 import {
   Play, ChevronRight, Phone, PhoneOff, MessageCircle, User, MapPin, Package, DollarSign,
   Video, Store, Tag, StickyNote, CalendarIcon, ExternalLink, AlertCircle, Zap,
-  Pencil, Plus, Trash2, X, Check, Loader2, Clock, RotateCcw, Copy, AlertTriangle
+  Pencil, Plus, Trash2, X, Check, Loader2, Clock, RotateCcw, Copy, AlertTriangle, PackagePlus
 } from "lucide-react";
 
 
@@ -124,6 +125,7 @@ const AgentOrders = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [assignedProducts, setAssignedProducts] = useState<string[] | null>(null);
+  const [showCreateOrder, setShowCreateOrder] = useState(false);
 
   // Editable customer info
   const [editCustomer, setEditCustomer] = useState({ name: "", phone: "", city: "", address: "" });
@@ -905,6 +907,21 @@ const AgentOrders = () => {
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
           Start Smart Confirmation
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setShowCreateOrder(true)}
+        >
+          <PackagePlus className="h-4 w-4" />
+          Add New Order
+        </Button>
+        <AgentCreateOrderModal
+          open={showCreateOrder}
+          onOpenChange={setShowCreateOrder}
+          assignedProductNames={assignedProducts}
+          onCreated={() => refreshAvailableCounts()}
+        />
       </div>
     );
   }
@@ -919,6 +936,20 @@ const AgentOrders = () => {
 
   return (
     <div className="p-4 md:p-6 max-w-[1100px] mx-auto space-y-4">
+
+      {/* Add New Order */}
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowCreateOrder(true)}>
+          <PackagePlus className="h-4 w-4" />
+          Add New Order
+        </Button>
+        <AgentCreateOrderModal
+          open={showCreateOrder}
+          onOpenChange={setShowCreateOrder}
+          assignedProductNames={assignedProducts}
+          onCreated={() => refreshAvailableCounts()}
+        />
+      </div>
 
       {/* ⚠️ Taking too long warning */}
       {orderElapsedSec >= ORDER_WARNING_SEC && (
