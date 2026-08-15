@@ -545,13 +545,13 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
           large
         />
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <MetricCard
-          title="Sourcing Profit"
-          value={formatUSD(totals.sourcingProfit)}
-          helper="Seller price minus landed price"
-          icon={ReceiptText}
-          tone="green"
+          title="Call Center Cost"
+          value={formatUSD(anwar ? 0 : totals.callCenter)}
+          helper={anwar ? "No call center fee for Anwar" : "Confirmed + dropped lead fees"}
+          icon={Phone}
+          tone="rose"
         />
         <MetricCard
           title="COD Fee Revenue"
@@ -561,32 +561,20 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
           tone="rose"
         />
         <MetricCard
-          title="Operating Costs"
-          value={formatUSD(operatingCosts)}
-          helper={anwar ? "Estimated shipping cost only" : "Shipping cost, COD, call center, other fee impact"}
-          icon={ReceiptText}
-          tone="blue"
-        />
-        <MetricCard
           title="Shipping Cost"
           value={formatUSD(shippingCost)}
           helper={`${totals.totalOrders} invoiced orders x ${formatUSD(ESTIMATED_SHIPPING_COST_USD)}`}
           icon={Truck}
           tone="rose"
         />
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <MetricCard
-          title="Fulfillment Cost"
-          value={formatUSD(0)}
-          helper="Not tracked in invoice summaries yet"
-          icon={Banknote}
-          tone="amber"
-        />
-        <MetricCard
-          title="Packaging Cost"
-          value={formatUSD(0)}
-          helper="Not tracked in invoice summaries yet"
+          title="Sourcing Profit"
+          value={formatUSD(totals.sourcingProfit)}
+          helper="Seller price minus landed price"
           icon={ReceiptText}
-          tone="amber"
+          tone="green"
         />
         <MetricCard
           title="Paid"
@@ -594,13 +582,6 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
           helper="Already paid invoices"
           icon={Banknote}
           tone="green"
-        />
-        <MetricCard
-          title="Call Center Cost"
-          value={formatUSD(anwar ? 0 : totals.callCenter)}
-          helper={anwar ? "No call center fee for Anwar" : "Confirmed + dropped lead fees"}
-          icon={Phone}
-          tone="rose"
         />
       </div>
     </section>
