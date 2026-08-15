@@ -42,6 +42,17 @@ interface SellerProfile {
   email?: string | null;
 }
 
+interface SourcingRequest {
+  id: string;
+  seller_id: string;
+  product_name: string | null;
+  quantity: number | null;
+  landed_price: number | null;
+  seller_price: number | null;
+  seller_validated: boolean | null;
+  created_at: string;
+}
+
 interface FinanceRow {
   invoiceId: string;
   invoiceNumber: string;
@@ -70,6 +81,7 @@ interface FinanceTotals {
   delivered: number;
   totalOrders: number;
   revenue: number;
+  sourcingProfit: number;
   shipping: number;
   callCenter: number;
   cod: number;
@@ -86,6 +98,7 @@ const zeroTotals: FinanceTotals = {
   delivered: 0,
   totalOrders: 0,
   revenue: 0,
+  sourcingProfit: 0,
   shipping: 0,
   callCenter: 0,
   cod: 0,
@@ -112,6 +125,7 @@ function sumRows(rows: FinanceRow[]): FinanceTotals {
       delivered: acc.delivered + row.deliveredCount,
       totalOrders: acc.totalOrders + row.totalOrders,
       revenue: acc.revenue + row.revenue,
+      sourcingProfit: acc.sourcingProfit,
       shipping: acc.shipping + row.shipping,
       callCenter: acc.callCenter + row.callCenter,
       cod: acc.cod + row.cod,
@@ -123,6 +137,19 @@ function sumRows(rows: FinanceRow[]): FinanceTotals {
     }),
     { ...zeroTotals }
   );
+}
+
+function withSourcingProfit(totals: FinanceTotals, sourcingProfit: number): FinanceTotals {
+  return { ...totals, sourcingProfit };
+}
+
+function calculateSourcingProfit(requests: SourcingRequest[]) {
+  return requests.reduce((sum, request) => {
+    const qty = Number(request.quantity ?? 0);
+    const sellerPrice = Number(request.seller_price ?? 0);
+    const landedPrice = Number(request.landed_price ?? 0);
+    return sum + (sellerPrice - landedPrice) * qty;
+  }, 0);
 }
 
 function makeFinanceRow(invoice: DbInvoice, summary: InvoiceSummaryResponse, profile?: SellerProfile): FinanceRow {
@@ -176,7 +203,22 @@ export default function Finance2() {
     },
   });
 
-  const sellerIds = useMemo(() => [...new Set(invoices.map((invoice) => invoice.seller_id))], [invoices]);
+  const { data: sourcingRequests = [] } = useQuery({
+    queryKey: ["finance2-sourcing-requests"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sourcing_requests")
+        .select("id, seller_id, product_name, quantity, landed_price, seller_price, seller_validated, created_at")
+        .eq("seller_validated", true);
+      if (error) throw error;
+      return data as SourcingRequest[];
+    },
+  });
+
+  const sellerIds = useMemo(
+    () => [...new Set([...invoices.map((invoice) => invoice.seller_id), ...sourcingRequests.map((request) => request.seller_id)])],
+    [invoices, sourcingRequests]
+  );
 
   const { data: profiles = [] } = useQuery({
     queryKey: ["finance2-seller-profiles", sellerIds],
@@ -245,10 +287,28 @@ export default function Finance2() {
     });
   }, [rows, sellerFilter, statusFilter, groupFilter, dateRange, searchQuery]);
 
+  const filteredSourcing = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return sourcingRequests.filter((request) => {
+      const profile = profileMap.get(request.seller_id);
+      const anwar = isAnwarSeller(profile);
+      const sellerName = profile?.name || "";
+      if (sellerFilter !== "all" && request.seller_id !== sellerFilter) return false;
+      if (groupFilter === "main" && anwar) return false;
+      if (groupFilter === "anwar" && !anwar) return false;
+      if (dateRange?.from && new Date(request.created_at) < dateRange.from) return false;
+      if (dateRange?.to && new Date(request.created_at) > dateRange.to) return false;
+      if (q && !`${request.product_name ?? ""} ${sellerName}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [sourcingRequests, profileMap, sellerFilter, groupFilter, dateRange, searchQuery]);
+
   const mainRows = filteredRows.filter((row) => !row.isAnwar);
   const anwarRows = filteredRows.filter((row) => row.isAnwar);
-  const mainTotals = useMemo(() => sumRows(mainRows), [mainRows]);
-  const anwarTotals = useMemo(() => sumRows(anwarRows), [anwarRows]);
+  const mainSourcingRequests = filteredSourcing.filter((request) => !isAnwarSeller(profileMap.get(request.seller_id)));
+  const anwarSourcingRequests = filteredSourcing.filter((request) => isAnwarSeller(profileMap.get(request.seller_id)));
+  const mainTotals = useMemo(() => withSourcingProfit(sumRows(mainRows), calculateSourcingProfit(mainSourcingRequests)), [mainRows, mainSourcingRequests]);
+  const anwarTotals = useMemo(() => withSourcingProfit(sumRows(anwarRows), calculateSourcingProfit(anwarSourcingRequests)), [anwarRows, anwarSourcingRequests]);
   const combinedTotals = useMemo(() => sumRows(filteredRows), [filteredRows]);
 
   const sellerRows = useMemo(() => {
@@ -450,6 +510,7 @@ export default function Finance2() {
 function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; totals: FinanceTotals; anwar?: boolean }) {
   const operatingCosts = anwar ? 0 : totals.shipping + totals.callCenter + totals.cod + Math.max(0, totals.otherImpact);
   const netProfit = anwar ? 0 : totals.feeRevenue;
+  const grossRevenue = totals.revenue + totals.sourcingProfit;
 
   return (
     <section className="space-y-3">
@@ -465,8 +526,8 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
         />
         <MetricCard
           title="Gross Revenue"
-          value={formatUSD(totals.revenue)}
-          helper="Delivered revenue from invoice summaries"
+          value={formatUSD(grossRevenue)}
+          helper="Delivered revenue + sourcing profit"
           icon={DollarSign}
           tone="rose"
           large
@@ -482,10 +543,10 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Delivery Revenue"
-          value={formatUSD(totals.revenue)}
-          helper={`${totals.delivered} delivered orders`}
-          icon={Truck}
+          title="Sourcing Profit"
+          value={formatUSD(totals.sourcingProfit)}
+          helper="Seller price minus landed price"
+          icon={ReceiptText}
           tone="green"
         />
         <MetricCard
