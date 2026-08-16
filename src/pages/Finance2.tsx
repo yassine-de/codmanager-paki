@@ -576,6 +576,13 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <MetricCard
+          title="Shipping Profit"
+          value={formatUSD(shippingProfit)}
+          helper="Shipping revenue minus carrier cost"
+          icon={BadgeDollarSign}
+          tone={shippingProfit >= 0 ? "green" : "rose"}
+        />
+        <MetricCard
           title="Shipping Revenue"
           value={formatUSD(shippingRevenue)}
           helper={anwar ? "No shipping fee charged to Anwar" : "Shipping fees charged to sellers"}
@@ -588,13 +595,6 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
           helper={`${totals.shipped} shipped orders x ${formatUSD(SHIPPING_COST_USD)}`}
           icon={Truck}
           tone="rose"
-        />
-        <MetricCard
-          title="Shipping Profit"
-          value={formatUSD(shippingProfit)}
-          helper="Shipping revenue minus carrier cost"
-          icon={BadgeDollarSign}
-          tone={shippingProfit >= 0 ? "green" : "rose"}
         />
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
