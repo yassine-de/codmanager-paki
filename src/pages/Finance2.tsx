@@ -95,8 +95,7 @@ interface FinanceTotals {
 }
 
 const SHIPPING_COST_USD = 0.7;
-const WAREHOUSE_SHIPPED_STATUSES = new Set([
-  "dispatched",
+const FINANCE_S_MARKER_STATUSES = new Set([
   "shipped",
   "in_transit",
   "with_courier",
@@ -172,15 +171,12 @@ function calculateSourcingProfit(requests: SourcingRequest[]) {
   }, 0);
 }
 
-function calculateWarehouseShippedCount(summary: InvoiceSummaryResponse) {
-  const summaryCount = Number(summary.counts.shipped_count ?? 0);
-  const statusCount = new Set(
+function calculateSMarkerCount(summary: InvoiceSummaryResponse) {
+  return new Set(
     (summary.all_orders ?? [])
-      .filter((order) => WAREHOUSE_SHIPPED_STATUSES.has(order.delivery_status))
+      .filter((order) => FINANCE_S_MARKER_STATUSES.has(order.delivery_status))
       .map((order) => order.id)
   ).size;
-
-  return Math.max(summaryCount, statusCount);
 }
 
 function makeFinanceRow(invoice: DbInvoice, summary: InvoiceSummaryResponse, profile?: SellerProfile): FinanceRow {
@@ -200,7 +196,7 @@ function makeFinanceRow(invoice: DbInvoice, summary: InvoiceSummaryResponse, pro
     status: invoice.status,
     createdAt: invoice.created_at,
     deliveredCount: Number(summary.counts.delivered_count ?? 0),
-    shippedCount: calculateWarehouseShippedCount(summary),
+    shippedCount: calculateSMarkerCount(summary),
     totalOrders: Number(summary.counts.total_orders_count ?? 0),
     revenue: Number(totals.delivered_revenue_usd ?? 0),
     shipping: anwar ? 0 : Number(totals.shipping_fees ?? 0),
