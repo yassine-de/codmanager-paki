@@ -36,8 +36,8 @@ const AgentDashboard = () => {
   const userId = authUser?.id;
   const quote = motivationalQuotes[Math.floor(Date.now() / 86400000) % motivationalQuotes.length];
 
-  const [datePreset, setDatePreset] = useState<DatePresetValue>("7d");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(getDateRangeFromPreset("7d"));
+  const [datePreset, setDatePreset] = useState<DatePresetValue>("today");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(getDateRangeFromPreset("today"));
 
   const { data: orderHistory = [] } = useQuery({
     queryKey: ["agent-dashboard-order-history", userId],
