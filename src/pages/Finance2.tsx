@@ -62,6 +62,7 @@ interface FinanceRow {
   status: string;
   createdAt: string;
   deliveredCount: number;
+  shippedCount: number;
   totalOrders: number;
   revenue: number;
   shipping: number;
@@ -79,6 +80,7 @@ interface FinanceTotals {
   invoices: number;
   sellers: number;
   delivered: number;
+  shipped: number;
   totalOrders: number;
   revenue: number;
   sourcingProfit: number;
@@ -92,13 +94,13 @@ interface FinanceTotals {
   nextPayout: number;
 }
 
-const CUSTOMER_SHIPPING_CHARGE_USD = 3;
-const ANWAR_SHIPPING_COST_USD = 0.7;
+const SHIPPING_COST_USD = 0.7;
 
 const zeroTotals: FinanceTotals = {
   invoices: 0,
   sellers: 0,
   delivered: 0,
+  shipped: 0,
   totalOrders: 0,
   revenue: 0,
   sourcingProfit: 0,
@@ -126,6 +128,7 @@ function sumRows(rows: FinanceRow[]): FinanceTotals {
       invoices: acc.invoices + 1,
       sellers: sellers.size,
       delivered: acc.delivered + row.deliveredCount,
+      shipped: acc.shipped + row.shippedCount,
       totalOrders: acc.totalOrders + row.totalOrders,
       revenue: acc.revenue + row.revenue,
       sourcingProfit: acc.sourcingProfit,
@@ -172,6 +175,7 @@ function makeFinanceRow(invoice: DbInvoice, summary: InvoiceSummaryResponse, pro
     status: invoice.status,
     createdAt: invoice.created_at,
     deliveredCount: Number(summary.counts.delivered_count ?? 0),
+    shippedCount: Number(summary.counts.shipped_count ?? 0),
     totalOrders: Number(summary.counts.total_orders_count ?? 0),
     revenue: Number(totals.delivered_revenue_usd ?? 0),
     shipping: anwar ? 0 : Number(totals.shipping_fees ?? 0),
@@ -437,9 +441,9 @@ export default function Finance2() {
                 <tr>
                   <th className="px-4 py-3 text-left">Seller</th>
                   <th className="px-4 py-3 text-right">Revenue</th>
-                  <th className="px-4 py-3 text-right">Shipping Fee Rev.</th>
-                  <th className="px-4 py-3 text-right">Call Center</th>
-                  <th className="px-4 py-3 text-right">COD</th>
+                  <th className="px-4 py-3 text-right">Shipping Revenue</th>
+                  <th className="px-4 py-3 text-right">Call Center Revenue</th>
+                  <th className="px-4 py-3 text-right">COD Revenue</th>
                   <th className="px-4 py-3 text-right">Fee Revenue</th>
                   <th className="px-4 py-3 text-right">Next Payout</th>
                   <th className="px-4 py-3 text-right">Paid</th>
@@ -465,9 +469,9 @@ export default function Finance2() {
                         </div>
                       </td>
                       <AmountCell value={seller.totals.revenue} />
-                      <AmountCell value={seller.totals.shipping} negative />
-                      <AmountCell value={seller.totals.callCenter} negative />
-                      <AmountCell value={seller.totals.cod} negative />
+                      <AmountCell value={seller.totals.shipping} tone="success" />
+                      <AmountCell value={seller.totals.callCenter} tone="success" />
+                      <AmountCell value={seller.totals.cod} tone="success" />
                       <AmountCell value={seller.totals.feeRevenue} strong />
                       <AmountCell value={seller.totals.nextPayout} strong tone={seller.totals.nextPayout >= 0 ? "success" : "danger"} />
                       <AmountCell value={seller.totals.paid} tone="success" />
@@ -504,19 +508,21 @@ export default function Finance2() {
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        Next Payout includes every non-paid invoice, including open invoices. Anwar is shown separately and no fees are counted for Anwar.
+        Next Payout includes every non-paid invoice, including open invoices. Shipping profit is seller shipping fees minus our carrier cost of {formatUSD(SHIPPING_COST_USD)} per shipped order.
       </p>
     </div>
   );
 }
 
 function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; totals: FinanceTotals; anwar?: boolean }) {
-  const shippingRate = anwar ? ANWAR_SHIPPING_COST_USD : CUSTOMER_SHIPPING_CHARGE_USD;
-  const shippingCost = totals.totalOrders * shippingRate;
-  const feeRevenue = anwar ? 0 : totals.feeRevenue;
-  const operatingCosts = shippingCost + (anwar ? 0 : totals.callCenter + totals.cod + Math.max(0, totals.otherImpact));
-  const netProfit = feeRevenue + totals.sourcingProfit - operatingCosts;
-  const grossRevenue = totals.revenue + totals.sourcingProfit;
+  const shippingRevenue = anwar ? 0 : totals.shipping;
+  const shippingCost = totals.shipped * SHIPPING_COST_USD;
+  const shippingProfit = shippingRevenue - shippingCost;
+  const callCenterRevenue = anwar ? 0 : totals.callCenter;
+  const codRevenue = anwar ? 0 : totals.cod;
+  const otherServiceRevenue = anwar ? 0 : totals.otherImpact;
+  const serviceRevenue = shippingRevenue + callCenterRevenue + codRevenue + Math.max(0, otherServiceRevenue) + totals.sourcingProfit;
+  const netProfit = shippingProfit + callCenterRevenue + codRevenue + otherServiceRevenue + totals.sourcingProfit;
 
   return (
     <section className="space-y-3">
@@ -525,15 +531,15 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
         <MetricCard
           title="Net Profit"
           value={formatUSD(netProfit)}
-          helper={anwar ? "Sourcing profit minus Anwar shipping cost" : "Fee revenue + sourcing profit minus operating costs"}
+          helper="Service revenue minus real shipping cost"
           icon={BadgeDollarSign}
           tone="green"
           large
         />
         <MetricCard
-          title="Gross Revenue"
-          value={formatUSD(grossRevenue)}
-          helper="Delivered revenue + sourcing profit"
+          title="Service Revenue"
+          value={formatUSD(serviceRevenue)}
+          helper="Shipping fees + service fees + sourcing profit"
           icon={DollarSign}
           tone="rose"
           large
@@ -549,34 +555,57 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <MetricCard
-          title="Call Center Cost"
-          value={formatUSD(anwar ? 0 : totals.callCenter)}
-          helper={anwar ? "No call center fee for Anwar" : "Confirmed + dropped lead fees"}
-          icon={Phone}
-          tone="rose"
-        />
-        <MetricCard
-          title="COD Fee Revenue"
-          value={formatUSD(anwar ? 0 : totals.cod)}
-          helper={anwar ? "No COD fee for Anwar" : "COD fees charged to sellers"}
-          icon={CreditCard}
-          tone="rose"
+          title="Shipping Revenue"
+          value={formatUSD(shippingRevenue)}
+          helper={anwar ? "No shipping fee charged to Anwar" : "Shipping fees charged to sellers"}
+          icon={Truck}
+          tone="green"
         />
         <MetricCard
           title="Shipping Cost"
           value={formatUSD(shippingCost)}
-          helper={`${totals.totalOrders} invoiced orders x ${formatUSD(shippingRate)}`}
+          helper={`${totals.shipped} shipped orders x ${formatUSD(SHIPPING_COST_USD)}`}
           icon={Truck}
           tone="rose"
         />
+        <MetricCard
+          title="Shipping Profit"
+          value={formatUSD(shippingProfit)}
+          helper="Shipping revenue minus carrier cost"
+          icon={BadgeDollarSign}
+          tone={shippingProfit >= 0 ? "green" : "rose"}
+        />
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MetricCard
+          title="Call Center Revenue"
+          value={formatUSD(callCenterRevenue)}
+          helper={anwar ? "No call center fee for Anwar" : "Confirmed + dropped lead fees charged"}
+          icon={Phone}
+          tone="green"
+        />
+        <MetricCard
+          title="COD Fee Revenue"
+          value={formatUSD(codRevenue)}
+          helper={anwar ? "No COD fee for Anwar" : "COD fees charged to sellers"}
+          icon={CreditCard}
+          tone="green"
+        />
         <MetricCard
           title="Sourcing Profit"
           value={formatUSD(totals.sourcingProfit)}
           helper="Seller price minus landed price"
           icon={ReceiptText}
           tone="green"
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <MetricCard
+          title="Seller COD Revenue"
+          value={formatUSD(totals.revenue)}
+          helper="Delivered customer money before seller payout"
+          icon={DollarSign}
+          tone="blue"
         />
         <MetricCard
           title="Paid"
