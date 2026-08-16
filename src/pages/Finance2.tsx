@@ -548,7 +548,7 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
   return (
     <section className="space-y-3">
       <SectionTitle title={title} badge={anwar ? "No fees charged" : undefined} />
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <MetricCard
           title="Net Profit"
           value={formatUSD(netProfit)}
@@ -563,14 +563,6 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
           helper="Shipping fees + service fees + sourcing profit"
           icon={DollarSign}
           tone="rose"
-          large
-        />
-        <MetricCard
-          title="Next Payout"
-          value={formatUSD(totals.nextPayout)}
-          helper="All non-paid invoices, including open invoices"
-          icon={Wallet}
-          tone="amber"
           large
         />
       </div>
@@ -620,7 +612,7 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
           tone="green"
         />
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <MetricCard
           title="Seller COD Revenue"
           value={formatUSD(totals.revenue)}
@@ -634,6 +626,13 @@ function FinanceOverviewGrid({ title, totals, anwar = false }: { title: string; 
           helper="Already paid invoices"
           icon={Banknote}
           tone="green"
+        />
+        <MetricCard
+          title="Next Payout"
+          value={formatUSD(totals.nextPayout)}
+          helper="All non-paid invoices, including open invoices"
+          icon={Wallet}
+          tone="amber"
         />
       </div>
     </section>
