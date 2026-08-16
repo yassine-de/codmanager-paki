@@ -69,7 +69,7 @@ export function FinancialIndicators({
 }: Props) {
   if (HIDDEN_STATUSES.includes(confirmationStatus)) return null;
 
-  const shippedStatuses = ["dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery", "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return", "return_received"];
+  const shippedStatuses = ["shipped", "in_transit", "with_courier", "out_for_delivery", "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return", "return_received"];
 
   // C — confirmed
   const cActive = confirmationStatus === "confirmed";
