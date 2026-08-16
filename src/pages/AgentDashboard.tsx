@@ -144,18 +144,26 @@ const AgentDashboard = () => {
     refetchOnWindowFocus: true,
   });
 
-  // Filter the agent's orders by date directly from the orders table (the source of
-  // truth the ranking also uses). We DON'T rely on order_history here because status
-  // changes made outside AgentOrders (e.g. the WhatsApp inbox, imports) never wrote
-  // history rows — which left the dashboard cards stuck at 0 even when the agent had
-  // hundreds of confirmed orders.
-  const filteredOrders = useMemo(() => {
+  // Shared with the ranking query below so "Your Ranking" always agrees with
+  // the date-filtered stat cards on this same page instead of silently
+  // showing an all-time number next to a period-filtered one.
+  const resolvedDateRange = useMemo(() => {
     const from = dateRange?.from ? startOfDay(dateRange.from) : null;
     const to = dateRange?.to
       ? endOfDay(dateRange.to)
       : dateRange?.from
         ? endOfDay(dateRange.from)
         : null;
+    return { from, to };
+  }, [dateRange]);
+
+  // Filter the agent's orders by date directly from the orders table (the source of
+  // truth the ranking also uses). We DON'T rely on order_history here because status
+  // changes made outside AgentOrders (e.g. the WhatsApp inbox, imports) never wrote
+  // history rows — which left the dashboard cards stuck at 0 even when the agent had
+  // hundreds of confirmed orders.
+  const filteredOrders = useMemo(() => {
+    const { from, to } = resolvedDateRange;
 
     if (!from && !to) return agentOrders;
 
@@ -206,11 +214,15 @@ const AgentDashboard = () => {
     ...(stats.other > 0 ? [{ name: "Wrong №/Double", value: stats.other, color: COLORS.wrongNumber }] : []),
   ].filter(d => d.value > 0);
 
-  // Agent ranking (real data)
+  // Agent ranking (real data) — scoped to the same date range as the stat
+  // cards above, so "Your Ranking" never disagrees with them.
   const { data: rankingData = [] } = useQuery({
-    queryKey: ["agent-rankings"],
+    queryKey: ["agent-rankings", resolvedDateRange.from?.toISOString(), resolvedDateRange.to?.toISOString()],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_agent_rankings");
+      const { data, error } = await supabase.rpc("get_agent_rankings", {
+        p_from: resolvedDateRange.from ? resolvedDateRange.from.toISOString() : null,
+        p_to: resolvedDateRange.to ? resolvedDateRange.to.toISOString() : null,
+      });
       if (error) throw error;
       return data || [];
     },
