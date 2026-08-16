@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number, agentNewOrders: number, pendingAdjustments: number, followUpPending: number) => [
+const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number, pendingAdjustments: number, followUpPending: number) => [
   { title: "dashboard", url: "/", icon: LayoutDashboard },
   { title: "orders", url: "/orders", icon: ShoppingCart, badge: orderCount, permission: "access_to_orders", sellerVisible: true },
   { title: "analytics", url: "/seller-analytics", icon: BarChart3, sellerOnly: true, beta: true },
@@ -42,7 +42,7 @@ const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUn
   { title: "simulation", url: "/simulation", icon: Calculator, sellerOnly: true },
   { title: "settings", url: "/seller-settings", icon: Settings, sellerOnly: true },
   { title: "My Dashboard", url: "/agent-dashboard", icon: LayoutDashboard, agentOnly: true },
-  { title: "Process Orders", url: "/agent-orders", icon: Play, agentOnly: true, badge: agentNewOrders > 0 ? agentNewOrders : undefined },
+  { title: "Process Orders", url: "/agent-orders", icon: Play, agentOnly: true },
   { title: "Confirmed Orders", url: "/agent-confirmed", icon: ListChecks, agentOnly: true },
   { title: "WhatsApp Inbox", url: "/agent-whatsapp", icon: MessageSquare, permission: "access_to_whatsapp_inbox" },
   { title: "Dashboard", url: "/follow-up/dashboard", icon: LayoutDashboard, followUpOnly: true },
@@ -227,21 +227,6 @@ export function AppSidebar() {
     refetchInterval: 10000,
   });
 
-  const { data: agentNewOrders = 0 } = useQuery({
-    queryKey: ["agent-new-orders-count"],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .eq("confirmation_status", "new")
-        .is("agent_id", null);
-      if (error) throw error;
-      return count || 0;
-    },
-    enabled: isAgent && !!authUser,
-    refetchInterval: 15000,
-  });
-
   const { data: pendingAdjustments = 0 } = useQuery({
     queryKey: ["pending-adjustments-count"],
     queryFn: async () => {
@@ -336,7 +321,7 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
-  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, agentNewOrders, pendingAdjustments, followUpPending);
+  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, pendingAdjustments, followUpPending);
   const whatsappSubItems = getWhatsappSubItems(whatsappInboxUnread);
   const visibleWarehouseSubItems = isWarehouseManager
     ? warehouseSubItems.filter((sub) => sub.url !== "/warehouse/dashboard")

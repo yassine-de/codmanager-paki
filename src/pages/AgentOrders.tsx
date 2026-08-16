@@ -889,14 +889,10 @@ const AgentOrders = () => {
           </div>
           <h1 className="text-2xl font-bold text-foreground">Ready to start confirming?</h1>
           <p className="text-muted-foreground text-sm max-w-md">
-            You have <span className="font-bold text-primary">{newOrderCount}</span> new orders
-            {retryCount > 0 && (
-              <>, <span className="font-bold text-blue-500">{retryCount}</span> retries</>
-            )}
-            {duplicateCount > 0 && (
-              <>, <span className="font-bold text-amber-500">{duplicateCount}</span> duplicate groups</>
-            )}
-            {" "}waiting. Orders are loaded one by one directly from the backend.
+            Let's get through today's orders — one at a time.
+          </p>
+          <p dir="rtl" lang="ur" className="text-muted-foreground text-sm max-w-md">
+            آئیں آج کے آرڈرز مکمل کریں — ایک وقت میں ایک۔
           </p>
         </div>
         <Button

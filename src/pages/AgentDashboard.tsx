@@ -217,11 +217,19 @@ const AgentDashboard = () => {
   });
 
   const agentRanking = useMemo(() => {
-    return rankingData.map((r: any) => ({
-      name: r.agent_name,
-      confirmed: Number(r.confirmed_count),
-      isCurrentAgent: r.agent_id === userId,
-    }));
+    return rankingData
+      .map((r: any) => {
+        const confirmed = Number(r.confirmed_count);
+        const total = Number(r.total_count);
+        const newOrders = Number(r.new_count);
+        return {
+          name: r.agent_name,
+          confirmed,
+          rate: confirmationRatePercent(confirmed, total, newOrders),
+          isCurrentAgent: r.agent_id === userId,
+        };
+      })
+      .sort((a, b) => b.rate - a.rate);
   }, [rankingData, userId]);
 
   const currentRank = agentRanking.findIndex((a: any) => a.isCurrentAgent) + 1;
@@ -415,11 +423,11 @@ const AgentDashboard = () => {
                   <span className="flex-1 truncate">
                     {agent.name} {agent.isCurrentAgent && <Star className="inline h-3.5 w-3.5 text-primary ml-1" />}
                   </span>
-                  <span className="text-xs font-mono text-muted-foreground">{agent.confirmed} confirmed</span>
+                  <span className="text-xs font-mono text-muted-foreground">{agent.rate}% ({agent.confirmed} confirmed)</span>
                   <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
                     <div
                       className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${(agent.confirmed / (agentRanking[0]?.confirmed || 1)) * 100}%` }}
+                      style={{ width: `${agent.rate}%` }}
                     />
                   </div>
                 </div>
