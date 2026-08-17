@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Package, CheckCircle2, XCircle, Truck, BarChart2,
   ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight,
-  TrendingUp, TrendingDown, AlertCircle, PhoneMissed, PhoneOff,
+  TrendingUp, TrendingDown, AlertCircle, PhoneMissed, PhoneOff, Globe,
 } from "lucide-react";
 import {
   startOfDayPKT as startOfDay,
@@ -41,7 +41,7 @@ type Order = {
 type DateBasis = "created" | "updated";
 
 type SortDir = "asc" | "desc";
-type ProductSortField = "name" | "total" | "confirmed" | "confRate" | "delivered" | "delRate" | "cancelled" | "wrongNumber";
+type ProductSortField = "name" | "total" | "confirmed" | "confRate" | "delivered" | "delRate" | "globalRate" | "cancelled" | "wrongNumber";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -81,6 +81,34 @@ function rateGradient(rate: number): string {
   if (rate >= 50) return "from-emerald-500 to-green-400";
   if (rate >= 20) return "from-orange-700 to-amber-600";  // marron gradient
   return "from-red-500 to-rose-400";
+}
+
+// Global Delivery Rate (delivered / total leads) is on a structurally lower
+// scale than the other rates — it's diluted by every lead that never even
+// got confirmed, not just orders that shipped. Using the same 50/20
+// thresholds as the other rates would show it red/orange almost always
+// even when it's healthy for this metric, so it gets its own, proportionally
+// halved scale: 20%+ is green.
+function globalRateColor(rate: number): string {
+  if (rate >= 20) return "hsl(155, 50%, 42%)";           // green
+  if (rate >= 10) return "hsl(25, 65%, 42%)";            // marron
+  return "hsl(0, 65%, 52%)";                             // red
+}
+
+function globalRateBadgeClass(rate: number): string {
+  if (rate >= 20) return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+  if (rate >= 10) return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+  return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
+}
+
+function globalRateGradient(rate: number): string {
+  if (rate >= 20) return "from-emerald-500 to-green-400";
+  if (rate >= 10) return "from-orange-700 to-amber-600";
+  return "from-red-500 to-rose-400";
+}
+
+function globalRateLabel(rate: number): string {
+  return rate >= 40 ? "Excellent" : rate >= 20 ? "Average" : "Low";
 }
 
 function isWithinRange(date: Date, range: DateRange | undefined): boolean {
@@ -253,6 +281,11 @@ export default function SellerProductAnalytics() {
       unreachable,
       confRate: confirmationRatePercent(confirmed, total, newOrders),
       delRate: pct(delivered, shipped),
+      // Global Delivery Rate: delivered as a fraction of ALL leads, not just
+      // shipped ones — the true end-to-end lead-to-delivered conversion,
+      // as opposed to Delivery Rate which only looks at orders that made it
+      // to shipping (and so hides confirmation-stage drop-off).
+      globalDelRate: pct(delivered, total),
       cancelRate: pct(cancelled, total),
       wrongNumberRate: pct(wrongNumber, total),
       unreachableRate: pct(unreachable, total),
@@ -290,6 +323,7 @@ export default function SellerProductAnalytics() {
       wrongNumber: d.wrongNumber,
       confRate: confirmationRatePercent(d.confirmed, d.total, d.newOrders),
       delRate: pct(d.delivered, d.shipped),
+      globalRate: pct(d.delivered, d.total),
       cancelRate: pct(d.cancelled, d.total),
       reasons: Object.entries(d.reasons)
         .map(([reason, count]) => ({ reason, count, pct: pct(count, d.cancelled) }))
@@ -494,33 +528,34 @@ export default function SellerProductAnalytics() {
           </div>
 
           {/* ── Section 2: Rate summary pills ────────────────────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "Confirmation Rate", value: kpis.confRate, sub: `${kpis.confirmed} / ${kpis.total} orders`, icon: TrendingUp },
-              { label: "Delivery Rate", value: kpis.delRate, sub: `${kpis.delivered} / ${kpis.shipped} shipped`, icon: Truck },
-              { label: "Cancellation Rate", value: kpis.cancelRate, sub: `${kpis.cancelled} / ${kpis.total} orders`, icon: TrendingDown },
-            ].map(({ label, value, sub, icon: Icon }) => (
+              { label: "Confirmation Rate", value: kpis.confRate, sub: `${kpis.confirmed} / ${kpis.total} orders`, icon: TrendingUp, colorFn: rateColor, gradientFn: rateGradient, badgeFn: rateBadgeClass, labelFn: (v: number) => (v >= 70 ? "Excellent" : v >= 40 ? "Average" : "Low") },
+              { label: "Delivery Rate", value: kpis.delRate, sub: `${kpis.delivered} / ${kpis.shipped} shipped`, icon: Truck, colorFn: rateColor, gradientFn: rateGradient, badgeFn: rateBadgeClass, labelFn: (v: number) => (v >= 70 ? "Excellent" : v >= 40 ? "Average" : "Low") },
+              { label: "Global Delivery Rate", value: kpis.globalDelRate, sub: `${kpis.delivered} / ${kpis.total} leads`, icon: Globe, colorFn: globalRateColor, gradientFn: globalRateGradient, badgeFn: globalRateBadgeClass, labelFn: globalRateLabel },
+              { label: "Cancellation Rate", value: kpis.cancelRate, sub: `${kpis.cancelled} / ${kpis.total} orders`, icon: TrendingDown, colorFn: rateColor, gradientFn: rateGradient, badgeFn: rateBadgeClass, labelFn: (v: number) => (v >= 70 ? "Excellent" : v >= 40 ? "Average" : "Low") },
+            ].map(({ label, value, sub, icon: Icon, colorFn, gradientFn, badgeFn, labelFn }) => (
               <div
                 key={label}
                 className="relative overflow-hidden rounded-2xl bg-card border border-border/60 shadow-sm p-5"
               >
-                <div className={cn("absolute top-0 left-0 right-0 h-1 bg-gradient-to-r", rateGradient(value))} />
+                <div className={cn("absolute top-0 left-0 right-0 h-1 bg-gradient-to-r", gradientFn(value))} />
                 <div className="flex items-start justify-between mb-3">
                   <div className="p-2 rounded-xl bg-muted">
                     <Icon className="h-4 w-4 text-muted-foreground" />
                   </div>
-                  <Badge className={cn("text-xs font-semibold border-0", rateBadgeClass(value))}>
-                    {value >= 70 ? "Excellent" : value >= 40 ? "Average" : "Low"}
+                  <Badge className={cn("text-xs font-semibold border-0", badgeFn(value))}>
+                    {labelFn(value)}
                   </Badge>
                 </div>
-                <div className="text-4xl font-bold tracking-tight" style={{ color: rateColor(value) }}>
+                <div className="text-4xl font-bold tracking-tight" style={{ color: colorFn(value) }}>
                   {fmtPct(value)}
                 </div>
                 <p className="text-sm font-medium text-foreground mt-1">{label}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
                 <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
                   <div
-                    className={cn("h-full rounded-full bg-gradient-to-r transition-all duration-700", rateGradient(value))}
+                    className={cn("h-full rounded-full bg-gradient-to-r transition-all duration-700", gradientFn(value))}
                     style={{ width: `${Math.min(value, 100)}%` }}
                   />
                 </div>
@@ -556,6 +591,7 @@ export default function SellerProductAnalytics() {
                           { key: "confRate",  label: "Conf. Rate",   align: "right" },
                           { key: "delivered", label: "Delivered",    align: "right" },
                           { key: "delRate",   label: "Del. Rate",    align: "right" },
+                          { key: "globalRate", label: "Global Rate", align: "right" },
                           { key: "cancelled",    label: "Cancelled",      align: "right" },
                           { key: "wrongNumber",  label: "Wrong Numbers",  align: "right" },
                         ] as { key: ProductSortField; label: string; align: string }[]
@@ -565,7 +601,7 @@ export default function SellerProductAnalytics() {
                           className={cn(
                             "py-2.5 font-semibold cursor-pointer hover:text-foreground select-none",
                             align === "left" ? "text-left pr-4" : "text-right px-3",
-                            (key === "confRate" || key === "delRate") && "min-w-[120px]",
+                            (key === "confRate" || key === "delRate" || key === "globalRate") && "min-w-[120px]",
                           )}
                           onClick={() => toggleSort(key)}
                         >
@@ -626,6 +662,18 @@ export default function SellerProductAnalytics() {
                                 </div>
                                 <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[42px] text-center", rateBadgeClass(row.delRate))}>
                                   {fmtPct(row.delRate)}
+                                </span>
+                              </div>
+                            </td>
+                            {/* Global rate (delivered / total leads, not just shipped) — uses the
+                                lenient global-rate scale, see globalRateColor for why. */}
+                            <td className="py-2.5 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <div className="w-10 h-1.5 bg-muted rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full" style={{ width: `${Math.min(row.globalRate, 100)}%`, backgroundColor: globalRateColor(row.globalRate) }} />
+                                </div>
+                                <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[42px] text-center", globalRateBadgeClass(row.globalRate))}>
+                                  {fmtPct(row.globalRate)}
                                 </span>
                               </div>
                             </td>
