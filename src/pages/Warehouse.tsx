@@ -30,6 +30,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1938,6 +1942,37 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     }
   };
 
+  const [confirmBulkOutOfStock, setConfirmBulkOutOfStock] = useState(false);
+
+  const markSelectedOutOfStock = async () => {
+    if (selectedReadyRows.length === 0) return;
+    setBusy(true);
+    try {
+      await updateOrderDeliveryStatus(selectedReadyRows, "out_of_stock", "warehouse_out_of_stock_bulk");
+      const trackedRows = selectedReadyRows.filter((row) => row.tracking_number);
+      if (trackedRows.length > 0) {
+        await supabase.from("scan_events" as any).insert(
+          trackedRows.map((row) => ({
+            shipment_id: row.shipment_id || null,
+            tracking_number: row.tracking_number,
+            scan_type: "audit",
+            result: "ok",
+            message: "Marked out of stock (bulk)",
+            scanned_by: authUser?.id,
+          })),
+        );
+      }
+      toast.success(`${selectedReadyRows.length} order${selectedReadyRows.length === 1 ? "" : "s"} moved to Out of Stock`);
+      setSelectedReadyIds(new Set());
+      refreshWarehouse();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to mark orders out of stock");
+    } finally {
+      setBusy(false);
+      setConfirmBulkOutOfStock(false);
+    }
+  };
+
   const restockAndRetry = async (row: FulfillmentRow) => {
     setRestockingId(row.fulfillment_item_id);
     try {
@@ -2638,6 +2673,15 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                         <Button size="sm" className="h-8 text-xs" onClick={() => printLabels(selectedReadyRows)} disabled={printingLabels || !canReprint}>
                           <Printer className="h-3.5 w-3.5 mr-1.5" /> Reprint selected ({selectedReadyRows.length})
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-8 text-xs"
+                          onClick={() => setConfirmBulkOutOfStock(true)}
+                          disabled={busy}
+                        >
+                          <PackageX className="h-3.5 w-3.5 mr-1.5" /> Out of Stock ({selectedReadyRows.length})
+                        </Button>
                       </>
                     )}
                     <Input className="h-8 w-[260px] text-xs" value={readySearch} onChange={(e) => setReadySearch(e.target.value)} placeholder="Filter ready orders..." />
@@ -3118,6 +3162,27 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={confirmBulkOutOfStock} onOpenChange={(open) => { if (!open && !busy) setConfirmBulkOutOfStock(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark {selectedReadyRows.length} order{selectedReadyRows.length === 1 ? "" : "s"} as Out of Stock?</AlertDialogTitle>
+            <AlertDialogDescription>
+              These orders will move out of Ready to Dispatch and into the Out of Stock queue. This can be undone later with Restock &amp; Retry.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={busy}
+              onClick={(event) => { event.preventDefault(); markSelectedOutOfStock(); }}
+            >
+              <PackageX className="h-4 w-4 mr-1.5" /> Out of Stock
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={!!returnDialogOrder} onOpenChange={(open) => !open && setReturnDialogOrder(null)}>
         <DialogContent className="max-w-lg">
