@@ -6,10 +6,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Timer, AlertTriangle, Trophy, Turtle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Activity, Timer, AlertTriangle, Trophy, Turtle, ListFilter, ChevronLeft, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatDistanceStrict } from "date-fns";
 import { formatPKT as format } from "@/lib/timezone";
+import { DatePresetFilter, getDateRangeFromPreset, type DatePresetValue } from "@/components/DatePresetFilter";
+import type { DateRange } from "react-day-picker";
 
 type Activity = {
   id: string;
@@ -49,19 +54,30 @@ function activityLabel(type: string): string {
   return type;
 }
 
-export default function AgentMonitoring() {
-  const [days, setDays] = useState(1);
+const RANGE_LABELS: Record<DatePresetValue, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  "7d": "Last 7 days",
+  this_month: "This month",
+  last_month: "Last month",
+  maximum: "All time",
+  custom: "Custom range",
+};
 
-  // Fetch activity log
+export default function AgentMonitoring() {
+  const [datePreset, setDatePreset] = useState<DatePresetValue>("today");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(getDateRangeFromPreset("today"));
+
+  // Fetch activity log — same PKT-aware date range logic as the rest of the
+  // app (DatePresetFilter), instead of a naive "last N×24h from right now"
+  // window that didn't line up with real calendar-day/PKT boundaries.
   const { data: activities = [], isLoading } = useQuery({
-    queryKey: ["agent-activity-log", days],
+    queryKey: ["agent-activity-log", dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
     queryFn: async () => {
-      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-      const { data, error } = await supabase
-        .from("agent_activity_log")
-        .select("*")
-        .gte("created_at", since)
-        .order("created_at", { ascending: true });
+      let query = supabase.from("agent_activity_log").select("*").order("created_at", { ascending: true });
+      if (dateRange?.from) query = query.gte("created_at", dateRange.from.toISOString());
+      if (dateRange?.to) query = query.lte("created_at", dateRange.to.toISOString());
+      const { data, error } = await query;
       if (error) throw error;
       return (data || []) as Activity[];
     },
@@ -153,7 +169,36 @@ export default function AgentMonitoring() {
     return { avgReaction, slowCount, bestAgent, worstAgent, totalActions };
   }, [perAgent, agents]);
 
-  const rangeLabel = days === 1 ? "Today" : `Last ${days} days`;
+  const rangeLabel = RANGE_LABELS[datePreset];
+
+  // ── Full activity log (everything, not just idle gaps) ─────────────────
+  const LOG_PAGE_SIZE = 50;
+  const [logAgentFilter, setLogAgentFilter] = useState<string>("all");
+  const [logTypeFilter, setLogTypeFilter] = useState<string>("all");
+  const [logSearch, setLogSearch] = useState("");
+  const [logPage, setLogPage] = useState(0);
+
+  const distinctActivityTypes = useMemo(() => {
+    return Array.from(new Set(activities.map((a) => a.activity_type))).sort();
+  }, [activities]);
+
+  const filteredLog = useMemo(() => {
+    const search = logSearch.trim().toLowerCase();
+    return activities
+      .filter((a) => logAgentFilter === "all" || a.agent_id === logAgentFilter)
+      .filter((a) => logTypeFilter === "all" || a.activity_type === logTypeFilter)
+      .filter((a) => !search || (a.order_id || "").toLowerCase().includes(search))
+      .slice()
+      .reverse(); // most recent first — `activities` is fetched ascending for gap math
+  }, [activities, logAgentFilter, logTypeFilter, logSearch]);
+
+  const logPageCount = Math.max(1, Math.ceil(filteredLog.length / LOG_PAGE_SIZE));
+  const pagedLog = useMemo(
+    () => filteredLog.slice(logPage * LOG_PAGE_SIZE, (logPage + 1) * LOG_PAGE_SIZE),
+    [filteredLog, logPage],
+  );
+
+  const resetLogPage = () => setLogPage(0);
 
   return (
     <div className="space-y-6 w-full max-w-none">
@@ -164,23 +209,12 @@ export default function AgentMonitoring() {
             Track agent productivity & idle time. Gaps &gt; 3 minutes are flagged.
           </p>
         </div>
-        <div className="flex gap-1 bg-muted rounded-lg p-1">
-          {[
-            { v: 1, l: "Today" },
-            { v: 7, l: "7d" },
-            { v: 30, l: "30d" },
-          ].map((opt) => (
-            <button
-              key={opt.v}
-              onClick={() => setDays(opt.v)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                days === opt.v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {opt.l}
-            </button>
-          ))}
-        </div>
+        <DatePresetFilter
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+          preset={datePreset}
+          onPresetChange={setDatePreset}
+        />
       </div>
 
       {/* Top KPIs */}
@@ -345,6 +379,123 @@ export default function AgentMonitoring() {
           })}
         </Tabs>
       )}
+
+      {/* Full activity log — every claim and confirmation action, not just idle gaps */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ListFilter className="h-4 w-4" /> Full Activity Log
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Every logged action ({filteredLog.length.toLocaleString()} of {activities.length.toLocaleString()}) · {rangeLabel}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select
+                value={logAgentFilter}
+                onValueChange={(v) => { setLogAgentFilter(v); resetLogPage(); }}
+              >
+                <SelectTrigger className="h-8 text-xs w-[160px]">
+                  <SelectValue placeholder="Agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All agents</SelectItem>
+                  {agents.map((a) => (
+                    <SelectItem key={a.user_id} value={a.user_id}>{a.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={logTypeFilter}
+                onValueChange={(v) => { setLogTypeFilter(v); resetLogPage(); }}
+              >
+                <SelectTrigger className="h-8 text-xs w-[160px]">
+                  <SelectValue placeholder="Action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All actions</SelectItem>
+                  {distinctActivityTypes.map((t) => (
+                    <SelectItem key={t} value={t}>{activityLabel(t)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                value={logSearch}
+                onChange={(e) => { setLogSearch(e.target.value); resetLogPage(); }}
+                placeholder="Search order ID…"
+                className="h-8 text-xs w-[160px]"
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <Skeleton className="h-[300px] w-full" />
+          ) : filteredLog.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground text-sm">No activity matches these filters.</div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Agent</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Order</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pagedLog.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell className="text-xs text-muted-foreground font-mono whitespace-nowrap">
+                        {format(new Date(a.created_at), "MMM d, HH:mm:ss")}
+                      </TableCell>
+                      <TableCell className="font-medium text-sm">{agentNameById.get(a.agent_id) || "Unknown"}</TableCell>
+                      <TableCell className="text-sm">{activityLabel(a.activity_type)}</TableCell>
+                      <TableCell>
+                        {a.order_id ? (
+                          <Link to={`/orders/${a.order_id}`} className="text-primary hover:underline text-xs font-mono">
+                            {a.order_id}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <p className="text-xs text-muted-foreground">
+                  Page {logPage + 1} of {logPageCount}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    disabled={logPage === 0}
+                    onClick={() => setLogPage((p) => Math.max(0, p - 1))}
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" /> Prev
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    disabled={logPage >= logPageCount - 1}
+                    onClick={() => setLogPage((p) => Math.min(logPageCount - 1, p + 1))}
+                  >
+                    Next <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

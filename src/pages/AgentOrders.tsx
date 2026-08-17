@@ -114,6 +114,23 @@ interface DbOrder {
   _duplicateGroup?: DbOrder[];
 }
 
+// Fire-and-forget activity log for Agent Monitoring's idle-gap tracking.
+// Never blocks or fails the actual claim/submit flow — logging is
+// observability, not a requirement for the order action to succeed.
+async function logAgentActivity(agentId: string, agentName: string, activityType: string, orderId: string | null, metadata?: Record<string, unknown>) {
+  try {
+    await supabase.from("agent_activity_log" as any).insert({
+      agent_id: agentId,
+      agent_name: agentName,
+      activity_type: activityType,
+      order_id: orderId,
+      metadata: metadata || null,
+    });
+  } catch (error) {
+    console.error("[AgentOrders] Activity log insert failed:", error);
+  }
+}
+
 const AgentOrders = () => {
   const { authUser } = useAuth();
   const queryClient = useQueryClient();
@@ -519,13 +536,16 @@ const AgentOrders = () => {
       initOrderState(nextOrder);
       setStarted(true);
       await refreshAvailableCounts();
+      if (authUser) {
+        logAgentActivity(authUser.id, authUser.name, "claim", nextOrder.order_id);
+      }
     } catch (error: any) {
       console.error("[AgentOrders] Failed to load next order", error);
       toast.error(error?.message || "Failed to load next order");
     } finally {
       setClaiming(false);
     }
-  }, [claiming, clearActiveOrderState, claimNextAvailableOrder, initOrderState, refreshAvailableCounts]);
+  }, [claiming, clearActiveOrderState, claimNextAvailableOrder, initOrderState, refreshAvailableCounts, authUser]);
 
   // Auto-release order at 6 minutes — STRICT for new orders, FLEXIBLE for retries
   useEffect(() => {
@@ -821,6 +841,8 @@ const AgentOrders = () => {
         const { error: historyError } = await supabase.from("order_history").insert(historyEntries as any);
         if (historyError) console.error("[AgentOrders] History insert failed:", historyError);
       }
+
+      logAgentActivity(authUser.id, authUser.name, `confirmation_${finalStatus}`, currentOrder.order_id, actionType === "retry" ? { attempt_number: newAttemptCount } : undefined);
 
       toast.success(`Order ${currentOrder.order_id} → ${selectedStatus.toUpperCase()} ✅`, {
         duration: 3000,
