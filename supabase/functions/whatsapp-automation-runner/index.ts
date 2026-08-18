@@ -1367,6 +1367,14 @@ async function tickPendingIntentHandoff(): Promise<number> {
       const intentCreatedAt = intent?.created_at ? new Date(intent.created_at).getTime() : 0;
       if (intentCreatedAt && intentCreatedAt > Date.now() - 60 * 60 * 1000) continue;
 
+      // Only flag the conversation for a human to look at when there's
+      // actually something to look at: we handed the order to the agent
+      // queue, or we can't tell what state it's in. If the order already
+      // moved on (postponed/confirmed/cancelled/etc — an agent already
+      // handled it), the stale button intent isn't a real problem, so just
+      // clear it silently instead of raising a false "needs review".
+      let needsReview = false;
+
       if (c.order_id) {
         const { data: ord } = await admin
           .from("orders")
@@ -1417,27 +1425,36 @@ async function tickPendingIntentHandoff(): Promise<number> {
                 old_value: before ?? null,
                 new_value: "new",
               });
+              needsReview = true;
             } else {
               log("pending-intent: handoff skipped — status changed mid-flight", {
                 conv: c.id, order: c.order_id, status: before,
               });
             }
           }
+        } else {
+          // Linked order_id but no matching order row — unusual, worth a look.
+          needsReview = true;
         }
+      } else {
+        // No linked order at all — nothing to auto-resolve, flag for review.
+        needsReview = true;
       }
+
+      const convUpdate: Record<string, unknown> = {
+        ai_enabled: false,
+        pending_button_intent: null,
+        updated_at: new Date().toISOString(),
+      };
+      if (needsReview) convUpdate.status = "manual_review_needed";
 
       await admin
         .from("whatsapp_conversations")
-        .update({
-          ai_enabled: false,
-          status: "manual_review_needed",
-          pending_button_intent: null,
-          updated_at: new Date().toISOString(),
-        })
+        .update(convUpdate)
         .eq("id", c.id);
 
-      handed++;
-      log("pending-intent: auto-handoff to agent", { conv: c.id, order: c.order_id });
+      if (needsReview) handed++;
+      log("pending-intent: swept stale button intent", { conv: c.id, order: c.order_id, needsReview });
     } catch (e) {
       errLog("tickPendingIntentHandoff iter failed", (e as Error).message);
     }
