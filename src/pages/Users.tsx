@@ -91,6 +91,7 @@ const Users = () => {
     customRoleName: "",
     agentProductScope: "all" as "all" | "specific",
     agentProducts: [] as string[],
+    agentTrainingMode: false,
     followUpReceivesNewOrders: true,
     followUpProductScope: "all" as "all" | "specific",
     followUpProducts: [] as string[],
@@ -139,7 +140,7 @@ const Users = () => {
       name: "", email: "", password: "", phone: "",
       role: "seller", ...defaultSellerRateFields,
       selectedPermissions: [], customRoleName: "",
-      agentProductScope: "all", agentProducts: [],
+      agentProductScope: "all", agentProducts: [], agentTrainingMode: false,
       followUpReceivesNewOrders: true,
       followUpProductScope: "all", followUpProducts: [],
     });
@@ -152,6 +153,7 @@ const Users = () => {
     // Load agent product assignments
     let agentProductScope: "all" | "specific" = "all";
     let agentProducts: string[] = [];
+    let agentTrainingMode = false;
     if (user.role === "agent") {
       const { data } = await supabase
         .from("agent_products")
@@ -161,6 +163,12 @@ const Users = () => {
         agentProductScope = "specific";
         agentProducts = data.map(d => d.product_name);
       }
+      const { data: settings } = await (supabase as any)
+        .from("agent_settings")
+        .select("training_mode")
+        .eq("agent_id", user.user_id)
+        .maybeSingle();
+      agentTrainingMode = settings?.training_mode ?? false;
     }
 
     let followUpReceivesNewOrders = true;
@@ -199,6 +207,7 @@ const Users = () => {
       customRoleName: "",
       agentProductScope,
       agentProducts,
+      agentTrainingMode,
       followUpReceivesNewOrders,
       followUpProductScope,
       followUpProducts,
@@ -215,6 +224,13 @@ const Users = () => {
         form.agentProducts.map(name => ({ agent_id: agentId, product_name: name }))
       );
     }
+  };
+
+  const saveAgentTrainingMode = async (agentId: string) => {
+    const { error } = await (supabase as any)
+      .from("agent_settings")
+      .upsert({ agent_id: agentId, training_mode: form.agentTrainingMode }, { onConflict: "agent_id" });
+    if (error) throw error;
   };
 
   const saveFollowUpSettings = async (followUpUserId: string) => {
@@ -277,6 +293,7 @@ const Users = () => {
         // Save agent product assignments
         if (form.role === "agent") {
           await saveAgentProducts(editingUser.user_id);
+          await saveAgentTrainingMode(editingUser.user_id);
         }
         if (form.role === "follow_up") {
           await saveFollowUpSettings(editingUser.user_id);
@@ -311,6 +328,7 @@ const Users = () => {
         // Save agent product assignments for new user
         if (form.role === "agent" && data?.userId) {
           await saveAgentProducts(data.userId);
+          await saveAgentTrainingMode(data.userId);
         }
         if (form.role === "follow_up" && data?.userId) {
           await saveFollowUpSettings(data.userId);
@@ -640,6 +658,18 @@ const Users = () => {
             {/* Agent product scope */}
             {form.role === "agent" && (
               <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 p-3">
+                  <div>
+                    <Label className="text-xs font-semibold">Training mode</Label>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      When on, this agent can only claim No Answer (retry) orders — never new orders — until turned off.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.agentTrainingMode}
+                    onCheckedChange={(checked) => setForm((f) => ({ ...f, agentTrainingMode: checked }))}
+                  />
+                </div>
                 <Label className="text-xs font-semibold">Produits assignés</Label>
                 <Select
                   value={form.agentProductScope}

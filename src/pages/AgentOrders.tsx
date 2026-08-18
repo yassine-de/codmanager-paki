@@ -143,6 +143,7 @@ const AgentOrders = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [assignedProducts, setAssignedProducts] = useState<string[] | null>(null);
+  const [trainingMode, setTrainingMode] = useState(false);
   const [showCreateOrder, setShowCreateOrder] = useState(false);
 
   // Editable customer info
@@ -351,6 +352,14 @@ const AgentOrders = () => {
         : null;
 
       setAssignedProducts(prodNames);
+
+      const { data: settings } = await (supabase as any)
+        .from("agent_settings")
+        .select("training_mode")
+        .eq("agent_id", authUser.id)
+        .maybeSingle();
+      setTrainingMode(settings?.training_mode ?? false);
+
       await refreshAvailableCounts(prodNames);
     };
 
@@ -438,8 +447,13 @@ const AgentOrders = () => {
   }, [authUser, assignedProducts, enrichClaimedOrder]);
 
   const claimNextAvailableOrder = useCallback(async (): Promise<DbOrder | null> => {
-    // Priority: duplicates first, then agent's own postponed/retry, then new orders
-    const priority: string[] = ["duplicate", "postponed", "new", "no_answer"];
+    // Priority: duplicates first, then agent's own postponed/retry, then new orders.
+    // Training-mode agents only ever get no_answer (retry) orders — the RPC
+    // itself already enforces this server-side, this just avoids wasting
+    // calls on types we already know will be blocked.
+    const priority: string[] = trainingMode
+      ? ["no_answer"]
+      : ["duplicate", "postponed", "new", "no_answer"];
 
     for (const orderType of priority) {
       const claimedOrder = await claimOrderAtomic(orderType);
@@ -447,7 +461,7 @@ const AgentOrders = () => {
     }
 
     return null;
-  }, [claimOrderAtomic]);
+  }, [claimOrderAtomic, trainingMode]);
 
   const initOrderState = useCallback((order: DbOrder) => {
     const activeOrderId = order.id;
