@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { usePresenceHeartbeat } from "@/hooks/usePresence";
 import { useGlobalAdminSupportNotifications } from "@/hooks/useGlobalSupportNotifications";
+import { useAgentNotifications } from "@/hooks/useAgentNotifications";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SellerSupportChat } from "@/components/SellerSupportChat";
@@ -57,7 +58,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     location.pathname === "/sheets" ||
     location.pathname === "/seller-settings";
   const { authUser, signOut } = useAuth();
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const isConfirmationAgent = authUser?.role === "agent";
+  const mockNotif = useNotifications();
+  const agentNotif = useAgentNotifications(isConfirmationAgent ? authUser?.id : undefined);
+  // Confirmation agents see their real notifications (delivered/returned/
+  // postponed-due/rank); every other role keeps the existing behavior
+  // unchanged.
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = isConfirmationAgent ? agentNotif : mockNotif;
   const { language, setLanguage, t } = useLanguage();
   const { isDataVisible, toggleDataVisibility } = useDataVisibility();
   const { theme, toggleTheme } = useTheme();
