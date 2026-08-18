@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { usePresenceHeartbeat } from "@/hooks/usePresence";
 import { useGlobalAdminSupportNotifications } from "@/hooks/useGlobalSupportNotifications";
 import { useAgentNotifications } from "@/hooks/useAgentNotifications";
+import { useSellerNotifications } from "@/hooks/useSellerNotifications";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SellerSupportChat } from "@/components/SellerSupportChat";
@@ -59,12 +60,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     location.pathname === "/seller-settings";
   const { authUser, signOut } = useAuth();
   const isConfirmationAgent = authUser?.role === "agent";
+  const isSeller = authUser?.role === "seller";
   const mockNotif = useNotifications();
   const agentNotif = useAgentNotifications(isConfirmationAgent ? authUser?.id : undefined);
-  // Confirmation agents see their real notifications (delivered/returned/
-  // postponed-due/rank); every other role keeps the existing behavior
-  // unchanged.
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = isConfirmationAgent ? agentNotif : mockNotif;
+  const sellerNotif = useSellerNotifications(isSeller ? authUser?.id : undefined);
+  // Confirmation agents and sellers see their own real notifications; every
+  // other role keeps the existing mock behavior unchanged.
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = isConfirmationAgent
+    ? agentNotif
+    : isSeller
+      ? sellerNotif
+      : mockNotif;
   const { language, setLanguage, t } = useLanguage();
   const { isDataVisible, toggleDataVisibility } = useDataVisibility();
   const { theme, toggleTheme } = useTheme();
