@@ -5,7 +5,7 @@ import type { Notification } from "@/contexts/NotificationContext";
 
 interface FollowUpNotificationRow {
   id: string;
-  type: "followup_assigned" | "followup_stale" | "followup_delivered" | "followup_returned" | "followup_no_answer_attempt" | "followup_reattempt_stale";
+  type: "followup_assigned" | "followup_stale" | "followup_delivered" | "followup_returned" | "followup_no_answer_attempt" | "followup_reattempt_stale" | "followup_postpone_due";
   title: string;
   message: string;
   order_id: string | null;
@@ -20,6 +20,7 @@ const TYPE_MAP: Record<FollowUpNotificationRow["type"], Notification["type"]> = 
   followup_returned: "alert",
   followup_no_answer_attempt: "alert",
   followup_reattempt_stale: "urgent",
+  followup_postpone_due: "urgent",
 };
 
 // Real, per-follow-up-agent notifications (followup_assigned, followup_stale,
@@ -47,12 +48,13 @@ export function useFollowUpNotifications(followUpUserId: string | undefined) {
     refetchInterval: 30000,
   });
 
-  // Rows already arrive newest-first; float the "still not delivered 24h+"
-  // reminder to the top since it's the most actionable/urgent one, ahead of
+  // Rows already arrive newest-first; float the most actionable/urgent
+  // reminders (still-not-delivered, postponed-date-due) to the top ahead of
   // everything else regardless of age.
+  const URGENT_TYPES = new Set<FollowUpNotificationRow["type"]>(["followup_reattempt_stale", "followup_postpone_due"]);
   const sortedRows = [...rows].sort((a, b) => {
-    const aUrgent = a.type === "followup_reattempt_stale" ? 0 : 1;
-    const bUrgent = b.type === "followup_reattempt_stale" ? 0 : 1;
+    const aUrgent = URGENT_TYPES.has(a.type) ? 0 : 1;
+    const bUrgent = URGENT_TYPES.has(b.type) ? 0 : 1;
     return aUrgent - bUrgent;
   });
 

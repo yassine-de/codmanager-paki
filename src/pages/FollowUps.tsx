@@ -108,6 +108,7 @@ const FOLLOW_UP_STATUSES = [
   ...FU_TOP_STATUSES,
   ...FU_ACTION_STATUSES,
   { value: "no_answer", label: "No Answer" },
+  { value: "postponed", label: "Postponed" },
   { value: "closed",    label: "Closed"    },
 ];
 
@@ -119,6 +120,7 @@ const followUpStatusStyle: Record<string, string> = {
   re_attempted:    "bg-[hsl(270,50%,55%)]/12  text-[hsl(270,50%,55%)]  border-[hsl(270,50%,55%)]/25",
   pushed_delivery: "bg-[hsl(190,60%,42%)]/12  text-[hsl(190,60%,42%)]  border-[hsl(190,60%,42%)]/25",
   no_answer:       "bg-[hsl(220,60%,52%)]/12  text-[hsl(220,60%,52%)]  border-[hsl(220,60%,52%)]/25",
+  postponed:       "bg-[hsl(25,85%,55%)]/12   text-[hsl(25,85%,55%)]   border-[hsl(25,85%,55%)]/25",
   refused:         "bg-[hsl(340,65%,45%)]/12  text-[hsl(340,65%,45%)]  border-[hsl(340,65%,45%)]/25",
   /* legacy */
   contacted_courier: "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)]  border-[hsl(210,60%,52%)]/25",
@@ -172,6 +174,7 @@ interface FollowUpRow {
   product_name: string | null;
   total_amount: number | null;
   fu_no_answer_count: number;
+  fu_postpone_until: string | null;
 }
 
 function computeSegment(row: FollowUpRow): "failed_attempt" | "delayed" | "on_going" | null {
@@ -492,12 +495,13 @@ export default function FollowUps() {
     }
   }
 
-  async function handleStatusChange(orderId: string, newStatus: string, noAnswerAttempt?: number, note?: string) {
+  async function handleStatusChange(orderId: string, newStatus: string, noAnswerAttempt?: number, note?: string, postponeUntil?: string) {
     if (!authUser) return;
     setSavingId(orderId);
     try {
       const upsertData: Record<string, unknown> = { order_id: orderId, follow_up_status: newStatus, updated_by: authUser.id };
       if (newStatus === "no_answer" && noAnswerAttempt !== undefined) upsertData.fu_no_answer_count = noAnswerAttempt;
+      if (newStatus === "postponed" && postponeUntil) upsertData.fu_postpone_until = postponeUntil;
       const { error } = await supabase.from("order_follow_ups").upsert(upsertData as any, { onConflict: "order_id" });
       if (error) throw error;
       if (note?.trim()) {
@@ -1184,7 +1188,7 @@ function DateRangePicker({
 
 const FU_MAX_ATTEMPTS = 5;
 
-type FuView = "status" | "attempts" | "refused_note";
+type FuView = "status" | "attempts" | "refused_note" | "postpone_date";
 
 function FollowUpStatusCell({
   row,
@@ -1193,11 +1197,13 @@ function FollowUpStatusCell({
 }: {
   row: FollowUpRow & { segment: "failed_attempt" | "delayed" | "on_going" | null };
   savingId: string | null;
-  onStatusChange: (id: string, status: string, attempt?: number, note?: string) => void;
+  onStatusChange: (id: string, status: string, attempt?: number, note?: string, postponeUntil?: string) => void;
 }) {
   const [open, setOpen]       = useState(false);
   const [view, setView]       = useState<FuView>("status");
   const [refusedNote, setRefusedNote] = useState("");
+  const [postponeDate, setPostponeDate] = useState<Date | undefined>();
+  const [postponeTime, setPostponeTime] = useState("10:00");
 
   const doneCount   = row.fu_no_answer_count ?? 0;
   const nextAttempt = doneCount + 1;
@@ -1216,14 +1222,16 @@ function FollowUpStatusCell({
 
   function handleOpenChange(v: boolean) {
     setOpen(v);
-    if (!v) { setView("status"); setRefusedNote(""); }
+    if (!v) { setView("status"); setRefusedNote(""); setPostponeDate(undefined); setPostponeTime("10:00"); }
   }
 
-  function pick(status: string, attempt?: number, note?: string) {
+  function pick(status: string, attempt?: number, note?: string, postponeUntil?: string) {
     setOpen(false);
     setView("status");
     setRefusedNote("");
-    onStatusChange(row.order_id, status, attempt, note);
+    setPostponeDate(undefined);
+    setPostponeTime("10:00");
+    onStatusChange(row.order_id, status, attempt, note, postponeUntil);
   }
 
   return (
@@ -1315,6 +1323,17 @@ function FollowUpStatusCell({
                       No Answer {isNoAnswer && doneCount > 0 ? `· ${doneCount}/${FU_MAX_ATTEMPTS}` : ""}
                     </span>
                     <ChevronDown className="h-3.5 w-3.5 text-[hsl(220,60%,52%)]/70 -rotate-90 flex-shrink-0" />
+                  </button>
+
+                  {/* Postponed — opens date/time picker */}
+                  <button
+                    onClick={() => setView("postpone_date")}
+                    className={`w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-[hsl(25,85%,55%)]/8 ${row.follow_up_status === "postponed" ? "bg-[hsl(25,85%,55%)]/8" : ""}`}
+                  >
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle["postponed"]}`}>
+                      Postponed
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-[hsl(25,85%,55%)]/70 -rotate-90 flex-shrink-0" />
                   </button>
 
                   {/* Refused — opens note input (obligatory) */}
@@ -1453,11 +1472,69 @@ function FollowUpStatusCell({
             </div>
           )}
 
+          {/* ── VIEW 4: Postponed — pick a date/time to come back to this order ── */}
+          {view === "postpone_date" && (
+            <div className="bg-[hsl(25,85%,55%)]/[0.03]">
+              <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/50">
+                <button
+                  onClick={() => setView("status")}
+                  className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                </button>
+                <div className="flex items-center gap-1.5 flex-1">
+                  <div className="p-1 rounded-md bg-[hsl(25,85%,55%)]/15">
+                    <CalendarIcon className="h-3 w-3 text-[hsl(25,85%,55%)]" />
+                  </div>
+                  <span className="text-xs font-bold text-[hsl(25,85%,55%)]">Postponed — Pick Date & Time</span>
+                </div>
+              </div>
+
+              <div className="p-3 space-y-3">
+                <Calendar
+                  mode="single"
+                  selected={postponeDate}
+                  onSelect={setPostponeDate}
+                  disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                  className="mx-auto"
+                />
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground font-medium">Time</span>
+                  <input
+                    type="time"
+                    value={postponeTime}
+                    onChange={(e) => setPostponeTime(e.target.value)}
+                    className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  />
+                </div>
+                <button
+                  disabled={!postponeDate}
+                  onClick={() => {
+                    if (!postponeDate) return;
+                    const [h, m] = postponeTime.split(":").map((n) => parseInt(n, 10));
+                    const combined = new Date(postponeDate);
+                    combined.setHours(h || 0, m || 0, 0, 0);
+                    pick("postponed", undefined, undefined, combined.toISOString());
+                  }}
+                  className="w-full py-2 rounded-lg text-xs font-semibold transition-all
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                    bg-[hsl(25,85%,55%)] text-white hover:bg-[hsl(25,85%,50%)] active:scale-95"
+                >
+                  Confirm Postponed
+                </button>
+              </div>
+            </div>
+          )}
+
         </PopoverContent>
       </Popover>
 
       {/* Timestamp under pill */}
-      {updatedAt && (
+      {row.follow_up_status === "postponed" && row.fu_postpone_until ? (
+        <span className="text-[9px] text-[hsl(25,85%,55%)]/80 font-medium leading-none pl-1">
+          Due {format(new Date(row.fu_postpone_until), "MMM d, HH:mm")}
+        </span>
+      ) : updatedAt && (
         <span className="text-[9px] text-muted-foreground/45 leading-none pl-1">{updatedAt}</span>
       )}
     </div>
@@ -1470,7 +1547,7 @@ function renderCell(
   row: FollowUpRow & { segment: "failed_attempt" | "delayed" | "on_going" | null },
   segMeta: (typeof segmentMeta)[keyof typeof segmentMeta] | null,
   savingId: string | null,
-  handleStatusChange: (id: string, status: string, attempt?: number, note?: string) => void,
+  handleStatusChange: (id: string, status: string, attempt?: number, note?: string, postponeUntil?: string) => void,
   handleNoteSave: (id: string, note: string) => void,
   navigate: (to: string) => void,
   setHistoryOrder: (v: { id: string; customer: string } | null) => void,
