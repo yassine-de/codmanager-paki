@@ -14,6 +14,7 @@ import { useGlobalAdminSupportNotifications } from "@/hooks/useGlobalSupportNoti
 import { useAgentNotifications } from "@/hooks/useAgentNotifications";
 import { useSellerNotifications } from "@/hooks/useSellerNotifications";
 import { useAdminNotifications } from "@/hooks/useAdminNotifications";
+import { useFollowUpNotifications } from "@/hooks/useFollowUpNotifications";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SellerSupportChat } from "@/components/SellerSupportChat";
@@ -63,12 +64,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isConfirmationAgent = authUser?.role === "agent";
   const isSeller = authUser?.role === "seller";
   const isAdmin = authUser?.role === "admin";
+  const isFollowUp = authUser?.role === "follow_up";
   const mockNotif = useNotifications();
   const agentNotif = useAgentNotifications(isConfirmationAgent ? authUser?.id : undefined);
   const sellerNotif = useSellerNotifications(isSeller ? authUser?.id : undefined);
   const adminNotif = useAdminNotifications(isAdmin ? authUser?.id : undefined);
-  // Confirmation agents, sellers, and admins see their own real
-  // notifications; every other role keeps the existing mock behavior
+  const followUpNotif = useFollowUpNotifications(isFollowUp ? authUser?.id : undefined);
+  // Confirmation agents, sellers, admins, and follow-up agents see their own
+  // real notifications; every other role keeps the existing mock behavior
   // unchanged.
   const { notifications, unreadCount, markAsRead, markAllAsRead } = isConfirmationAgent
     ? agentNotif
@@ -76,7 +79,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       ? sellerNotif
       : isAdmin
         ? adminNotif
-        : mockNotif;
+        : isFollowUp
+          ? followUpNotif
+          : mockNotif;
   const { language, setLanguage, t } = useLanguage();
   const { isDataVisible, toggleDataVisibility } = useDataVisibility();
   const { theme, toggleTheme } = useTheme();
