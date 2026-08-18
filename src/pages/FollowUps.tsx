@@ -101,6 +101,7 @@ const FU_TOP_STATUSES = [
 const FU_ACTION_STATUSES = [
   { value: "re_attempted",    label: "Re-attempted"    },
   { value: "pushed_delivery", label: "Pushed Delivery" },
+  { value: "area_restricted", label: "Area Restricted" },
   { value: "refused",         label: "Refused"         },
 ];
 const FOLLOW_UP_STATUSES = [
@@ -119,6 +120,7 @@ const followUpStatusStyle: Record<string, string> = {
   delayed:         "bg-[hsl(38,90%,48%)]/12   text-[hsl(38,90%,48%)]   border-[hsl(38,90%,48%)]/25",
   re_attempted:    "bg-[hsl(270,50%,55%)]/12  text-[hsl(270,50%,55%)]  border-[hsl(270,50%,55%)]/25",
   pushed_delivery: "bg-[hsl(190,60%,42%)]/12  text-[hsl(190,60%,42%)]  border-[hsl(190,60%,42%)]/25",
+  area_restricted: "bg-[hsl(215,25%,45%)]/12  text-[hsl(215,25%,45%)]  border-[hsl(215,25%,45%)]/25",
   no_answer:       "bg-[hsl(220,60%,52%)]/12  text-[hsl(220,60%,52%)]  border-[hsl(220,60%,52%)]/25",
   postponed:       "bg-[hsl(25,85%,55%)]/12   text-[hsl(25,85%,55%)]   border-[hsl(25,85%,55%)]/25",
   refused:         "bg-[hsl(340,65%,45%)]/12  text-[hsl(340,65%,45%)]  border-[hsl(340,65%,45%)]/25",
@@ -1299,6 +1301,24 @@ function FollowUpStatusCell({
                   {/* Pushed Delivery — direct save */}
                   {(() => {
                     const s = FU_ACTION_STATUSES.find((x) => x.value === "pushed_delivery")!;
+                    const active = row.follow_up_status === s.value;
+                    return (
+                      <button
+                        key={s.value}
+                        onClick={() => pick(s.value)}
+                        className={`w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-muted/70 ${active ? "bg-muted/50" : ""}`}
+                      >
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle[s.value] ?? ""}`}>
+                          {s.label}
+                        </span>
+                        {active && <Check className="h-3.5 w-3.5 text-primary flex-shrink-0" />}
+                      </button>
+                    );
+                  })()}
+
+                  {/* Area Restricted — direct save */}
+                  {(() => {
+                    const s = FU_ACTION_STATUSES.find((x) => x.value === "area_restricted")!;
                     const active = row.follow_up_status === s.value;
                     return (
                       <button
