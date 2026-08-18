@@ -13,6 +13,7 @@ import { usePresenceHeartbeat } from "@/hooks/usePresence";
 import { useGlobalAdminSupportNotifications } from "@/hooks/useGlobalSupportNotifications";
 import { useAgentNotifications } from "@/hooks/useAgentNotifications";
 import { useSellerNotifications } from "@/hooks/useSellerNotifications";
+import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SellerSupportChat } from "@/components/SellerSupportChat";
@@ -61,16 +62,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { authUser, signOut } = useAuth();
   const isConfirmationAgent = authUser?.role === "agent";
   const isSeller = authUser?.role === "seller";
+  const isAdmin = authUser?.role === "admin";
   const mockNotif = useNotifications();
   const agentNotif = useAgentNotifications(isConfirmationAgent ? authUser?.id : undefined);
   const sellerNotif = useSellerNotifications(isSeller ? authUser?.id : undefined);
-  // Confirmation agents and sellers see their own real notifications; every
-  // other role keeps the existing mock behavior unchanged.
+  const adminNotif = useAdminNotifications(isAdmin ? authUser?.id : undefined);
+  // Confirmation agents, sellers, and admins see their own real
+  // notifications; every other role keeps the existing mock behavior
+  // unchanged.
   const { notifications, unreadCount, markAsRead, markAllAsRead } = isConfirmationAgent
     ? agentNotif
     : isSeller
       ? sellerNotif
-      : mockNotif;
+      : isAdmin
+        ? adminNotif
+        : mockNotif;
   const { language, setLanguage, t } = useLanguage();
   const { isDataVisible, toggleDataVisibility } = useDataVisibility();
   const { theme, toggleTheme } = useTheme();
