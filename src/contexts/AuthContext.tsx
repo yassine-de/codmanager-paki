@@ -32,18 +32,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserDetails = async (supabaseUser: User): Promise<AuthUser> => {
+  // A 401 here (typically caused by the auth token failing to refresh in
+  // time, sometimes rate-limited by Supabase — see gotrue-js "Lock ...
+  // was not released" console warning) makes these queries silently
+  // return null/empty instead of throwing, which used to fall back to
+  // role: "custom" and render a broken "no access" UI even though the
+  // account itself is perfectly fine. isAuthError() lets the caller detect
+  // that specific case and recover instead of trusting the empty result.
+  const isAuthError = (error: { code?: string; message?: string } | null) =>
+    !!error && (error.code === "PGRST301" || /jwt|401|unauthorized/i.test(error.message || ""));
+
+  const fetchUserDetails = async (supabaseUser: User): Promise<AuthUser | null> => {
     const fallbackName =
       typeof supabaseUser.user_metadata?.name === "string" && supabaseUser.user_metadata.name.trim().length > 0
         ? supabaseUser.user_metadata.name
         : supabaseUser.email?.split("@")[0] || "User";
 
     try {
-      const [{ data: profile }, { data: roleData }, { data: permsData }] = await Promise.all([
+      const [profileRes, roleRes, permsRes] = await Promise.all([
         supabase.from("profiles").select("*").eq("user_id", supabaseUser.id).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", supabaseUser.id).maybeSingle(),
         supabase.from("user_permissions").select("permission_key").eq("user_id", supabaseUser.id),
       ]);
+
+      if (isAuthError(profileRes.error) || isAuthError(roleRes.error) || isAuthError(permsRes.error)) {
+        // The access token is stale/invalid rather than the account lacking
+        // a role — null signals the caller to recover the session and
+        // retry, instead of us guessing a role from a failed query.
+        return null;
+      }
+
+      const profile = profileRes.data;
+      const roleData = roleRes.data;
+      const permsData = permsRes.data;
 
       return {
         id: supabaseUser.id,
@@ -56,23 +77,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     } catch (err) {
       console.error("Error fetching user details:", err);
-      return {
-        id: supabaseUser.id,
-        email: supabaseUser.email || "",
-        name: fallbackName,
-        role: "custom",
-        permissions: [],
-        phone: "",
-        active: true,
-      };
+      return null;
     }
+  };
+
+  // fetchUserDetails returning null means the profile/role/permission
+  // queries failed on an invalid token, not that the account has no role.
+  // Recover by actively refreshing the session and retrying once; only if
+  // that still fails do we treat it as a real sign-out, so a transient
+  // token hiccup (e.g. a rate-limited refresh) can't strand someone on a
+  // broken "no access" screen for an account that's actually fine.
+  const resolveUserDetails = async (sessionUser: User): Promise<AuthUser | null> => {
+    let details = await fetchUserDetails(sessionUser);
+    if (details) return details;
+
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    details = await fetchUserDetails(refreshed.user ?? sessionUser);
+    return details;
   };
 
   const refreshUser = async () => {
     if (!user) return;
     setLoading(true);
-    const details = await fetchUserDetails(user);
-    setAuthUser(details);
+    const details = await resolveUserDetails(user);
+    if (details) {
+      setAuthUser(details);
+    } else {
+      await supabase.auth.signOut();
+      setUser(null);
+      setAuthUser(null);
+    }
     setLoading(false);
   };
 
@@ -90,10 +124,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         // Fetch ALL user data before rendering UI
-        const details = await fetchUserDetails(sessionUser);
+        const details = await resolveUserDetails(sessionUser);
         if (!isMounted) return;
-        setUser(sessionUser);
-        setAuthUser(details);
+        if (details) {
+          setUser(sessionUser);
+          setAuthUser(details);
+        } else {
+          // Session truly can't be recovered — sign out cleanly instead of
+          // rendering a broken permission-denied state for a fine account.
+          await supabase.auth.signOut();
+          setUser(null);
+          setAuthUser(null);
+        }
         setLoading(false);
       } else {
         setUser(null);
