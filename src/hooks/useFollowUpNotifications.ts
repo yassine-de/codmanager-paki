@@ -19,7 +19,7 @@ const TYPE_MAP: Record<FollowUpNotificationRow["type"], Notification["type"]> = 
   followup_delivered: "order",
   followup_returned: "alert",
   followup_no_answer_attempt: "alert",
-  followup_reattempt_stale: "alert",
+  followup_reattempt_stale: "urgent",
 };
 
 // Real, per-follow-up-agent notifications (followup_assigned, followup_stale,
@@ -47,7 +47,16 @@ export function useFollowUpNotifications(followUpUserId: string | undefined) {
     refetchInterval: 30000,
   });
 
-  const notifications: Notification[] = rows.map((r) => ({
+  // Rows already arrive newest-first; float the "still not delivered 24h+"
+  // reminder to the top since it's the most actionable/urgent one, ahead of
+  // everything else regardless of age.
+  const sortedRows = [...rows].sort((a, b) => {
+    const aUrgent = a.type === "followup_reattempt_stale" ? 0 : 1;
+    const bUrgent = b.type === "followup_reattempt_stale" ? 0 : 1;
+    return aUrgent - bUrgent;
+  });
+
+  const notifications: Notification[] = sortedRows.map((r) => ({
     id: r.id,
     title: r.title,
     message: r.message,

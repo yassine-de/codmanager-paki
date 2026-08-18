@@ -33,12 +33,14 @@ const notifTypeIcon = {
   order: ShoppingCart,
   alert: AlertTriangle,
   system: Info,
+  urgent: AlertTriangle,
 };
 
 const notifTypeColor = {
   order: "text-primary bg-primary/10",
   alert: "text-warning bg-warning/10",
   system: "text-info bg-info/10",
+  urgent: "text-destructive bg-destructive/10",
 };
 
 export function AppLayout({ children }: { children: React.ReactNode }) {

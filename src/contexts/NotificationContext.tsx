@@ -6,7 +6,7 @@ export interface Notification {
   message: string;
   time: string;
   read: boolean;
-  type: "order" | "system" | "alert";
+  type: "order" | "system" | "alert" | "urgent";
 }
 
 const initialNotifications: Notification[] = [
