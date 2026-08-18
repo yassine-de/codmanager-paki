@@ -373,6 +373,18 @@ async function ensureConversation(order: any, normalizedPhone: string) {
     .select()
     .single();
   if (error) {
+    // Race condition: another process (e.g. the webhook, or another runner
+    // tick) inserted a conversation for this order between our lookup above
+    // and this insert (blocked by whatsapp_conversations_order_unique).
+    // Fall back to fetching the one that won instead of dropping this run.
+    if (error.code === "23505") {
+      const { data: existing } = await admin
+        .from("whatsapp_conversations")
+        .select("*")
+        .eq("order_id", order.order_id)
+        .maybeSingle();
+      if (existing) return existing;
+    }
     errLog("conversation insert failed", error);
     return null;
   }

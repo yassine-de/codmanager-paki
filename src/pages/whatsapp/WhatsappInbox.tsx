@@ -2067,24 +2067,41 @@ export default function WhatsappInbox() {
                   </Button>
                 )}
 
-                {/* Force to Agent — hand the order off to the call-center queue */}
+                {/* Force to Agent — hand the order off to the call-center queue.
+                    Once done, whatsapp_status flips to "handed_to_agent" and
+                    stays that way (nothing else overwrites it), so we use it
+                    to lock the button and show it's already been sent. */}
                 {conv?.order_id && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={forceToAgent}
-                    disabled={forcingAgent}
-                    className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 hover:text-orange-700 dark:text-orange-400"
-                    title="Stop AI and send this order to the agent queue"
-                  >
-                    {forcingAgent ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <UserPlus className="h-3.5 w-3.5" />
-                    )}
-                    <span className="hidden md:inline">Force to Agent</span>
-                  </Button>
+                  order?.whatsapp_status === "handed_to_agent" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled
+                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 opacity-90 disabled:opacity-90"
+                      title="Already sent to the agent queue"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span className="hidden md:inline">Sent to Agent</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={forceToAgent}
+                      disabled={forcingAgent}
+                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 hover:text-orange-700 dark:text-orange-400"
+                      title="Stop AI and send this order to the agent queue"
+                    >
+                      {forcingAgent ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <UserPlus className="h-3.5 w-3.5" />
+                      )}
+                      <span className="hidden md:inline">Force to Agent</span>
+                    </Button>
+                  )
                 )}
 
                 {/* AI auto-reply toggle */}

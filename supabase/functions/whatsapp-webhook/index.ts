@@ -296,16 +296,30 @@ async function findOrCreateConversation(phone: string, orderId?: string | null) 
       .select()
       .single();
     if (error) {
-      // Race condition: another webhook just inserted an unlinked conversation
-      // for this phone (blocked by whatsapp_conversations_phone_unlinked_unique).
-      // Fall back to fetching the existing one so we don't drop the message.
-      const { data: existing } = await admin
-        .from("whatsapp_conversations")
-        .select("*")
-        .in("customer_phone", phoneVariants)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Race condition: another process just inserted a conversation for this
+      // same order (blocked by whatsapp_conversations_order_unique) or an
+      // unlinked conversation for this phone (blocked by
+      // whatsapp_conversations_phone_unlinked_unique). Fall back to fetching
+      // the one that won so we don't drop the message.
+      let existing: any = null;
+      if (order) {
+        const { data } = await admin
+          .from("whatsapp_conversations")
+          .select("*")
+          .eq("order_id", order.order_id)
+          .maybeSingle();
+        existing = data;
+      }
+      if (!existing) {
+        const { data } = await admin
+          .from("whatsapp_conversations")
+          .select("*")
+          .in("customer_phone", phoneVariants)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        existing = data;
+      }
       if (existing) {
         conv = existing;
       } else {
