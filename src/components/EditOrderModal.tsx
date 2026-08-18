@@ -181,7 +181,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[65vh]">
+        <ScrollArea className="h-[65vh]">
           <div className="px-5 py-4 space-y-5">
             {/* Customer Info */}
             <div>

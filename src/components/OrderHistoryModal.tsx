@@ -286,7 +286,7 @@ export default function OrderHistoryModal({ open, onOpenChange, orderId, custome
             <span className="ml-2 text-xs font-normal text-muted-foreground">{orderId} · {customerName}</span>
           </DialogTitle>
         </DialogHeader>
-        <ScrollArea className="max-h-[60vh]">
+        <ScrollArea className="h-[60vh]">
           <div className="px-5 py-4">
             {loading ? (
               <div className="flex items-center justify-center py-8">

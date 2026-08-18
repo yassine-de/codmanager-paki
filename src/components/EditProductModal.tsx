@@ -316,7 +316,7 @@ export function EditProductModal({ product, open, onOpenChange, onSave }: EditPr
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[65vh]">
+        <ScrollArea className="h-[65vh]">
           <div className="px-5 py-4 space-y-5">
             {/* Image preview */}
             {product.image && (

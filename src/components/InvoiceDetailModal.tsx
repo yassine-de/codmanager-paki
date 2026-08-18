@@ -85,7 +85,7 @@ export function InvoiceDetailModal({
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[80vh]">
+        <ScrollArea className="h-[80vh]">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

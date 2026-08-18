@@ -183,12 +183,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       </button>
                     )}
                   </div>
-                  <ScrollArea className="max-h-[380px]">
-                    {notifications.length === 0 ? (
-                      <div className="p-10 text-center text-sm text-muted-foreground">
-                        {t("no_notifications")}
-                      </div>
-                    ) : (
+                  {notifications.length === 0 ? (
+                    <div className="p-10 text-center text-sm text-muted-foreground">
+                      {t("no_notifications")}
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[380px]">
                       <div className="divide-y">
                         {notifications.map((n) => {
                           const Icon = notifTypeIcon[n.type];
@@ -220,8 +220,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           );
                         })}
                       </div>
-                    )}
-                  </ScrollArea>
+                    </ScrollArea>
+                  )}
                 </PopoverContent>
               </Popover>
 

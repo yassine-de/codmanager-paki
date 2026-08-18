@@ -83,7 +83,7 @@ export function SourcingHistoryModal({ requestId, open, onOpenChange }: Sourcing
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[60vh] pr-2">
+        <ScrollArea className="h-[60vh] pr-2">
           {isLoading ? (
             <div className="flex justify-center py-10">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

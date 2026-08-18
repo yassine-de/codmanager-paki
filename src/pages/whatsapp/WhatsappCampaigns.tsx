@@ -1018,7 +1018,7 @@ function FilterMultiSelect({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-          <ScrollArea className="max-h-[280px]">
+          <ScrollArea className="h-[280px]">
             <div className="p-1">
               {options.length === 0 ? (
                 <div className="text-xs text-muted-foreground px-3 py-2">No options</div>
