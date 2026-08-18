@@ -8,10 +8,36 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// A 401 from any request on this client means the access token itself is
+// dead (expired/invalid) — most commonly because a background token
+// refresh got rate-limited (429) and never recovered. Left alone, every
+// query across the app (orders, products, profiles, ...) keeps firing
+// against the dead token and failing independently, which looks like the
+// whole app breaking. Catch it once, globally, and force a clean local
+// sign-out + redirect to login instead of letting dozens of queries fail
+// silently in place. `scope: 'local'` avoids making another network call
+// to the (possibly still rate-limited) auth server.
+let recoveringFromAuthFailure = false;
+const fetchWithAuthRecovery: typeof fetch = async (input, init) => {
+  const response = await fetch(input, init);
+  if (response.status === 401 && !recoveringFromAuthFailure) {
+    recoveringFromAuthFailure = true;
+    supabase.auth.signOut({ scope: 'local' }).finally(() => {
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login';
+      }
+    });
+  }
+  return response;
+};
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+  },
+  global: {
+    fetch: fetchWithAuthRecovery,
+  },
 });
