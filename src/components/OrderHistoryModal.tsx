@@ -69,6 +69,7 @@ function getActionIcon(actionType: string) {
     case "whatsapp_cancel":
     case "whatsapp_more_info": return MessageCircle;
     case "follow_up_status_change": return PhoneOff;
+    case "followup_backfill_snapshot": return CalendarClock;
     default: return PlusCircle;
   }
 }
@@ -88,6 +89,7 @@ function getActionColor(actionType: string) {
     case "whatsapp_confirm": return "text-emerald-500 bg-emerald-500/10";
     case "whatsapp_more_info": return "text-blue-500 bg-blue-500/10";
     case "follow_up_status_change": return "text-info bg-info/10";
+    case "followup_backfill_snapshot": return "text-muted-foreground bg-muted/50";
     default: return "text-muted-foreground bg-muted";
   }
 }
@@ -170,6 +172,12 @@ function buildReadableMessage(group: GroupedEntry): string {
 
   if (action_type === "manual_create") {
     return `${actor} added this order`;
+  }
+
+  if (action_type === "followup_backfill_snapshot") {
+    const statusEntry = entries.find(e => e.field_changed === "follow_up_status");
+    const label = (v: string | null) => v ? v.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) : "—";
+    return `System snapshot — follow-up status recorded as ${label(statusEntry?.new_value ?? null)} (backfilled, prior attempts before this weren't tracked)`;
   }
 
   if (action_type === "follow_up_status_change") {
