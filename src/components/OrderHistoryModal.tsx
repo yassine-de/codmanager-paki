@@ -51,6 +51,7 @@ const fieldLabels: Record<string, string> = {
   postpone_date: "Postpone Date",
   postpone_note: "Postpone Note",
   manual_price: "Manual Price Override",
+  follow_up_status: "Follow-up Status",
 };
 
 function getActionIcon(actionType: string) {
@@ -67,6 +68,7 @@ function getActionIcon(actionType: string) {
     case "whatsapp_confirm":
     case "whatsapp_cancel":
     case "whatsapp_more_info": return MessageCircle;
+    case "follow_up_status_change": return PhoneOff;
     default: return PlusCircle;
   }
 }
@@ -85,6 +87,7 @@ function getActionColor(actionType: string) {
     case "ai_confirm": return "text-purple-500 bg-purple-500/10";
     case "whatsapp_confirm": return "text-emerald-500 bg-emerald-500/10";
     case "whatsapp_more_info": return "text-blue-500 bg-blue-500/10";
+    case "follow_up_status_change": return "text-info bg-info/10";
     default: return "text-muted-foreground bg-muted";
   }
 }
@@ -98,6 +101,7 @@ function getActor(group: GroupedEntry): string {
     case "warehouse":
     case "warehouse_agent": return "Warehouse";
     case "warehouse_manager": return "Warehouse Manager";
+    case "follow_up": return "Follow-up Agent";
     case "system": return "System";
     default: return group.changed_by_role || "User";
   }
@@ -168,6 +172,21 @@ function buildReadableMessage(group: GroupedEntry): string {
     return `${actor} added this order`;
   }
 
+  if (action_type === "follow_up_status_change") {
+    const statusEntry = entries.find(e => e.field_changed === "follow_up_status");
+    const noteEntry = entries.find(e => e.field_changed === "note");
+    if (statusEntry) {
+      const label = (v: string | null) => v ? v.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) : "—";
+      if (statusEntry.new_value === "no_answer" && attempt_number) {
+        return `${actor} marked Follow-up No Answer (attempt ${attempt_number}/5)`;
+      }
+      return `${actor} updated follow-up status: ${label(statusEntry.old_value)} → ${label(statusEntry.new_value)}`;
+    }
+    if (noteEntry) {
+      return `${actor} added a follow-up note: "${noteEntry.new_value}"`;
+    }
+  }
+
   // Generic edit
   if (entries.length === 1) {
     const e = entries[0];
@@ -189,6 +208,11 @@ export default function OrderHistoryModal({ open, onOpenChange, orderId, custome
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
+  const [showFollowUpOnly, setShowFollowUpOnly] = useState(false);
+
+  const displayedGroups = showFollowUpOnly
+    ? groups.filter((g) => g.changed_by_role === "follow_up")
+    : groups;
 
   const fetchHistory = useCallback(async (pageNum: number) => {
     const from = pageNum * PAGE_SIZE;
@@ -260,6 +284,7 @@ export default function OrderHistoryModal({ open, onOpenChange, orderId, custome
     setLoading(true);
     setPage(0);
     setGroups([]);
+    setShowFollowUpOnly(false);
     fetchHistory(0).then(({ entries, hasMore: more }) => {
       setGroups(groupEntries(entries));
       setHasMore(more);
@@ -281,10 +306,21 @@ export default function OrderHistoryModal({ open, onOpenChange, orderId, custome
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] p-0 gap-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b">
-          <DialogTitle className="text-base font-semibold">
-            Order History
-            <span className="ml-2 text-xs font-normal text-muted-foreground">{orderId} · {customerName}</span>
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-3">
+            <DialogTitle className="text-base font-semibold">
+              Order History
+              <span className="ml-2 text-xs font-normal text-muted-foreground">{orderId} · {customerName}</span>
+            </DialogTitle>
+            <Button
+              variant={showFollowUpOnly ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-[11px] gap-1.5 shrink-0"
+              onClick={() => setShowFollowUpOnly((v) => !v)}
+            >
+              <PhoneOff className="h-3 w-3" />
+              {showFollowUpOnly ? "All History" : "Follow-up History"}
+            </Button>
+          </div>
         </DialogHeader>
         <ScrollArea className="h-[60vh]">
           <div className="px-5 py-4">
@@ -292,13 +328,15 @@ export default function OrderHistoryModal({ open, onOpenChange, orderId, custome
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : groups.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No history recorded yet</p>
+            ) : displayedGroups.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                {showFollowUpOnly ? "No follow-up history recorded yet" : "No history recorded yet"}
+              </p>
             ) : (
               <div className="relative">
                 <div className="absolute left-[15px] top-2 bottom-2 w-px bg-border" />
                 <div className="space-y-0">
-                  {groups.map((group) => {
+                  {displayedGroups.map((group) => {
                     const Icon = getActionIcon(group.action_type);
                     const color = getActionColor(group.action_type);
                     const message = buildReadableMessage(group);

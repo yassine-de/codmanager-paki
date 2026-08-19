@@ -289,6 +289,7 @@ export default function FollowUps() {
   const [filterSeller, setFilterSeller]         = useState<string>("all");
   const [filterAgent, setFilterAgent]           = useState<string>("all");
   const [filterFollowUp, setFilterFollowUp]     = useState<string>("all");
+  const [filterFollowUpAgent, setFilterFollowUpAgent] = useState<string>("all");
   const [dateField, setDateField]       = useState<DateField>("created");
   const [dateRange, setDateRange]       = useState<DateRange | undefined>();
   const [pageSize, setPageSize]         = useState<number>(100);
@@ -327,6 +328,29 @@ export default function FollowUps() {
     staleTime: 25_000,
     placeholderData: (prev) => prev,
     refetchOnWindowFocus: false,
+  });
+
+  const { data: followUpAgents = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["follow-up-agents-list"],
+    queryFn: async () => {
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "follow_up");
+      if (rolesError) throw rolesError;
+      const ids = (roles ?? []).map((r) => r.user_id);
+      if (ids.length === 0) return [];
+      const { data: profs, error: profsError } = await supabase
+        .from("profiles")
+        .select("user_id, name")
+        .in("user_id", ids);
+      if (profsError) throw profsError;
+      const nameById: Record<string, string> = {};
+      (profs ?? []).forEach((p) => { nameById[p.user_id] = p.name; });
+      return ids.map((id) => ({ id, name: nameById[id] || id }));
+    },
+    enabled: !!authUser && authUser.role === "admin",
+    staleTime: 5 * 60_000,
   });
 
   const { data: totalCount } = useQuery<number>({
@@ -403,6 +427,7 @@ export default function FollowUps() {
     if (filterSeller     !== "all" && r.seller_id       !== filterSeller)     return false;
     if (filterAgent    !== "all" && r.agent_id        !== filterAgent)    return false;
     if (filterFollowUp !== "all" && r.follow_up_status !== filterFollowUp) return false;
+    if (filterFollowUpAgent !== "all" && r.follow_up_assigned_to !== filterFollowUpAgent) return false;
     if (filterDays !== "all") {
       const d = r.days_since_shipped ?? -1;
       if (filterDays === "0"   && d !== 0) return false;
@@ -441,7 +466,7 @@ export default function FollowUps() {
       if (!hay.includes(q)) return false;
     }
     return true;
-  }), [enriched, segment, filterDelivery, filterSubStatus, filterSeller, filterAgent, filterFollowUp, filterDays, search, dateRange, dateField]);
+  }), [enriched, segment, filterDelivery, filterSubStatus, filterSeller, filterAgent, filterFollowUp, filterFollowUpAgent, filterDays, search, dateRange, dateField]);
 
   // Reset to page 1 whenever filtered result set changes
   useEffect(() => { setPage(1); }, [filtered]);
@@ -474,12 +499,12 @@ export default function FollowUps() {
     (segment !== "all" ? 1 : 0) + (filterDelivery !== "all" ? 1 : 0) +
     (filterSubStatus !== "all" ? 1 : 0) +
     (filterSeller !== "all" ? 1 : 0) + (filterAgent !== "all" ? 1 : 0) +
-    (filterFollowUp !== "all" ? 1 : 0) + (filterDays !== "all" ? 1 : 0) +
+    (filterFollowUp !== "all" ? 1 : 0) + (filterFollowUpAgent !== "all" ? 1 : 0) + (filterDays !== "all" ? 1 : 0) +
     (dateRange?.from ? 1 : 0) + (search.trim() ? 1 : 0);
 
   function clearFilters() {
     setSegment("all"); setFilterDelivery("all"); setFilterSubStatus("all"); setFilterSeller("all");
-    setFilterAgent("all"); setFilterFollowUp("all"); setFilterDays("all"); setSearch(""); setDateRange(undefined);
+    setFilterAgent("all"); setFilterFollowUp("all"); setFilterFollowUpAgent("all"); setFilterDays("all"); setSearch(""); setDateRange(undefined);
   }
 
   function toggleSort(key: "days" | "created" | "updated" | "follow_up") {
@@ -501,6 +526,7 @@ export default function FollowUps() {
     if (!authUser) return;
     setSavingId(orderId);
     try {
+      const previousStatus = rows.find((r) => r.order_id === orderId)?.follow_up_status ?? "pending";
       const upsertData: Record<string, unknown> = { order_id: orderId, follow_up_status: newStatus, updated_by: authUser.id };
       if (newStatus === "no_answer" && noAnswerAttempt !== undefined) upsertData.fu_no_answer_count = noAnswerAttempt;
       if (newStatus === "postponed" && postponeUntil) upsertData.fu_postpone_until = postponeUntil;
@@ -509,6 +535,43 @@ export default function FollowUps() {
       if (note?.trim()) {
         await supabase.from("orders").update({ follow_up_note: note.trim() }).eq("order_id", orderId);
       }
+
+      // Log this action so it shows up in the order's History modal — the
+      // follow-up upsert above has no history trail of its own.
+      const historyEntries: any[] = [{
+        order_id: orderId,
+        changed_by: authUser.id,
+        changed_by_role: authUser.role,
+        field_changed: "follow_up_status",
+        old_value: previousStatus,
+        new_value: newStatus,
+        action_type: "follow_up_status_change",
+        attempt_number: newStatus === "no_answer" ? (noAnswerAttempt ?? null) : null,
+      }];
+      if (newStatus === "postponed" && postponeUntil) {
+        historyEntries.push({
+          order_id: orderId,
+          changed_by: authUser.id,
+          changed_by_role: authUser.role,
+          field_changed: "postpone_date",
+          old_value: null,
+          new_value: postponeUntil,
+          action_type: "postpone",
+        });
+      }
+      if (note?.trim()) {
+        historyEntries.push({
+          order_id: orderId,
+          changed_by: authUser.id,
+          changed_by_role: authUser.role,
+          field_changed: "note",
+          old_value: null,
+          new_value: note.trim(),
+          action_type: "follow_up_status_change",
+        });
+      }
+      await supabase.from("order_history").insert(historyEntries);
+
       toast.success("Follow-up updated");
       refetch();
     } catch (err: any) {
@@ -727,6 +790,21 @@ export default function FollowUps() {
               ))}
             </SelectContent>
           </Select>
+
+          {/* Follow-up agent filter — which follow-up agent the order is assigned to (admin-only) */}
+          {authUser?.role === "admin" && (
+            <Select value={filterFollowUpAgent} onValueChange={setFilterFollowUpAgent}>
+              <SelectTrigger className="h-8 text-xs w-[160px]">
+                <SelectValue placeholder="Follow-up Agent" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Follow-up Agents</SelectItem>
+                {followUpAgents.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           {/* Days filter */}
           <Select value={filterDays} onValueChange={setFilterDays}>
