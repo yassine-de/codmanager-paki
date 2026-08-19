@@ -1392,19 +1392,37 @@ export default function WhatsappInbox() {
     )) return;
     setForcingAgent(true);
     try {
-      // 1) Stop AI on the conversation + flag channel as agent
-      const { error: convErr } = await supabase
-        .from("whatsapp_conversations")
-        .update({ ai_enabled: false, status: "manual_review_needed" })
-        .eq("id", selected);
-      if (convErr) throw convErr;
-
+      // 0) Re-check eligibility against a fresh read BEFORE touching
+      // anything — not stale component state, since the button's disabled
+      // state only reflects whatever was loaded when the page rendered.
+      // Without this the order could have been claimed or decided by
+      // someone else in the meantime (exactly what broke
+      // AB-2014/AB-2019/AB-2023: an agent's claim, postpone, or even a
+      // direct status edit getting silently wiped back to "new"). Checked
+      // first, before disabling AI on the conversation below, so a
+      // rejected force leaves no partial side effect.
       const { data: currentOrder, error: currentOrderErr } = await supabase
         .from("orders")
         .select("confirmation_status, agent_id")
         .eq("order_id", conv.order_id)
         .maybeSingle();
       if (currentOrderErr) throw currentOrderErr;
+
+      if (
+        currentOrder?.agent_id ||
+        (currentOrder?.confirmation_status && !["new_wts", "new"].includes(currentOrder.confirmation_status))
+      ) {
+        toast.error(`Order #${conv.order_id} already went to a confirmation agent — refresh to see its current state`);
+        setForcingAgent(false);
+        return;
+      }
+
+      // 1) Stop AI on the conversation + flag channel as agent
+      const { error: convErr } = await supabase
+        .from("whatsapp_conversations")
+        .update({ ai_enabled: false, status: "manual_review_needed" })
+        .eq("id", selected);
+      if (convErr) throw convErr;
 
       const previousConfirmationStatus = currentOrder?.confirmation_status || "new";
       const nextConfirmationStatus = previousConfirmationStatus === "no_answer" ? "no_answer" : "new";
@@ -2068,11 +2086,33 @@ export default function WhatsappInbox() {
                 )}
 
                 {/* Force to Agent — hand the order off to the call-center queue.
-                    Once done, whatsapp_status flips to "handed_to_agent" and
-                    stays that way (nothing else overwrites it), so we use it
-                    to lock the button and show it's already been sent. */}
+                    Locked whenever the order is no longer in the fresh,
+                    undecided WhatsApp state (new_wts/new): either a
+                    confirmation agent currently owns it (order.agent_id set —
+                    covers "actively claimed right now" and "postponed but
+                    still owned by them"), or a real decision was already
+                    recorded on it (confirmed/cancelled/no_answer/etc) even if
+                    that happened through a path that never set agent_id
+                    (e.g. a direct status edit that skipped the claim/lock
+                    step). Either way, Force to Agent must never be able to
+                    yank a decided/owned order back to "new". Falls back to
+                    the whatsapp_status flag only for the remaining case: it
+                    was force-sent before, then released, but never actually
+                    re-claimed or decided. */}
                 {conv?.order_id && (
-                  order?.whatsapp_status === "handed_to_agent" ? (
+                  order?.agent_id || (order?.confirmation_status && !["new_wts", "new"].includes(order.confirmation_status)) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled
+                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 opacity-90 disabled:opacity-90"
+                      title="This order already went to a confirmation agent"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span className="hidden md:inline">Already with Agent</span>
+                    </Button>
+                  ) : order?.whatsapp_status === "handed_to_agent" ? (
                     <Button
                       type="button"
                       variant="outline"
