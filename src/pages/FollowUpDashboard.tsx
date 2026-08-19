@@ -120,6 +120,29 @@ export default function FollowUpDashboard() {
     refetchInterval: 30000,
   });
 
+  // Real per-action counts (not per-order) from order_history — a no_answer
+  // order gets called up to 5 times before it's exhausted, and each of
+  // those attempts is a real treated action that should count separately,
+  // not just once for the order. order_follow_ups itself only ever holds
+  // the latest state, so this can't be derived from assignedRows.
+  const { data: treatedActions = [] } = useQuery({
+    queryKey: ["follow-up-treated-actions", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const since = startOfDay(subDays(new Date(), 6));
+      const { data, error } = await supabase
+        .from("order_history")
+        .select("created_at")
+        .eq("field_changed", "follow_up_status")
+        .eq("changed_by", userId)
+        .gte("created_at", since.toISOString());
+      if (error) throw error;
+      return (data ?? []) as { created_at: string }[];
+    },
+    enabled: !!userId && authUser?.role === "follow_up",
+    refetchInterval: 30000,
+  });
+
   const kpis = useMemo(() => {
     const total = assignedRows.length;
     const pending = assignedRows.filter((r) => r.follow_up_status === "pending").length;
@@ -129,14 +152,24 @@ export default function FollowUpDashboard() {
     const conversionRate = treated > 0 ? Math.round((delivered / treated) * 100) : 0;
 
     const today = startOfDay(new Date());
-    const treatedToday = assignedRows.filter((r) => {
+    const end = endOfDay(new Date());
+    const treatedTodayFromActions = treatedActions.filter((a) => {
+      const d = new Date(a.created_at);
+      return d >= today && d <= end;
+    }).length;
+    // order_history only started capturing per-attempt data recently, so for
+    // any day it hasn't caught up on yet, fall back to the older per-order
+    // approximation (still real signal, just can't tell repeat attempts on
+    // the same order apart) rather than showing a false zero.
+    const treatedTodayFromOrders = assignedRows.filter((r) => {
       if (!r.follow_up_updated_at) return false;
       const d = new Date(r.follow_up_updated_at);
-      return d >= today && d <= endOfDay(new Date()) && r.follow_up_status !== "pending";
+      return d >= today && d <= end && r.follow_up_status !== "pending";
     }).length;
+    const treatedToday = Math.max(treatedTodayFromActions, treatedTodayFromOrders);
 
     return { total, pending, treated, closed, delivered, conversionRate, treatedToday, savedOrders: savedOrdersCount };
-  }, [assignedRows, savedOrdersCount]);
+  }, [assignedRows, savedOrdersCount, treatedActions]);
 
   const last7Days = useMemo(() => {
     const days: { date: string; label: string; treated: number }[] = [];
@@ -144,15 +177,19 @@ export default function FollowUpDashboard() {
       const day = subDays(new Date(), i);
       const start = startOfDay(day);
       const end = endOfDay(day);
-      const count = assignedRows.filter((r) => {
+      const fromActions = treatedActions.filter((a) => {
+        const d = new Date(a.created_at);
+        return d >= start && d <= end;
+      }).length;
+      const fromOrders = assignedRows.filter((r) => {
         if (!r.follow_up_updated_at || r.follow_up_status === "pending") return false;
         const d = new Date(r.follow_up_updated_at);
         return d >= start && d <= end;
       }).length;
-      days.push({ date: format(day, "yyyy-MM-dd"), label: format(day, "EEE"), treated: count });
+      days.push({ date: format(day, "yyyy-MM-dd"), label: format(day, "EEE"), treated: Math.max(fromActions, fromOrders) });
     }
     return days;
-  }, [assignedRows]);
+  }, [treatedActions, assignedRows]);
 
   const statusBreakdown = useMemo(() => {
     const buckets: Record<string, number> = {};
