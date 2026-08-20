@@ -157,14 +157,31 @@ async function sendTemplate(args: {
     placeholders.push(m[1]);
   }
   if (placeholders.length > 0) {
-    const positionalFallback = [
+    // Meta strips descriptive placeholder names once a template is approved —
+    // {{tracking_number}} in the body we author becomes {{1}}/var_1 in the
+    // synced template. A single fixed 5-field fallback array can't know what
+    // "var_4" means for every template (it might be tracking_number here,
+    // something else in another template) — so `whatsapp_templates.variables`
+    // stores, per template, the actual field-name order authored for it. That
+    // is checked first; the fixed array below only covers older templates
+    // saved before this column was populated.
+    const tplVarNames: string[] = Array.isArray(tpl.variables) ? (tpl.variables as string[]) : [];
+    const legacyPositionalFallback = [
       String(vars.customer_name ?? "").trim(),
       String(vars.product_name ?? "").trim(),
       String(vars.price ?? "").trim(),
       String(vars.city ?? "").trim(),
       String(vars.order_id ?? "").trim(),
     ];
-    const finalFallback = positionalFallback.find(Boolean) || "-";
+    const finalFallback = legacyPositionalFallback.find(Boolean) || "-";
+    const valueForIndex = (idx: number): string => {
+      const fieldName = tplVarNames[idx];
+      if (fieldName && vars[fieldName] != null) {
+        const v = String(vars[fieldName]).trim();
+        if (v) return v;
+      }
+      return legacyPositionalFallback[idx] || finalFallback;
+    };
     const resolvePlaceholder = (name: string, idx: number) => {
       const raw = vars[name];
       let val = raw == null ? "" : String(raw).trim();
@@ -172,11 +189,10 @@ async function sendTemplate(args: {
       if (!val && (lower.includes("customer") || lower === "name")) val = String(vars.customer_name ?? "").trim();
       else if (!val && lower.includes("product")) val = String(vars.product_name ?? "").trim();
       else if (!val && (lower.includes("amount") || lower.includes("price") || lower.includes("total"))) val = String(vars.price ?? "").trim();
+      else if (!val && lower.includes("tracking")) val = String(vars.tracking_number ?? "").trim();
       else if (!val && lower.includes("city")) val = String(vars.city ?? "").trim();
       else if (!val && lower.includes("order")) val = String(vars.order_id ?? "").trim();
-      const varMatch = /^var_(\d+)$/i.exec(name);
-      if (!val && varMatch) val = positionalFallback[Math.max(0, Number(varMatch[1]) - 1)] || "";
-      if (!val) val = positionalFallback[idx] || finalFallback;
+      if (!val) val = valueForIndex(idx);
       return val;
     };
     components.push({
@@ -210,17 +226,25 @@ async function sendTemplate(args: {
   const ok = resp.ok;
   const metaMsgId = ok ? respJson?.messages?.[0]?.id : null;
 
+  // Mirrors resolvePlaceholder's tplVarNames-first logic above, so the stored
+  // message preview text matches what actually got sent to Meta.
   const previewVars = {
     ...vars,
     ...Object.fromEntries(placeholders.map((name, idx) => {
-      const values = [
+      const tplVarNames: string[] = Array.isArray(tpl.variables) ? (tpl.variables as string[]) : [];
+      const legacyValues = [
         String(vars.customer_name ?? "").trim(),
         String(vars.product_name ?? "").trim(),
         String(vars.price ?? "").trim(),
         String(vars.city ?? "").trim(),
         String(vars.order_id ?? "").trim(),
       ];
-      return [name, vars[name] ?? values[Math.max(0, (/^var_(\d+)$/i.exec(name)?.[1] ? Number(/^var_(\d+)$/i.exec(name)?.[1]) - 1 : idx))] ?? values[idx] ?? "-"];
+      if (vars[name] != null) return [name, vars[name]];
+      const varMatch = /^var_(\d+)$/i.exec(name);
+      const posIdx = varMatch ? Number(varMatch[1]) - 1 : idx;
+      const fieldName = tplVarNames[posIdx];
+      if (fieldName && vars[fieldName] != null) return [name, vars[fieldName]];
+      return [name, legacyValues[posIdx] ?? legacyValues[idx] ?? "-"];
     })),
   };
   const previewBody = render(tpl.body || `[template: ${templateName}]`, previewVars);
