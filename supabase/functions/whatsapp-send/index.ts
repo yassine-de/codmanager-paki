@@ -335,14 +335,32 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Tracking number lives on `shipments`, not `orders` — same lookup as
+      // whatsapp-automation-runner's sendTemplate, so a manual send from the
+      // Inbox resolves {{tracking_number}} the same way an automated one does.
+      let trackingNumber = "";
+      if (order?.id) {
+        const { data: shipment } = await admin
+          .from("shipments")
+          .select("tracking_number")
+          .eq("order_uuid", order.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        trackingNumber = shipment?.tracking_number ?? "";
+      }
+
       const vars: Record<string, any> = order
         ? {
             customer_name: order.customer_name,
             product_name: productSummary,
             price: order.total_amount,
+            amount: order.total_amount,
             city: order.customer_city,
             address: order.customer_address,
             order_id: order.order_id,
+            quantity: order.quantity,
+            tracking_number: trackingNumber,
           }
         : {};
 
@@ -364,7 +382,16 @@ Deno.serve(async (req) => {
       let mm: RegExpExecArray | null;
       while ((mm = re.exec(tplBody)) !== null) placeholders.push(mm[1]);
 
-      const positionalFallback = [
+      // Meta strips descriptive placeholder names once a template is approved
+      // ({{tracking_number}} becomes {{1}}/var_1) — a fixed 5-field fallback
+      // can't know what "var_4" means for every template, so
+      // whatsapp_templates.variables (a per-template ordered list of field
+      // names, authored alongside the body) is checked first. Mirrors
+      // whatsapp-automation-runner's sendTemplate — see that file for the
+      // bug this fixes (var_4 silently resolving to city instead of
+      // tracking_number).
+      const tplVarNames: string[] = Array.isArray(tpl.variables) ? (tpl.variables as string[]) : [];
+      const legacyPositionalFallback = [
         (order?.customer_name && String(order.customer_name).trim()) || "",
         (productSummary && String(productSummary).trim()) || "",
         (order?.total_amount != null && String(order.total_amount)) || "",
@@ -376,6 +403,14 @@ Deno.serve(async (req) => {
         (productSummary && String(productSummary).trim()) ||
         (order?.order_id && String(order.order_id)) ||
         "-";
+      const valueForIndex = (idx: number): string => {
+        const fieldName = tplVarNames[idx];
+        if (fieldName && vars[fieldName] != null) {
+          const v = String(vars[fieldName]).trim();
+          if (v) return v;
+        }
+        return legacyPositionalFallback[idx] || finalFallback;
+      };
       const resolvePlaceholder = (name: string, idx: number) => {
         const raw = vars[name];
         let val = raw == null ? "" : String(raw).trim();
@@ -384,6 +419,8 @@ Deno.serve(async (req) => {
           val = (order?.customer_name && String(order.customer_name).trim()) || "";
         } else if (!val && lower.includes("product")) {
           val = (productSummary && String(productSummary).trim()) || "";
+        } else if (!val && lower.includes("tracking")) {
+          val = trackingNumber || "";
         } else if (!val && lower.includes("city")) {
           val = (order?.customer_city && String(order.customer_city).trim()) || "";
         } else if (!val && (lower.includes("amount") || lower.includes("price") || lower.includes("total"))) {
@@ -391,9 +428,7 @@ Deno.serve(async (req) => {
         } else if (!val && lower.includes("order")) {
           val = (order?.order_id && String(order.order_id)) || "";
         }
-        const varMatch = /^var_(\d+)$/i.exec(name);
-        if (!val && varMatch) val = positionalFallback[Math.max(0, Number(varMatch[1]) - 1)] || "";
-        if (!val) val = positionalFallback[idx] || finalFallback;
+        if (!val) val = valueForIndex(idx);
         return val;
       };
       const resolvedVars = Object.fromEntries(placeholders.map((name, idx) => [name, resolvePlaceholder(name, idx)]));
