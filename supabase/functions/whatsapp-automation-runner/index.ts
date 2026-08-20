@@ -1585,7 +1585,12 @@ async function sweepDeliveryStatusChanges() {
   );
   if (targetStatuses.length === 0) return 0;
 
-  const sinceIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  // 2h lookback (not just 1-2 ticks' worth) so a cron gap or deploy restart
+  // doesn't silently drop an order that shipped during the downtime — as
+  // long as it hasn't since progressed past the target status, this will
+  // still catch it on the next tick. startNewRuns' dedup guard (now backed
+  // by a DB unique index) makes re-matching the same order across ticks safe.
+  const sinceIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   const { data: orders, error } = await admin
     .from("orders")
     .select("order_id")
