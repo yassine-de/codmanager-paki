@@ -939,16 +939,19 @@ async function startNewRuns(triggerType: string, orderId: string) {
       .eq("id", a.id);
 
     // Mark the conversation so staff can see in the Inbox that an automated
-    // delivery-status follow-up already went out (e.g. followup_shipped).
+    // delivery-status follow-up already went out (e.g. followup_shipped),
+    // and stop the AI from freelancing on top of it — the automated
+    // template + its button flow (if any) now owns the conversation for
+    // this milestone, so the AI shouldn't keep asking things like "please
+    // send your full address" on an order that's already shipped.
     if (triggerType === "delivery_status_changed" && conv) {
       const labelName = `followup_${order.delivery_status}`;
       const existingLabels: string[] = Array.isArray((conv as any).labels) ? (conv as any).labels : [];
+      const updates: Record<string, any> = { ai_enabled: false };
       if (!existingLabels.includes(labelName)) {
-        await admin
-          .from("whatsapp_conversations")
-          .update({ labels: Array.from(new Set([...existingLabels, labelName])) })
-          .eq("id", conv.id);
+        updates.labels = Array.from(new Set([...existingLabels, labelName]));
       }
+      await admin.from("whatsapp_conversations").update(updates).eq("id", conv.id);
     }
 
     await executeFlow({
@@ -1057,14 +1060,26 @@ async function applyButtonAction(opts: {
   const storedAddrDeliverable = !!order && isAddressDeliverable(order.customer_address, order.customer_city);
   const forceAddressGate = wantsConfirm && !!order && !storedAddrDeliverable;
 
+  // The order already shipped (or moved further) with a real address on
+  // file — a stale/old button on the conversation (e.g. the customer
+  // re-tapping an earlier "Confirm" button after the order's already out
+  // for delivery) must never reopen the address-collection flow. The
+  // isAddressDeliverable heuristic can false-negative on a perfectly good,
+  // already-successfully-shipped address, so delivery_status is the
+  // authoritative signal here, not the heuristic. Confirmed live: HG-21
+  // was Confirmed+Shipped with a tracking number, yet an old confirm
+  // button re-triggered "please send your full detailed address".
+  const orderAlreadyShipped =
+    !!order && !["pending", "booked"].includes(String(order.delivery_status || "pending"));
+
   // CRITICAL: when the customer pressed a CONFIRM button AND the stored address
   // is already deliverable, NEVER gate. We confirm immediately. Otherwise we
   // would stash a pending_button_intent and rely on the AI / customer to send
   // a follow-up text that may never come, leaving the order stuck on WhatsApp
   // forever (AB-606).
   const skipGateForConfirmedAddress = wantsConfirm && storedAddrDeliverable;
-  const aiGated = !skipGateForConfirmedAddress && (action.ai_gate === "validate" || forceAddressGate);
-  const wantsTakeover = !skipGateForConfirmedAddress && (action.ai_takeover === true || aiGated);
+  const aiGated = !orderAlreadyShipped && !skipGateForConfirmedAddress && (action.ai_gate === "validate" || forceAddressGate);
+  const wantsTakeover = !orderAlreadyShipped && !skipGateForConfirmedAddress && (action.ai_takeover === true || aiGated);
 
   // 1) AI takeover (gated buttons always force takeover so AI drives the convo)
   if (conversationId && wantsTakeover) {
@@ -1127,7 +1142,14 @@ async function applyButtonAction(opts: {
     updates.whatsapp_status = "confirmed";
   }
 
-  if (hasMappedStatus) {
+  // A stale button click that maps to the status the order is ALREADY at
+  // (e.g. re-tapping an old "Confirm" button on an order that's shipped and
+  // still shows confirmation_status='confirmed') has nothing to change —
+  // applying it anyway would bump confirmed_at to right now, corrupting
+  // "when was this actually confirmed" for reporting/ranking.
+  const mappedStatusIsNoOp = hasMappedStatus && orderAlreadyShipped && status === order.confirmation_status;
+
+  if (hasMappedStatus && !mappedStatusIsNoOp) {
     const before = order.confirmation_status;
     updates.confirmation_status = status;
     updates.confirmation_channel = "whatsapp";
