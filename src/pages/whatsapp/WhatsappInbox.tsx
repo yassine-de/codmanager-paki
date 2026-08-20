@@ -595,11 +595,18 @@ function colorFor(seed: string) {
   return avatarColors[h % avatarColors.length];
 }
 
-// Conversations that got an automated delivery-status follow-up message
-// (whatsapp-automation-runner tags them "followup_<status>", e.g.
-// "followup_shipped" — see supabase/functions/whatsapp-automation-runner).
+// Conversations that need follow-up attention — automated delivery-status
+// messages tag the conversation "followup_<status>" (whatsapp-automation-
+// runner), but only statuses that actually need staff follow-up show the
+// "Follow Up" badge/filter here. "followup_shipped" is intentionally
+// excluded: a shipped notification doesn't need any follow-up by itself,
+// unlike e.g. "followup_failed_attempt" where the customer may need
+// redelivery arranged.
 function isFollowUpConv(c: { labels?: string[] | null }) {
-  return Array.isArray(c.labels) && c.labels.some((l) => l.startsWith("followup_"));
+  return (
+    Array.isArray(c.labels) &&
+    c.labels.some((l) => l.startsWith("followup_") && l !== "followup_shipped")
+  );
 }
 
 function dayLabel(d: Date) {
