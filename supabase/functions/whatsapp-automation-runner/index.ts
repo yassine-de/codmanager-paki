@@ -451,14 +451,31 @@ async function executeFlow(args: {
     }
   }
 
+  // Tracking number lives on `shipments`, not `orders` — look up the latest
+  // shipment for this order so templates can reference {{tracking_number}}.
+  let trackingNumber = "";
+  if (order?.id) {
+    const { data: shipment } = await admin
+      .from("shipments")
+      .select("tracking_number")
+      .eq("order_uuid", order.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    trackingNumber = shipment?.tracking_number ?? "";
+  }
+
   const vars = {
     customer_name: order?.customer_name ?? "",
     product_name: productSummary,
     price: order?.total_amount ?? "",
+    // "amount" is an alias for price — some templates use one name, some the other.
+    amount: order?.total_amount ?? "",
     city: order?.customer_city ?? "",
     address: order?.customer_address ?? "",
     order_id: order?.order_id ?? "",
     quantity: order?.quantity ?? "",
+    tracking_number: trackingNumber,
   };
 
   let currentId: string | null = startNodeId;
@@ -811,13 +828,21 @@ async function startNewRuns(triggerType: string, orderId: string) {
     return { started: 0 };
   }
 
-  const { data: autos } = await admin
+  const { data: autosRaw } = await admin
     .from("whatsapp_automations")
     .select("*")
     .eq("trigger_type", triggerType)
     .eq("status", "active");
+
+  // delivery_status_changed automations are configured with a specific target
+  // status (trigger_config.to) — only run the ones matching what the order
+  // actually became, not every active automation of this trigger type.
+  const autos = triggerType === "delivery_status_changed"
+    ? (autosRaw ?? []).filter((a: any) => a.trigger_config?.to === order.delivery_status)
+    : autosRaw;
+
   if (!autos?.length) {
-    log("no active automations for", triggerType);
+    log("no matching active automations for", triggerType, order.delivery_status);
     return { started: 0 };
   }
 
@@ -888,6 +913,19 @@ async function startNewRuns(triggerType: string, orderId: string) {
         last_run_at: new Date().toISOString(),
       })
       .eq("id", a.id);
+
+    // Mark the conversation so staff can see in the Inbox that an automated
+    // delivery-status follow-up already went out (e.g. followup_shipped).
+    if (triggerType === "delivery_status_changed" && conv) {
+      const labelName = `followup_${order.delivery_status}`;
+      const existingLabels: string[] = Array.isArray((conv as any).labels) ? (conv as any).labels : [];
+      if (!existingLabels.includes(labelName)) {
+        await admin
+          .from("whatsapp_conversations")
+          .update({ labels: Array.from(new Set([...existingLabels, labelName])) })
+          .eq("id", conv.id);
+      }
+    }
 
     await executeFlow({
       runId: run.id,
@@ -1337,7 +1375,8 @@ async function tickDelays() {
   const switched = await tickAgentSwitches();
   const recovered = await sweepMissedNewOrders();
   const handedOff = await tickPendingIntentHandoff();
-  return { processed: due?.length ?? 0, switched, recovered, handedOff };
+  const deliveryStatusStarted = await sweepDeliveryStatusChanges();
+  return { processed: due?.length ?? 0, switched, recovered, handedOff, deliveryStatusStarted };
 }
 
 // Hand off conversations stuck on a `pending_button_intent` for too long to a
@@ -1494,6 +1533,54 @@ async function sweepMissedNewOrders() {
       log("recovered missed new_order", { order_id: o.order_id, started: r.started });
     } catch (e) {
       errLog("recover startNewRuns failed", o.order_id, (e as Error).message);
+    }
+  }
+  return started;
+}
+
+// Sweep orders whose delivery_status recently became a status some active
+// delivery_status_changed automation targets (trigger_config.to), and start
+// that automation for them. There's no push/trigger from `orders` when
+// delivery_status changes (see carrier-status-sync, warehouse dispatch,
+// etc.) — this poll, run every minute alongside the other tick sweeps, is
+// how the automation actually fires. Re-matching the same order on a later
+// tick is harmless: startNewRuns() already guards against a duplicate run
+// per (automation, order).
+async function sweepDeliveryStatusChanges() {
+  const { data: autos, error: autosErr } = await admin
+    .from("whatsapp_automations")
+    .select("trigger_config")
+    .eq("trigger_type", "delivery_status_changed")
+    .eq("status", "active");
+  if (autosErr) {
+    errLog("sweepDeliveryStatusChanges autos query", autosErr.message);
+    return 0;
+  }
+  const targetStatuses = Array.from(
+    new Set((autos ?? []).map((a: any) => a.trigger_config?.to).filter(Boolean))
+  );
+  if (targetStatuses.length === 0) return 0;
+
+  const sinceIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const { data: orders, error } = await admin
+    .from("orders")
+    .select("order_id")
+    .in("delivery_status", targetStatuses)
+    .gte("shipped_at", sinceIso)
+    .limit(50);
+  if (error) {
+    errLog("sweepDeliveryStatusChanges orders query", error.message);
+    return 0;
+  }
+  if (!orders?.length) return 0;
+
+  let started = 0;
+  for (const o of orders) {
+    try {
+      const r = await startNewRuns("delivery_status_changed", o.order_id);
+      if (r.started) started += r.started;
+    } catch (e) {
+      errLog("sweepDeliveryStatusChanges startNewRuns failed", o.order_id, (e as Error).message);
     }
   }
   return started;

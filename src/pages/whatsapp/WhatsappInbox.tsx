@@ -78,6 +78,7 @@ type Conv = {
   last_read_at: string | null;
   updated_at: string;
   ai_enabled?: boolean;
+  labels?: string[] | null;
   review_note?: string | null;
   resolved_by?: string | null;
   resolved_at?: string | null;
@@ -592,6 +593,13 @@ function colorFor(seed: string) {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return avatarColors[h % avatarColors.length];
+}
+
+// Conversations that got an automated delivery-status follow-up message
+// (whatsapp-automation-runner tags them "followup_<status>", e.g.
+// "followup_shipped" — see supabase/functions/whatsapp-automation-runner).
+function isFollowUpConv(c: { labels?: string[] | null }) {
+  return Array.isArray(c.labels) && c.labels.some((l) => l.startsWith("followup_"));
 }
 
 function dayLabel(d: Date) {
@@ -1180,6 +1188,8 @@ export default function WhatsappInbox() {
       list = list.filter((c) => !!c.order_id);
     } else if (filter === "no_order") {
       list = list.filter((c) => !c.order_id);
+    } else if (filter === "follow_up") {
+      list = list.filter((c) => isFollowUpConv(c));
     } else if (filter === "window_open") {
       list = list.filter((c) => {
         // Use last_message_at as a proxy for last customer activity (the
@@ -1240,6 +1250,11 @@ export default function WhatsappInbox() {
 
   const needsReviewCount = useMemo(
     () => convos.filter((c) => c.status === "manual_review_needed").length,
+    [convos],
+  );
+
+  const followUpCount = useMemo(
+    () => convos.filter(isFollowUpConv).length,
     [convos],
   );
 
@@ -1722,6 +1737,7 @@ export default function WhatsappInbox() {
           { key: "ai_off", label: "AI Off" },
           { key: "with_order", label: "With Order" },
           { key: "no_order", label: "No Order" },
+          { key: "follow_up", label: "Follow Up", count: followUpCount },
           { key: "window_open", label: "24h Window" },
         ] as const).map((f) => (
           <button
@@ -1732,6 +1748,8 @@ export default function WhatsappInbox() {
               filter === f.key
                 ? f.key === "needs_review"
                   ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                  : f.key === "follow_up"
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
                   : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                 : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
             )}
@@ -1741,7 +1759,11 @@ export default function WhatsappInbox() {
               <span className={cn(
                 "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
                 filter === f.key
-                  ? "bg-sky-500 text-white"
+                  ? f.key === "follow_up"
+                    ? "bg-amber-500 text-white"
+                    : "bg-sky-500 text-white"
+                  : f.key === "follow_up"
+                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
                   : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
               )}>
                 {f.count > 99 ? "99+" : f.count}
@@ -1825,6 +1847,7 @@ export default function WhatsappInbox() {
               const unreadCount = unreadMap[c.id] ?? 0;
               const unread = unreadCount > 0;
               const needsReview = c.status === "manual_review_needed";
+              const followUp = isFollowUpConv(c);
               const ts = c.last_reply_at || c.last_message_at || c.updated_at;
               const tooltip = needsReview
                 ? "⚠️ Needs human review — AI flagged this conversation"
@@ -1906,6 +1929,16 @@ export default function WhatsappInbox() {
                         >
                           <AlertCircle className="h-2.5 w-2.5" />
                           Review
+                        </span>
+                      )}
+                      {followUp && (
+                        <span
+                          className="inline-flex items-center gap-0.5 h-5 px-1.5 rounded-full bg-amber-500 text-white text-[9px] font-bold shrink-0 uppercase tracking-wide"
+                          aria-label="Delivery follow-up sent"
+                          title="An automated delivery-status follow-up message was sent for this order"
+                        >
+                          <Truck className="h-2.5 w-2.5" />
+                          Follow Up
                         </span>
                       )}
                       {unread && (
