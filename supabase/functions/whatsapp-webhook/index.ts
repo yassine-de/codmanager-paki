@@ -486,7 +486,9 @@ async function applyOutcome(
             status: "confirmed",
             outcome: "confirmed",
             pending_button_intent: null,
-            ai_enabled: true,
+            // Order is confirmed with a deliverable address on file — nothing left for
+            // the AI to do, so stop it auto-replying to further small talk.
+            ai_enabled: false,
             updated_at: new Date().toISOString(),
           })
           .eq("id", conversationId);
@@ -1845,6 +1847,9 @@ async function tryExtractAndConfirmAddress(args: {
         status: "confirmed",
         outcome: "confirmed",
         pending_button_intent: null,
+        // Order is confirmed with a deliverable address on file — nothing left for
+        // the AI to do, so stop it auto-replying to further small talk.
+        ai_enabled: false,
         updated_at: new Date().toISOString(),
       })
       .eq("id", conv.id);
@@ -2063,6 +2068,9 @@ Rules:
       status: "confirmed",
       outcome: "confirmed",
       pending_button_intent: null, // Clear: AI gating finalized via confirm.
+      // Order is confirmed with a deliverable address on file — nothing left for
+      // the AI to do, so stop it auto-replying to further small talk.
+      ai_enabled: false,
       updated_at: new Date().toISOString(),
     })
     .eq("id", conv.id);
