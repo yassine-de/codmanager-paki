@@ -151,7 +151,7 @@ async function ensureProfile(
 async function ensureRole(
   supabaseAdmin: ReturnType<typeof createClient>,
   userId: string,
-  role: "admin" | "seller" | "agent" | "follow_up" | "custom",
+  role: "admin" | "seller" | "agent" | "follow_up" | "warehouse_agent" | "warehouse_manager" | "whatsapp_manager" | "custom",
 ) {
   const { data: existingRole, error: roleLookupError } = await supabaseAdmin
     .from("user_roles")

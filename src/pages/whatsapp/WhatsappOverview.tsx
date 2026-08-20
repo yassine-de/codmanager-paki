@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageSquare, CheckCircle2, AlertTriangle, XCircle, Send, Reply } from "lucide-react";
+import { MessageSquare, CheckCircle2, AlertTriangle, XCircle, Send, Reply, MessageCircleQuestion } from "lucide-react";
 
 function startOfTodayISO() {
   const d = new Date();
@@ -15,14 +15,20 @@ export default function WhatsappOverview() {
   const { data: stats } = useQuery({
     queryKey: ["wts-overview"],
     queryFn: async () => {
-      const [inWts, confirmed, escalated, canceled, sent, replies] = await Promise.all([
+      const [inWts, confirmed, escalated, canceled, sent, replies, unansweredRows] = await Promise.all([
         supabase.from("orders").select("id", { count: "exact", head: true }).eq("confirmation_status", "new_wts"),
         supabase.from("whatsapp_conversations").select("id", { count: "exact", head: true }).eq("status", "confirmed").gte("updated_at", todayISO),
         supabase.from("whatsapp_conversations").select("id", { count: "exact", head: true }).eq("status", "more_info").gte("updated_at", todayISO),
         supabase.from("whatsapp_conversations").select("id", { count: "exact", head: true }).eq("status", "canceled").gte("updated_at", todayISO),
         supabase.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("direction", "out").gte("created_at", todayISO),
         supabase.from("whatsapp_messages").select("id", { count: "exact", head: true }).eq("direction", "in").gte("created_at", todayISO),
+        // Conversations whose latest customer message has no reply yet. PostgREST filters can't
+        // compare two columns to each other, so this is counted client-side.
+        supabase.from("whatsapp_conversations").select("last_inbound_at, last_reply_at").not("last_inbound_at", "is", null).order("last_inbound_at", { ascending: false }).limit(2000),
       ]);
+      const unanswered = (unansweredRows.data || []).filter((c) =>
+        !c.last_reply_at || new Date(c.last_reply_at) < new Date(c.last_inbound_at)
+      ).length;
       return {
         inWts: inWts.count ?? 0,
         confirmed: confirmed.count ?? 0,
@@ -30,6 +36,7 @@ export default function WhatsappOverview() {
         canceled: canceled.count ?? 0,
         sent: sent.count ?? 0,
         replies: replies.count ?? 0,
+        unanswered,
       };
     },
     refetchInterval: 30000,
@@ -37,6 +44,7 @@ export default function WhatsappOverview() {
 
   const cards = [
     { label: "In WhatsApp", value: stats?.inWts ?? 0, icon: MessageSquare, tone: "text-foreground" },
+    { label: "Unanswered", value: stats?.unanswered ?? 0, icon: MessageCircleQuestion, tone: "text-amber-600" },
     { label: "Confirmed today", value: stats?.confirmed ?? 0, icon: CheckCircle2, tone: "text-emerald-600" },
     { label: "Escalated today", value: stats?.escalated ?? 0, icon: AlertTriangle, tone: "text-amber-600" },
     { label: "Canceled today", value: stats?.canceled ?? 0, icon: XCircle, tone: "text-rose-600" },

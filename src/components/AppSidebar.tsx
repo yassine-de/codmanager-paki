@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
-const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number, pendingAdjustments: number, followUpPending: number) => [
+const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUnseen: number, productUnseen: number, supportUnread: number, pendingAdjustments: number, followUpPending: number, whatsappInboxUnread: number) => [
   { title: "dashboard", url: "/", icon: LayoutDashboard },
   { title: "orders", url: "/orders", icon: ShoppingCart, badge: orderCount, permission: "access_to_orders", sellerVisible: true },
   { title: "analytics", url: "/seller-analytics", icon: BarChart3, sellerOnly: true, beta: true },
@@ -48,6 +48,8 @@ const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUn
   { title: "Dashboard", url: "/follow-up/dashboard", icon: LayoutDashboard, followUpOnly: true },
   { title: "Follow Ups", url: "/follow-up/queue", icon: ClipboardCheck, followUpOnly: true, badge: followUpPending > 0 ? followUpPending : undefined },
   { title: "Control", url: "/follow-up/control", icon: ListChecks, followUpOnly: true },
+  { title: "Overview", url: "/whatsapp", icon: LayoutDashboard, whatsappManagerOnly: true },
+  { title: "Inbox", url: "/whatsapp/inbox", icon: Inbox, whatsappManagerOnly: true, badge: whatsappInboxUnread > 0 ? whatsappInboxUnread : undefined },
 ];
 
 const analyticsSubItems = [
@@ -156,6 +158,7 @@ export function AppSidebar() {
   const isFollowUp = authUser?.role === "follow_up";
   const isWarehouse = authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager";
   const isWarehouseManager = authUser?.role === "warehouse_manager";
+  const isWhatsappManager = authUser?.role === "whatsapp_manager";
 
   const { data: orderCount = 0 } = useQuery({
     queryKey: ["sidebar-order-count"],
@@ -256,7 +259,7 @@ export function AppSidebar() {
       const { data: msgs, error: msgErr } = await supabase
         .from("whatsapp_messages")
         .select("conversation_id, created_at, direction")
-        .eq("direction", "inbound")
+        .eq("direction", "in")
         .order("created_at", { ascending: false })
         .limit(1000);
       if (msgErr) throw msgErr;
@@ -276,7 +279,7 @@ export function AppSidebar() {
       });
       return unreadConvs.size;
     },
-    enabled: isAdmin && !!authUser,
+    enabled: (isAdmin || isWhatsappManager) && !!authUser,
     refetchInterval: 10000,
   });
 
@@ -321,7 +324,7 @@ export function AppSidebar() {
     refetchInterval: 15000,
   });
 
-  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, pendingAdjustments, followUpPending);
+  const navItems = getNavItems(orderCount, sourcingUnseen, adminSourcingUnseen, productUnseen, supportUnread, pendingAdjustments, followUpPending, whatsappInboxUnread);
   const whatsappSubItems = getWhatsappSubItems(whatsappInboxUnread);
   const visibleWarehouseSubItems = isWarehouseManager
     ? warehouseSubItems.filter((sub) => sub.url !== "/warehouse/dashboard")
@@ -337,9 +340,11 @@ export function AppSidebar() {
     if (item.sellerOnly) return isSeller;
     if (item.adminOnly) return isAdmin;
     if (item.adminAgentOnly) return isAdmin || isAgent;
+    if (item.whatsappManagerOnly) return isWhatsappManager;
     if (isFollowUp) return false;
     if (isWarehouseManager) return item.url === "/" || item.warehouseVisible;
     if (isWarehouse) return item.warehouseVisible;
+    if (isWhatsappManager) return false;
     if (isAgent) return item.permission === "access_to_whatsapp_inbox" && hasWhatsappException;
     if (isSeller) return !item.permission || item.sellerVisible;
     return !item.permission || hasPermission(item.permission);

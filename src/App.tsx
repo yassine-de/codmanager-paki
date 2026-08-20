@@ -106,8 +106,8 @@ function AppSkeleton() {
   );
 }
 
-function ProtectedRoute({ children, permission }: { children: React.ReactNode; permission?: string }) {
-  const { user, loading, hasPermission } = useAuth();
+function ProtectedRoute({ children, permission, roles }: { children: React.ReactNode; permission?: string; roles?: string[] }) {
+  const { user, authUser, loading, hasPermission } = useAuth();
 
   if (loading) {
     return null; // AppRoutes already shows skeleton
@@ -115,6 +115,13 @@ function ProtectedRoute({ children, permission }: { children: React.ReactNode; p
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // A role in `roles` bypasses the permission check entirely — used for roles that are
+  // confined to a route subtree by path (see the whatsapp_manager redirect below) rather
+  // than by the permissions table.
+  if (roles && authUser && roles.includes(authUser.role)) {
+    return <>{children}</>;
   }
 
   if (permission && !hasPermission(permission)) {
@@ -143,6 +150,14 @@ function AppRoutes() {
 
   if (authUser?.role === "warehouse_manager" && !location.pathname.startsWith("/warehouse")) {
     return <Navigate to="/warehouse/dashboard" replace />;
+  }
+
+  if (
+    authUser?.role === "whatsapp_manager" &&
+    location.pathname !== "/whatsapp" &&
+    location.pathname !== "/whatsapp/inbox"
+  ) {
+    return <Navigate to="/whatsapp" replace />;
   }
 
   return (
@@ -192,7 +207,7 @@ function AppRoutes() {
         <Route path="/follow-up/dashboard" element={<ProtectedRoute><FollowUpDashboard /></ProtectedRoute>} />
         <Route path="/follow-up/queue" element={<ProtectedRoute><FollowUps /></ProtectedRoute>} />
         <Route path="/follow-up/control" element={<ProtectedRoute><FollowUpControl /></ProtectedRoute>} />
-        <Route path="/whatsapp" element={<ProtectedRoute permission="access_to_settings"><WhatsappLayout /></ProtectedRoute>}>
+        <Route path="/whatsapp" element={<ProtectedRoute permission="access_to_settings" roles={["whatsapp_manager"]}><WhatsappLayout /></ProtectedRoute>}>
           <Route index element={<WhatsappOverview />} />
           <Route path="inbox" element={<WhatsappInbox />} />
           <Route path="confirmations" element={<WhatsappConfirmations />} />

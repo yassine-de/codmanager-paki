@@ -633,7 +633,7 @@ export default function WhatsappInbox() {
   const { authUser, hasPermission } = useAuth();
   const isAdmin = authUser?.role === "admin";
   const WHATSAPP_ALLOWED_EMAILS = ["eshaehsan@gmail.com"];
-  const hasWhatsappAccess = isAdmin || hasPermission("access_to_whatsapp_inbox") || WHATSAPP_ALLOWED_EMAILS.includes(authUser?.email ?? "");
+  const hasWhatsappAccess = isAdmin || authUser?.role === "whatsapp_manager" || hasPermission("access_to_whatsapp_inbox") || WHATSAPP_ALLOWED_EMAILS.includes(authUser?.email ?? "");
 
   const qc = useQueryClient();
   const navigate = useNavigate();
