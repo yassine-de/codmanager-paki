@@ -1609,23 +1609,32 @@ async function sweepDeliveryStatusChanges() {
   );
   if (targetStatuses.length === 0) return 0;
 
+  // Event-sourced via order_history, NOT orders.shipped_at — shipped_at is
+  // only set once, at the FIRST shipment, so it correctly marks "just
+  // became shipped" but is silently useless for any later status (e.g.
+  // failed_attempt typically happens days after shipped_at, so a
+  // shipped_at-based filter would never match it — confirmed live: orders
+  // that became failed_attempt today all had shipped_at from 3-8 days
+  // earlier). order_history.created_at records exactly when delivery_status
+  // changed to each value, correctly for every status.
+  //
   // 2h lookback (not just 1-2 ticks' worth) so a cron gap or deploy restart
-  // doesn't silently drop an order that shipped during the downtime — as
-  // long as it hasn't since progressed past the target status, this will
-  // still catch it on the next tick. startNewRuns' dedup guard (now backed
-  // by a DB unique index) makes re-matching the same order across ticks safe.
+  // doesn't silently drop an order — startNewRuns' dedup guard (backed by a
+  // DB unique index) makes re-matching the same order across ticks safe.
   const sinceIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-  const { data: orders, error } = await admin
-    .from("orders")
+  const { data: events, error } = await admin
+    .from("order_history")
     .select("order_id")
-    .in("delivery_status", targetStatuses)
-    .gte("shipped_at", sinceIso)
-    .limit(50);
+    .eq("field_changed", "delivery_status")
+    .in("new_value", targetStatuses)
+    .gte("created_at", sinceIso)
+    .limit(100);
   if (error) {
-    errLog("sweepDeliveryStatusChanges orders query", error.message);
+    errLog("sweepDeliveryStatusChanges events query", error.message);
     return 0;
   }
-  if (!orders?.length) return 0;
+  if (!events?.length) return 0;
+  const orders = Array.from(new Set(events.map((e: any) => e.order_id))).map((order_id) => ({ order_id }));
 
   let started = 0;
   for (const o of orders) {
