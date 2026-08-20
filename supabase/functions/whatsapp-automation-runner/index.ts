@@ -987,6 +987,7 @@ async function applyButtonAction(opts: {
         ai_takeover?: boolean;
         ai_gate?: "off" | "validate";
         intent_kind?: "confirm" | "cancel" | "info";
+        needs_review?: boolean;
       }
     | undefined;
   order: any | null;
@@ -995,6 +996,29 @@ async function applyButtonAction(opts: {
 }) {
   const { action, order, conversationId, buttonText } = opts;
   if (!action) return;
+
+  // Urgent-review flag (e.g. "Yes, still want it" on a Failed Attempt
+  // template) — independent of any order-status mapping below, so it
+  // applies whether or not this same button also confirms/cancels the
+  // order. Puts the conversation in the Needs Review queue with a distinct
+  // "urgent_redelivery" label the Inbox renders as a red badge; an agent
+  // clears it via the "Arrange Delivery — Done" resolve action.
+  if (action.needs_review && conversationId) {
+    const { data: convRow } = await admin
+      .from("whatsapp_conversations")
+      .select("labels")
+      .eq("id", conversationId)
+      .maybeSingle();
+    const existingLabels: string[] = Array.isArray(convRow?.labels) ? convRow!.labels : [];
+    await admin
+      .from("whatsapp_conversations")
+      .update({
+        status: "manual_review_needed",
+        labels: Array.from(new Set([...existingLabels, "urgent_redelivery"])),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", conversationId);
+  }
 
   // Address-deliverable check (mirrors webhook's isAddressDeliverable).
   // Used to FORCE AI gating on confirm buttons when the address is incomplete,

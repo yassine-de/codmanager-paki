@@ -486,6 +486,20 @@ export default function WhatsappAutomationBuilder() {
                                   </div>
                                   <div className="flex items-center justify-between gap-2 pt-1 border-t">
                                     <Label className="text-[10px] text-muted-foreground cursor-pointer flex-1">
+                                      Flag as urgent review
+                                    </Label>
+                                    <Switch
+                                      checked={!!action.needs_review}
+                                      onCheckedChange={(v) => updateAction({ needs_review: v })}
+                                    />
+                                  </div>
+                                  {action.needs_review && (
+                                    <p className="text-[9px] text-muted-foreground leading-tight">
+                                      Puts the conversation in Needs Review with a red "Urgent" badge until an agent resolves it.
+                                    </p>
+                                  )}
+                                  <div className="flex items-center justify-between gap-2 pt-1 border-t">
+                                    <Label className="text-[10px] text-muted-foreground cursor-pointer flex-1">
                                       AI validates before applying
                                     </Label>
                                     <Switch
@@ -1066,6 +1080,20 @@ function NodeBranch({
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t">
+                    <Label className="text-[10px] text-muted-foreground cursor-pointer flex-1">
+                      Flag as urgent review
+                    </Label>
+                    <Switch
+                      checked={!!action.needs_review}
+                      onCheckedChange={(v) => updateAction({ needs_review: v })}
+                    />
+                  </div>
+                  {action.needs_review && (
+                    <p className="text-[9px] text-muted-foreground leading-tight">
+                      Puts the conversation in Needs Review with a red "Urgent" badge until an agent resolves it.
+                    </p>
+                  )}
                   <div className="flex items-center justify-between gap-2 pt-1 border-t">
                     <Label className="text-[10px] text-muted-foreground cursor-pointer flex-1">
                       AI validates before applying

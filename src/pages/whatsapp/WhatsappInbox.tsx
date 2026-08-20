@@ -1326,6 +1326,9 @@ export default function WhatsappInbox() {
     setResolving(true);
     const note = resolveNote.trim();
     const { data: u } = await supabase.auth.getUser();
+    const remainingLabels = (Array.isArray(conv.labels) ? conv.labels : []).filter(
+      (l) => l !== "urgent_redelivery",
+    );
     const { error } = await supabase
       .from("whatsapp_conversations")
       .update({
@@ -1333,6 +1336,7 @@ export default function WhatsappInbox() {
         review_note: note || null,
         resolved_by: u?.user?.id ?? null,
         resolved_at: new Date().toISOString(),
+        labels: remainingLabels,
       })
       .eq("id", selected);
     if (error) {
@@ -1847,9 +1851,12 @@ export default function WhatsappInbox() {
               const unreadCount = unreadMap[c.id] ?? 0;
               const unread = unreadCount > 0;
               const needsReview = c.status === "manual_review_needed";
+              const urgentRedelivery = needsReview && !!c.labels?.includes("urgent_redelivery");
               const followUp = isFollowUpConv(c);
               const ts = c.last_reply_at || c.last_message_at || c.updated_at;
-              const tooltip = needsReview
+              const tooltip = urgentRedelivery
+                ? "🚨 Urgent — customer wants a redelivery attempt"
+                : needsReview
                 ? "⚠️ Needs human review — AI flagged this conversation"
                 : unread
                 ? `New message${c.last_inbound_at ? ` • ${formatDistanceToNowStrict(new Date(c.last_inbound_at), { addSuffix: true })}` : ""}${
@@ -1873,7 +1880,8 @@ export default function WhatsappInbox() {
                     "w-full text-left px-3 py-3 border-b border-border/60 hover:bg-muted/40 transition-colors flex gap-3 relative",
                     selected === c.id && "bg-muted/60",
                     unread && !needsReview && "bg-emerald-500/5 hover:bg-emerald-500/10 border-l-4 border-l-emerald-500",
-                    needsReview && "bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-l-sky-500",
+                    needsReview && !urgentRedelivery && "bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-l-sky-500",
+                    urgentRedelivery && "bg-red-500/5 hover:bg-red-500/10 border-l-4 border-l-red-500",
                   )}
                 >
                   <div className="relative shrink-0">
@@ -1887,8 +1895,8 @@ export default function WhatsappInbox() {
                     </div>
                     {needsReview && (
                       <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-sky-500 border-2 border-background items-center justify-center">
+                        <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", urgentRedelivery ? "bg-red-400" : "bg-sky-400")}></span>
+                        <span className={cn("relative inline-flex rounded-full h-3.5 w-3.5 border-2 border-background items-center justify-center", urgentRedelivery ? "bg-red-500" : "bg-sky-500")}>
                           <AlertCircle className="h-2 w-2 text-white" />
                         </span>
                       </span>
@@ -1923,13 +1931,23 @@ export default function WhatsappInbox() {
                         {c.order_id ? `#${c.order_id}` : c.customer_phone}
                       </div>
                       {needsReview && (
-                        <span
-                          className="inline-flex items-center gap-0.5 h-5 px-1.5 rounded-full bg-sky-500 text-white text-[9px] font-bold shrink-0 uppercase tracking-wide"
-                          aria-label="Needs human review"
-                        >
-                          <AlertCircle className="h-2.5 w-2.5" />
-                          Review
-                        </span>
+                        urgentRedelivery ? (
+                          <span
+                            className="inline-flex items-center gap-0.5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[9px] font-bold shrink-0 uppercase tracking-wide"
+                            aria-label="Urgent — redelivery requested"
+                          >
+                            <AlertCircle className="h-2.5 w-2.5" />
+                            Urgent
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-0.5 h-5 px-1.5 rounded-full bg-sky-500 text-white text-[9px] font-bold shrink-0 uppercase tracking-wide"
+                            aria-label="Needs human review"
+                          >
+                            <AlertCircle className="h-2.5 w-2.5" />
+                            Review
+                          </span>
+                        )
                       )}
                       {followUp && (
                         <span
@@ -2103,19 +2121,36 @@ export default function WhatsappInbox() {
                 </div>
 
                 <div className="flex w-full md:w-auto items-center justify-end gap-1 pl-10 md:pl-0">
-                {/* Mark as resolved (only when conversation needs review) */}
+                {/* Mark as resolved (only when conversation needs review).
+                    "Arrange Delivery — Done" for the urgent redelivery case
+                    (customer confirmed they still want it after a failed
+                    attempt) — same resolve flow, clearer call to action. */}
                 {conv?.status === "manual_review_needed" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setResolveOpen(true)}
-                    className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-sky-500/30 bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 hover:text-sky-700 dark:text-sky-400"
-                    title="Mark this conversation as resolved"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span className="hidden md:inline">Mark Resolved</span>
-                  </Button>
+                  conv.labels?.includes("urgent_redelivery") ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setResolveOpen(true)}
+                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20 hover:text-red-700 dark:text-red-400"
+                      title="Mark redelivery as arranged"
+                    >
+                      <Truck className="h-3.5 w-3.5" />
+                      <span className="hidden md:inline">Arrange Delivery — Done</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setResolveOpen(true)}
+                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-sky-500/30 bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 hover:text-sky-700 dark:text-sky-400"
+                      title="Mark this conversation as resolved"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span className="hidden md:inline">Mark Resolved</span>
+                    </Button>
+                  )
                 )}
 
                 {/* Force to Agent — hand the order off to the call-center queue.
@@ -3505,18 +3540,29 @@ export default function WhatsappInbox() {
         </DialogContent>
       </Dialog>
 
-      {/* Mark as resolved dialog */}
+      {/* Mark as resolved dialog — contextual copy for the urgent redelivery case */}
       <Dialog open={resolveOpen} onOpenChange={(o) => { setResolveOpen(o); if (!o) setResolveNote(""); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-sky-500" />
-              Mark as Resolved
+              {conv?.labels?.includes("urgent_redelivery") ? (
+                <>
+                  <Truck className="h-5 w-5 text-red-500" />
+                  Arrange Delivery — Done
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-sky-500" />
+                  Mark as Resolved
+                </>
+              )}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Confirm this conversation has been handled. Add an optional note to record what was done.
+              {conv?.labels?.includes("urgent_redelivery")
+                ? "Confirm a new delivery attempt has been arranged with the courier. Add an optional note (e.g. new pickup date)."
+                : "Confirm this conversation has been handled. Add an optional note to record what was done."}
             </p>
             <Textarea
               value={resolveNote}
@@ -3536,7 +3582,7 @@ export default function WhatsappInbox() {
                 className="gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white"
               >
                 {resolving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                Mark Resolved
+                {conv?.labels?.includes("urgent_redelivery") ? "Confirm Arranged" : "Mark Resolved"}
               </Button>
             </div>
           </div>
