@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2, PackageCheck } from "lucide-react";
 import { CitySelect } from "@/components/CitySelect";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 interface AgentCreateOrderModalProps {
   open: boolean;
@@ -139,6 +140,10 @@ export default function AgentCreateOrderModal({ open, onOpenChange, assignedProd
     if (!authUser) return;
     if (!customerName.trim() || !customerPhone.trim() || !customerCity) {
       toast.error("Please fill in customer name, phone and city");
+      return;
+    }
+    if (!isValidPhoneNumber(customerPhone)) {
+      toast.error("Phone number is wrong — please enter a real phone number");
       return;
     }
     if (items.some((item) => !item.productId || !item.productName)) {
