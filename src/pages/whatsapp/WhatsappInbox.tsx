@@ -796,13 +796,21 @@ export default function WhatsappInbox() {
       if (!conv?.order_id) return null;
       const { data } = await supabase
         .from("orders")
-        .select("*, order_items(id, product_id, product_variant_id, sku, product_name, variant_name, quantity, unit_price, total_price, weight_kg, created_at)")
+        .select("*, order_items(id, product_id, product_variant_id, sku, product_name, variant_name, quantity, unit_price, total_price, weight_kg, created_at), shipments(id, tracking_number, carrier_status, normalized_status, created_at, carriers(name))")
         .eq("order_id", conv.order_id)
         .maybeSingle();
       return data;
     },
     enabled: !!conv?.order_id,
   });
+
+  const latestShipment = useMemo(() => {
+    const shipments = Array.isArray((order as any)?.shipments) ? (order as any).shipments : [];
+    if (shipments.length === 0) return null;
+    return [...shipments].sort((a: any, b: any) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )[0];
+  }, [order]);
 
   const { data: duplicateMatches = [] } = useQuery<DuplicateOrderWarning[]>({
     queryKey: ["wts-order-duplicates", order?.id, order?.customer_phone],
@@ -3339,6 +3347,24 @@ export default function WhatsappInbox() {
                     <div className="text-[11px] text-muted-foreground">Created</div>
                     <div>{order.created_at ? format(new Date(order.created_at), "dd/MM/yyyy HH:mm") : "—"}</div>
                   </div>
+                  {latestShipment?.tracking_number && (
+                    <div className="col-span-2">
+                      <div className="text-[11px] text-muted-foreground">
+                        Tracking Number{latestShipment.carriers?.name ? ` · ${latestShipment.carriers.name}` : ""}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(latestShipment.tracking_number);
+                          toast.success(`Copied ${latestShipment.tracking_number}`);
+                        }}
+                        title="Click to copy"
+                        className="font-mono text-sm text-foreground hover:text-primary transition-colors"
+                      >
+                        {latestShipment.tracking_number}
+                      </button>
+                    </div>
+                  )}
                   <div className="col-span-2">
                     <div className="flex items-center justify-between mb-1">
                       <div className="text-[11px] text-muted-foreground">Address</div>
