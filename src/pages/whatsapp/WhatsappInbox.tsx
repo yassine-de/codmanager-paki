@@ -3519,6 +3519,7 @@ export default function WhatsappInbox() {
                         const updates: {
                           updated_at: string;
                           confirmation_status?: string;
+                          confirmed_at?: string;
                           delivery_status?: string;
                           cancel_reason?: string;
                           agent_id?: null;
@@ -3526,7 +3527,18 @@ export default function WhatsappInbox() {
                           last_activity_at?: null;
                         } = { updated_at: new Date().toISOString() };
                         let forcedToAgent = false;
-                        if (selectedConfirmationStatus !== (order.confirmation_status || "new")) updates.confirmation_status = selectedConfirmationStatus;
+                        if (selectedConfirmationStatus !== (order.confirmation_status || "new")) {
+                          updates.confirmation_status = selectedConfirmationStatus;
+                          // This panel never set confirmed_at on confirm — every order
+                          // touched only through here (agent/whatsapp mixed, ~484 found)
+                          // had confirmed_at stuck at NULL, corrupting any report that
+                          // buckets confirms by date (SellerAnalytics' daily trend,
+                          // ConfirmationAnalytics' default snapshot view, etc. all fall
+                          // back to updated_at instead, mis-dating the confirm event).
+                          if (selectedConfirmationStatus === "confirmed" && (order.confirmation_status || "new") !== "confirmed") {
+                            updates.confirmed_at = new Date().toISOString();
+                          }
+                        }
                         if (selectedConfirmationStatus === "cancelled" && cancelReasonValue !== (order.cancel_reason || "")) {
                           updates.cancel_reason = cancelReasonValue;
                         }

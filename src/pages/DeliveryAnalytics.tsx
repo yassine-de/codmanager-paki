@@ -372,58 +372,72 @@ export default function DeliveryAnalytics() {
 
   // ── KPI Calculations ─────────────────────────────────────────────────────────
 
-  // When a date range is active, confirmed/delivered/returned use their own event
-  // dates so we count "confirmed today", "delivered today", "returned today"
-  // accurately — not just orders *created* today that happen to have that status.
+  // The daily trend chart plots its own rolling window independent of the main
+  // date filter — each line buckets by its own event date — so it needs an
+  // unbounded-by-date population (seller/product/status filtered only).
   const eventFilteredPool = useMemo(() => {
-    if (!dateRange?.from) return null;
     return orders.filter((o) => {
       if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
       if (productFilter !== "all" && o.product_name !== productFilter) return false;
       if (deliveryStatusFilter !== "all" && o.delivery_status !== deliveryStatusFilter) return false;
       return true;
     });
-  }, [orders, sellerFilter, productFilter, deliveryStatusFilter, dateRange]);
+  }, [orders, sellerFilter, productFilter, deliveryStatusFilter]);
+
+  // Same basis-aware event rule used by SellerAnalytics.tsx (the page this was
+  // reconciled against): in "created" mode every metric is scoped by
+  // created_at — a pure cohort view ("of orders placed in this period, what's
+  // their status now"), one single population so nothing can mismatch. In
+  // "updated" mode each metric uses ITS OWN event timestamp when it has one
+  // (confirmed_at, delivered_at) so "Confirmed"/"Delivered" mean what really
+  // happened in the period, not just "current status of whatever was touched
+  // today" — falling back to updated_at only for stages with no dedicated
+  // timestamp (booked/printed/dispatched/shipped/failed_attempt/ready_for_return).
+  //
+  // Earlier attempts got this wrong twice: (1) mixing event dates for
+  // confirmed/delivered/returned with a plain created_at/updated_at filter for
+  // everything else — poolCount came out 0 while Delivered came out 5 for the
+  // same filter, a 0-denominator rate next to a nonzero numerator; (2) scoping
+  // EVERY metric to a blunt updated_at/created_at snapshot ("orders touched
+  // today, whatever their current status") — "Confirmed" then meant something
+  // completely different from what SellerAnalytics' own confirmed-trend chart
+  // shows for the same day (578 touched-and-currently-confirmed vs. 5 that
+  // actually became confirmed that day). poolCount is deliberately just
+  // `shipped`'s own event-scoped count (not a separately-defined population),
+  // so the delivery/return/failed-attempt rates can never divide mismatched sets.
+  const inRangeByEvent = (o: Order, eventIso: string | null): boolean => {
+    if (!dateRange?.from) return true;
+    const d = dateField === "created" ? o.created_at : (eventIso ?? o.updated_at);
+    return isWithinRange(new Date(d), dateRange);
+  };
 
   const kpis = useMemo(() => {
-    const total = filteredOrders.length;
+    const matchesFilters = (o: Order) =>
+      (sellerFilter === "all" || o.seller_id === sellerFilter) &&
+      (productFilter === "all" || o.product_name === productFilter) &&
+      (deliveryStatusFilter === "all" || o.delivery_status === deliveryStatusFilter);
+    const base = orders.filter(matchesFilters);
 
-    const pool = eventFilteredPool ?? filteredOrders;
+    const total = base.filter((o) => inRangeByEvent(o, o.updated_at)).length;
 
-    // Confirmed: use confirmed_at if set, otherwise updated_at
-    const confirmed = pool.filter((o) => {
-      const isConf =
-        o.confirmation_status === "confirmed" ||
-        CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || "");
-      if (!isConf) return false;
-      if (!dateRange?.from) return true;
-      return isWithinRange(new Date(o.confirmed_at ?? o.updated_at), dateRange);
-    }).length;
+    const confirmed = base.filter((o) =>
+      (o.confirmation_status === "confirmed" || CONFIRMED_DELIVERY_STATUSES.includes(o.delivery_status || ""))
+      && inRangeByEvent(o, o.confirmed_at)
+    ).length;
 
-    const deliveryPool = filteredOrders.filter((o) => isInShippedDeliveryPool(o.delivery_status));
-    const poolCount = deliveryPool.length;
-    const booked  = filteredOrders.filter((o) => o.delivery_status === "booked").length;
-    const printed = filteredOrders.filter((o) => o.delivery_status === "printed").length;
-    const dispatched = filteredOrders.filter((o) => o.delivery_status === "dispatched").length;
-    const shipped = filteredOrders.filter((o) => ACTIVE_SHIPPING_STATUSES.includes(o.delivery_status || "")).length;
+    const booked  = base.filter((o) => o.delivery_status === "booked" && inRangeByEvent(o, o.updated_at)).length;
+    const printed = base.filter((o) => o.delivery_status === "printed" && inRangeByEvent(o, o.updated_at)).length;
+    const dispatched = base.filter((o) => o.delivery_status === "dispatched" && inRangeByEvent(o, o.updated_at)).length;
+    const shipped = base.filter((o) => ACTIVE_SHIPPING_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.updated_at)).length;
+    const delivered = base.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
+    // Matches both "returned" and "return" (both values exist in the DB); no
+    // dedicated returned_at field, so delivered_at (the closest real event) is
+    // tried first, falling back to updated_at.
+    const returned = base.filter((o) => RETURNED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
+    const failedAttempt  = base.filter((o) => o.delivery_status === "failed_attempt" && inRangeByEvent(o, o.updated_at)).length;
+    const inReturnProcess = base.filter((o) => o.delivery_status === "ready_for_return" && inRangeByEvent(o, o.updated_at)).length;
 
-    // Delivered: use delivered_at if set, otherwise updated_at
-    const delivered = pool.filter((o) => {
-      if (!DELIVERED_STATUSES.includes(o.delivery_status || "")) return false;
-      if (!dateRange?.from) return true;
-      return isWithinRange(new Date(o.delivered_at ?? o.updated_at), dateRange);
-    }).length;
-
-    // Returned: no returned_at field — use updated_at as proxy
-    // Matches both "returned" and "return" (both values exist in the DB)
-    const returned = pool.filter((o) => {
-      if (!RETURNED_STATUSES.includes(o.delivery_status || "")) return false;
-      if (!dateRange?.from) return true;
-      return isWithinRange(new Date(o.updated_at), dateRange);
-    }).length;
-
-    const failedAttempt  = filteredOrders.filter((o) => o.delivery_status === "failed_attempt").length;
-    const inReturnProcess = filteredOrders.filter((o) => o.delivery_status === "ready_for_return").length;
+    const poolCount = base.filter((o) => isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)).length;
 
     return {
       total, confirmed, poolCount, booked, printed, dispatched, shipped, delivered,
@@ -432,7 +446,7 @@ export default function DeliveryAnalytics() {
       returnRate: pct(returned, poolCount),
       failedAttemptRate: pct(failedAttempt, poolCount),
     };
-  }, [filteredOrders, eventFilteredPool, dateRange]);
+  }, [orders, sellerFilter, productFilter, deliveryStatusFilter, dateField, dateRange]);
 
   // ── By Courier ───────────────────────────────────────────────────────────────
 
