@@ -23,6 +23,7 @@ interface Carrier {
   fulfillment_mode: FulfillmentMode;
   supports_cod: boolean;
   supports_tracking: boolean;
+  supports_bulk_tracking: boolean;
   supports_labels: boolean;
   supports_load_sheet: boolean;
   supports_cancel: boolean;
@@ -71,6 +72,19 @@ export default function CarrierManagement() {
     },
   });
 
+  const { data: activeCarrierCode = "postex" } = useQuery({
+    queryKey: ["carrier-management-active-carrier"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "active_carrier_code")
+        .maybeSingle();
+      if (error) throw error;
+      return data?.value || "postex";
+    },
+  });
+
   const { data: rules = [], isLoading: loadingRules } = useQuery({
     queryKey: ["carrier-management-rules"],
     queryFn: async () => {
@@ -93,6 +107,7 @@ export default function CarrierManagement() {
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["carrier-management-carriers"] });
     queryClient.invalidateQueries({ queryKey: ["carrier-management-rules"] });
+    queryClient.invalidateQueries({ queryKey: ["carrier-management-active-carrier"] });
   };
 
   const updateCarrier = async (id: string, patch: Partial<Carrier>) => {
@@ -125,6 +140,19 @@ export default function CarrierManagement() {
     }
     setCarrierForm(emptyCarrier);
     toast.success("Carrier created");
+    refresh();
+  };
+
+  const updateActiveCarrier = async (code: string) => {
+    const { error } = await supabase.from("app_settings" as any).upsert(
+      { key: "active_carrier_code", value: code, is_public: false, updated_at: new Date().toISOString() },
+      { onConflict: "key" },
+    );
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`Active carrier set to ${code}`);
     refresh();
   };
 
@@ -166,6 +194,19 @@ export default function CarrierManagement() {
             Carriers
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">Manage shipping companies, priority and routing criteria.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs text-muted-foreground">Active carrier</Label>
+          <Select value={activeCarrierCode} onValueChange={updateActiveCarrier}>
+            <SelectTrigger className="h-8 w-[190px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {carriers.map((carrier) => (
+                <SelectItem key={carrier.id} value={carrier.code} disabled={!carrier.enabled}>
+                  {carrier.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -209,6 +250,7 @@ export default function CarrierManagement() {
                       <div className="flex flex-wrap gap-1">
                         {carrier.supports_cod && <Badge variant="secondary" className="text-[10px]">COD</Badge>}
                         {carrier.supports_tracking && <Badge variant="secondary" className="text-[10px]">Tracking</Badge>}
+                        {carrier.supports_bulk_tracking && <Badge variant="secondary" className="text-[10px]">Bulk tracking</Badge>}
                         {carrier.supports_labels && <Badge variant="secondary" className="text-[10px]">Labels</Badge>}
                         {carrier.supports_load_sheet && <Badge variant="secondary" className="text-[10px]">Load sheet</Badge>}
                         {carrier.supports_cancel && <Badge variant="secondary" className="text-[10px]">Cancel</Badge>}
