@@ -14,6 +14,10 @@ interface Order {
   confirmation_status: string;
   confirmation_channel: string | null;
   postpone_date: string | null;
+  /** Who actually made this period's last order_history action on this order
+   *  (from ConfirmationAnalytics' statusActionsInPeriod) — takes priority over
+   *  agent_id/original_agent_id for per-agent attribution below. */
+  actedBy?: string | null;
 }
 
 interface AgentScore {
@@ -169,7 +173,7 @@ export function DailyConfirmationReport({
 }: DailyConfirmationReportProps) {
 
   const handledOrders = useMemo(
-    () => orders.filter(o => (o.agent_id || o.original_agent_id) && o.confirmation_status !== "new"),
+    () => orders.filter(o => (o.actedBy || o.agent_id || o.original_agent_id) && o.confirmation_status !== "new"),
     [orders]
   );
 
@@ -183,9 +187,20 @@ export function DailyConfirmationReport({
     const handledConf = handledOrders.filter(o => o.confirmation_status === "confirmed").length;
 
     const noAnswer    = handledOrders.filter(o => o.confirmation_status === "no_answer").length;
-    const postponed   = handledOrders.filter(o => o.postpone_date !== null || o.confirmation_status === "postponed").length;
+    // `postpone_date` isn't cleared when an order later moves off "postponed"
+    // (it's a retry-scheduling field, not a status flag), so an order this
+    // agent postponed last week and called again today as no_answer/cancelled
+    // still carries a non-null postpone_date — checking it here double-counted
+    // the order into both buckets, making the segments sum past `total`
+    // (reported: sidra hanif's breakdown summed to 28 against a total of 22).
+    // confirmation_status alone is the current, mutually-exclusive source of truth.
+    const postponed   = handledOrders.filter(o => o.confirmation_status === "postponed").length;
     const cancelled   = handledOrders.filter(o => o.confirmation_status === "cancelled").length;
     const wrongNumber = handledOrders.filter(o => o.confirmation_status === "wrong_number").length;
+    // Without its own bucket, "unreachable" orders inflated `total` (the Status
+    // Distribution bar's denominator) while contributing to no visible segment,
+    // making the legend's percentages permanently undercount vs. the bar itself.
+    const unreachable = handledOrders.filter(o => o.confirmation_status === "unreachable").length;
 
     // Channel split uses all confirmed orders (same population as `confirmed`)
     const byWhatsApp  = orders.filter(o => o.confirmation_status === "confirmed" && o.confirmation_channel === "whatsapp").length;
@@ -193,13 +208,14 @@ export function DailyConfirmationReport({
 
     const p = (n: number, d = total) => d > 0 ? Math.round((n / d) * 100) : 0;
     return {
-      total, confirmed, noAnswer, postponed, cancelled, wrongNumber, byWhatsApp, byPhone,
+      total, confirmed, noAnswer, postponed, cancelled, wrongNumber, unreachable, byWhatsApp, byPhone,
       // Rate = agent-handled confirmed / agent-handled total (meaningful performance metric)
       confirmRate:    p(handledConf),
       noAnswerRate:   p(noAnswer),
       postponedRate:  p(postponed),
       cancelledRate:  p(cancelled),
       wrongNumberRate:p(wrongNumber),
+      unreachableRate:p(unreachable),
       whatsappRate:   p(byWhatsApp, confirmed),
       phoneRate:      p(byPhone, confirmed),
     };
@@ -213,11 +229,20 @@ export function DailyConfirmationReport({
       return map[id];
     };
     handledOrders.forEach(o => {
-      const aid = o.agent_id || o.original_agent_id;
+      // actedBy (who actually made this period's last action — see the Order
+      // interface) takes priority over ownership. Without it, an order
+      // originally assigned to one agent but reattempted by a DIFFERENT agent
+      // today still counted toward the ORIGINAL agent's Handled/No Answer/
+      // Postponed/Cancelled totals (reported: HARRAM's row showed 9 handled
+      // orders despite zero order_history activity from him today — all 9
+      // were orders other agents reattempted today that he originally owned).
+      const aid = o.actedBy || o.agent_id || o.original_agent_id;
       if (!aid) return;
       ensure(aid).total++;
       if (o.confirmation_status === "no_answer")  map[aid].noAnswer++;
-      if (o.postpone_date || o.confirmation_status === "postponed") map[aid].postponed++;
+      // See the `postponed` comment in `s` above — stale postpone_date must not
+      // double-count an order whose current status is something else.
+      if (o.confirmation_status === "postponed") map[aid].postponed++;
       if (o.confirmation_status === "cancelled") map[aid].cancelled++;
     });
     // Credit "confirmed"/"whatsappConfirmed" to whoever actually pressed confirm
@@ -225,7 +250,7 @@ export function DailyConfirmationReport({
     // confirmedByAgentMap in ConfirmationAnalytics.tsx for why.
     handledOrders.forEach(o => {
       if (o.confirmation_status !== "confirmed") return;
-      const owner = o.agent_id || o.original_agent_id;
+      const owner = o.actedBy || o.agent_id || o.original_agent_id;
       if (!owner) return;
       const confirmingAgent = confirmedByAgent[o.order_id] || (hasConfirmHistory[o.order_id] ? null : owner);
       if (!confirmingAgent) return;
@@ -259,7 +284,9 @@ export function DailyConfirmationReport({
     const waOrders = orders.filter(o => o.confirmation_channel === "whatsapp");
     const confirmed = waOrders.filter(o => o.confirmation_status === "confirmed").length;
     const noAnswer  = waOrders.filter(o => o.confirmation_status === "no_answer").length;
-    const postponed = waOrders.filter(o => o.postpone_date !== null || o.confirmation_status === "postponed").length;
+    // See the `postponed` comment in `s` above — stale postpone_date must not
+    // double-count an order whose current status is something else.
+    const postponed = waOrders.filter(o => o.confirmation_status === "postponed").length;
     const cancelled = waOrders.filter(o => o.confirmation_status === "cancelled").length;
     const newOrders = waOrders.filter(o => o.confirmation_status === "new").length;
     const total     = waOrders.length;
@@ -359,6 +386,7 @@ export function DailyConfirmationReport({
             {s.postponed  > 0 && <div style={{ flex: s.postponed  }} className="bg-[hsl(220,60%,55%)]" title={`Postponed ${s.postponedRate}%`} />}
             {s.cancelled  > 0 && <div style={{ flex: s.cancelled  }} className="bg-[hsl(0,65%,52%)]"   title={`Cancelled ${s.cancelledRate}%`} />}
             {s.wrongNumber> 0 && <div style={{ flex: s.wrongNumber}} className="bg-muted-foreground/40" title={`Wrong # ${s.wrongNumberRate}%`} />}
+            {s.unreachable> 0 && <div style={{ flex: s.unreachable}} className="bg-[hsl(280,50%,55%)]" title={`Unreachable ${s.unreachableRate}%`} />}
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-3">
             {[
@@ -367,6 +395,7 @@ export function DailyConfirmationReport({
               { label: "Postponed",   n: s.postponed,   pct: s.postponedRate,  color: "bg-[hsl(220,60%,55%)]" },
               { label: "Cancelled",   n: s.cancelled,   pct: s.cancelledRate,  color: "bg-[hsl(0,65%,52%)]" },
               { label: "Wrong #",     n: s.wrongNumber, pct: s.wrongNumberRate,color: "bg-muted-foreground/40" },
+              { label: "Unreachable", n: s.unreachable, pct: s.unreachableRate,color: "bg-[hsl(280,50%,55%)]" },
             ].filter(r => r.n > 0).map(r => (
               <div key={r.label} className="flex items-center gap-1.5">
                 <div className={cn("w-2 h-2 rounded-sm flex-shrink-0", r.color)} />

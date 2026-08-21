@@ -28,6 +28,7 @@ const COLORS = {
   cancelled: "hsl(0, 65%, 52%)",
   wrongNumber: "hsl(280, 50%, 55%)",
   double: "hsl(30, 70%, 50%)",
+  unreachable: "hsl(190, 65%, 45%)",
 };
 
 const AgentDashboard = () => {
@@ -157,33 +158,61 @@ const AgentDashboard = () => {
     return { from, to };
   }, [dateRange]);
 
-  // Filter the agent's orders by date directly from the orders table (the source of
-  // truth the ranking also uses). We DON'T rely on order_history here because status
-  // changes made outside AgentOrders (e.g. the WhatsApp inbox, imports) never wrote
-  // history rows — which left the dashboard cards stuck at 0 even when the agent had
-  // hundreds of confirmed orders.
+  // My latest confirmation_status order_history event per order — both WHEN I
+  // acted and WHAT I set it to (orderHistory is already scoped to
+  // changed_by=userId and fetched ascending, so a later write for the same
+  // order_id overwrites an earlier one, leaving the latest).
+  const myLatestEventByOrder = useMemo(() => {
+    const map: Record<string, { at: string; status: string }> = {};
+    orderHistory.forEach((h) => {
+      if (h.new_value) map[h.order_id] = { at: h.created_at, status: h.new_value };
+    });
+    return map;
+  }, [orderHistory]);
+
+  // Filter the agent's orders by date, and override confirmation_status to MY
+  // own latest action's outcome where I have order_history evidence — not the
+  // order's raw CURRENT status, which a DIFFERENT agent's later action can
+  // change. Without this, an order I marked no_answer that a different agent
+  // later confirmed still showed confirmation_status="confirmed" against me
+  // (wrongly inflating my "Confirmed" count), and — the reverse — an order I
+  // originally touched but that a different agent is now actively working
+  // still bumped its own updated_at/last_activity_at today, wrongly inflating
+  // my "Claimed Orders" count with work I didn't do (reported: sidra's own
+  // dashboard showed 43 "claimed today" while the admin's action-attributed
+  // view correctly showed 23 — the extra 20 were orders another agent was
+  // actually calling today). Only fall back to the order's raw status/generic
+  // timestamp when I have NO order_history evidence at all for that order —
+  // preserves the original fix this replaced: status changes made outside
+  // AgentOrders (e.g. the WhatsApp inbox, imports) that never wrote history
+  // rows must not silently vanish from the dashboard.
   const filteredOrders = useMemo(() => {
     const { from, to } = resolvedDateRange;
 
-    if (!from && !to) return agentOrders;
+    const withEffectiveStatus = agentOrders.map((o: any) => {
+      const mine = myLatestEventByOrder[o.order_id];
+      return mine ? { ...o, confirmation_status: mine.status, _effectiveAt: mine.at } : { ...o, _effectiveAt: null };
+    });
 
-    return agentOrders.filter((o: any) => {
-      // Pick the most relevant "worked on" timestamp available for this order.
+    if (!from && !to) return withEffectiveStatus;
+
+    return withEffectiveStatus.filter((o: any) => {
       const tsRaw =
-        o.confirmation_status === "confirmed" && o.confirmed_at
+        o._effectiveAt ||
+        (o.confirmation_status === "confirmed" && o.confirmed_at
           ? o.confirmed_at
-          : o.last_activity_at || o.last_attempt_at || o.updated_at || o.created_at;
+          : o.last_activity_at || o.last_attempt_at || o.updated_at || o.created_at);
       if (!tsRaw) return false;
       const ts = new Date(tsRaw);
       if (from && ts < from) return false;
       if (to && ts > to) return false;
       return true;
     });
-  }, [agentOrders, dateRange]);
+  }, [agentOrders, myLatestEventByOrder, dateRange]);
 
   // Agent ranking (real data) — moved above `stats` because the "Confirmed"
   // stat card now reads its count from here too (see stats.confirmed below).
-  const { data: rankingData = [], isSuccess: rankingLoaded } = useQuery({
+  const { data: rankingData = [] } = useQuery({
     queryKey: ["agent-rankings", resolvedDateRange.from?.toISOString(), resolvedDateRange.to?.toISOString()],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_agent_rankings", {
@@ -198,22 +227,22 @@ const AgentDashboard = () => {
   const stats = useMemo(() => {
     const total = filteredOrders.length;
     const byStatus = (s: string) => filteredOrders.filter((o: any) => o.confirmation_status === s).length;
-    // get_agent_rankings attributes a "confirmed" order to whoever's order_history
-    // row actually pressed confirm (via changed_by), not to everyone who ever
-    // touched the order. filteredOrders/byStatus doesn't know that: an order this
-    // agent marked no_answer yesterday, then a DIFFERENT agent confirmed today,
-    // still shows confirmation_status="confirmed" and stays in this agent's
-    // touched-order set — so byStatus("confirmed") wrongly credited it here too,
-    // disagreeing with "Your Ranking" below (reported: Alishba's card showed 2
-    // confirmed / ranking showed 1 — the extra one was sidra hanif's confirm).
-    // Once the ranking RPC has loaded, trust its per-agent count instead.
-    const rankingRow = rankingData.find((r: any) => r.agent_id === userId);
-    const confirmed = rankingLoaded ? Number(rankingRow?.confirmed_count ?? 0) : byStatus("confirmed");
+    // filteredOrders' confirmation_status is now already overridden to MY own
+    // latest order_history action where I have evidence (see filteredOrders
+    // above), so a straight byStatus count here is attribution-correct on its
+    // own — no need to borrow get_agent_rankings' count separately, and this
+    // way every card (Claimed/Confirmed/Postponed/No Answer/Cancelled) comes
+    // from the exact same population, so they always sum consistently.
+    const confirmed = byStatus("confirmed");
     const newOrders = byStatus("new");
     const postponed = byStatus("postponed");
     const noAnswer = byStatus("no_answer");
     const cancelled = byStatus("cancelled");
     const other = byStatus("double") + byStatus("wrong_number");
+    // Without its own bucket, "unreachable" orders counted toward Claimed
+    // Orders but had no matching pie slice, making the donut's own total
+    // (summed from its slices) undercount vs. the Claimed Orders KPI card.
+    const unreachable = byStatus("unreachable");
     // Claimed Orders = distinct orders this agent worked on in the period.
     return {
       total,
@@ -226,8 +255,10 @@ const AgentDashboard = () => {
       cancelled,
       cancelledPct: total ? Math.round((cancelled / total) * 100) : 0,
       other,
+      unreachable,
+      unreachablePct: total ? Math.round((unreachable / total) * 100) : 0,
     };
-  }, [filteredOrders, rankingData, rankingLoaded, userId]);
+  }, [filteredOrders]);
 
   // Pie chart data
   const pieData = [
@@ -236,6 +267,7 @@ const AgentDashboard = () => {
     { name: "No Answer", value: stats.noAnswer, color: COLORS.noAnswer },
     { name: "Cancelled", value: stats.cancelled, color: COLORS.cancelled },
     ...(stats.other > 0 ? [{ name: "Wrong №/Double", value: stats.other, color: COLORS.wrongNumber }] : []),
+    ...(stats.unreachable > 0 ? [{ name: "Unreachable", value: stats.unreachable, color: COLORS.unreachable }] : []),
   ].filter(d => d.value > 0);
 
   const agentRanking = useMemo(() => {

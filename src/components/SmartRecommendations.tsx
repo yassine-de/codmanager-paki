@@ -23,6 +23,10 @@ interface AgentOrderData {
   confirmed_at: string | null;
   attempt_count: number;
   postpone_date: string | null;
+  /** Who actually made this period's last order_history action on this order
+   *  (from ConfirmationAnalytics' statusActionsInPeriod) — takes priority over
+   *  agent_id/original_agent_id for per-agent attribution below. */
+  actedBy?: string | null;
 }
 
 interface OrderHistoryEntry {
@@ -85,48 +89,53 @@ function formatMs(ms: number): string {
 
 export function SmartRecommendations({ orders, orderHistory, calls, profileNameMap, agentIds }: Props) {
   const insights = useMemo(() => {
-    // Build handling time from order_history: agent_id claim → first status change
-    const agentClaimMap: Record<string, { time: string; agentId: string }> = {};
-    const firstChangeAfterClaim: Record<string, string> = {};
-
+    // Handling time per agent: for EACH agent_id claim (not just an order's
+    // first-ever claim), the time to the NEXT confirmation_status change made
+    // by that SAME agent. An order can be claimed and reattempted by several
+    // agents across its life; each agent's own claim-to-response interval
+    // must count toward THEIR OWN average, not get attributed to whoever
+    // historically claimed the order first (reported: an agent's insight
+    // card showed a "handling time" built from a different agent's
+    // claim-to-response speed on orders they'd only inherited).
+    const statusEventsByOrder: Record<string, Array<{ at: string; changedBy: string }>> = {};
     orderHistory.forEach((h) => {
-      if (h.field_changed === "agent_id" && !h.old_value && h.new_value && !agentClaimMap[h.order_id]) {
-        agentClaimMap[h.order_id] = { time: h.created_at, agentId: h.new_value };
-      }
+      if (h.field_changed !== "confirmation_status") return;
+      (statusEventsByOrder[h.order_id] ||= []).push({ at: h.created_at, changedBy: h.changed_by || "" });
     });
 
-    orderHistory.forEach((h) => {
-      if (h.field_changed === "confirmation_status" && agentClaimMap[h.order_id] && !firstChangeAfterClaim[h.order_id]) {
-        const claimTime = new Date(agentClaimMap[h.order_id].time).getTime();
-        const changeTime = new Date(h.created_at).getTime();
-        if (changeTime >= claimTime) {
-          firstChangeAfterClaim[h.order_id] = h.created_at;
-        }
-      }
-    });
-
-    // Handling times per agent from history
     const handlingTimeByAgent: Record<string, number[]> = {};
     const allHandlingTimes: number[] = [];
-    for (const [orderId, changeTime] of Object.entries(firstChangeAfterClaim)) {
-      const claim = agentClaimMap[orderId];
-      if (!claim) continue;
-      const diff = new Date(changeTime).getTime() - new Date(claim.time).getTime();
+    orderHistory.forEach((h) => {
+      // The claim mechanism writes "agent_lock" history rows, not "agent_id"
+      // (which has zero rows in the live table) — see ConfirmationAnalytics.tsx.
+      if (h.field_changed !== "agent_lock" || h.old_value || !h.new_value) return;
+      const claimedBy = h.new_value;
+      const claimTime = new Date(h.created_at).getTime();
+      const events = statusEventsByOrder[h.order_id] || [];
+      const next = events.find((e) => e.changedBy === claimedBy && new Date(e.at).getTime() >= claimTime);
+      if (!next) return;
+      const diff = new Date(next.at).getTime() - claimTime;
       if (diff > 0 && diff < 86400000) {
-        if (!handlingTimeByAgent[claim.agentId]) handlingTimeByAgent[claim.agentId] = [];
-        handlingTimeByAgent[claim.agentId].push(diff);
+        (handlingTimeByAgent[claimedBy] ||= []).push(diff);
         allHandlingTimes.push(diff);
       }
-    }
+    });
 
     const teamAvgHandlingMs = allHandlingTimes.length > 0
       ? allHandlingTimes.reduce((s, v) => s + v, 0) / allHandlingTimes.length
       : 0;
 
-    // Group orders by the agent who processed them (use original_agent_id if agent_id is null)
+    // Group orders by the agent who actually processed them this period
+    // (actedBy, from order_history — see the AgentOrderData interface), not by
+    // current ownership: an order originally assigned to one agent but
+    // reattempted by a DIFFERENT agent today must not count toward the
+    // ORIGINAL agent's insights card (reported: an agent with zero activity
+    // today still got a full "processed" count and recommendations from
+    // orders other agents reattempted). Falls back to
+    // agent_id/original_agent_id only when actedBy isn't available.
     const agentOrders: Record<string, AgentOrderData[]> = {};
     orders.forEach((o) => {
-      const effectiveAgent = o.agent_id || o.original_agent_id;
+      const effectiveAgent = o.actedBy || o.agent_id || o.original_agent_id;
       if (!effectiveAgent) return;
       if (!agentOrders[effectiveAgent]) agentOrders[effectiveAgent] = [];
       agentOrders[effectiveAgent].push(o);
