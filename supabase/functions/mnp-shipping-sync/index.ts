@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0?no-check";
+import { PDFDocument } from "https://esm.sh/pdf-lib@1.17.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -146,12 +147,33 @@ async function mnpPost(path: string, body: Record<string, unknown>) {
 
 function base64Encode(text: string) {
   const bytes = new TextEncoder().encode(text);
+  return base64EncodeBytes(bytes);
+}
+
+function base64EncodeBytes(bytes: Uint8Array) {
   let binary = "";
   const chunkSize = 0x8000;
   for (let i = 0; i < bytes.length; i += chunkSize) {
     binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
   }
   return btoa(binary);
+}
+
+function looksLikePdf(bytes: Uint8Array) {
+  if (bytes.length < 5) return false;
+  return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
+}
+
+async function mergePdfs(pdfs: Uint8Array[]) {
+  if (pdfs.length === 1) return pdfs[0];
+
+  const merged = await PDFDocument.create();
+  for (const pdf of pdfs) {
+    const source = await PDFDocument.load(pdf);
+    const pages = await merged.copyPages(source, source.getPageIndices());
+    pages.forEach((page) => merged.addPage(page));
+  }
+  return await merged.save();
 }
 
 function extractHtmlBody(html: string) {
@@ -193,6 +215,7 @@ async function generateLabels(supabase: ReturnType<typeof createClient>, trackin
   if (numbers.length === 0) throw new Error("tracking_numbers required");
 
   const labels: string[] = [];
+  const pdfLabels: Uint8Array[] = [];
   for (const tracking of numbers) {
     const url = new URL(`${MNP_LABEL_BASE.replace(/\/$/, "")}/GetAddressLabel_HTML_image.aspx`);
     url.searchParams.set("con", tracking);
@@ -201,12 +224,30 @@ async function generateLabels(supabase: ReturnType<typeof createClient>, trackin
     url.searchParams.set("labeltype", String(cfg.labelType || 3));
 
     const res = await fetch(url.toString(), { method: "GET" });
-    const html = await res.text();
+    const bytes = new Uint8Array(await res.arrayBuffer());
     if (!res.ok) throw new Error(`M&P label failed for ${tracking}: ${res.status}`);
+
+    if (looksLikePdf(bytes)) {
+      pdfLabels.push(bytes);
+      continue;
+    }
+
+    const html = new TextDecoder().decode(bytes);
     if (/not\s+found|invalid|error/i.test(html) && !/<table|<img|barcode|consignee/i.test(html)) {
       throw new Error(`M&P label failed for ${tracking}: ${html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160)}`);
     }
     labels.push(html);
+  }
+
+  if (pdfLabels.length > 0) {
+    if (labels.length > 0) throw new Error("M&P returned mixed PDF and HTML labels");
+    const pdf = await mergePdfs(pdfLabels);
+    return {
+      success: true,
+      label_format: "pdf",
+      pdf_base64: base64EncodeBytes(pdf),
+      tracking_numbers: numbers,
+    };
   }
 
   const printableHtml = buildPrintableLabelHtml(labels);
