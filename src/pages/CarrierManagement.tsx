@@ -1,19 +1,22 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle2, Copy, DollarSign, MapPin, Package, Plus, Route, Save, Scale, ShieldCheck, SlidersHorizontal, Trash2, Truck } from "lucide-react";
 import { toast } from "sonner";
-import { Plus, Save, Truck } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
 
 type FulfillmentMode = "carrier_managed" | "self_fulfilled";
+type RuleType = "city" | "seller" | "cod" | "weight" | "capability" | "custom";
 
 interface Carrier {
   id: string;
@@ -27,7 +30,9 @@ interface Carrier {
   supports_labels: boolean;
   supports_load_sheet: boolean;
   supports_cancel: boolean;
+  supports_payment_status?: boolean;
   priority: number;
+  settings?: Record<string, unknown>;
   created_at: string;
 }
 
@@ -41,6 +46,11 @@ interface ShippingRule {
   criteria: Record<string, unknown>;
 }
 
+interface CarrierCity {
+  carrier_id: string;
+  city_name: string;
+}
+
 const emptyCarrier = {
   code: "",
   name: "",
@@ -48,15 +58,52 @@ const emptyCarrier = {
   priority: "100",
 };
 
+const defaultRuleCriteria = "{\n  \"city\": [],\n  \"seller_ids\": [],\n  \"min_cod_amount\": null,\n  \"max_cod_amount\": null,\n  \"min_weight\": null,\n  \"max_weight\": null,\n  \"requires_labels\": false,\n  \"requires_tracking\": true,\n  \"fallback_carrier_code\": null\n}";
+
+const ruleTemplates: Record<RuleType, string> = {
+  city: "{\n  \"city\": [\"LAHORE\"],\n  \"fallback_carrier_code\": \"postex\"\n}",
+  seller: "{\n  \"seller_ids\": [\"seller-id-here\"],\n  \"city\": [],\n  \"fallback_carrier_code\": \"postex\"\n}",
+  cod: "{\n  \"min_cod_amount\": 0,\n  \"max_cod_amount\": 8000,\n  \"fallback_carrier_code\": \"postex\"\n}",
+  weight: "{\n  \"min_weight\": 0,\n  \"max_weight\": 1,\n  \"fallback_carrier_code\": \"postex\"\n}",
+  capability: "{\n  \"requires_labels\": true,\n  \"requires_tracking\": true,\n  \"requires_cod\": true,\n  \"fallback_carrier_code\": \"postex\"\n}",
+  custom: defaultRuleCriteria,
+};
+
+const parseList = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
+
+const stringifyCriteria = (criteria: Record<string, unknown>) => JSON.stringify(criteria, null, 2);
+
+function capabilityBadges(carrier: Carrier) {
+  return [
+    carrier.supports_cod && "COD",
+    carrier.supports_tracking && "Tracking",
+    carrier.supports_bulk_tracking && "Bulk tracking",
+    carrier.supports_labels && "Labels",
+    carrier.supports_load_sheet && "Load sheet",
+    carrier.supports_cancel && "Cancel",
+    carrier.supports_payment_status && "Payments",
+  ].filter(Boolean) as string[];
+}
+
 export default function CarrierManagement() {
   const queryClient = useQueryClient();
   const [carrierForm, setCarrierForm] = useState(emptyCarrier);
+  const [ruleType, setRuleType] = useState<RuleType>("city");
   const [ruleForm, setRuleForm] = useState({
     name: "",
     carrier_id: "",
     fulfillment_mode: "carrier_default",
     priority: "100",
-    criteria: "{\n  \"city\": [],\n  \"max_cod_amount\": null,\n  \"seller_ids\": []\n}",
+    cities: "",
+    sellers: "",
+    min_cod_amount: "",
+    max_cod_amount: "",
+    min_weight: "",
+    max_weight: "",
+    fallback_carrier_code: "",
+    requires_labels: false,
+    requires_tracking: true,
+    criteria: ruleTemplates.city,
   });
 
   const { data: carriers = [], isLoading: loadingCarriers } = useQuery({
@@ -76,7 +123,7 @@ export default function CarrierManagement() {
     queryKey: ["carrier-management-active-carrier"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("app_settings")
+        .from("app_settings" as any)
         .select("value")
         .eq("key", "active_carrier_code")
         .maybeSingle();
@@ -98,20 +145,69 @@ export default function CarrierManagement() {
     },
   });
 
+  const { data: cityRows = [] } = useQuery({
+    queryKey: ["carrier-management-city-coverage"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("carrier_city_cache" as any)
+        .select("carrier_id, city_name")
+        .order("city_name", { ascending: true })
+        .limit(2500);
+      if (error) throw error;
+      return (data || []) as CarrierCity[];
+    },
+  });
+
   const carrierById = useMemo(() => {
     const map = new Map<string, Carrier>();
     carriers.forEach((carrier) => map.set(carrier.id, carrier));
     return map;
   }, [carriers]);
 
+  const carrierByCode = useMemo(() => {
+    const map = new Map<string, Carrier>();
+    carriers.forEach((carrier) => map.set(carrier.code, carrier));
+    return map;
+  }, [carriers]);
+
+  const activeCarrier = activeCarrierCode ? carrierByCode.get(activeCarrierCode) : null;
+  const enabledCarriers = carriers.filter((carrier) => carrier.enabled);
+
+  const cityCoverage = useMemo(() => {
+    const cityMap = new Map<string, Set<string>>();
+    cityRows.forEach((row) => {
+      if (!row.city_name) return;
+      const key = String(row.city_name).trim().toUpperCase();
+      if (!cityMap.has(key)) cityMap.set(key, new Set());
+      const carrier = carrierById.get(row.carrier_id);
+      if (carrier) cityMap.get(key)?.add(carrier.code);
+    });
+    return Array.from(cityMap.entries())
+      .map(([city, carrierCodes]) => ({ city, carrierCodes: Array.from(carrierCodes).sort() }))
+      .sort((a, b) => a.city.localeCompare(b.city));
+  }, [carrierById, cityRows]);
+
+  const routingStats = useMemo(() => {
+    const enabledRules = rules.filter((rule) => rule.enabled);
+    const cityRules = enabledRules.filter((rule) => Array.isArray(rule.criteria?.city) && (rule.criteria.city as unknown[]).length > 0);
+    const fallbackRules = enabledRules.filter((rule) => Boolean(rule.criteria?.fallback_carrier_code));
+    return {
+      enabledRules: enabledRules.length,
+      cityRules: cityRules.length,
+      fallbackRules: fallbackRules.length,
+      coveredCities: cityCoverage.length,
+    };
+  }, [cityCoverage.length, rules]);
+
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["carrier-management-carriers"] });
     queryClient.invalidateQueries({ queryKey: ["carrier-management-rules"] });
     queryClient.invalidateQueries({ queryKey: ["carrier-management-active-carrier"] });
+    queryClient.invalidateQueries({ queryKey: ["carrier-management-city-coverage"] });
   };
 
   const updateCarrier = async (id: string, patch: Partial<Carrier>) => {
-    const { error } = await supabase.from("carriers" as any).update(patch).eq("id", id);
+    const { error } = await supabase.from("carriers" as any).update({ ...patch, updated_at: new Date().toISOString() }).eq("id", id);
     if (error) {
       toast.error(error.message);
       return;
@@ -144,6 +240,11 @@ export default function CarrierManagement() {
   };
 
   const updateActiveCarrier = async (code: string) => {
+    const selected = carrierByCode.get(code);
+    if (selected && !selected.enabled) {
+      toast.error("Disabled carriers cannot be the default carrier");
+      return;
+    }
     const { error } = await supabase.from("app_settings" as any).upsert(
       { key: "active_carrier_code", value: code, is_public: false, updated_at: new Date().toISOString() },
       { onConflict: "key" },
@@ -152,8 +253,34 @@ export default function CarrierManagement() {
       toast.error(error.message);
       return;
     }
-    toast.success(`Active carrier set to ${code}`);
+    toast.success(`Default carrier set to ${selected?.name || code}`);
     refresh();
+  };
+
+  const applyRuleTemplate = (nextType: RuleType) => {
+    setRuleType(nextType);
+    setRuleForm((current) => ({ ...current, criteria: ruleTemplates[nextType] }));
+  };
+
+  const buildCriteriaFromForm = () => {
+    const criteria: Record<string, unknown> = {};
+    const cities = parseList(ruleForm.cities);
+    const sellers = parseList(ruleForm.sellers);
+    if (cities.length > 0) criteria.city = cities;
+    if (sellers.length > 0) criteria.seller_ids = sellers;
+    if (ruleForm.min_cod_amount) criteria.min_cod_amount = Number(ruleForm.min_cod_amount);
+    if (ruleForm.max_cod_amount) criteria.max_cod_amount = Number(ruleForm.max_cod_amount);
+    if (ruleForm.min_weight) criteria.min_weight = Number(ruleForm.min_weight);
+    if (ruleForm.max_weight) criteria.max_weight = Number(ruleForm.max_weight);
+    if (ruleForm.requires_labels) criteria.requires_labels = true;
+    if (ruleForm.requires_tracking) criteria.requires_tracking = true;
+    if (ruleForm.fallback_carrier_code) criteria.fallback_carrier_code = ruleForm.fallback_carrier_code;
+    return criteria;
+  };
+
+  const copyBuilderToJson = () => {
+    setRuleForm((current) => ({ ...current, criteria: stringifyCriteria(buildCriteriaFromForm()) }));
+    toast.success("Criteria JSON updated");
   };
 
   const createRule = async () => {
@@ -180,23 +307,33 @@ export default function CarrierManagement() {
       toast.error(error.message);
       return;
     }
-    setRuleForm((current) => ({ ...current, name: "" }));
+    setRuleForm((current) => ({ ...current, name: "", priority: "100" }));
     toast.success("Shipping rule created");
+    refresh();
+  };
+
+  const deleteRule = async (id: string) => {
+    const { error } = await supabase.from("shipping_rules" as any).delete().eq("id", id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Rule deleted");
     refresh();
   };
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
             <Truck className="h-5 w-5 text-primary" />
-            Carriers
+            Carrier Configuration
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Manage shipping companies, priority and routing criteria.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Control default carrier, city routing, fallback rules and shipping capabilities.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground">Active carrier</Label>
+        <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
+          <Label className="text-xs font-semibold text-muted-foreground">Default carrier</Label>
           <Select value={activeCarrierCode} onValueChange={updateActiveCarrier}>
             <SelectTrigger className="h-8 w-[190px] text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -210,194 +347,391 @@ export default function CarrierManagement() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4">
-        <Card className="border-border/60">
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm">Shipping Companies</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="h-9 text-xs">Carrier</TableHead>
-                  <TableHead className="h-9 text-xs">Mode</TableHead>
-                  <TableHead className="h-9 text-xs">Capabilities</TableHead>
-                  <TableHead className="h-9 text-xs w-24">Priority</TableHead>
-                  <TableHead className="h-9 text-xs w-24">Enabled</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loadingCarriers ? (
-                  <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">Loading carriers...</TableCell></TableRow>
-                ) : carriers.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">No carriers configured.</TableCell></TableRow>
-                ) : carriers.map((carrier) => (
-                  <TableRow key={carrier.id}>
-                    <TableCell>
-                      <div className="font-medium text-sm">{carrier.name}</div>
-                      <div className="text-[11px] text-muted-foreground font-mono">{carrier.code}</div>
-                    </TableCell>
-                    <TableCell>
-                      <Select value={carrier.fulfillment_mode} onValueChange={(value: FulfillmentMode) => updateCarrier(carrier.id, { fulfillment_mode: value })}>
-                        <SelectTrigger className="h-8 text-xs w-[160px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="carrier_managed">Carrier managed</SelectItem>
-                          <SelectItem value="self_fulfilled">Self fulfilled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {carrier.supports_cod && <Badge variant="secondary" className="text-[10px]">COD</Badge>}
-                        {carrier.supports_tracking && <Badge variant="secondary" className="text-[10px]">Tracking</Badge>}
-                        {carrier.supports_bulk_tracking && <Badge variant="secondary" className="text-[10px]">Bulk tracking</Badge>}
-                        {carrier.supports_labels && <Badge variant="secondary" className="text-[10px]">Labels</Badge>}
-                        {carrier.supports_load_sheet && <Badge variant="secondary" className="text-[10px]">Load sheet</Badge>}
-                        {carrier.supports_cancel && <Badge variant="secondary" className="text-[10px]">Cancel</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        className="h-8 text-xs"
-                        type="number"
-                        defaultValue={carrier.priority}
-                        onBlur={(event) => updateCarrier(carrier.id, { priority: Number(event.currentTarget.value) || 100 })}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Switch checked={carrier.enabled} onCheckedChange={(enabled) => updateCarrier(carrier.id, { enabled })} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60">
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm">Add Carrier</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Code</Label>
-              <Input className="h-8 text-xs font-mono" value={carrierForm.code} onChange={(e) => setCarrierForm({ ...carrierForm, code: e.target.value })} placeholder="postex" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Name</Label>
-              <Input className="h-8 text-xs" value={carrierForm.name} onChange={(e) => setCarrierForm({ ...carrierForm, name: e.target.value })} placeholder="PostEx" />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Mode</Label>
-                <Select value={carrierForm.fulfillment_mode} onValueChange={(value: FulfillmentMode) => setCarrierForm({ ...carrierForm, fulfillment_mode: value })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="carrier_managed">Carrier managed</SelectItem>
-                    <SelectItem value="self_fulfilled">Self fulfilled</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Priority</Label>
-                <Input className="h-8 text-xs" type="number" value={carrierForm.priority} onChange={(e) => setCarrierForm({ ...carrierForm, priority: e.target.value })} />
-              </div>
-            </div>
-            <Button size="sm" className="w-full gap-1.5" onClick={createCarrier}>
-              <Plus className="h-3.5 w-3.5" /> Add carrier
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <StatusCard icon={<ShieldCheck className="h-4 w-4" />} label="Default carrier" value={activeCarrier?.name || activeCarrierCode || "-"} detail="Used when no routing rule matches" />
+        <StatusCard icon={<Route className="h-4 w-4" />} label="Enabled rules" value={routingStats.enabledRules} detail={`${routingStats.cityRules} city rules, ${routingStats.fallbackRules} fallbacks`} />
+        <StatusCard icon={<MapPin className="h-4 w-4" />} label="Covered cities" value={routingStats.coveredCities} detail="From carrier city cache" />
+        <StatusCard icon={<Truck className="h-4 w-4" />} label="Enabled carriers" value={enabledCarriers.length} detail={`${carriers.length} configured carriers`} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-4">
-        <Card className="border-border/60">
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm">Routing Rules</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="h-9 text-xs">Rule</TableHead>
-                  <TableHead className="h-9 text-xs">Carrier</TableHead>
-                  <TableHead className="h-9 text-xs">Mode</TableHead>
-                  <TableHead className="h-9 text-xs">Priority</TableHead>
-                  <TableHead className="h-9 text-xs">Enabled</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loadingRules ? (
-                  <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">Loading rules...</TableCell></TableRow>
-                ) : rules.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">No routing rules yet.</TableCell></TableRow>
-                ) : rules.map((rule) => (
-                  <TableRow key={rule.id}>
-                    <TableCell>
-                      <div className="font-medium text-sm">{rule.name}</div>
-                      <div className="text-[11px] text-muted-foreground truncate max-w-[420px]">{JSON.stringify(rule.criteria || {})}</div>
-                    </TableCell>
-                    <TableCell className="text-sm">{carrierById.get(rule.carrier_id)?.name || "-"}</TableCell>
-                    <TableCell className="text-xs">{rule.fulfillment_mode || "carrier default"}</TableCell>
-                    <TableCell className="text-sm">{rule.priority}</TableCell>
-                    <TableCell><Switch checked={rule.enabled} onCheckedChange={async (enabled) => {
-                      const { error } = await supabase.from("shipping_rules" as any).update({ enabled }).eq("id", rule.id);
-                      if (error) toast.error(error.message); else refresh();
-                    }} /></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="carriers" className="space-y-4">
+        <TabsList className="h-9">
+          <TabsTrigger value="carriers" className="text-xs">Carriers</TabsTrigger>
+          <TabsTrigger value="rules" className="text-xs">Routing Rules</TabsTrigger>
+          <TabsTrigger value="cities" className="text-xs">City Coverage</TabsTrigger>
+          <TabsTrigger value="safety" className="text-xs">Fallbacks</TabsTrigger>
+        </TabsList>
 
-        <Card className="border-border/60">
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm">Add Routing Rule</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Name</Label>
-                <Input className="h-8 text-xs" value={ruleForm.name} onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })} placeholder="High COD Lahore" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Priority</Label>
-                <Input className="h-8 text-xs" type="number" value={ruleForm.priority} onChange={(e) => setRuleForm({ ...ruleForm, priority: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Carrier</Label>
-                <Select value={ruleForm.carrier_id} onValueChange={(carrier_id) => setRuleForm({ ...ruleForm, carrier_id })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select carrier" /></SelectTrigger>
-                  <SelectContent>
-                    {carriers.map((carrier) => <SelectItem key={carrier.id} value={carrier.id}>{carrier.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Mode override</Label>
-                <Select value={ruleForm.fulfillment_mode} onValueChange={(fulfillment_mode) => setRuleForm({ ...ruleForm, fulfillment_mode })}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="carrier_default">Carrier default</SelectItem>
-                    <SelectItem value="carrier_managed">Carrier managed</SelectItem>
-                    <SelectItem value="self_fulfilled">Self fulfilled</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Criteria JSON</Label>
-              <Textarea className="min-h-[140px] text-xs font-mono" value={ruleForm.criteria} onChange={(e) => setRuleForm({ ...ruleForm, criteria: e.target.value })} />
-            </div>
-            <Button size="sm" className="w-full gap-1.5" onClick={createRule}>
-              <Save className="h-3.5 w-3.5" /> Save rule
-            </Button>
-          </CardContent>
-        </Card>
+        <TabsContent value="carriers" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_360px]">
+            <Card className="border-border/60">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Shipping Companies</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="h-9 text-xs">Carrier</TableHead>
+                      <TableHead className="h-9 text-xs">Mode</TableHead>
+                      <TableHead className="h-9 text-xs">Capabilities</TableHead>
+                      <TableHead className="h-9 w-24 text-xs">Priority</TableHead>
+                      <TableHead className="h-9 w-24 text-xs">Enabled</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingCarriers ? (
+                      <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">Loading carriers...</TableCell></TableRow>
+                    ) : carriers.length === 0 ? (
+                      <TableRow><TableCell colSpan={5} className="text-sm text-muted-foreground">No carriers configured.</TableCell></TableRow>
+                    ) : carriers.map((carrier) => (
+                      <TableRow key={carrier.id}>
+                        <TableCell>
+                          <div className="font-medium text-sm">{carrier.name}</div>
+                          <div className="text-[11px] text-muted-foreground font-mono">{carrier.code}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Select value={carrier.fulfillment_mode} onValueChange={(value: FulfillmentMode) => updateCarrier(carrier.id, { fulfillment_mode: value })}>
+                            <SelectTrigger className="h-8 w-[160px] text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="carrier_managed">Carrier managed</SelectItem>
+                              <SelectItem value="self_fulfilled">Self fulfilled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {capabilityBadges(carrier).map((capability) => <Badge key={capability} variant="secondary" className="text-[10px]">{capability}</Badge>)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            className="h-8 text-xs"
+                            type="number"
+                            defaultValue={carrier.priority}
+                            onBlur={(event) => updateCarrier(carrier.id, { priority: Number(event.currentTarget.value) || 100 })}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Switch checked={carrier.enabled} onCheckedChange={(enabled) => updateCarrier(carrier.id, { enabled })} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/60">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Add Carrier</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Code</Label>
+                  <Input className="h-8 text-xs font-mono" value={carrierForm.code} onChange={(e) => setCarrierForm({ ...carrierForm, code: e.target.value })} placeholder="mnp" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Name</Label>
+                  <Input className="h-8 text-xs" value={carrierForm.name} onChange={(e) => setCarrierForm({ ...carrierForm, name: e.target.value })} placeholder="M&P" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Mode</Label>
+                    <Select value={carrierForm.fulfillment_mode} onValueChange={(value: FulfillmentMode) => setCarrierForm({ ...carrierForm, fulfillment_mode: value })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="carrier_managed">Carrier managed</SelectItem>
+                        <SelectItem value="self_fulfilled">Self fulfilled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Priority</Label>
+                    <Input className="h-8 text-xs" type="number" value={carrierForm.priority} onChange={(e) => setCarrierForm({ ...carrierForm, priority: e.target.value })} />
+                  </div>
+                </div>
+                <Button size="sm" className="w-full gap-1.5" onClick={createCarrier}>
+                  <Plus className="h-3.5 w-3.5" /> Add carrier
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="rules" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_460px]">
+            <Card className="border-border/60">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Routing Rules</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="h-9 text-xs">Rule</TableHead>
+                      <TableHead className="h-9 text-xs">Carrier</TableHead>
+                      <TableHead className="h-9 text-xs">Mode</TableHead>
+                      <TableHead className="h-9 text-xs">Priority</TableHead>
+                      <TableHead className="h-9 text-xs">Enabled</TableHead>
+                      <TableHead className="h-9 w-14 text-xs"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingRules ? (
+                      <TableRow><TableCell colSpan={6} className="text-sm text-muted-foreground">Loading rules...</TableCell></TableRow>
+                    ) : rules.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} className="text-sm text-muted-foreground">No routing rules yet.</TableCell></TableRow>
+                    ) : rules.map((rule) => (
+                      <TableRow key={rule.id}>
+                        <TableCell>
+                          <div className="font-medium text-sm">{rule.name}</div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <RuleBadge icon={<MapPin className="h-3 w-3" />} label={Array.isArray(rule.criteria?.city) ? `${(rule.criteria.city as unknown[]).length} cities` : "Any city"} />
+                            {rule.criteria?.max_cod_amount ? <RuleBadge icon={<DollarSign className="h-3 w-3" />} label={`COD <= ${rule.criteria.max_cod_amount}`} /> : null}
+                            {rule.criteria?.max_weight ? <RuleBadge icon={<Scale className="h-3 w-3" />} label={`Weight <= ${rule.criteria.max_weight}`} /> : null}
+                            {rule.criteria?.requires_labels ? <RuleBadge icon={<Package className="h-3 w-3" />} label="Labels required" /> : null}
+                            {rule.criteria?.fallback_carrier_code ? <RuleBadge icon={<ShieldCheck className="h-3 w-3" />} label={`Fallback ${rule.criteria.fallback_carrier_code}`} /> : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">{carrierById.get(rule.carrier_id)?.name || "-"}</TableCell>
+                        <TableCell className="text-xs">{rule.fulfillment_mode || "carrier default"}</TableCell>
+                        <TableCell className="text-sm">{rule.priority}</TableCell>
+                        <TableCell>
+                          <Switch checked={rule.enabled} onCheckedChange={async (enabled) => {
+                            const { error } = await supabase.from("shipping_rules" as any).update({ enabled, updated_at: new Date().toISOString() }).eq("id", rule.id);
+                            if (error) toast.error(error.message); else refresh();
+                          }} />
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteRule(rule.id)} title="Delete rule">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/60">
+              <CardHeader className="py-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <SlidersHorizontal className="h-4 w-4 text-primary" />
+                  Add Routing Rule
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Rule type</Label>
+                    <Select value={ruleType} onValueChange={(value: RuleType) => applyRuleTemplate(value)}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="city">City routing</SelectItem>
+                        <SelectItem value="seller">Seller override</SelectItem>
+                        <SelectItem value="cod">COD amount</SelectItem>
+                        <SelectItem value="weight">Weight</SelectItem>
+                        <SelectItem value="capability">Capability</SelectItem>
+                        <SelectItem value="custom">Custom JSON</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Priority</Label>
+                    <Input className="h-8 text-xs" type="number" value={ruleForm.priority} onChange={(e) => setRuleForm({ ...ruleForm, priority: e.target.value })} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Name</Label>
+                    <Input className="h-8 text-xs" value={ruleForm.name} onChange={(e) => setRuleForm({ ...ruleForm, name: e.target.value })} placeholder="Lahore to M&P" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Carrier</Label>
+                    <Select value={ruleForm.carrier_id} onValueChange={(carrier_id) => setRuleForm({ ...ruleForm, carrier_id })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select carrier" /></SelectTrigger>
+                      <SelectContent>
+                        {carriers.map((carrier) => <SelectItem key={carrier.id} value={carrier.id}>{carrier.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Cities</Label>
+                    <Input className="h-8 text-xs" value={ruleForm.cities} onChange={(e) => setRuleForm({ ...ruleForm, cities: e.target.value })} placeholder="LAHORE, KARACHI" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Seller IDs</Label>
+                    <Input className="h-8 text-xs" value={ruleForm.sellers} onChange={(e) => setRuleForm({ ...ruleForm, sellers: e.target.value })} placeholder="seller uuid, seller uuid" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberInput label="Min COD" value={ruleForm.min_cod_amount} onChange={(value) => setRuleForm({ ...ruleForm, min_cod_amount: value })} />
+                  <NumberInput label="Max COD" value={ruleForm.max_cod_amount} onChange={(value) => setRuleForm({ ...ruleForm, max_cod_amount: value })} />
+                  <NumberInput label="Min weight" value={ruleForm.min_weight} onChange={(value) => setRuleForm({ ...ruleForm, min_weight: value })} />
+                  <NumberInput label="Max weight" value={ruleForm.max_weight} onChange={(value) => setRuleForm({ ...ruleForm, max_weight: value })} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Fallback carrier</Label>
+                    <Select value={ruleForm.fallback_carrier_code || "none"} onValueChange={(value) => setRuleForm({ ...ruleForm, fallback_carrier_code: value === "none" ? "" : value })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No fallback</SelectItem>
+                        {carriers.map((carrier) => <SelectItem key={carrier.id} value={carrier.code}>{carrier.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Mode override</Label>
+                    <Select value={ruleForm.fulfillment_mode} onValueChange={(fulfillment_mode) => setRuleForm({ ...ruleForm, fulfillment_mode })}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="carrier_default">Carrier default</SelectItem>
+                        <SelectItem value="carrier_managed">Carrier managed</SelectItem>
+                        <SelectItem value="self_fulfilled">Self fulfilled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 rounded-md border p-2">
+                  <ToggleLine label="Requires labels" checked={ruleForm.requires_labels} onChange={(requires_labels) => setRuleForm({ ...ruleForm, requires_labels })} />
+                  <ToggleLine label="Requires tracking" checked={ruleForm.requires_tracking} onChange={(requires_tracking) => setRuleForm({ ...ruleForm, requires_tracking })} />
+                </div>
+
+                <Button type="button" variant="outline" size="sm" className="w-full gap-1.5" onClick={copyBuilderToJson}>
+                  <Copy className="h-3.5 w-3.5" /> Generate criteria JSON
+                </Button>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Criteria JSON</Label>
+                  <Textarea className="min-h-[140px] text-xs font-mono" value={ruleForm.criteria} onChange={(e) => setRuleForm({ ...ruleForm, criteria: e.target.value })} />
+                </div>
+                <Button size="sm" className="w-full gap-1.5" onClick={createRule}>
+                  <Save className="h-3.5 w-3.5" /> Save rule
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="cities" className="space-y-4">
+          <Card className="border-border/60">
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm">City Coverage</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="h-9 text-xs">City</TableHead>
+                    <TableHead className="h-9 text-xs">Available Carriers</TableHead>
+                    <TableHead className="h-9 text-xs">Recommended Rule</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cityCoverage.slice(0, 400).map((row) => (
+                    <TableRow key={row.city}>
+                      <TableCell className="text-sm font-medium">{row.city}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {row.carrierCodes.map((code) => <Badge key={code} variant={code === activeCarrierCode ? "default" : "secondary"} className="text-[10px]">{carrierByCode.get(code)?.name || code}</Badge>)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {row.carrierCodes.length > 1 ? "Use routing rule if one carrier performs better here" : "Fallback needed if this carrier is down"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {cityCoverage.length === 0 && <TableRow><TableCell colSpan={3} className="text-sm text-muted-foreground">No city cache loaded yet.</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="safety" className="space-y-4">
+          <Card className="border-border/60">
+            <CardHeader className="py-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                Routing Safety Rules
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <SafetyItem title="Default carrier first" detail="If no rule matches, the system should keep using the configured default carrier." />
+              <SafetyItem title="Coverage check" detail="A carrier should only be selected when the destination city exists in its city cache." />
+              <SafetyItem title="Fallback carrier" detail="Every important city or COD rule should define a fallback carrier for API failures." />
+              <SafetyItem title="Manual override" detail="Admin-selected carrier on a single order should override automatic routing." />
+              <SafetyItem title="Capability guard" detail="Self-fulfilled orders should require label support before a carrier can be selected." />
+              <SafetyItem title="PostEx protected" detail="Keep active_carrier_code on postex until M&P booking, tracking and labels are tested end to end." />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function StatusCard({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: React.ReactNode; detail: string }) {
+  return (
+    <Card className="border-border/60">
+      <CardContent className="flex items-center justify-between gap-3 p-4">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
+          <p className="mt-1 text-xl font-bold">{value}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        </div>
+        <div className="rounded-md bg-primary/10 p-2 text-primary">{icon}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RuleBadge({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <Badge variant="secondary" className="gap-1 text-[10px]">
+      {icon}
+      {label}
+    </Badge>
+  );
+}
+
+function NumberInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <Input className="h-8 text-xs" type="number" value={value} onChange={(event) => onChange(event.target.value)} />
+    </div>
+  );
+}
+
+function ToggleLine({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <Label className="text-xs">{label}</Label>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}
+
+function SafetyItem({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="rounded-md border p-3">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+        {title}
       </div>
+      <Separator className="my-2" />
+      <p className="text-xs leading-5 text-muted-foreground">{detail}</p>
     </div>
   );
 }
