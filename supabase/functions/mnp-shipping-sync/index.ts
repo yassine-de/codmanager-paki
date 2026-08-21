@@ -253,7 +253,12 @@ async function getCities(supabase: ReturnType<typeof createClient>) {
     password: cfg.password,
     AccountNo: cfg.accountNo,
   });
-  const rows = (Array.isArray(data?.City) ? data.City : []).map((city: string) => ({
+  const cityList = Array.isArray(data?.City)
+    ? data.City
+    : Array.isArray(data?.[0]?.City)
+      ? data[0].City
+      : [];
+  const rows = cityList.map((city: string) => ({
     carrier_id: carrier.id,
     carrier_city_id: city,
     city_name: city,
