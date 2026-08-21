@@ -72,7 +72,7 @@ export default function FailedSyncModal({ open, onOpenChange }: FailedSyncModalP
         .update({ sync_status: "pending", sync_error: null })
         .eq("order_id", orderId);
 
-      const { data, error } = await supabase.functions.invoke("carrier-shipping-sync", {
+      const { data, error } = await supabase.functions.invoke("shipping-sync", {
         body: { action: "sync-order", order_id: orderId },
       });
       if (error) throw new Error(await getFunctionErrorMessage(error));

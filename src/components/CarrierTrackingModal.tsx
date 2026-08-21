@@ -76,7 +76,7 @@ export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerI
     setPayload(null);
 
     supabase.functions
-      .invoke("carrier-shipping-sync", {
+      .invoke("shipping-sync", {
         body: { action: "track-by-carrier-order-id", carrier_order_id: carrierOrderId },
       })
       .then(({ data, error: fnError }) => {

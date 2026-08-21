@@ -7,28 +7,29 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const DEFAULT_CARRIER_CODE = Deno.env.get("DEFAULT_CARRIER_CODE") || "postex";
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   try {
-    const { data: settings } = await supabase
+    const { data: enabled } = await supabase
       .from("app_settings")
-      .select("key,value")
-      .in("key", ["carrier_sync_enabled", "active_carrier_code"]);
-    const byKey = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
-    if (byKey.carrier_sync_enabled === "false") {
+      .select("value")
+      .eq("key", "carrier_sync_enabled")
+      .maybeSingle();
+    if (enabled?.value === "false") {
       return new Response(JSON.stringify({ skipped: true, reason: "Carrier sync disabled" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const activeCarrierCode = byKey.active_carrier_code || Deno.env.get("ACTIVE_CARRIER_CODE") || Deno.env.get("DEFAULT_CARRIER_CODE") || "postex";
 
     const { data: carrier, error: carrierError } = await supabase
       .from("carriers")
       .select("id")
-      .eq("code", activeCarrierCode)
+      .eq("code", DEFAULT_CARRIER_CODE)
       .maybeSingle();
     if (carrierError) throw carrierError;
     if (!carrier) throw new Error("Default carrier is not configured");
@@ -53,7 +54,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/carrier-shipping-sync`;
+    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/shipping-sync`;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const results: any[] = [];
 
