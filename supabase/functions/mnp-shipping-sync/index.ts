@@ -430,11 +430,12 @@ async function trackByConsignment(supabase: ReturnType<typeof createClient>, con
   const carrier = await getCarrier(supabase);
   const res = await fetch(`${MNP_TRACKING_BASE}/CNTracking?consignment=${encodeURIComponent(consignment)}&id=4`);
   const data = await res.json();
-  if (!res.ok || String(data?.isSuccess).toLowerCase() !== "true") {
+  const trackingRoot = Array.isArray(data) ? data[0] : data;
+  if (!res.ok || String(trackingRoot?.isSuccess).toLowerCase() !== "true") {
     throw new Error(`M&P tracking failed: ${JSON.stringify(data).substring(0, 300)}`);
   }
 
-  const detail = Array.isArray(data?.tracking_Details) ? data.tracking_Details[0] : null;
+  const detail = Array.isArray(trackingRoot?.tracking_Details) ? trackingRoot.tracking_Details[0] : null;
   const events = Array.isArray(detail?.CNTrackingDetail) ? detail.CNTrackingDetail : [];
   const latest = events[events.length - 1] || {};
   const statusText = latest.TrackingStatus || detail?.DeliveryStatus || "Booked";

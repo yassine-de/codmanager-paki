@@ -123,7 +123,8 @@ Deno.serve(async (req) => {
       }),
     });
     const data = await res.json();
-    if (!res.ok || String(data?.isSuccess).toLowerCase() !== "true") {
+    const trackingRoot = Array.isArray(data) ? data[0] : data;
+    if (!res.ok || String(trackingRoot?.isSuccess).toLowerCase() !== "true") {
       throw new Error(`M&P bulk tracking failed: ${JSON.stringify(data).substring(0, 500)}`);
     }
 
@@ -131,7 +132,7 @@ Deno.serve(async (req) => {
     const results: any[] = [];
     const now = new Date().toISOString();
 
-    for (const detail of data?.tracking_Details || []) {
+    for (const detail of trackingRoot?.tracking_Details || []) {
       const consignment = String(detail.ConsignmentNumber || "");
       const shipment = shipmentByTracking.get(consignment);
       if (!shipment) continue;
