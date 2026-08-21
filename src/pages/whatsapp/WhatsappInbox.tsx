@@ -42,6 +42,8 @@ import {
   Truck,
   Plus,
   Trash2,
+  Inbox,
+  Clock,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -656,9 +658,14 @@ export default function WhatsappInbox() {
   const [search, setSearch] = useState("");
   const [dbSearchResults, setDbSearchResults] = useState<Conv[]>([]);
   const [dbSearching, setDbSearching] = useState(false);
-  const [filter, setFilter] = useState<
-    "all" | "unread" | "needs_review" | "ai_on" | "ai_off" | "with_order" | "no_order" | "window_open"
-  >("all");
+  // Two independent, combinable filter dimensions: `stageFilter` narrows by
+  // order stage (Confirmation vs Follow Up), `refineFilter` narrows further
+  // within that (e.g. AI On). Both apply together (AND), so picking
+  // Confirmation + AI On shows only confirmation-stage conversations with AI on.
+  const [stageFilter, setStageFilter] = useState<"all" | "confirmation" | "follow_up">("all");
+  const [refineFilter, setRefineFilter] = useState<
+    "none" | "unread" | "needs_review" | "ai_on" | "ai_off" | "with_order" | "no_order" | "window_open"
+  >("none");
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [tab, setTab] = useState<"reply" | "note">("reply");
   const [draft, setDraft] = useState("");
@@ -1183,21 +1190,24 @@ export default function WhatsappInbox() {
         );
       }
     }
-    if (filter === "unread") {
-      list = list.filter((c) => (unreadMap[c.id] ?? 0) > 0);
-    } else if (filter === "needs_review") {
-      list = list.filter((c) => c.status === "manual_review_needed");
-    } else if (filter === "ai_on") {
-      list = list.filter((c) => c.ai_enabled !== false);
-    } else if (filter === "ai_off") {
-      list = list.filter((c) => c.ai_enabled === false);
-    } else if (filter === "with_order") {
-      list = list.filter((c) => !!c.order_id);
-    } else if (filter === "no_order") {
-      list = list.filter((c) => !c.order_id);
-    } else if (filter === "follow_up") {
+    if (stageFilter === "follow_up") {
       list = list.filter((c) => isFollowUpConv(c));
-    } else if (filter === "window_open") {
+    } else if (stageFilter === "confirmation") {
+      list = list.filter((c) => !isFollowUpConv(c));
+    }
+    if (refineFilter === "unread") {
+      list = list.filter((c) => (unreadMap[c.id] ?? 0) > 0);
+    } else if (refineFilter === "needs_review") {
+      list = list.filter((c) => c.status === "manual_review_needed");
+    } else if (refineFilter === "ai_on") {
+      list = list.filter((c) => c.ai_enabled !== false);
+    } else if (refineFilter === "ai_off") {
+      list = list.filter((c) => c.ai_enabled === false);
+    } else if (refineFilter === "with_order") {
+      list = list.filter((c) => !!c.order_id);
+    } else if (refineFilter === "no_order") {
+      list = list.filter((c) => !c.order_id);
+    } else if (refineFilter === "window_open") {
       list = list.filter((c) => {
         // Use last_message_at as a proxy for last customer activity (the
         // 24h WA window opens on inbound messages).
@@ -1216,7 +1226,7 @@ export default function WhatsappInbox() {
       return sortDesc ? tb - ta : ta - tb;
     });
     return list;
-  }, [convos, search, filter, sortDesc, unreadMap]);
+  }, [convos, search, stageFilter, refineFilter, sortDesc, unreadMap]);
 
   // DB search: fires when search has text but local filteredConvos is empty
   useEffect(() => {
@@ -1262,6 +1272,11 @@ export default function WhatsappInbox() {
 
   const followUpCount = useMemo(
     () => convos.filter(isFollowUpConv).length,
+    [convos],
+  );
+
+  const confirmationCount = useMemo(
+    () => convos.filter((c) => !isFollowUpConv(c)).length,
     [convos],
   );
 
@@ -1731,57 +1746,103 @@ export default function WhatsappInbox() {
 
   return (
     <>
-      {/* Horizontal filters bar above inbox — hidden on mobile when a conversation is open */}
+      {/* Horizontal filters bar above inbox — hidden on mobile when a conversation is open.
+          Two independent rows that combine (AND): stage (Confirmation/Follow Up)
+          and refine (Unread/AI On/etc). Picking both narrows to their intersection. */}
       <div className={cn(
-        "mb-1.5 items-center gap-2 flex-wrap rounded-xl border border-border bg-card px-3 py-2",
+        "mb-1.5 flex-col gap-2 rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm",
         selected ? "hidden md:flex" : "flex"
       )}>
-        <div className="flex items-center gap-1.5 mr-1">
-          <FilterIcon className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">Filters</span>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold shrink-0">
+            Stage
+          </span>
+          <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5">
+            {([
+              { key: "all", label: "All", icon: Inbox },
+              { key: "confirmation", label: "Confirmation", count: confirmationCount, icon: CheckCircle2 },
+              { key: "follow_up", label: "Follow Up", count: followUpCount, icon: RotateCcw },
+            ] as const).map((f) => {
+              const Icon = f.icon;
+              const active = stageFilter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setStageFilter(f.key)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-md font-medium text-[12px] inline-flex items-center gap-1.5 transition-all",
+                    active
+                      ? f.key === "follow_up"
+                        ? "bg-amber-500 text-white shadow-sm"
+                        : f.key === "confirmation"
+                        ? "bg-violet-500 text-white shadow-sm"
+                        : "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {f.label}
+                  {"count" in f && f.count > 0 && (
+                    <span className={cn(
+                      "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
+                      active ? "bg-white/25 text-white" : "bg-foreground/10 text-muted-foreground",
+                    )}>
+                      {f.count > 99 ? "99+" : f.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        {([
-          { key: "all", label: "All" },
-          { key: "unread", label: "Unread" },
-          { key: "needs_review", label: "Needs Review", count: needsReviewCount },
-          { key: "ai_on", label: "AI On" },
-          { key: "ai_off", label: "AI Off" },
-          { key: "with_order", label: "With Order" },
-          { key: "no_order", label: "No Order" },
-          { key: "follow_up", label: "Follow Up", count: followUpCount },
-          { key: "window_open", label: "24h Window" },
-        ] as const).map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            className={cn(
-              "px-2.5 py-1 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1",
-              filter === f.key
-                ? f.key === "needs_review"
-                  ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                  : f.key === "follow_up"
-                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                  : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
-            )}
-          >
-            {f.label}
-            {"count" in f && f.count > 0 && (
-              <span className={cn(
-                "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
-                filter === f.key
-                  ? f.key === "follow_up"
-                    ? "bg-amber-500 text-white"
-                    : "bg-sky-500 text-white"
-                  : f.key === "follow_up"
-                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
-                  : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
-              )}>
-                {f.count > 99 ? "99+" : f.count}
-              </span>
-            )}
-          </button>
-        ))}
+
+        <div className="h-px bg-border" />
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold shrink-0 inline-flex items-center gap-1">
+            <FilterIcon className="h-3 w-3" />
+            Refine
+          </span>
+          {([
+            { key: "unread", label: "Unread", icon: MessageSquare },
+            { key: "needs_review", label: "Needs Review", count: needsReviewCount, icon: AlertCircle },
+            { key: "ai_on", label: "AI On", icon: Bot },
+            { key: "ai_off", label: "AI Off", icon: BotOff },
+            { key: "with_order", label: "With Order", icon: FileText },
+            { key: "no_order", label: "No Order", icon: X },
+            { key: "window_open", label: "24h Window", icon: Clock },
+          ] as const).map((f) => {
+            const Icon = f.icon;
+            const active = refineFilter === f.key;
+            return (
+              <button
+                key={f.key}
+                onClick={() => setRefineFilter((prev) => (prev === f.key ? "none" : f.key))}
+                className={cn(
+                  "px-2.5 py-1 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
+                  active
+                    ? f.key === "needs_review"
+                      ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                )}
+              >
+                <Icon className="h-3 w-3" />
+                {f.label}
+                {"count" in f && f.count > 0 && (
+                  <span className={cn(
+                    "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
+                    active
+                      ? "bg-sky-500 text-white"
+                      : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
+                  )}>
+                    {f.count > 99 ? "99+" : f.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className={cn(

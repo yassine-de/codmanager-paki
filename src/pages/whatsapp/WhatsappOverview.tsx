@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageSquare, CheckCircle2, AlertTriangle, XCircle, Send, Reply, MessageCircleQuestion } from "lucide-react";
+import { MessageSquare, CheckCircle2, AlertTriangle, XCircle, Send, Reply, MessageCircleQuestion, RotateCcw } from "lucide-react";
 
 function startOfTodayISO() {
   const d = new Date();
@@ -15,7 +15,7 @@ export default function WhatsappOverview() {
   const { data: stats } = useQuery({
     queryKey: ["wts-overview"],
     queryFn: async () => {
-      const [inWts, confirmed, escalated, canceled, sent, replies, unansweredRows] = await Promise.all([
+      const [inWts, confirmed, escalated, canceled, sent, replies, unansweredRows, followUpRows] = await Promise.all([
         supabase.from("orders").select("id", { count: "exact", head: true }).eq("confirmation_status", "new_wts"),
         supabase.from("whatsapp_conversations").select("id", { count: "exact", head: true }).eq("status", "confirmed").gte("updated_at", todayISO),
         supabase.from("whatsapp_conversations").select("id", { count: "exact", head: true }).eq("status", "more_info").gte("updated_at", todayISO),
@@ -25,9 +25,16 @@ export default function WhatsappOverview() {
         // Conversations whose latest customer message has no reply yet. PostgREST filters can't
         // compare two columns to each other, so this is counted client-side.
         supabase.from("whatsapp_conversations").select("last_inbound_at, last_reply_at").not("last_inbound_at", "is", null).order("last_inbound_at", { ascending: false }).limit(2000),
+        // Same "needs follow-up" definition as the Inbox's Follow Up tab: labeled
+        // followup_<status> by the automation runner, excluding followup_shipped
+        // (a shipped notice alone doesn't need staff follow-up).
+        supabase.from("whatsapp_conversations").select("labels").not("labels", "is", null).limit(3000),
       ]);
       const unanswered = (unansweredRows.data || []).filter((c) =>
         !c.last_reply_at || new Date(c.last_reply_at) < new Date(c.last_inbound_at)
+      ).length;
+      const followUp = (followUpRows.data || []).filter((c) =>
+        Array.isArray(c.labels) && c.labels.some((l: string) => l.startsWith("followup_") && l !== "followup_shipped")
       ).length;
       return {
         inWts: inWts.count ?? 0,
@@ -37,6 +44,7 @@ export default function WhatsappOverview() {
         sent: sent.count ?? 0,
         replies: replies.count ?? 0,
         unanswered,
+        followUp,
       };
     },
     refetchInterval: 30000,
@@ -45,6 +53,7 @@ export default function WhatsappOverview() {
   const cards = [
     { label: "In WhatsApp", value: stats?.inWts ?? 0, icon: MessageSquare, tone: "text-foreground" },
     { label: "Unanswered", value: stats?.unanswered ?? 0, icon: MessageCircleQuestion, tone: "text-amber-600" },
+    { label: "Follow Up", value: stats?.followUp ?? 0, icon: RotateCcw, tone: "text-amber-600" },
     { label: "Confirmed today", value: stats?.confirmed ?? 0, icon: CheckCircle2, tone: "text-emerald-600" },
     { label: "Escalated today", value: stats?.escalated ?? 0, icon: AlertTriangle, tone: "text-amber-600" },
     { label: "Canceled today", value: stats?.canceled ?? 0, icon: XCircle, tone: "text-rose-600" },
