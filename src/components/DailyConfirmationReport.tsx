@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 interface Order {
+  order_id: string;
   agent_id: string | null;
   original_agent_id: string | null;
   confirmation_status: string;
@@ -39,6 +40,12 @@ interface DailyConfirmationReportProps {
   totalByWhatsApp?: number;
   /** Override for the hero confirmation rate — aligned with the main dashboard KPI */
   confirmationRate?: number;
+  /** order_id -> agent who actually pressed confirm (from order_history), for
+   *  correct per-agent "Confirmed" attribution — see ConfirmationAnalytics.tsx */
+  confirmedByAgentMap?: {
+    confirmedByAgent: Record<string, string>;
+    hasConfirmHistory: Record<string, boolean>;
+  };
 }
 
 interface AgentRow {
@@ -158,7 +165,7 @@ function ConfRatePill({ rate }: { rate: number }) {
 
 export function DailyConfirmationReport({
   orders, profileNameMap, profilePhoneMap = {}, agentIds, agentScores = [], treatedOrders, claimedOrders, firstCallAvg, handlingTime,
-  totalConfirmed, totalByWhatsApp, confirmationRate,
+  totalConfirmed, totalByWhatsApp, confirmationRate, confirmedByAgentMap,
 }: DailyConfirmationReportProps) {
 
   const handledOrders = useMemo(
@@ -199,19 +206,31 @@ export function DailyConfirmationReport({
   }, [handledOrders, orders]);
 
   const agentRows: AgentRow[] = useMemo(() => {
+    const { confirmedByAgent = {}, hasConfirmHistory = {} } = confirmedByAgentMap || {};
     const map: Record<string, { total: number; noAnswer: number; postponed: number; confirmed: number; cancelled: number; whatsappConfirmed: number }> = {};
+    const ensure = (id: string) => {
+      if (!map[id]) map[id] = { total: 0, noAnswer: 0, postponed: 0, confirmed: 0, cancelled: 0, whatsappConfirmed: 0 };
+      return map[id];
+    };
     handledOrders.forEach(o => {
       const aid = o.agent_id || o.original_agent_id;
       if (!aid) return;
-      if (!map[aid]) map[aid] = { total: 0, noAnswer: 0, postponed: 0, confirmed: 0, cancelled: 0, whatsappConfirmed: 0 };
-      map[aid].total++;
+      ensure(aid).total++;
       if (o.confirmation_status === "no_answer")  map[aid].noAnswer++;
       if (o.postpone_date || o.confirmation_status === "postponed") map[aid].postponed++;
-      if (o.confirmation_status === "confirmed") {
-        map[aid].confirmed++;
-        if (o.confirmation_channel === "whatsapp") map[aid].whatsappConfirmed++;
-      }
       if (o.confirmation_status === "cancelled") map[aid].cancelled++;
+    });
+    // Credit "confirmed"/"whatsappConfirmed" to whoever actually pressed confirm
+    // (order_history), not whoever currently/originally owns the order — see
+    // confirmedByAgentMap in ConfirmationAnalytics.tsx for why.
+    handledOrders.forEach(o => {
+      if (o.confirmation_status !== "confirmed") return;
+      const owner = o.agent_id || o.original_agent_id;
+      if (!owner) return;
+      const confirmingAgent = confirmedByAgent[o.order_id] || (hasConfirmHistory[o.order_id] ? null : owner);
+      if (!confirmingAgent) return;
+      ensure(confirmingAgent).confirmed++;
+      if (o.confirmation_channel === "whatsapp") map[confirmingAgent].whatsappConfirmed++;
     });
     const totalAll = handledOrders.length || 1;
     const p = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
@@ -229,7 +248,7 @@ export function DailyConfirmationReport({
       postponedRate:    p(d.postponed, d.total),
       workloadPct:      Math.round((d.total / totalAll) * 100),
     })).sort((a, b) => b.total - a.total);
-  }, [handledOrders, profileNameMap]);
+  }, [handledOrders, profileNameMap, confirmedByAgentMap]);
 
   const avgWorkload = agentRows.length > 0 ? 100 / agentRows.length : 100;
   const insights    = useMemo(() => getInsights(agentRows, avgWorkload), [agentRows, avgWorkload]);

@@ -181,10 +181,34 @@ const AgentDashboard = () => {
     });
   }, [agentOrders, dateRange]);
 
+  // Agent ranking (real data) — moved above `stats` because the "Confirmed"
+  // stat card now reads its count from here too (see stats.confirmed below).
+  const { data: rankingData = [], isSuccess: rankingLoaded } = useQuery({
+    queryKey: ["agent-rankings", resolvedDateRange.from?.toISOString(), resolvedDateRange.to?.toISOString()],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_agent_rankings", {
+        p_from: resolvedDateRange.from ? resolvedDateRange.from.toISOString() : null,
+        p_to: resolvedDateRange.to ? resolvedDateRange.to.toISOString() : null,
+      });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const stats = useMemo(() => {
     const total = filteredOrders.length;
     const byStatus = (s: string) => filteredOrders.filter((o: any) => o.confirmation_status === s).length;
-    const confirmed = byStatus("confirmed");
+    // get_agent_rankings attributes a "confirmed" order to whoever's order_history
+    // row actually pressed confirm (via changed_by), not to everyone who ever
+    // touched the order. filteredOrders/byStatus doesn't know that: an order this
+    // agent marked no_answer yesterday, then a DIFFERENT agent confirmed today,
+    // still shows confirmation_status="confirmed" and stays in this agent's
+    // touched-order set — so byStatus("confirmed") wrongly credited it here too,
+    // disagreeing with "Your Ranking" below (reported: Alishba's card showed 2
+    // confirmed / ranking showed 1 — the extra one was sidra hanif's confirm).
+    // Once the ranking RPC has loaded, trust its per-agent count instead.
+    const rankingRow = rankingData.find((r: any) => r.agent_id === userId);
+    const confirmed = rankingLoaded ? Number(rankingRow?.confirmed_count ?? 0) : byStatus("confirmed");
     const newOrders = byStatus("new");
     const postponed = byStatus("postponed");
     const noAnswer = byStatus("no_answer");
@@ -203,7 +227,7 @@ const AgentDashboard = () => {
       cancelledPct: total ? Math.round((cancelled / total) * 100) : 0,
       other,
     };
-  }, [filteredOrders]);
+  }, [filteredOrders, rankingData, rankingLoaded, userId]);
 
   // Pie chart data
   const pieData = [
@@ -213,20 +237,6 @@ const AgentDashboard = () => {
     { name: "Cancelled", value: stats.cancelled, color: COLORS.cancelled },
     ...(stats.other > 0 ? [{ name: "Wrong №/Double", value: stats.other, color: COLORS.wrongNumber }] : []),
   ].filter(d => d.value > 0);
-
-  // Agent ranking (real data) — scoped to the same date range as the stat
-  // cards above, so "Your Ranking" never disagrees with them.
-  const { data: rankingData = [] } = useQuery({
-    queryKey: ["agent-rankings", resolvedDateRange.from?.toISOString(), resolvedDateRange.to?.toISOString()],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_agent_rankings", {
-        p_from: resolvedDateRange.from ? resolvedDateRange.from.toISOString() : null,
-        p_to: resolvedDateRange.to ? resolvedDateRange.to.toISOString() : null,
-      });
-      if (error) throw error;
-      return data || [];
-    },
-  });
 
   const agentRanking = useMemo(() => {
     return rankingData

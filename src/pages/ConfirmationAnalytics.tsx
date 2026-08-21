@@ -414,32 +414,63 @@ export default function ConfirmationAnalytics() {
     };
   }, [orderHistory, filteredOrders]);
 
-  // Agent scores — use original_agent_id as fallback for attribution
-  const agentScores = useMemo(() => {
-    // Build a map: order_id -> agent who confirmed it (from order_history)
+  // order_id -> agent who actually pressed confirm, taken from order_history's
+  // LATEST confirmation_status->confirmed event (orderHistory is fetched
+  // ascending, so a later forEach write for the same order_id overwrites an
+  // earlier one). This is the same attribution get_agent_rankings() uses in the
+  // DB — without it, an order agent A marks no_answer/postponed and agent B
+  // later confirms still shows confirmation_status="confirmed" against agent A
+  // too (if A still owns it via agent_id/original_agent_id), wrongly inflating
+  // A's confirmed count. Reported: a confirmation agent's own dashboard
+  // "Confirmed" count disagreed with "Your Ranking" for exactly this reason.
+  // hasConfirmHistory tracks orders with a confirm event but no changed_by on
+  // record — those should count for nobody rather than fall back to whoever
+  // currently owns the order (only orders with NO confirm history at all, e.g.
+  // legacy data predating order_history, fall back to agent_id/original_agent_id).
+  const confirmedByAgentMap = useMemo(() => {
     const confirmedByAgent: Record<string, string> = {};
+    const hasConfirmHistory: Record<string, boolean> = {};
     orderHistory.forEach(h => {
-      if (h.field_changed === "confirmation_status" && h.new_value === "confirmed" && !confirmedByAgent[h.order_id]) {
-        const order = filteredOrders.find(o => o.order_id === h.order_id);
-        const agentId = order?.agent_id || order?.original_agent_id;
-        if (agentId) confirmedByAgent[h.order_id] = agentId;
+      if (h.field_changed === "confirmation_status" && h.new_value === "confirmed") {
+        hasConfirmHistory[h.order_id] = true;
+        if (h.changed_by) confirmedByAgent[h.order_id] = h.changed_by;
       }
     });
+    return { confirmedByAgent, hasConfirmHistory };
+  }, [orderHistory]);
+
+  // Agent scores — use original_agent_id as fallback for attribution
+  const agentScores = useMemo(() => {
+    const { confirmedByAgent, hasConfirmHistory } = confirmedByAgentMap;
 
     const map: Record<string, { total: number; answered: number; confirmed: number; shipped: number; delivered: number }> = {};
+    const ensure = (id: string) => {
+      if (!map[id]) map[id] = { total: 0, answered: 0, confirmed: 0, shipped: 0, delivered: 0 };
+      return map[id];
+    };
+
     filteredOrders.forEach(o => {
       // Use original_agent_id as fallback for released orders
       const agentId = o.agent_id || o.original_agent_id;
       if (!agentId || o.confirmation_status === "new") return;
-      if (!map[agentId]) map[agentId] = { total: 0, answered: 0, confirmed: 0, shipped: 0, delivered: 0 };
-      map[agentId].total++;
-      if (["confirmed", "cancelled", "wrong_number", "reported"].includes(o.confirmation_status)) map[agentId].answered++;
-      if (o.confirmation_status === "confirmed") map[agentId].confirmed++;
+      ensure(agentId).total++;
+      if (["confirmed", "cancelled", "wrong_number", "reported"].includes(o.confirmation_status)) ensure(agentId).answered++;
+    });
+
+    // Credit "confirmed" to whoever actually pressed confirm, not whoever
+    // currently/originally owns the order — see confirmedByAgentMap above.
+    filteredOrders.forEach(o => {
+      if (o.confirmation_status !== "confirmed") return;
+      const agentId = o.agent_id || o.original_agent_id;
+      if (!agentId) return;
+      const confirmingAgent = confirmedByAgent[o.order_id] || (hasConfirmHistory[o.order_id] ? null : agentId);
+      if (confirmingAgent) ensure(confirmingAgent).confirmed++;
     });
 
     // Count shipped-pool and delivered orders per confirming agent.
     filteredOrders.forEach(o => {
-      const confirmingAgent = confirmedByAgent[o.order_id] || o.agent_id || o.original_agent_id;
+      const agentId = o.agent_id || o.original_agent_id;
+      const confirmingAgent = confirmedByAgent[o.order_id] || agentId;
       if (confirmingAgent && map[confirmingAgent]) {
         if (isInShippedDeliveryPool(o.delivery_status)) map[confirmingAgent].shipped++;
         if (isDeliveredStatus(o.delivery_status)) map[confirmingAgent].delivered++;
@@ -457,7 +488,7 @@ export default function ConfirmationAnalytics() {
         deliveryRate: deliveryRatePercent(d.delivered, d.shipped),
       }))
       .sort((a, b) => b.confirmationRate - a.confirmationRate);
-  }, [filteredOrders, orderHistory, profileNameMap]);
+  }, [filteredOrders, confirmedByAgentMap, profileNameMap]);
 
   // No Answer attempts breakdown — always shows CURRENT state of no_answer orders,
   // ignoring agent/date filters. Only seller and product filters apply so you see
@@ -647,6 +678,7 @@ export default function ConfirmationAnalytics() {
       <DailyConfirmationReport
         orders={filteredOrders.map(o => {
           return {
+            order_id: o.order_id,
             agent_id: o.agent_id,
             original_agent_id: o.original_agent_id,
             confirmation_status: o.confirmation_status,
@@ -664,6 +696,7 @@ export default function ConfirmationAnalytics() {
         claimedOrders={stats.claimed}
         firstCallAvg={timeStats.firstCallAvg}
         handlingTime={timeStats.handlingTime}
+        confirmedByAgentMap={confirmedByAgentMap}
         agentScores={agentScores.map(a => ({
           id: a.id,
           confirmed: a.confirmed,
