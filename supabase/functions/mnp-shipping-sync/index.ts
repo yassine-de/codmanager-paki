@@ -429,10 +429,28 @@ async function syncConfirmedOrder(supabase: ReturnType<typeof createClient>, ord
 async function trackByConsignment(supabase: ReturnType<typeof createClient>, consignment: string) {
   const carrier = await getCarrier(supabase);
   const res = await fetch(`${MNP_TRACKING_BASE}/CNTracking?consignment=${encodeURIComponent(consignment)}&id=4`);
-  const data = await res.json();
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = { raw: text };
+  }
   const trackingRoot = Array.isArray(data) ? data[0] : data;
-  if (!res.ok || String(trackingRoot?.isSuccess).toLowerCase() !== "true") {
+  if (!res.ok) {
     throw new Error(`M&P tracking failed: ${JSON.stringify(data).substring(0, 300)}`);
+  }
+  if (String(trackingRoot?.isSuccess).toLowerCase() !== "true") {
+    const message = trackingRoot?.message || "M&P tracking is not available yet";
+    return {
+      success: false,
+      trackingNumber: consignment,
+      status: "Tracking unavailable",
+      transactionStatus: "Tracking unavailable",
+      message,
+      transactionStatusHistory: [],
+      raw_tracking_response: data,
+    };
   }
 
   const detail = Array.isArray(trackingRoot?.tracking_Details) ? trackingRoot.tracking_Details[0] : null;

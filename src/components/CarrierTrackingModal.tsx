@@ -22,6 +22,9 @@ interface TrackingEvent {
 }
 
 interface TrackingPayload {
+  success?: boolean;
+  message?: string;
+  error?: string;
   status?: string;
   consigment_no?: string;
   order_date?: string;
@@ -44,6 +47,19 @@ interface TrackingPayload {
   cityName?: string;
   transactionNotes?: string;
   transactionStatusHistory?: TrackingEvent[];
+}
+
+async function getFunctionErrorMessage(error: any) {
+  const fallback = error?.message || "Tracking request failed";
+  const response = error?.context;
+  if (!response || typeof response.json !== "function") return fallback;
+
+  try {
+    const data = await response.json();
+    return data?.error || data?.message || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function formatTrackingDate(value?: string) {
@@ -79,9 +95,9 @@ export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerI
       .invoke("carrier-shipping-sync", {
         body: { action: "track-by-carrier-order-id", carrier_order_id: carrierOrderId },
       })
-      .then(({ data, error: fnError }) => {
+      .then(async ({ data, error: fnError }) => {
         if (fnError) {
-          setError(fnError.message);
+          setError(await getFunctionErrorMessage(fnError));
         } else if (data?.error) {
           setError(data.error);
         } else {
@@ -147,6 +163,12 @@ export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerI
 
         {payload && (
           <div className="space-y-4">
+            {payload.success === false && payload.message && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                {payload.message}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <SummaryItem icon={<Truck className="w-3.5 h-3.5" />} label="STATUS" value={view.currentStatus} />
               <SummaryItem icon={<Package className="w-3.5 h-3.5" />} label="CN#" value={view.trackingNumber || "-"} />
