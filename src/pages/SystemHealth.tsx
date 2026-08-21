@@ -158,7 +158,7 @@ export default function SystemHealth() {
         .update({ sync_status: "pending", sync_error: null })
         .eq("id", order.id);
 
-      const { error } = await supabase.functions.invoke("shipping-sync", {
+      const { error } = await supabase.functions.invoke("carrier-shipping-sync", {
         body: { action: "sync-order", order_id: order.order_id },
       });
       if (error) throw new Error(await getFunctionErrorMessage(error));
@@ -173,7 +173,7 @@ export default function SystemHealth() {
 
   const handleTriggerStatusSync = async () => {
     try {
-      const { error } = await supabase.functions.invoke("carrier-status-sync");
+      const { error } = await supabase.functions.invoke("carrier-status-sync-router");
       if (error) throw error;
       toast.success("Status sync triggered");
     } catch (e: any) {

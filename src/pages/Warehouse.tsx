@@ -1701,6 +1701,19 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
+  const openHtml = (base64: string, popup: Window | null) => {
+    const html = new TextDecoder().decode(base64ToBytes(base64));
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    if (!popup || popup.closed) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      popup.location.href = url;
+      setTimeout(() => popup.print(), 1_500);
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
   const readFunctionError = async (error: any) => {
     const response = error?.context;
     if (response?.clone) {
@@ -1767,8 +1780,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       return;
     }
 
-    // Open one window while the click is still a trusted user gesture. PostEx
-    // limits each generated PDF to 10 labels, so all returned PDFs are merged
+    // Open one window while the click is still a trusted user gesture. Carrier
+    // label APIs may limit PDF batches, so all returned PDFs are merged
     // into this single print job after the requests finish.
     const printPopup = window.open("", "_blank");
     if (printPopup) {
@@ -1785,27 +1798,33 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       const printedTrackingNumbers = new Set<string>();
       const failedLabels: Array<{ tracking: string; message: string }> = [];
       const pdfBatches: string[] = [];
-      const requestLabelPdf = async (numbers: string[]) => {
-        const { data, error } = await supabase.functions.invoke("shipping-sync", {
+      const htmlBatches: string[] = [];
+      const requestLabels = async (numbers: string[]) => {
+        const { data, error } = await supabase.functions.invoke("carrier-shipping-sync", {
           body: { action: "generate-labels", tracking_numbers: numbers },
         });
         if (error) throw new Error(await readFunctionError(error));
-        if (!data?.pdf_base64) throw new Error("PostEx did not return a label PDF");
-        return String(data.pdf_base64);
+        if (data?.pdf_base64) return { type: "pdf", value: String(data.pdf_base64) };
+        if (data?.html_base64) return { type: "html", value: String(data.html_base64) };
+        throw new Error("Carrier did not return a printable label");
       };
 
       for (let i = 0; i < chunks.length; i += 1) {
         const chunk = chunks[i];
         try {
-          pdfBatches.push(await requestLabelPdf(chunk));
+          const labelBatch = await requestLabels(chunk);
+          if (labelBatch.type === "pdf") pdfBatches.push(labelBatch.value);
+          else htmlBatches.push(labelBatch.value);
           chunk.forEach((tracking) => printedTrackingNumbers.add(tracking));
         } catch (batchError: any) {
           for (const tracking of chunk) {
             try {
-              pdfBatches.push(await requestLabelPdf([tracking]));
+              const labelBatch = await requestLabels([tracking]);
+              if (labelBatch.type === "pdf") pdfBatches.push(labelBatch.value);
+              else htmlBatches.push(labelBatch.value);
               printedTrackingNumbers.add(tracking);
             } catch (singleError: any) {
-              failedLabels.push({ tracking, message: singleError?.message || batchError?.message || "Label PDF failed" });
+              failedLabels.push({ tracking, message: singleError?.message || batchError?.message || "Label failed" });
             }
           }
         }
@@ -1816,8 +1835,13 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         throw new Error(firstFailure ? `${firstFailure.tracking}: ${firstFailure.message}` : "Label printing failed");
       }
 
-      const mergedPdf = await mergeLabelPdfs(pdfBatches);
-      openPdf(mergedPdf, `postex-labels-${printedTrackingNumbers.size}.pdf`, printPopup);
+      if (htmlBatches.length > 0) {
+        openHtml(htmlBatches[0], printPopup);
+        htmlBatches.slice(1).forEach((html) => window.open(URL.createObjectURL(new Blob([new TextDecoder().decode(base64ToBytes(html))], { type: "text/html" })), "_blank", "noopener,noreferrer"));
+      } else {
+        const mergedPdf = await mergeLabelPdfs(pdfBatches);
+        openPdf(mergedPdf, `carrier-labels-${printedTrackingNumbers.size}.pdf`, printPopup);
+      }
 
       const printedAt = new Date().toISOString();
       const printedRows = rows.filter((row) => row.tracking_number && printedTrackingNumbers.has(row.tracking_number));
