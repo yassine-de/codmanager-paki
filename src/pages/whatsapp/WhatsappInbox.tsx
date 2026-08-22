@@ -812,6 +812,21 @@ export default function WhatsappInbox() {
     )[0];
   }, [order]);
 
+  const { data: followUpAgent } = useQuery({
+    queryKey: ["wts-followup-agent", (order as any)?.follow_up_assigned_to],
+    queryFn: async () => {
+      const assignedTo = (order as any)?.follow_up_assigned_to;
+      if (!assignedTo) return null;
+      const { data } = await supabase
+        .from("profiles")
+        .select("name, phone")
+        .eq("user_id", assignedTo)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!(order as any)?.follow_up_assigned_to,
+  });
+
   const { data: duplicateMatches = [] } = useQuery<DuplicateOrderWarning[]>({
     queryKey: ["wts-order-duplicates", order?.id, order?.customer_phone],
     queryFn: async () => {
@@ -3363,6 +3378,25 @@ export default function WhatsappInbox() {
                       >
                         {latestShipment.tracking_number}
                       </button>
+                    </div>
+                  )}
+                  {(order as any)?.follow_up_assigned_to && (
+                    <div className="col-span-2">
+                      <div className="text-[11px] text-muted-foreground">Follow-up Agent</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium">{followUpAgent?.name || "—"}</span>
+                        {followUpAgent?.phone && (
+                          <a
+                            href={`https://wa.me/${followUpAgent.phone.replace(/\D/g, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`WhatsApp ${followUpAgent.name}`}
+                            className="text-muted-foreground hover:text-emerald-500 transition-colors"
+                          >
+                            <Phone className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   )}
                   <div className="col-span-2">
