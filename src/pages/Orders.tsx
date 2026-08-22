@@ -226,6 +226,7 @@ export default function Orders() {
   const [agentOptions, setAgentOptions] = useState<{ id: string; name: string }[]>([]);
   const [productNames, setProductNames] = useState<string[]>([]);
   const [subStatusOptions, setSubStatusOptions] = useState<string[]>([]);
+  const [courierOptions, setCourierOptions] = useState<{ code: string; name: string }[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -343,6 +344,7 @@ export default function Orders() {
   const [filterSubStatus, setFilterSubStatus] = useState('all');
   const [filterChannel, setFilterChannel] = useState('all');
   const [filterUpsell, setFilterUpsell] = useState('all');
+  const [filterCourier, setFilterCourier] = useState('all');
   
   
 
@@ -383,6 +385,7 @@ export default function Orders() {
       subStatus: 'all',
       channel: 'all',
       upsell: 'all',
+      courier: 'all',
     };
   });
 
@@ -447,6 +450,12 @@ export default function Orders() {
         if (v) set.add(v);
       });
       if (!cancelled) setSubStatusOptions([...set].sort());
+
+      const { data: carriers } = await supabase
+        .from("carriers" as any)
+        .select("code, name")
+        .order("name", { ascending: true });
+      if (!cancelled) setCourierOptions((carriers || []) as { code: string; name: string }[]);
     };
     loadOptions();
     return () => { cancelled = true; };
@@ -542,6 +551,14 @@ export default function Orders() {
             .from("shipments" as any)
             .select("order_uuid")
             .or(`normalized_status.eq.${f.subStatus},carrier_status.eq.${f.subStatus}`);
+          idFilterSets.push([...new Set((data || []).map((r: any) => r.order_uuid))]);
+        }
+
+        if (isAdmin && f.courier !== 'all') {
+          const { data } = await supabase
+            .from("shipments" as any)
+            .select("order_uuid, carriers!inner(code)")
+            .eq("carriers.code", f.courier);
           idFilterSets.push([...new Set((data || []).map((r: any) => r.order_uuid))]);
         }
 
@@ -709,8 +726,9 @@ export default function Orders() {
       subStatus: filterSubStatus,
       channel: filterChannel,
       upsell: filterUpsell,
+      courier: filterCourier,
     });
-  }, [dateRange, deliveredDateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell]);
+  }, [dateRange, deliveredDateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell, filterCourier]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
@@ -720,9 +738,10 @@ export default function Orders() {
     setFilterSubStatus('all');
     setFilterChannel('all');
     setFilterUpsell('all');
+    setFilterCourier('all');
     setAppliedFilters({
       dateRange: undefined, deliveredRange: undefined, product: 'all', seller: 'all', agent: 'all',
-      confirmation: 'all', delivery: 'all', subStatus: 'all', channel: 'all', upsell: 'all',
+      confirmation: 'all', delivery: 'all', subStatus: 'all', channel: 'all', upsell: 'all', courier: 'all',
     });
   }, []);
 
@@ -738,6 +757,7 @@ export default function Orders() {
     if (appliedFilters.subStatus !== 'all') count++;
     if (appliedFilters.channel !== 'all') count++;
     if (appliedFilters.upsell !== 'all') count++;
+    if (appliedFilters.courier !== 'all') count++;
     return count;
   }, [appliedFilters]);
 
@@ -944,6 +964,20 @@ export default function Orders() {
                 onValueChange={setFilterSubStatus}
                 options={subStatusOptions.map(s => ({ value: s, label: subStatusLabel(s) || s }))}
                 placeholder="Sub Status"
+                allLabel="All"
+                className="w-full"
+              />
+            </div>
+            )}
+            {/* Delivery courier - admin only */}
+            {isAdmin && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Courier</label>
+              <SearchableSelect
+                value={filterCourier}
+                onValueChange={setFilterCourier}
+                options={courierOptions.map(c => ({ value: c.code, label: c.name }))}
+                placeholder="Courier"
                 allLabel="All"
                 className="w-full"
               />
