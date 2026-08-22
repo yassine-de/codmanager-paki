@@ -183,10 +183,14 @@ const STALE_REATTEMPT_MS = 24 * 60 * 60 * 1000;
 
 // A "Re-attempted" order that's still sitting there >24h later, undelivered,
 // needs someone to actually look at it again — it's easy to lose track of
-// once it drops out of the default view.
+// once it drops out of the default view. Orders that already came back as a
+// return have a real, resolved outcome — they don't need this "still
+// pending" nudge even if the re-attempted label is stale.
+const RETURN_DELIVERY_STATUSES = ["returned", "return", "ready_for_return", "return_received"];
 function isStaleReattempt(row: FollowUpRow): boolean {
   if (row.follow_up_status !== "re_attempted") return false;
   if (row.delivery_status === "delivered") return false;
+  if (RETURN_DELIVERY_STATUSES.includes(row.delivery_status ?? "")) return false;
   if (!row.follow_up_updated_at) return false;
   return Date.now() - new Date(row.follow_up_updated_at).getTime() > STALE_REATTEMPT_MS;
 }
