@@ -428,13 +428,16 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const [labelProductFilter, setLabelProductFilter] = useState("all");
   const [labelCarrierFilter, setLabelCarrierFilter] = useState("all");
   const [notPrintedSearch, setNotPrintedSearch] = useState("");
+  const [notPrintedCourierFilter, setNotPrintedCourierFilter] = useState("all");
 
   const [readySearch, setReadySearch] = useState("");
+  const [readyCourierFilter, setReadyCourierFilter] = useState("all");
   const [selectedReadyIds, setSelectedReadyIds] = useState<Set<string>>(new Set());
   const [readyScan, setReadyScan] = useState("");
   const [dispatchCandidate, setDispatchCandidate] = useState<FulfillmentRow | null>(null);
 
   const [outOfStockSearch, setOutOfStockSearch] = useState("");
+  const [outOfStockCourierFilter, setOutOfStockCourierFilter] = useState("all");
   const [restockingId, setRestockingId] = useState<string | null>(null);
 
   const [returnScan, setReturnScan] = useState("");
@@ -992,42 +995,55 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
   const filteredNotPrinted = useMemo(() => {
     const q = notPrintedSearch.trim().toLowerCase();
-    if (!q) return notPrintedRows;
-    return notPrintedRows.filter((row) => [
-      row.order_id,
-      row.customer_name,
-      row.customer_city,
-      row.product_name || "",
-      row.carrier_name,
-      row.tracking_number || "",
-    ].join(" ").toLowerCase().includes(q));
-  }, [notPrintedRows, notPrintedSearch]);
+    return notPrintedRows.filter((row) => {
+      if (notPrintedCourierFilter !== "all" && row.carrier_name !== notPrintedCourierFilter) return false;
+      if (!q) return true;
+      return [
+        row.order_id,
+        row.customer_name,
+        row.customer_city,
+        row.product_name || "",
+        row.carrier_name,
+        row.tracking_number || "",
+      ].join(" ").toLowerCase().includes(q);
+    });
+  }, [notPrintedRows, notPrintedSearch, notPrintedCourierFilter]);
 
   const filteredReady = useMemo(() => {
     const q = readySearch.trim().toLowerCase();
-    if (!q) return readyRows;
-    return readyRows.filter((row) => [
-      row.order_id,
-      row.customer_name,
-      row.customer_city,
-      row.product_name || "",
-      row.carrier_name,
-      row.tracking_number || "",
-    ].join(" ").toLowerCase().includes(q));
-  }, [readyRows, readySearch]);
+    return readyRows.filter((row) => {
+      if (readyCourierFilter !== "all" && row.carrier_name !== readyCourierFilter) return false;
+      if (!q) return true;
+      return [
+        row.order_id,
+        row.customer_name,
+        row.customer_city,
+        row.product_name || "",
+        row.carrier_name,
+        row.tracking_number || "",
+      ].join(" ").toLowerCase().includes(q);
+    });
+  }, [readyRows, readySearch, readyCourierFilter]);
 
   const filteredOutOfStock = useMemo(() => {
     const q = outOfStockSearch.trim().toLowerCase();
-    if (!q) return outOfStockRows;
-    return outOfStockRows.filter((row) => [
-      row.order_id,
-      row.customer_name,
-      row.customer_city,
-      row.product_name || "",
-      row.carrier_name,
-      row.tracking_number || "",
-    ].join(" ").toLowerCase().includes(q));
-  }, [outOfStockRows, outOfStockSearch]);
+    return outOfStockRows.filter((row) => {
+      if (outOfStockCourierFilter !== "all" && row.carrier_name !== outOfStockCourierFilter) return false;
+      if (!q) return true;
+      return [
+        row.order_id,
+        row.customer_name,
+        row.customer_city,
+        row.product_name || "",
+        row.carrier_name,
+        row.tracking_number || "",
+      ].join(" ").toLowerCase().includes(q);
+    });
+  }, [outOfStockRows, outOfStockSearch, outOfStockCourierFilter]);
+
+  const notPrintedCouriers = useMemo(() => Array.from(new Set(notPrintedRows.map((r) => r.carrier_name).filter(Boolean))).sort(), [notPrintedRows]);
+  const readyCouriers = useMemo(() => Array.from(new Set(readyRows.map((r) => r.carrier_name).filter(Boolean))).sort(), [readyRows]);
+  const outOfStockCouriers = useMemo(() => Array.from(new Set(outOfStockRows.map((r) => r.carrier_name).filter(Boolean))).sort(), [outOfStockRows]);
 
   const filteredHistory = useMemo(() => {
     const q = historySearch.trim().toLowerCase();
@@ -2656,8 +2672,15 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                     </Button>
                   </div>
                 </CardHeader>
-                <div className="px-4 pb-3">
-                  <Input value={notPrintedSearch} onChange={(e) => setNotPrintedSearch(e.target.value)} placeholder="Search order, tracking, city or product..." className="h-9 text-sm" />
+                <div className="px-4 pb-3 flex flex-wrap items-center gap-2">
+                  <Input value={notPrintedSearch} onChange={(e) => setNotPrintedSearch(e.target.value)} placeholder="Search order, tracking, city or product..." className="h-9 text-sm flex-1 min-w-[200px]" />
+                  <Select value={notPrintedCourierFilter} onValueChange={setNotPrintedCourierFilter}>
+                    <SelectTrigger className="h-9 w-[160px] text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All couriers</SelectItem>
+                      {notPrintedCouriers.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <CardContent className="p-0">
                   <DispatchTable
@@ -2708,6 +2731,13 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                         </Button>
                       </>
                     )}
+                    <Select value={readyCourierFilter} onValueChange={setReadyCourierFilter}>
+                      <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All couriers</SelectItem>
+                        {readyCouriers.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                     <Input className="h-8 w-[260px] text-xs" value={readySearch} onChange={(e) => setReadySearch(e.target.value)} placeholder="Filter ready orders..." />
                   </div>
                 </CardHeader>
@@ -2736,7 +2766,16 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                     Out of Stock
                     <Badge variant="outline" className="text-[10px]">{filteredOutOfStock.length} orders</Badge>
                   </CardTitle>
-                  <Input className="h-8 w-[260px] text-xs" value={outOfStockSearch} onChange={(e) => setOutOfStockSearch(e.target.value)} placeholder="Search out-of-stock orders..." />
+                  <div className="flex items-center gap-2">
+                    <Select value={outOfStockCourierFilter} onValueChange={setOutOfStockCourierFilter}>
+                      <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All couriers</SelectItem>
+                        {outOfStockCouriers.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input className="h-8 w-[260px] text-xs" value={outOfStockSearch} onChange={(e) => setOutOfStockSearch(e.target.value)} placeholder="Search out-of-stock orders..." />
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   <DispatchTable
