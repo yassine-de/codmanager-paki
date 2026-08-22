@@ -179,6 +179,18 @@ interface FollowUpRow {
   fu_postpone_until: string | null;
 }
 
+const STALE_REATTEMPT_MS = 24 * 60 * 60 * 1000;
+
+// A "Re-attempted" order that's still sitting there >24h later, undelivered,
+// needs someone to actually look at it again — it's easy to lose track of
+// once it drops out of the default view.
+function isStaleReattempt(row: FollowUpRow): boolean {
+  if (row.follow_up_status !== "re_attempted") return false;
+  if (row.delivery_status === "delivered") return false;
+  if (!row.follow_up_updated_at) return false;
+  return Date.now() - new Date(row.follow_up_updated_at).getTime() > STALE_REATTEMPT_MS;
+}
+
 function computeSegment(row: FollowUpRow): "failed_attempt" | "delayed" | "on_going" | null {
   const ds = row.delivery_status;
   const inTransit = ["printed", "dispatched", "shipped", "in_transit", "out_for_delivery", "with_courier"].includes(ds ?? "");
@@ -204,7 +216,8 @@ const segmentMeta: Record<
   on_going:       { label: "On Going",       color: "hsl(210,60%,52%)", chip: "bg-[hsl(210,60%,52%)]/15 text-[hsl(210,60%,52%)]", icon: Activity },
 };
 
-function rowAccentStyle(row: FollowUpRow & { segment: "failed_attempt" | "delayed" | "on_going" | null }) {
+function rowAccentStyle(row: FollowUpRow & { segment: "failed_attempt" | "delayed" | "on_going" | null; staleReattempt: boolean }) {
+  if (row.staleReattempt) return { boxShadow: "inset 4px 0 0 hsl(0 84% 55%)", backgroundColor: "hsl(0 84% 55% / 0.08)" };
   if (row.segment === "failed_attempt") return { boxShadow: "inset 3px 0 0 hsl(25 85% 55% / 0.6)" };
   if (row.segment === "delayed")        return { boxShadow: "inset 3px 0 0 hsl(25 85% 55% / 0.6)" };
   if (row.segment === "on_going")       return { boxShadow: "inset 3px 0 0 hsl(210 60% 52% / 0.5)" };
@@ -382,7 +395,10 @@ export default function FollowUps() {
     return rows.filter((r) => r.follow_up_assigned_to === authUser.id);
   }, [rows, authUser?.role, authUser?.id]);
 
-  const enriched = useMemo(() => scopedRows.map((r) => ({ ...r, segment: computeSegment(r) })), [scopedRows]);
+  const enriched = useMemo(
+    () => scopedRows.map((r) => ({ ...r, segment: computeSegment(r), staleReattempt: isStaleReattempt(r) })),
+    [scopedRows]
+  );
 
   const segCounts = useMemo(() => {
     const c = { failed_attempt: 0, delayed: 0, on_going: 0, none: 0, returned: 0, re_attempted: 0, no_answer: 0 };
@@ -472,8 +488,18 @@ export default function FollowUps() {
   useEffect(() => { setPage(1); }, [filtered]);
 
   const sorted = useMemo(() => {
-    if (!sortKey) return filtered;
+    // Stale re-attempts (still undelivered >24h after being marked
+    // re-attempted) always float to the top, ahead of whatever sort/filter
+    // is active — they're easy to forget once they scroll off the first page.
+    const stalePriority = (r: (typeof filtered)[number]) => (r.staleReattempt ? 0 : 1);
+
+    if (!sortKey) {
+      return [...filtered].sort((a, b) => stalePriority(a) - stalePriority(b));
+    }
     return [...filtered].sort((a, b) => {
+      const staleDiff = stalePriority(a) - stalePriority(b);
+      if (staleDiff !== 0) return staleDiff;
+
       let av: number, bv: number;
       if (sortKey === "days") {
         av = a.days_since_shipped ?? -1;
@@ -1642,7 +1668,7 @@ function FollowUpStatusCell({
 /* ── Cell renderer ── */
 function renderCell(
   key: ColumnKey,
-  row: FollowUpRow & { segment: "failed_attempt" | "delayed" | "on_going" | null },
+  row: FollowUpRow & { segment: "failed_attempt" | "delayed" | "on_going" | null; staleReattempt: boolean },
   segMeta: (typeof segmentMeta)[keyof typeof segmentMeta] | null,
   savingId: string | null,
   handleStatusChange: (id: string, status: string, attempt?: number, note?: string, postponeUntil?: string) => void,
@@ -1654,9 +1680,21 @@ function renderCell(
   switch (key) {
     case "order_id":
       return (
-        <span className="font-mono text-xs font-semibold text-foreground/80 tracking-tight">
-          {row.order_id}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {row.staleReattempt && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[hsl(0,84%,55%)] animate-pulse" />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                Re-attempted {row.follow_up_updated_at ? formatDistanceToNow(new Date(row.follow_up_updated_at), { addSuffix: true }) : ""} — still not delivered
+              </TooltipContent>
+            </Tooltip>
+          )}
+          <span className="font-mono text-xs font-semibold text-foreground/80 tracking-tight">
+            {row.order_id}
+          </span>
+        </div>
       );
 
     case "tracking":
