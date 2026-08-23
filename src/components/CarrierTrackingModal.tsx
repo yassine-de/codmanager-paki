@@ -99,7 +99,7 @@ function formatTrackingDate(value?: string) {
 export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerId, open, onClose }: CarrierTrackingModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [payload, setPayload] = useState<TrackingPayload | null>(null);
+  const [payload, setPayload] = useState<TrackingPayload | TrackingPayload[] | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -125,20 +125,21 @@ export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerI
   }, [open, carrierOrderId]);
 
   const view = useMemo(() => {
-    const mnpDetail = Array.isArray(payload?.tracking_Details) ? payload.tracking_Details[0] : null;
+    const payloadRoot = Array.isArray(payload) ? payload[0] : payload;
+    const mnpDetail = Array.isArray(payloadRoot?.tracking_Details) ? payloadRoot.tracking_Details[0] : null;
     const mnpEvents = Array.isArray(mnpDetail?.CNTrackingDetail) ? mnpDetail.CNTrackingDetail : [];
     const mnpLatest = mnpEvents[0] || mnpEvents[mnpEvents.length - 1] || null;
-    const trackingNumber = payload?.trackingNumber || payload?.consigment_no || mnpDetail?.ConsignmentNumber || String(carrierOrderId || "");
-    const currentStatus = payload?.transactionStatus || payload?.status || mnpLatest?.TrackingStatus || "-";
-    const orderDate = payload?.transactionDate || payload?.order_date || payload?.orderPickupDate || mnpDetail?.BookingDate || "-";
-    const customerName = payload?.customerName || payload?.consignee_name || mnpDetail?.ConsigneeName || "-";
-    const codAmount = payload?.invoicePayment ?? payload?.cod_amount ?? mnpDetail?.CODAmount;
-    const location = payload?.origin || payload?.destination
-      ? `${payload?.origin || "?"} -> ${payload?.destination || "?"}`
+    const trackingNumber = payloadRoot?.trackingNumber || payloadRoot?.consigment_no || mnpDetail?.ConsignmentNumber || String(carrierOrderId || "");
+    const currentStatus = payloadRoot?.transactionStatus || payloadRoot?.status || mnpLatest?.TrackingStatus || "-";
+    const orderDate = payloadRoot?.transactionDate || payloadRoot?.order_date || payloadRoot?.orderPickupDate || mnpDetail?.BookingDate || "-";
+    const customerName = payloadRoot?.customerName || payloadRoot?.consignee_name || mnpDetail?.ConsigneeName || "-";
+    const codAmount = payloadRoot?.invoicePayment ?? payloadRoot?.cod_amount ?? mnpDetail?.CODAmount;
+    const location = payloadRoot?.origin || payloadRoot?.destination
+      ? `${payloadRoot?.origin || "?"} -> ${payloadRoot?.destination || "?"}`
       : mnpDetail?.OriginCity || mnpDetail?.DestinationCity
         ? `${mnpDetail?.OriginCity || "?"} -> ${mnpDetail?.DestinationCity || "?"}`
-        : payload?.cityName || "-";
-    const standardEvents = (payload?.transactionStatusHistory || payload?.detail || []).map((event) => ({
+        : payloadRoot?.cityName || "-";
+    const standardEvents = (payloadRoot?.transactionStatusHistory || payloadRoot?.detail || []).map((event) => ({
       status: event.transactionStatusMessage || event.status || "-",
       code: event.transactionStatusMessageCode ? String(event.transactionStatusMessageCode) : "",
       dateTime: formatTrackingDate(event.updatedAt || event.transactionStatusDate || event.dateTime || event.createdAt),
