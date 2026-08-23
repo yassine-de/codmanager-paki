@@ -125,7 +125,11 @@ export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerI
   }, [open, carrierOrderId]);
 
   const view = useMemo(() => {
-    const payloadRoot = Array.isArray(payload) ? payload[0] : payload;
+    const payloadRoot = Array.isArray(payload)
+      ? payload[0]
+      : (payload as TrackingPayload & { 0?: TrackingPayload })?.tracking_Details
+        ? payload
+        : (payload as TrackingPayload & { 0?: TrackingPayload })?.[0] || payload;
     const mnpDetail = Array.isArray(payloadRoot?.tracking_Details) ? payloadRoot.tracking_Details[0] : null;
     const mnpEvents = Array.isArray(mnpDetail?.CNTrackingDetail) ? mnpDetail.CNTrackingDetail : [];
     const mnpLatest = mnpEvents[0] || mnpEvents[mnpEvents.length - 1] || null;
