@@ -30,7 +30,7 @@ function normalizeStatus(status?: string | null) {
   if (value.includes("return to shipper") || value === "returned" || value.includes("returned")) return "returned";
   if (value.includes("out for delivery")) return "out_for_delivery";
   if (value.includes("attempt") || value.includes("undeliver") || value.includes("consignee not")) return "failed_attempt";
-  if (value.includes("reached at destination") || value.includes("reached destination")) return "in_transit";
+  if (value.includes("reached at destination") || value.includes("reached destination")) return "reached_at_destination";
   if (value.includes("deliver") && !value.includes("undeliver")) return "delivered";
   if (value.includes("handed over") || value.includes("arrived") || value.includes("depart") || value.includes("transit") || value.includes("in-process")) return "in_transit";
   return "carrier_unknown";
@@ -41,6 +41,7 @@ function mapDeliveryStatus(normalizedStatus: string, currentStatus?: string | nu
   if (normalizedStatus === "returned") return "return";
   if (normalizedStatus === "failed_attempt") return "failed_attempt";
   if (normalizedStatus === "out_for_delivery") return "with_courier";
+  if (normalizedStatus === "reached_at_destination") return "shipped";
   if (normalizedStatus === "in_transit") return "shipped";
   if (normalizedStatus === "booked" || normalizedStatus === "carrier_unknown") {
     const locked = ["printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery", "delivered", "failed_attempt", "ready_for_return", "return", "returned", "cancelled", "out_of_stock"];
