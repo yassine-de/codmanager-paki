@@ -27,10 +27,11 @@ async function getMnpConfig(supabase: ReturnType<typeof createClient>) {
 function normalizeStatus(status?: string | null) {
   const value = String(status || "").trim().toLowerCase();
   if (!value || value === "booked") return "booked";
-  if (value.includes("deliver") && !value.includes("undeliver")) return "delivered";
   if (value.includes("return to shipper") || value === "returned" || value.includes("returned")) return "returned";
   if (value.includes("out for delivery")) return "out_for_delivery";
   if (value.includes("attempt") || value.includes("undeliver") || value.includes("consignee not")) return "failed_attempt";
+  if (value.includes("reached at destination") || value.includes("reached destination")) return "in_transit";
+  if (value.includes("deliver") && !value.includes("undeliver")) return "delivered";
   if (value.includes("handed over") || value.includes("arrived") || value.includes("depart") || value.includes("transit") || value.includes("in-process")) return "in_transit";
   return "carrier_unknown";
 }
