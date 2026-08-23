@@ -17,14 +17,13 @@ async function getMnpConfig(supabase: ReturnType<typeof createClient>) {
   const { data: settings } = await supabase
     .from("app_settings")
     .select("key,value")
-    .in("key", ["mnp_username", "mnp_password", "mnp_account_no", "carrier_sync_enabled", "active_carrier_code"]);
+    .in("key", ["mnp_username", "mnp_password", "mnp_account_no", "carrier_sync_enabled"]);
   const byKey = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
   return {
     username: byKey.mnp_username || Deno.env.get("MNP_USERNAME") || "",
     password: byKey.mnp_password || Deno.env.get("MNP_PASSWORD") || "",
     accountNo: byKey.mnp_account_no || Deno.env.get("MNP_ACCOUNT_NO") || "",
     enabled: byKey.carrier_sync_enabled !== "false",
-    activeCarrierCode: byKey.active_carrier_code || Deno.env.get("ACTIVE_CARRIER_CODE") || "",
   };
 }
 
@@ -71,11 +70,6 @@ Deno.serve(async (req) => {
     const cfg = await getMnpConfig(supabase);
     if (!cfg.enabled) {
       return new Response(JSON.stringify({ skipped: true, reason: "Carrier API disabled" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (cfg.activeCarrierCode && cfg.activeCarrierCode !== CARRIER_CODE) {
-      return new Response(JSON.stringify({ skipped: true, reason: `Active carrier is ${cfg.activeCarrierCode}` }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

@@ -12,6 +12,9 @@ const MNP_API_BASE = Deno.env.get("MNP_API_BASE") || "https://mnpcourier.com/myc
 const MNP_TRACKING_BASE = Deno.env.get("MNP_TRACKING_BASE") || "https://tracking.mulphilog.com.pk/api";
 const MNP_LABEL_BASE = Deno.env.get("MNP_LABEL_BASE") || "https://mnpcourier.com/mycodapi";
 const CARRIER_CODE = "mnp";
+const POINTS_PER_MM = 72 / 25.4;
+const MNP_STICKER_WIDTH = 150 * POINTS_PER_MM;
+const MNP_STICKER_HEIGHT = 100 * POINTS_PER_MM;
 
 function getSupabaseAdmin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -164,16 +167,41 @@ function looksLikePdf(bytes: Uint8Array) {
   return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
 }
 
-async function mergePdfs(pdfs: Uint8Array[]) {
-  if (pdfs.length === 1) return pdfs[0];
+function looksLikeBlankMnpPdf(bytes: Uint8Array) {
+  return bytes.length > 0 && bytes.length < 20_000;
+}
 
-  const merged = await PDFDocument.create();
-  for (const pdf of pdfs) {
-    const source = await PDFDocument.load(pdf);
-    const pages = await merged.copyPages(source, source.getPageIndices());
-    pages.forEach((page) => merged.addPage(page));
+async function buildMnpStickerPdf(labels: Array<{ tracking: string; bytes: Uint8Array }>) {
+  const output = await PDFDocument.create();
+
+  for (const label of labels) {
+    const source = await PDFDocument.load(label.bytes);
+    const sourcePages = source.getPages();
+
+    for (const sourcePage of sourcePages) {
+      const { width, height } = sourcePage.getSize();
+      const cropWidth = Math.min(width - 44, 552);
+      const cropHeight = Math.min(height, 340);
+      const cropLeft = Math.max(0, (width - cropWidth) / 2);
+      const cropBottom = Math.max(0, height - cropHeight - 4);
+      const embeddedLabel = await output.embedPage(sourcePage, {
+        left: cropLeft,
+        bottom: cropBottom,
+        right: cropLeft + cropWidth,
+        top: cropBottom + cropHeight,
+      });
+
+      const page = output.addPage([MNP_STICKER_WIDTH, MNP_STICKER_HEIGHT]);
+      const drawWidth = MNP_STICKER_WIDTH;
+      const drawHeight = MNP_STICKER_HEIGHT;
+      const x = 0;
+      const y = 0;
+
+      page.drawPage(embeddedLabel, { x, y, width: drawWidth, height: drawHeight });
+    }
   }
-  return await merged.save();
+
+  return await output.save();
 }
 
 function extractHtmlBody(html: string) {
@@ -199,8 +227,14 @@ function buildPrintableLabelHtml(labels: string[]) {
   <base href="${MNP_LABEL_BASE.replace(/\/$/, "")}/">
   ${head}
   <style>
-    @page { size: A4; margin: 8mm; }
+    @page { size: 150mm 100mm; margin: 0; }
     body { margin: 0; background: #fff; }
+    .mnp-label-page {
+      width: 150mm;
+      min-height: 100mm;
+      overflow: hidden;
+      background: #fff;
+    }
     .mnp-page-break { break-after: page; page-break-after: always; }
   </style>
 </head>
@@ -214,9 +248,7 @@ async function generateLabels(supabase: ReturnType<typeof createClient>, trackin
   const numbers = Array.from(new Set((trackingNumbers || []).map((value) => String(value || "").trim()).filter(Boolean)));
   if (numbers.length === 0) throw new Error("tracking_numbers required");
 
-  const labels: string[] = [];
-  const pdfLabels: Uint8Array[] = [];
-  for (const tracking of numbers) {
+  const fetchLabel = async (tracking: string) => {
     const url = new URL(`${MNP_LABEL_BASE.replace(/\/$/, "")}/GetAddressLabel_HTML_image.aspx`);
     url.searchParams.set("con", tracking);
     url.searchParams.set("userid", cfg.username);
@@ -228,24 +260,42 @@ async function generateLabels(supabase: ReturnType<typeof createClient>, trackin
     if (!res.ok) throw new Error(`M&P label failed for ${tracking}: ${res.status}`);
 
     if (looksLikePdf(bytes)) {
-      pdfLabels.push(bytes);
-      continue;
+      if (looksLikeBlankMnpPdf(bytes)) {
+        throw new Error(`M&P returned an empty label PDF for ${tracking}. Use label type 3 until M&P confirms the 15x10 API value.`);
+      }
+      return { tracking, type: "pdf", bytes };
     }
 
     const html = new TextDecoder().decode(bytes);
     if (/not\s+found|invalid|error/i.test(html) && !/<table|<img|barcode|consignee/i.test(html)) {
       throw new Error(`M&P label failed for ${tracking}: ${html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160)}`);
     }
-    labels.push(html);
+    return { tracking, type: "html", html };
+  };
+
+  const labelResults: any[] = [];
+  const concurrency = 4;
+  for (let i = 0; i < numbers.length; i += concurrency) {
+    const batch = await Promise.all(numbers.slice(i, i + concurrency).map(fetchLabel));
+    labelResults.push(...batch);
   }
+
+  const labels = labelResults.filter((label) => label.type === "html").map((label) => label.html);
+  const pdfLabels = labelResults.filter((label) => label.type === "pdf");
 
   if (pdfLabels.length > 0) {
     if (labels.length > 0) throw new Error("M&P returned mixed PDF and HTML labels");
-    const pdf = await mergePdfs(pdfLabels);
+    const pdf = await buildMnpStickerPdf(pdfLabels.map((label) => ({
+      tracking: label.tracking,
+      bytes: label.bytes,
+    })));
     return {
       success: true,
       label_format: "pdf",
       pdf_base64: base64EncodeBytes(pdf),
+      label_type: cfg.labelType,
+      label_size: "150x100mm",
+      without_shipper_contact: true,
       tracking_numbers: numbers,
     };
   }
@@ -255,6 +305,7 @@ async function generateLabels(supabase: ReturnType<typeof createClient>, trackin
     success: true,
     label_format: "html",
     html_base64: base64Encode(printableHtml),
+    label_type: cfg.labelType,
     tracking_numbers: numbers,
   };
 }

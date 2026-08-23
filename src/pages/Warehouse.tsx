@@ -1855,8 +1855,10 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         openHtml(htmlBatches[0], printPopup);
         htmlBatches.slice(1).forEach((html) => window.open(URL.createObjectURL(new Blob([new TextDecoder().decode(base64ToBytes(html))], { type: "text/html" })), "_blank", "noopener,noreferrer"));
       } else {
-        const mergedPdf = await mergeLabelPdfs(pdfBatches);
-        openPdf(mergedPdf, `carrier-labels-${printedTrackingNumbers.size}.pdf`, printPopup);
+        const printablePdf = pdfBatches.length === 1
+          ? base64ToBytes(pdfBatches[0])
+          : await mergeLabelPdfs(pdfBatches);
+        openPdf(printablePdf, `carrier-labels-${printedTrackingNumbers.size}.pdf`, printPopup);
       }
 
       const printedAt = new Date().toISOString();
