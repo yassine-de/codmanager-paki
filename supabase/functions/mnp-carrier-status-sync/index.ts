@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
       .not("tracking_number", "is", null)
       .not("normalized_status", "in", `(${terminal.join(",")})`)
       .or(`normalized_status.neq.delivered,created_at.gte.${deliveredWatchAfter}`)
-      .or(`last_synced_at.is.null,last_synced_at.lt.${staleBefore}`)
+      .or(`last_synced_at.is.null,last_synced_at.lt.${staleBefore},carrier_status.ilike.*Reached*Destination*`)
       .order("last_synced_at", { ascending: true, nullsFirst: true })
       .limit(200);
     if (error) throw error;
