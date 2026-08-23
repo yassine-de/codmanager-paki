@@ -1214,6 +1214,16 @@ function NodeInspector({
     enabled: node.type === "send_template",
   });
 
+  // Couriers list (for the "Courier" condition field's value picker)
+  const { data: couriers = [] } = useQuery({
+    queryKey: ["whatsapp-automation-couriers"],
+    queryFn: async () => {
+      const { data } = await supabase.from("carriers" as any).select("code, name").order("name");
+      return (data ?? []) as any[];
+    },
+    enabled: node.type === "condition" && node.data.field === "courier_code",
+  });
+
   return (
     <div className="w-[340px] border-l bg-card/40 overflow-y-auto">
       <div className="flex items-center justify-between p-3 border-b">
@@ -1278,6 +1288,7 @@ function NodeInspector({
                 <SelectContent>
                   <SelectItem value="confirmation_status">Confirmation status</SelectItem>
                   <SelectItem value="delivery_status">Delivery status</SelectItem>
+                  <SelectItem value="courier_code">Courier</SelectItem>
                   <SelectItem value="customer_city">Customer city</SelectItem>
                   <SelectItem value="product_name">Product name</SelectItem>
                   <SelectItem value="quantity">Quantity</SelectItem>
@@ -1300,7 +1311,18 @@ function NodeInspector({
             </div>
             <div className="space-y-2">
               <Label className="text-xs">Value</Label>
-              <Input value={node.data.value ?? ""} onChange={(e) => onChange({ value: e.target.value })} />
+              {node.data.field === "courier_code" ? (
+                <Select value={node.data.value ?? ""} onValueChange={(v) => onChange({ value: v })}>
+                  <SelectTrigger><SelectValue placeholder="Pick a courier" /></SelectTrigger>
+                  <SelectContent>
+                    {couriers.map((c: any) => (
+                      <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={node.data.value ?? ""} onChange={(e) => onChange({ value: e.target.value })} />
+              )}
             </div>
           </>
         )}

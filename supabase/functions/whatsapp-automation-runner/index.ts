@@ -416,20 +416,30 @@ async function ensureConversation(order: any, normalizedPhone: string) {
 }
 
 function evaluateCondition(node: FlowNode, ctx: { order: any }) {
-  const { field, op, value } = node.data ?? {};
+  // The builder UI saves the operator under `operator` (e.g. "equals",
+  // "not_equals"); `op` is kept as a legacy alias so any hand-crafted
+  // automations using the old short codes ("eq"/"neq") still work.
+  const { field, op, operator, value } = node.data ?? {};
   const fv = field ? (ctx.order?.[field] ?? null) : null;
   const v = value ?? "";
   const fvStr = fv == null ? "" : String(fv);
-  switch (op) {
+  const fvNum = fv == null || fv === "" ? NaN : Number(fv);
+  const vNum = Number(v);
+  switch (operator ?? op) {
     case "eq":
     case "equals":
       return fvStr === String(v);
     case "neq":
+    case "not_equals":
       return fvStr !== String(v);
     case "contains":
       return fvStr.toLowerCase().includes(String(v).toLowerCase());
     case "in":
       return String(v).split(",").map((s) => s.trim()).includes(fvStr);
+    case "greater_than":
+      return !Number.isNaN(fvNum) && !Number.isNaN(vNum) && fvNum > vNum;
+    case "less_than":
+      return !Number.isNaN(fvNum) && !Number.isNaN(vNum) && fvNum < vNum;
     default:
       return Boolean(fv);
   }
@@ -475,19 +485,25 @@ async function executeFlow(args: {
     }
   }
 
-  // Tracking number lives on `shipments`, not `orders` — look up the latest
-  // shipment for this order so templates can reference {{tracking_number}}.
+  // Tracking number and courier live on `shipments`, not `orders` — look up
+  // the latest shipment for this order so templates can reference
+  // {{tracking_number}} and "condition" nodes can branch on courier_code.
   let trackingNumber = "";
+  let courierCode = "";
   if (order?.id) {
     const { data: shipment } = await admin
       .from("shipments")
-      .select("tracking_number")
+      .select("tracking_number, carriers(code)")
       .eq("order_uuid", order.id)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     trackingNumber = shipment?.tracking_number ?? "";
+    courierCode = (shipment as any)?.carriers?.code ?? "";
   }
+  // Condition nodes read from this order+courier merged view, not from
+  // `order` directly — courier_code isn't a real orders column.
+  const orderForConditions = order ? { ...order, courier_code: courierCode } : order;
 
   const vars = {
     customer_name: order?.customer_name ?? "",
@@ -784,7 +800,7 @@ async function executeFlow(args: {
         }
         currentId = findNextNode(edges, node.id)?.target ?? null;
       } else if (node.type === "condition") {
-        const branch = evaluateCondition(node, { order }) ? "true" : "false";
+        const branch = evaluateCondition(node, { order: orderForConditions }) ? "true" : "false";
         await appendLog(runId, { type: "condition", node_id: node.id, branch });
         currentId = findNextNode(edges, node.id, branch)?.target ?? null;
       } else if (node.type === "add_tag" || node.type === "remove_tag") {
