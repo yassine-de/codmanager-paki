@@ -47,6 +47,22 @@ interface TrackingPayload {
   cityName?: string;
   transactionNotes?: string;
   transactionStatusHistory?: TrackingEvent[];
+  tracking_Details?: Array<{
+    ConsignmentNumber?: string;
+    OrderId?: string;
+    OriginCity?: string;
+    BookingDate?: string;
+    CODAmount?: number | string | null;
+    ConsigneeName?: string;
+    DestinationCity?: string;
+    CNTrackingDetail?: Array<{
+      TrackingStatus?: string;
+      TrackingTagID?: string | number;
+      TransactionTime?: string;
+      Location?: string;
+      TrackingNarration?: string;
+    }>;
+  }>;
 }
 
 async function getFunctionErrorMessage(error: any) {
@@ -109,19 +125,31 @@ export default function CarrierTrackingModal({ carrierOrderId, systemId, sellerI
   }, [open, carrierOrderId]);
 
   const view = useMemo(() => {
-    const trackingNumber = payload?.trackingNumber || payload?.consigment_no || String(carrierOrderId || "");
-    const currentStatus = payload?.transactionStatus || payload?.status || "-";
-    const orderDate = payload?.transactionDate || payload?.order_date || payload?.orderPickupDate || "-";
-    const customerName = payload?.customerName || payload?.consignee_name || "-";
-    const codAmount = payload?.invoicePayment ?? payload?.cod_amount;
+    const mnpDetail = Array.isArray(payload?.tracking_Details) ? payload.tracking_Details[0] : null;
+    const mnpEvents = Array.isArray(mnpDetail?.CNTrackingDetail) ? mnpDetail.CNTrackingDetail : [];
+    const mnpLatest = mnpEvents[0] || mnpEvents[mnpEvents.length - 1] || null;
+    const trackingNumber = payload?.trackingNumber || payload?.consigment_no || mnpDetail?.ConsignmentNumber || String(carrierOrderId || "");
+    const currentStatus = payload?.transactionStatus || payload?.status || mnpLatest?.TrackingStatus || "-";
+    const orderDate = payload?.transactionDate || payload?.order_date || payload?.orderPickupDate || mnpDetail?.BookingDate || "-";
+    const customerName = payload?.customerName || payload?.consignee_name || mnpDetail?.ConsigneeName || "-";
+    const codAmount = payload?.invoicePayment ?? payload?.cod_amount ?? mnpDetail?.CODAmount;
     const location = payload?.origin || payload?.destination
       ? `${payload?.origin || "?"} -> ${payload?.destination || "?"}`
-      : payload?.cityName || "-";
-    const events = (payload?.transactionStatusHistory || payload?.detail || []).map((event) => ({
+      : mnpDetail?.OriginCity || mnpDetail?.DestinationCity
+        ? `${mnpDetail?.OriginCity || "?"} -> ${mnpDetail?.DestinationCity || "?"}`
+        : payload?.cityName || "-";
+    const standardEvents = (payload?.transactionStatusHistory || payload?.detail || []).map((event) => ({
       status: event.transactionStatusMessage || event.status || "-",
       code: event.transactionStatusMessageCode ? String(event.transactionStatusMessageCode) : "",
       dateTime: formatTrackingDate(event.updatedAt || event.transactionStatusDate || event.dateTime || event.createdAt),
     }));
+    const carrierEvents = mnpEvents.map((event) => ({
+      status: event.TrackingStatus || "-",
+      code: event.TrackingTagID ? String(event.TrackingTagID) : "",
+      dateTime: formatTrackingDate(event.TransactionTime),
+      note: event.TrackingNarration || "",
+    }));
+    const events = carrierEvents.length > 0 ? carrierEvents : standardEvents;
 
     return {
       trackingNumber,

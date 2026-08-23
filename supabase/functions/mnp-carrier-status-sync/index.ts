@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const MNP_API_BASE = Deno.env.get("MNP_API_BASE") || "https://mnpcourier.com/mycodapi/api";
+const MNP_TRACKING_BASE = Deno.env.get("MNP_TRACKING_BASE") || "https://tracking.mulphilog.com.pk/api";
 const CARRIER_CODE = "mnp";
 
 function getSupabaseAdmin() {
@@ -17,12 +17,9 @@ async function getMnpConfig(supabase: ReturnType<typeof createClient>) {
   const { data: settings } = await supabase
     .from("app_settings")
     .select("key,value")
-    .in("key", ["mnp_username", "mnp_password", "mnp_account_no", "carrier_sync_enabled"]);
+    .in("key", ["carrier_sync_enabled"]);
   const byKey = Object.fromEntries((settings || []).map((s: any) => [s.key, s.value]));
   return {
-    username: byKey.mnp_username || Deno.env.get("MNP_USERNAME") || "",
-    password: byKey.mnp_password || Deno.env.get("MNP_PASSWORD") || "",
-    accountNo: byKey.mnp_account_no || Deno.env.get("MNP_ACCOUNT_NO") || "",
     enabled: byKey.carrier_sync_enabled !== "false",
   };
 }
@@ -73,8 +70,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (!cfg.username || !cfg.password || !cfg.accountNo) throw new Error("M&P config missing");
-
     const { data: carrier, error: carrierError } = await supabase
       .from("carriers")
       .select("id")
@@ -99,91 +94,101 @@ Deno.serve(async (req) => {
       .limit(200);
     if (error) throw error;
 
-    const trackingNumbers = [...new Set((shipments || []).map((s: any) => s.tracking_number || s.carrier_order_id).filter(Boolean))].slice(0, 200);
-    if (trackingNumbers.length === 0) {
+    if ((shipments || []).length === 0) {
       return new Response(JSON.stringify({ synced: 0, message: "No M&P shipments to sync" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const res = await fetch(`${MNP_API_BASE}/Tracking/Bulk_Consignment_Tracking_New`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        Username: cfg.username,
-        Password: cfg.password,
-        AccountNo: cfg.accountNo,
-        Consignments: trackingNumbers,
-      }),
-    });
-    const data = await res.json();
-    const trackingRoot = Array.isArray(data) ? data[0] : data;
-    if (!res.ok || String(trackingRoot?.isSuccess).toLowerCase() !== "true") {
-      throw new Error(`M&P bulk tracking failed: ${JSON.stringify(data).substring(0, 500)}`);
-    }
-
-    const shipmentByTracking = new Map((shipments || []).map((s: any) => [String(s.tracking_number || s.carrier_order_id), s]));
     const results: any[] = [];
-    const now = new Date().toISOString();
 
-    for (const detail of trackingRoot?.tracking_Details || []) {
-      const consignment = String(detail.ConsignmentNumber || "");
-      const shipment = shipmentByTracking.get(consignment);
-      if (!shipment) continue;
-      const events = Array.isArray(detail.CNTrackingDetail) ? detail.CNTrackingDetail : [];
-      const latest = events[events.length - 1] || {};
-      const statusText = latest.TrackingStatus || detail.DeliveryStatus || "Booked";
-      const normalized = normalizeStatus(statusText);
-      const deliveryStatus = mapDeliveryStatus(normalized, shipment.orders?.delivery_status);
-
-      await supabase.from("shipments").update({
-        carrier_status: statusText,
-        normalized_status: normalized,
-        sync_status: "synced",
-        sync_error: null,
-        last_synced_at: now,
-        raw_tracking_response: detail,
-      }).eq("id", shipment.id);
-
-      for (const event of events) {
-        await supabase.from("shipment_events").insert({
-          shipment_id: shipment.id,
-          carrier_status: event.TrackingStatus || statusText,
-          normalized_status: normalizeStatus(event.TrackingStatus || statusText),
-          location: event.Location || null,
-          raw_event: event,
-          occurred_at: parseMnpTime(event.TransactionTime) || now,
-        });
-      }
-
-      if (deliveryStatus !== shipment.orders?.delivery_status) {
-        const orderUpdate: Record<string, unknown> = {
-          delivery_status: deliveryStatus,
-          shipping_status: statusText,
-          updated_at: now,
-        };
-        if (deliveryStatus === "delivered") orderUpdate.delivered_at = now;
-        if (shipment.orders?.delivery_status === "delivered" && !["delivered", "paid"].includes(deliveryStatus)) {
-          orderUpdate.delivered_at = null;
+    async function processShipment(shipment: any) {
+      const consignment = String(shipment.tracking_number || shipment.carrier_order_id || "").trim();
+      const now = new Date().toISOString();
+      try {
+        if (!consignment) throw new Error("Missing M&P tracking number");
+        const res = await fetch(`${MNP_TRACKING_BASE}/CNTracking?consignment=${encodeURIComponent(consignment)}&id=4`);
+        const text = await res.text();
+        let data: any;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { raw: text };
         }
-        if (shouldSetShippedAt(deliveryStatus)) orderUpdate.shipped_at = shipment.orders?.shipped_at || now;
-        await supabase.from("orders").update(orderUpdate).eq("id", shipment.order_uuid);
+        const trackingRoot = Array.isArray(data) ? data[0] : data;
+        if (!res.ok || String(trackingRoot?.isSuccess).toLowerCase() !== "true") {
+          throw new Error(trackingRoot?.message || `M&P tracking failed: ${JSON.stringify(data).substring(0, 300)}`);
+        }
 
-        await supabase.from("order_history").insert({
-          order_id: shipment.order_id,
-          field_changed: "delivery_status",
-          old_value: shipment.orders?.delivery_status,
-          new_value: deliveryStatus,
-          changed_by: "00000000-0000-0000-0000-000000000000",
-          changed_by_role: "system",
-          action_type: "carrier_status_sync",
-          created_at: now,
-        });
+        const detail = Array.isArray(trackingRoot?.tracking_Details) ? trackingRoot.tracking_Details[0] : null;
+        const events = Array.isArray(detail?.CNTrackingDetail) ? detail.CNTrackingDetail : [];
+        const latest = events[0] || events[events.length - 1] || {};
+        const statusText = latest.TrackingStatus || detail?.DeliveryStatus || "Booked";
+        const normalized = normalizeStatus(statusText);
+        const deliveryStatus = mapDeliveryStatus(normalized, shipment.orders?.delivery_status);
+
+        await supabase.from("shipments").update({
+          carrier_status: statusText,
+          normalized_status: normalized,
+          sync_status: "synced",
+          sync_error: null,
+          last_synced_at: now,
+          raw_tracking_response: data,
+        }).eq("id", shipment.id);
+
+        for (const event of events) {
+          await supabase.from("shipment_events").insert({
+            shipment_id: shipment.id,
+            carrier_status: event.TrackingStatus || statusText,
+            normalized_status: normalizeStatus(event.TrackingStatus || statusText),
+            location: event.Location || null,
+            raw_event: event,
+            occurred_at: parseMnpTime(event.TransactionTime) || now,
+          });
+        }
+
+        if (deliveryStatus !== shipment.orders?.delivery_status) {
+          const orderUpdate: Record<string, unknown> = {
+            delivery_status: deliveryStatus,
+            shipping_status: statusText,
+            updated_at: now,
+          };
+          if (deliveryStatus === "delivered") orderUpdate.delivered_at = now;
+          if (shipment.orders?.delivery_status === "delivered" && !["delivered", "paid"].includes(deliveryStatus)) {
+            orderUpdate.delivered_at = null;
+          }
+          if (shouldSetShippedAt(deliveryStatus)) orderUpdate.shipped_at = shipment.orders?.shipped_at || now;
+          await supabase.from("orders").update(orderUpdate).eq("id", shipment.order_uuid);
+
+          await supabase.from("order_history").insert({
+            order_id: shipment.order_id,
+            field_changed: "delivery_status",
+            old_value: shipment.orders?.delivery_status,
+            new_value: deliveryStatus,
+            changed_by: "00000000-0000-0000-0000-000000000000",
+            changed_by_role: "system",
+            action_type: "carrier_status_sync",
+            created_at: now,
+          });
+        }
+
+        return { shipment_id: shipment.id, order_id: shipment.order_id, tracking_number: consignment, carrier_status: statusText, mapped_status: deliveryStatus, updated: true };
+      } catch (e) {
+        await supabase.from("shipments").update({
+          sync_status: "failed",
+          sync_error: (e as Error).message,
+          last_synced_at: now,
+        }).eq("id", shipment.id);
+        return { shipment_id: shipment.id, order_id: shipment.order_id, tracking_number: consignment, error: (e as Error).message };
       }
-
-      results.push({ shipment_id: shipment.id, order_id: shipment.order_id, carrier_status: statusText, mapped_status: deliveryStatus, updated: true });
     }
 
+    const batchSize = 10;
+    for (let i = 0; i < (shipments || []).length; i += batchSize) {
+      results.push(...await Promise.all(shipments.slice(i, i + batchSize).map(processShipment)));
+    }
+
+    const now = new Date().toISOString();
     await supabase.from("app_settings").upsert(
       { key: "mnp_last_status_sync", value: now, updated_at: now },
       { onConflict: "key" },
@@ -192,6 +197,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       synced: results.length,
       updated: results.filter((r) => r.updated).length,
+      errors: results.filter((r) => r.error).length,
       results,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {

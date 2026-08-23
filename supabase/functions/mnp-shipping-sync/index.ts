@@ -547,7 +547,7 @@ async function trackByConsignment(supabase: ReturnType<typeof createClient>, con
 
   const detail = Array.isArray(trackingRoot?.tracking_Details) ? trackingRoot.tracking_Details[0] : null;
   const events = Array.isArray(detail?.CNTrackingDetail) ? detail.CNTrackingDetail : [];
-  const latest = events[events.length - 1] || {};
+  const latest = events[0] || events[events.length - 1] || {};
   const statusText = latest.TrackingStatus || detail?.DeliveryStatus || "Booked";
   const normalized = normalizeStatus(statusText);
   const { data: shipment, error } = await supabase
