@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-24 09:25 - Adil
+Last manual update: 2026-08-24 09:51 - Adil
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-24 09:51 - Adil
+- Commit: `pending`
+- Area: Shipping / Carrier Routing
+- Change: Added additional M&P city aliases for highly likely spelling variants: `BUNER DISTRICT` -> `BUNER`, `BAHAWALNAGAR` -> `BAWALNAGAR`, `CHARSADDA` -> `CHARSADA`, `ABBOTTABAD` -> `ABOTTABAD`, `SWAT` -> `SWAT (MINGORA CITY)`, `DERA ISMAIL KHAN` -> `D.I. KHAN`, and `ABDUL HAKEEM` -> `ABDUL HAKIM /TULAMBA`.
+- Reason: These destinations appear to be supported by M&P under different spellings, so future orders should route to M&P instead of falling back to PostEx.
+- Notes: Migration `20260824095100_add_more_mnp_city_aliases.sql` was applied live to Supabase. Ambiguous cities such as `Kulachi`, `Bela`, `Jamshoro`, `MALAKAND`, `Digri`, `Minchinabad`, and `Turbat` were intentionally not mapped.
 
 ### 2026-08-24 09:25 - Adil
 - Commit: `978569d`
