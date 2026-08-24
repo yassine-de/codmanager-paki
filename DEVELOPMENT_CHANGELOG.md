@@ -4,6 +4,8 @@ Dieses Dokument ist fuer das Entwicklerteam gedacht. Es haelt fest, welche Aende
 
 Quelle fuer bestehende Eintraege: Git-Historie (`git log`). Zeiten sind lokale Zeiten aus der Entwicklerumgebung.
 
+Letzte manuelle Aktualisierung: 2026-08-24 08:30 - yassine-de
+
 ## Arbeitsregel
 
 Bei jeder relevanten Aenderung bitte einen Eintrag ergaenzen:
@@ -18,6 +20,13 @@ Bei jeder relevanten Aenderung bitte einen Eintrag ergaenzen:
 ```
 
 ## Aenderungen
+
+### 2026-08-24 08:30 - yassine-de
+- Commit: `9bb261b`
+- Bereich: Dokumentation / Team Workflow
+- Aenderung: `DEVELOPMENT_CHANGELOG.md` als Team-Changelog erstellt und mit bestehenden Git-Aenderungen befuellt.
+- Grund: Drei Entwickler sollen nachvollziehen koennen, wer wann welche Aenderungen ins Projekt gebracht hat.
+- Hinweis: Das Dokument wird nicht automatisch aktualisiert. Entwickler muessen es beim Pushen mitpflegen.
 
 ### 2026-08-23 15:22 - Adil
 - Commit: `966d044`
