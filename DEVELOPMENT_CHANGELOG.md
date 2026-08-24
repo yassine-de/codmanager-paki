@@ -22,7 +22,7 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-08-24 09:25 - Adil
-- Commit: `503cb9f`
+- Commit: `978569d`
 - Area: Shipping / Carrier Routing
 - Change: Added M&P city aliases for `DERA GHAZI KHAN` -> `D.G. KHAN` and `BAHAWALPUR` -> `BHAWALPUR`.
 - Reason: M&P supports these destinations under different spellings, so orders should route to M&P instead of falling back to PostEx.
