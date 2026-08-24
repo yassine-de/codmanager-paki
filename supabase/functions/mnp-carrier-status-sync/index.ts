@@ -25,7 +25,11 @@ async function getMnpConfig(supabase: ReturnType<typeof createClient>) {
 }
 
 function normalizeStatus(status?: string | null) {
-  const value = String(status || "").trim().toLowerCase();
+  const value = String(status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ");
   if (!value || value === "booked") return "booked";
   if (value.includes("return to shipper") || value === "returned" || value.includes("returned")) return "returned";
   if (value.includes("out for delivery")) return "out_for_delivery";
