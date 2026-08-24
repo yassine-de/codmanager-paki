@@ -4,7 +4,7 @@ Dieses Dokument ist fuer das Entwicklerteam gedacht. Es haelt fest, welche Aende
 
 Quelle fuer bestehende Eintraege: Git-Historie (`git log`). Zeiten sind lokale Zeiten aus der Entwicklerumgebung.
 
-Letzte manuelle Aktualisierung: 2026-08-24 08:30 - yassine-de
+Letzte manuelle Aktualisierung: 2026-08-24 08:30 - Adil
 
 ## Arbeitsregel
 
@@ -21,7 +21,7 @@ Bei jeder relevanten Aenderung bitte einen Eintrag ergaenzen:
 
 ## Aenderungen
 
-### 2026-08-24 08:30 - yassine-de
+### 2026-08-24 08:30 - Adil
 - Commit: `9bb261b`
 - Bereich: Dokumentation / Team Workflow
 - Aenderung: `DEVELOPMENT_CHANGELOG.md` als Team-Changelog erstellt und mit bestehenden Git-Aenderungen befuellt.
@@ -103,27 +103,27 @@ Bei jeder relevanten Aenderung bitte einen Eintrag ergaenzen:
 - Bereich: M&P Tracking
 - Aenderung: Fehlerbehandlung fuer M&P Tracking verbessert.
 
-### 2026-08-21 17:45 - yassine-de
+### 2026-08-21 17:45 - Adil
 - Commit: `f09682e`
 - Bereich: Shipping Router
 - Aenderung: Carrier-Fallback-Routing ergaenzt. Wenn der aktive Carrier eine Stadt nicht abdeckt, kann auf PostEx ausgewichen werden.
 
-### 2026-08-21 17:31 - yassine-de
+### 2026-08-21 17:31 - Adil
 - Commit: `4c13eac`
 - Bereich: Shipping
 - Aenderung: M&P Carrier Routing in `main` gemerged.
 
-### 2026-08-21 17:24 - yassine-de
+### 2026-08-21 17:24 - Adil
 - Commit: `aac0e20`
 - Bereich: Settings / Carriers
 - Aenderung: Konfigurationsseite fuer Carrier Routing hinzugefuegt.
 
-### 2026-08-21 17:13 - yassine-de
+### 2026-08-21 17:13 - Adil
 - Commit: `a85b850`
 - Bereich: M&P Tracking
 - Aenderung: Parsing der M&P Tracking Response korrigiert.
 
-### 2026-08-21 17:11 - yassine-de
+### 2026-08-21 17:11 - Adil
 - Commit: `fee9ca3`
 - Bereich: M&P Cities
 - Aenderung: Parsing der M&P City Response korrigiert.
@@ -138,12 +138,12 @@ Bei jeder relevanten Aenderung bitte einen Eintrag ergaenzen:
 - Bereich: Analytics / Dashboard
 - Aenderung: Confirmation Analytics Attribution, Handling-Time-Metrik und My Dashboard Claimed Orders korrigiert.
 
-### 2026-08-21 09:26 - yassine-de
+### 2026-08-21 09:26 - Adil
 - Commit: `e7eb0e9`
 - Bereich: Shipping
 - Aenderung: Vorherige M&P Carrier Routing und Label-Aenderung zurueckgesetzt.
 
-### 2026-08-21 09:25 - yassine-de
+### 2026-08-21 09:25 - Adil
 - Commit: `eacf482`
 - Bereich: Shipping
 - Aenderung: M&P Carrier Routing und Labels hinzugefuegt.
