@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-24 10:26 - Adil
+Last manual update: 2026-08-24 13:45 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-24 13:45 - Anwar Bounasser
+- Commit: `6c95264`
+- Area: Warehouse
+- Change: Added a product filter and row selection to the Out of Stock tab, plus a "Print list" action that opens a printable customer contact sheet (order, customer name, phone, city, address, product, quantity, amount) for the selected orders.
+- Reason: When a product runs out of stock for multiple orders at once, the warehouse team needs to hand confirmation agents a list of affected customers so they can re-confirm the order before a restock happens.
+- Notes: No migration or deploy needed — frontend-only change.
 
 ### 2026-08-24 10:26 - Adil
 - Commit: `fe29c04`
