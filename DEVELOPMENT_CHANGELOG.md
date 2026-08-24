@@ -22,7 +22,7 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-08-24 09:51 - Adil
-- Commit: `pending`
+- Commit: `fbefd99`
 - Area: Shipping / Carrier Routing
 - Change: Added additional M&P city aliases for highly likely spelling variants: `BUNER DISTRICT` -> `BUNER`, `BAHAWALNAGAR` -> `BAWALNAGAR`, `CHARSADDA` -> `CHARSADA`, `ABBOTTABAD` -> `ABOTTABAD`, `SWAT` -> `SWAT (MINGORA CITY)`, `DERA ISMAIL KHAN` -> `D.I. KHAN`, and `ABDUL HAKEEM` -> `ABDUL HAKIM /TULAMBA`.
 - Reason: These destinations appear to be supported by M&P under different spellings, so future orders should route to M&P instead of falling back to PostEx.
