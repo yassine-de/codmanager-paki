@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-24 09:56 - Adil
+Last manual update: 2026-08-24 10:26 - Adil
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-24 10:26 - Adil
+- Commit: `pending`
+- Area: Shipping / M&P City Aliases
+- Change: Updated the M&P city sync to preserve existing city aliases during cache refreshes and restored all M&P aliases with carrier-scoped SQL.
+- Reason: The M&P city refresh deletes and reloads the cache; without preserving aliases, manual mappings disappear after a refresh.
+- Notes: Migration `20260824100500_restore_mnp_aliases_scoped.sql` was applied live to Supabase and `mnp-shipping-sync` was deployed. The scoped migration also removes these M&P aliases from non-M&P carrier cache rows.
 
 ### 2026-08-24 09:56 - Adil
 - Commit: `db700ab`

@@ -86,6 +86,10 @@ function normalizePhone(phone?: string | null) {
   return digits || "03000000000";
 }
 
+function normalizeCarrierCity(city?: string | null) {
+  return String(city || "").trim().toLowerCase().replace(/\s+/g, "");
+}
+
 function normalizeStatus(status?: string | null) {
   const value = String(status || "")
     .trim()
@@ -356,6 +360,18 @@ async function getCities(supabase: ReturnType<typeof createClient>) {
     : Array.isArray(data?.[0]?.City)
       ? data[0].City
       : [];
+
+  const { data: existingCities, error: existingCitiesError } = await supabase
+    .from("carrier_city_cache")
+    .select("city_name,aliases")
+    .eq("carrier_id", carrier.id);
+  if (existingCitiesError) throw existingCitiesError;
+  const aliasesByCity = new Map<string, string[]>();
+  for (const existingCity of existingCities || []) {
+    const aliases = Array.isArray(existingCity.aliases) ? existingCity.aliases.filter(Boolean) : [];
+    if (aliases.length > 0) aliasesByCity.set(normalizeCarrierCity(existingCity.city_name), aliases);
+  }
+
   const rows = cityList.map((city: string) => ({
     carrier_id: carrier.id,
     carrier_city_id: city,
@@ -364,6 +380,7 @@ async function getCities(supabase: ReturnType<typeof createClient>) {
     country_name: "Pakistan",
     is_pickup_city: null,
     is_delivery_city: true,
+    aliases: aliasesByCity.get(normalizeCarrierCity(city)) || [],
     cached_at: new Date().toISOString(),
   })).filter((row: any) => row.city_name);
 
@@ -396,10 +413,11 @@ async function createShipment(supabase: ReturnType<typeof createClient>, order: 
   const cfg = await getMnpConfig(supabase);
   const cities = await getCities(supabase);
   const rawCity = String(order.customer_city || "").trim().toLowerCase();
-  const stripped = rawCity.replace(/\s+/g, "");
+  const stripped = normalizeCarrierCity(rawCity);
   const matchedCity =
     cities.find((c: any) => String(c.city_name || "").trim().toLowerCase() === rawCity) ||
-    cities.find((c: any) => String(c.city_name || "").trim().toLowerCase().replace(/\s+/g, "") === stripped);
+    cities.find((c: any) => normalizeCarrierCity(c.city_name) === stripped) ||
+    cities.find((c: any) => Array.isArray(c.aliases) && c.aliases.some((alias: string) => normalizeCarrierCity(alias) === stripped));
 
   if (!matchedCity) {
     const payload = {
