@@ -4,7 +4,7 @@ Dieses Dokument ist fuer das Entwicklerteam gedacht. Es haelt fest, welche Aende
 
 Quelle fuer bestehende Eintraege: Git-Historie (`git log`). Zeiten sind lokale Zeiten aus der Entwicklerumgebung.
 
-Letzte manuelle Aktualisierung: 2026-08-24 08:30 - Adil
+Letzte manuelle Aktualisierung: 2026-08-24 08:40 - Adil
 
 ## Arbeitsregel
 
@@ -20,6 +20,13 @@ Bei jeder relevanten Aenderung bitte einen Eintrag ergaenzen:
 ```
 
 ## Aenderungen
+
+### 2026-08-24 08:40 - Adil
+- Commit: `9c0a35b`
+- Bereich: M&P Shipping / Tracking
+- Aenderung: M&P Status `Out-For-Delivery` wird jetzt korrekt als `out_for_delivery` erkannt statt faelschlich als `delivered`.
+- Grund: M&P sendet den Status mit Bindestrichen. Die bisherige Normalisierung erkannte nur `out for delivery` mit Leerzeichen.
+- Hinweis: Functions `mnp-carrier-status-sync` und `mnp-shipping-sync` wurden deployed. Bestehende falsch gesetzte Orders werden beim naechsten M&P Status-Sync korrigiert.
 
 ### 2026-08-24 08:30 - Adil
 - Commit: `9bb261b`
