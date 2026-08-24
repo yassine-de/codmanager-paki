@@ -47,8 +47,24 @@ interface ShippingRule {
 }
 
 interface CarrierCity {
+  id: string;
   carrier_id: string;
   city_name: string;
+  aliases?: string[] | null;
+}
+
+interface UnmatchedCarrierCity {
+  id: string;
+  carrier_id: string;
+  fallback_carrier_id: string | null;
+  input_city: string;
+  normalized_city: string;
+  reason: string | null;
+  last_order_id: string | null;
+  last_system_id: number | null;
+  occurrence_count: number;
+  status: string;
+  last_seen_at: string;
 }
 
 const emptyCarrier = {
@@ -105,6 +121,7 @@ export default function CarrierManagement() {
     requires_tracking: true,
     criteria: ruleTemplates.city,
   });
+  const [aliasTargets, setAliasTargets] = useState<Record<string, string>>({});
 
   const { data: carriers = [], isLoading: loadingCarriers } = useQuery({
     queryKey: ["carrier-management-carriers"],
@@ -150,11 +167,25 @@ export default function CarrierManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("carrier_city_cache" as any)
-        .select("carrier_id, city_name")
+        .select("id, carrier_id, city_name, aliases")
         .order("city_name", { ascending: true })
         .limit(2500);
       if (error) throw error;
       return (data || []) as CarrierCity[];
+    },
+  });
+
+  const { data: unmatchedCities = [], isLoading: loadingUnmatched } = useQuery({
+    queryKey: ["carrier-management-unmatched-cities"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("carrier_city_unmatched" as any)
+        .select("*")
+        .eq("status", "open")
+        .order("last_seen_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return (data || []) as UnmatchedCarrierCity[];
     },
   });
 
@@ -204,6 +235,7 @@ export default function CarrierManagement() {
     queryClient.invalidateQueries({ queryKey: ["carrier-management-rules"] });
     queryClient.invalidateQueries({ queryKey: ["carrier-management-active-carrier"] });
     queryClient.invalidateQueries({ queryKey: ["carrier-management-city-coverage"] });
+    queryClient.invalidateQueries({ queryKey: ["carrier-management-unmatched-cities"] });
   };
 
   const updateCarrier = async (id: string, patch: Partial<Carrier>) => {
@@ -319,6 +351,54 @@ export default function CarrierManagement() {
       return;
     }
     toast.success("Rule deleted");
+    refresh();
+  };
+
+  const addCityAlias = async (unmatched: UnmatchedCarrierCity) => {
+    const targetCityId = aliasTargets[unmatched.id];
+    if (!targetCityId) {
+      toast.error("Select a carrier city first");
+      return;
+    }
+
+    const targetCity = cityRows.find((row) => row.id === targetCityId);
+    if (!targetCity) {
+      toast.error("Selected carrier city was not found");
+      return;
+    }
+
+    const existingAliases = Array.isArray(targetCity.aliases) ? targetCity.aliases : [];
+    const nextAliases = Array.from(new Set([...existingAliases, unmatched.input_city.trim()].filter(Boolean)));
+    const { error: aliasError } = await supabase
+      .from("carrier_city_cache" as any)
+      .update({ aliases: nextAliases, cached_at: new Date().toISOString() })
+      .eq("id", targetCity.id);
+    if (aliasError) {
+      toast.error(aliasError.message);
+      return;
+    }
+
+    const { data: userResult } = await supabase.auth.getUser();
+    const { error: unmatchedError } = await supabase
+      .from("carrier_city_unmatched" as any)
+      .update({
+        status: "resolved",
+        resolved_by: userResult?.user?.id || null,
+        resolved_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", unmatched.id);
+    if (unmatchedError) {
+      toast.error(unmatchedError.message);
+      return;
+    }
+
+    toast.success(`Alias added: ${unmatched.input_city} -> ${targetCity.city_name}`);
+    setAliasTargets((current) => {
+      const next = { ...current };
+      delete next[unmatched.id];
+      return next;
+    });
     refresh();
   };
 
@@ -659,6 +739,71 @@ export default function CarrierManagement() {
         </TabsContent>
 
         <TabsContent value="safety" className="space-y-4">
+          <Card className="border-border/60">
+            <CardHeader className="py-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <MapPin className="h-4 w-4 text-primary" />
+                Unmatched Carrier Cities
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="h-9 text-xs">Input City</TableHead>
+                    <TableHead className="h-9 text-xs">Carrier</TableHead>
+                    <TableHead className="h-9 text-xs">Fallback</TableHead>
+                    <TableHead className="h-9 text-xs">Last Order</TableHead>
+                    <TableHead className="h-9 text-xs">Count</TableHead>
+                    <TableHead className="h-9 text-xs">Add Alias To</TableHead>
+                    <TableHead className="h-9 w-24 text-xs"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingUnmatched ? (
+                    <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground">Loading unmatched cities...</TableCell></TableRow>
+                  ) : unmatchedCities.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground">No unmatched city fallbacks right now.</TableCell></TableRow>
+                  ) : unmatchedCities.map((row) => {
+                    const carrier = carrierById.get(row.carrier_id);
+                    const fallbackCarrier = row.fallback_carrier_id ? carrierById.get(row.fallback_carrier_id) : null;
+                    const carrierCities = cityRows.filter((city) => city.carrier_id === row.carrier_id);
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <div className="text-sm font-medium">{row.input_city}</div>
+                          {row.reason && <div className="text-[11px] text-muted-foreground">{row.reason}</div>}
+                        </TableCell>
+                        <TableCell className="text-sm">{carrier?.name || row.carrier_id}</TableCell>
+                        <TableCell className="text-sm">{fallbackCarrier?.name || "-"}</TableCell>
+                        <TableCell className="text-xs">
+                          {row.last_order_id || "-"}
+                          {row.last_system_id ? <span className="ml-1 text-muted-foreground">#{row.last_system_id}</span> : null}
+                        </TableCell>
+                        <TableCell className="text-sm">{row.occurrence_count}</TableCell>
+                        <TableCell>
+                          <Select value={aliasTargets[row.id] || ""} onValueChange={(value) => setAliasTargets((current) => ({ ...current, [row.id]: value }))}>
+                            <SelectTrigger className="h-8 min-w-[190px] text-xs"><SelectValue placeholder="Select carrier city" /></SelectTrigger>
+                            <SelectContent>
+                              {carrierCities.map((city) => (
+                                <SelectItem key={city.id} value={city.id}>{city.city_name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => addCityAlias(row)}>
+                            Add alias
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
           <Card className="border-border/60">
             <CardHeader className="py-3">
               <CardTitle className="flex items-center gap-2 text-sm">

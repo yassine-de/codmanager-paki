@@ -34,7 +34,9 @@ function normalizeCity(value?: string | null) {
   return String(value || "")
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "");
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function isCityCoverageError(data: any) {
@@ -55,14 +57,14 @@ async function getCarrier(supabase: ReturnType<typeof createClient>, code: strin
 async function getOrderForSync(supabase: ReturnType<typeof createClient>, orderIdOrDbId: string) {
   let { data: order, error } = await supabase
     .from("orders")
-    .select("id, order_id, customer_city")
+    .select("id, system_id, order_id, customer_city")
     .eq("id", orderIdOrDbId)
     .maybeSingle();
 
   if (error || !order) {
     const result = await supabase
       .from("orders")
-      .select("id, order_id, customer_city")
+      .select("id, system_id, order_id, customer_city")
       .eq("order_id", orderIdOrDbId)
       .maybeSingle();
     if (result.error) throw result.error;
@@ -78,17 +80,73 @@ async function carrierCoversCity(supabase: ReturnType<typeof createClient>, carr
 
   const { data, error } = await supabase
     .from("carrier_city_cache")
-    .select("city_name,is_delivery_city")
+    .select("id,city_name,is_delivery_city,aliases")
     .eq("carrier_id", carrierId)
     .or("is_delivery_city.is.true,is_delivery_city.is.null")
     .limit(2000);
   if (error) throw error;
 
-  const covered = (data || []).some((row: any) => normalizeCity(row.city_name) === wanted);
+  const match = (data || []).find((row: any) => {
+    const aliases = Array.isArray(row.aliases) ? row.aliases : [];
+    return normalizeCity(row.city_name) === wanted || aliases.some((alias: string) => normalizeCity(alias) === wanted);
+  });
   return {
-    covered,
-    reason: covered ? null : `Carrier does not cover city "${city}"`,
+    covered: Boolean(match),
+    matchedCity: match?.city_name || null,
+    reason: match ? null : `Carrier does not cover city "${city}"`,
   };
+}
+
+async function logUnmatchedCity(
+  supabase: ReturnType<typeof createClient>,
+  params: {
+    carrierId: string;
+    fallbackCarrierCode?: string;
+    inputCity?: string | null;
+    reason?: string | null;
+    order?: any;
+  },
+) {
+  const normalized = normalizeCity(params.inputCity);
+  if (!params.carrierId || !normalized) return;
+
+  let fallbackCarrierId: string | null = null;
+  if (params.fallbackCarrierCode) {
+    const fallback = await getCarrier(supabase, params.fallbackCarrierCode);
+    fallbackCarrierId = fallback?.id || null;
+  }
+
+  const now = new Date().toISOString();
+  const { data: existing, error: existingError } = await supabase
+    .from("carrier_city_unmatched")
+    .select("id,occurrence_count")
+    .eq("carrier_id", params.carrierId)
+    .eq("normalized_city", normalized)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  const payload = {
+    carrier_id: params.carrierId,
+    fallback_carrier_id: fallbackCarrierId,
+    input_city: String(params.inputCity || "").trim(),
+    normalized_city: normalized,
+    reason: params.reason || null,
+    last_order_uuid: params.order?.id || null,
+    last_order_id: params.order?.order_id || null,
+    last_system_id: params.order?.system_id || null,
+    status: "open",
+    last_seen_at: now,
+    updated_at: now,
+  };
+
+  if (existing) {
+    await supabase
+      .from("carrier_city_unmatched")
+      .update({ ...payload, occurrence_count: Number(existing.occurrence_count || 0) + 1 })
+      .eq("id", existing.id);
+  } else {
+    await supabase.from("carrier_city_unmatched").insert({ ...payload, occurrence_count: 1, created_at: now });
+  }
 }
 
 async function getShipmentCarrierCodes(supabase: ReturnType<typeof createClient>, trackingNumbers: string[]) {
@@ -138,6 +196,13 @@ async function resolveCarrierForBody(supabase: ReturnType<typeof createClient>, 
 
     const coverage = await carrierCoversCity(supabase, active.id, order.customer_city);
     if (!coverage.covered) {
+      await logUnmatchedCity(supabase, {
+        carrierId: active.id,
+        fallbackCarrierCode: FALLBACK_CARRIER_CODE,
+        inputCity: order.customer_city,
+        reason: coverage.reason,
+        order,
+      });
       return {
         carrierCode: FALLBACK_CARRIER_CODE,
         fallbackUsed: true,

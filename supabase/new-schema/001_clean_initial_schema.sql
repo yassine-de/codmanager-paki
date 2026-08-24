@@ -2110,6 +2110,26 @@ CREATE TABLE public.carrier_city_cache (
 CREATE UNIQUE INDEX carrier_city_cache_carrier_city_unique
   ON public.carrier_city_cache(carrier_id, lower(city_name));
 
+CREATE TABLE public.carrier_city_unmatched (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  carrier_id uuid NOT NULL REFERENCES public.carriers(id) ON DELETE CASCADE,
+  fallback_carrier_id uuid REFERENCES public.carriers(id) ON DELETE SET NULL,
+  input_city text NOT NULL,
+  normalized_city text NOT NULL,
+  reason text,
+  last_order_uuid uuid REFERENCES public.orders(id) ON DELETE SET NULL,
+  last_order_id text,
+  last_system_id bigint,
+  occurrence_count integer NOT NULL DEFAULT 1,
+  status text NOT NULL DEFAULT 'open',
+  resolved_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  resolved_at timestamptz,
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (carrier_id, normalized_city)
+);
+
 CREATE TABLE public.carrier_pickup_addresses (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   carrier_id uuid NOT NULL REFERENCES public.carriers(id) ON DELETE CASCADE,
@@ -3659,6 +3679,8 @@ CREATE INDEX idx_integration_sheets_seller ON public.integration_sheets(seller_i
 CREATE INDEX idx_integration_errors_sheet_created ON public.integration_errors(sheet_id, created_at DESC);
 CREATE INDEX idx_carriers_enabled_priority ON public.carriers(enabled, priority, code);
 CREATE INDEX idx_carrier_city_cache_name_trgm ON public.carrier_city_cache USING gin (city_name gin_trgm_ops);
+CREATE INDEX idx_carrier_city_unmatched_status_seen ON public.carrier_city_unmatched(status, last_seen_at DESC);
+CREATE INDEX idx_carrier_city_unmatched_carrier ON public.carrier_city_unmatched(carrier_id, status, last_seen_at DESC);
 CREATE INDEX idx_shipping_rules_active_priority ON public.shipping_rules(enabled, priority);
 CREATE INDEX idx_shipments_order_created ON public.shipments(order_uuid, created_at DESC);
 CREATE INDEX idx_shipments_carrier_created ON public.shipments(carrier_id, created_at DESC);
@@ -3728,7 +3750,7 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[
     'profiles','products','product_variants','sourcing_requests','orders',
     'order_follow_ups','integration_sheets','carriers','carrier_accounts',
-    'carrier_pickup_addresses','shipping_rules','shipments','shipment_labels',
+    'carrier_city_unmatched','carrier_pickup_addresses','shipping_rules','shipments','shipment_labels',
     'shipment_payments','fulfillment_batches','fulfillment_items',
     'inventory_locations','whatsapp_settings','whatsapp_templates',
     'whatsapp_conversations','whatsapp_automations','whatsapp_campaigns',
