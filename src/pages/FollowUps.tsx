@@ -302,6 +302,7 @@ export default function FollowUps() {
   const [segment, setSegment]           = useState<Segment>("all");
   const [search, setSearch]             = useState("");
   const [filterDelivery, setFilterDelivery]     = useState<string>("all");
+  const [filterCourier, setFilterCourier]       = useState<string>("all");
   const [filterSubStatus, setFilterSubStatus]   = useState<string>("all");
   const [filterSeller, setFilterSeller]         = useState<string>("all");
   const [filterAgent, setFilterAgent]           = useState<string>("all");
@@ -420,17 +421,20 @@ export default function FollowUps() {
     const agents  = new Map<string, string>();
     const deliveries = new Set<string>();
     const postexSubStatuses = new Set<string>();
+    const couriers = new Set<string>();
     for (const r of enriched) {
       if (r.seller_id && r.seller_name) sellers.set(r.seller_id, r.seller_name);
       if (r.agent_id  && r.agent_name)  agents.set(r.agent_id,   r.agent_name);
       if (r.delivery_status) deliveries.add(r.delivery_status);
       if (r.shipping_status) postexSubStatuses.add(r.shipping_status);
+      if (r.shipping_company) couriers.add(r.shipping_company);
     }
     return {
       sellers:    Array.from(sellers.entries()).sort((a, b) => a[1].localeCompare(b[1])),
       agents:     Array.from(agents.entries()).sort((a, b) => a[1].localeCompare(b[1])),
       deliveries: Array.from(deliveries).sort(),
       postexSubStatuses: Array.from(postexSubStatuses).sort((a, b) => formatPostexSubStatus(a).localeCompare(formatPostexSubStatus(b))),
+      couriers:   Array.from(couriers).sort(),
     };
   }, [enriched]);
 
@@ -443,6 +447,7 @@ export default function FollowUps() {
       else if (r.segment !== segment) return false;
     }
     if (filterDelivery   !== "all" && r.delivery_status !== filterDelivery)   return false;
+    if (filterCourier    !== "all" && r.shipping_company !== filterCourier)   return false;
     if (filterSubStatus  !== "all" && r.shipping_status !== filterSubStatus)  return false;
     if (filterSeller     !== "all" && r.seller_id       !== filterSeller)     return false;
     if (filterAgent    !== "all" && r.agent_id        !== filterAgent)    return false;
@@ -486,7 +491,7 @@ export default function FollowUps() {
       if (!hay.includes(q)) return false;
     }
     return true;
-  }), [enriched, segment, filterDelivery, filterSubStatus, filterSeller, filterAgent, filterFollowUp, filterFollowUpAgent, filterDays, search, dateRange, dateField]);
+  }), [enriched, segment, filterDelivery, filterCourier, filterSubStatus, filterSeller, filterAgent, filterFollowUp, filterFollowUpAgent, filterDays, search, dateRange, dateField]);
 
   // Reset to page 1 whenever filtered result set changes
   useEffect(() => { setPage(1); }, [filtered]);
@@ -526,14 +531,14 @@ export default function FollowUps() {
   const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const activeFilterCount =
-    (segment !== "all" ? 1 : 0) + (filterDelivery !== "all" ? 1 : 0) +
+    (segment !== "all" ? 1 : 0) + (filterDelivery !== "all" ? 1 : 0) + (filterCourier !== "all" ? 1 : 0) +
     (filterSubStatus !== "all" ? 1 : 0) +
     (filterSeller !== "all" ? 1 : 0) + (filterAgent !== "all" ? 1 : 0) +
     (filterFollowUp !== "all" ? 1 : 0) + (filterFollowUpAgent !== "all" ? 1 : 0) + (filterDays !== "all" ? 1 : 0) +
     (dateRange?.from ? 1 : 0) + (search.trim() ? 1 : 0);
 
   function clearFilters() {
-    setSegment("all"); setFilterDelivery("all"); setFilterSubStatus("all"); setFilterSeller("all");
+    setSegment("all"); setFilterDelivery("all"); setFilterCourier("all"); setFilterSubStatus("all"); setFilterSeller("all");
     setFilterAgent("all"); setFilterFollowUp("all"); setFilterFollowUpAgent("all"); setFilterDays("all"); setSearch(""); setDateRange(undefined);
   }
 
@@ -793,6 +798,18 @@ export default function FollowUps() {
               <SelectItem value="all">All Delivery</SelectItem>
               {filterOptions.deliveries.map((d) => (
                 <SelectItem key={d} value={d}>{formatStatus(d)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterCourier} onValueChange={setFilterCourier}>
+            <SelectTrigger className="h-8 text-xs w-[140px]">
+              <SelectValue placeholder="Courier" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Couriers</SelectItem>
+              {filterOptions.couriers.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
               ))}
             </SelectContent>
           </Select>
