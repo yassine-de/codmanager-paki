@@ -74,6 +74,8 @@ interface FulfillmentRow {
   system_id: number | null;
   customer_name: string;
   customer_city: string;
+  customer_phone?: string | null;
+  customer_address?: string | null;
   total_amount: number;
   shipment_id: string;
   tracking_number: string | null;
@@ -438,6 +440,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
   const [outOfStockSearch, setOutOfStockSearch] = useState("");
   const [outOfStockCourierFilter, setOutOfStockCourierFilter] = useState("all");
+  const [outOfStockProductFilter, setOutOfStockProductFilter] = useState("all");
+  const [selectedOutOfStockIds, setSelectedOutOfStockIds] = useState<Set<string>>(new Set());
   const [restockingId, setRestockingId] = useState<string | null>(null);
 
   const [returnScan, setReturnScan] = useState("");
@@ -608,7 +612,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select("id, order_id, system_id, customer_name, customer_city, total_amount, product_name, quantity, updated_at, created_at, fulfillment_items(id, status), shipments(id, tracking_number, created_at, carriers(name))")
+        .select("id, order_id, system_id, customer_name, customer_city, customer_phone, customer_address, total_amount, product_name, quantity, updated_at, created_at, fulfillment_items(id, status), shipments(id, tracking_number, created_at, carriers(name))")
         .eq("delivery_status", "out_of_stock")
         .order("updated_at", { ascending: false })
         .limit(200);
@@ -626,6 +630,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
           system_id: row.system_id,
           customer_name: row.customer_name,
           customer_city: row.customer_city,
+          customer_phone: row.customer_phone || null,
+          customer_address: row.customer_address || null,
           total_amount: Number(row.total_amount || 0),
           shipment_id: latestShipment?.id || "",
           tracking_number: latestShipment?.tracking_number || null,
@@ -1029,6 +1035,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     const q = outOfStockSearch.trim().toLowerCase();
     return outOfStockRows.filter((row) => {
       if (outOfStockCourierFilter !== "all" && row.carrier_name !== outOfStockCourierFilter) return false;
+      if (outOfStockProductFilter !== "all" && row.product_name !== outOfStockProductFilter) return false;
       if (!q) return true;
       return [
         row.order_id,
@@ -1039,11 +1046,12 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         row.tracking_number || "",
       ].join(" ").toLowerCase().includes(q);
     });
-  }, [outOfStockRows, outOfStockSearch, outOfStockCourierFilter]);
+  }, [outOfStockRows, outOfStockSearch, outOfStockCourierFilter, outOfStockProductFilter]);
 
   const notPrintedCouriers = useMemo(() => Array.from(new Set(notPrintedRows.map((r) => r.carrier_name).filter(Boolean))).sort(), [notPrintedRows]);
   const readyCouriers = useMemo(() => Array.from(new Set(readyRows.map((r) => r.carrier_name).filter(Boolean))).sort(), [readyRows]);
   const outOfStockCouriers = useMemo(() => Array.from(new Set(outOfStockRows.map((r) => r.carrier_name).filter(Boolean))).sort(), [outOfStockRows]);
+  const outOfStockProducts = useMemo(() => Array.from(new Set(outOfStockRows.map((r) => r.product_name).filter(Boolean))).sort() as string[], [outOfStockRows]);
 
   const filteredHistory = useMemo(() => {
     const q = historySearch.trim().toLowerCase();
@@ -1644,6 +1652,96 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
       else selectableReadyRows.forEach((row) => next.add(row.fulfillment_item_id));
       return next;
     });
+  };
+
+  const selectableOutOfStockRows = useMemo(() => filteredOutOfStock.filter((row) => row.tracking_number), [filteredOutOfStock]);
+  const selectedOutOfStockRows = useMemo(
+    () => outOfStockRows.filter((row) => selectedOutOfStockIds.has(row.fulfillment_item_id) && row.tracking_number),
+    [outOfStockRows, selectedOutOfStockIds],
+  );
+  const allDisplayedOutOfStockSelected = selectableOutOfStockRows.length > 0
+    && selectableOutOfStockRows.every((row) => selectedOutOfStockIds.has(row.fulfillment_item_id));
+
+  const toggleOutOfStockRow = (rowId: string) => {
+    setSelectedOutOfStockIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  };
+
+  const toggleDisplayedOutOfStock = () => {
+    setSelectedOutOfStockIds((prev) => {
+      const next = new Set(prev);
+      if (allDisplayedOutOfStockSelected) selectableOutOfStockRows.forEach((row) => next.delete(row.fulfillment_item_id));
+      else selectableOutOfStockRows.forEach((row) => next.add(row.fulfillment_item_id));
+      return next;
+    });
+  };
+
+  const printRestockList = (rows: FulfillmentRow[]) => {
+    if (rows.length === 0) {
+      toast.info("No orders selected");
+      return;
+    }
+    const printPopup = window.open("", "_blank");
+    if (!printPopup) {
+      toast.error("Popup blocked — allow popups to print");
+      return;
+    }
+    printPopup.opener = null;
+    const rowsHtml = rows.map((row) => `
+      <tr>
+        <td>${escapeHtml(row.order_id)}</td>
+        <td>${escapeHtml(row.customer_name || "-")}</td>
+        <td>${escapeHtml(row.customer_phone || "-")}</td>
+        <td>${escapeHtml(row.customer_city || "-")}</td>
+        <td>${escapeHtml(row.customer_address || "-")}</td>
+        <td>${escapeHtml(row.product_name || "-")}</td>
+        <td>${row.item_count || 1}</td>
+        <td>Rs. ${Number(row.total_amount || 0).toLocaleString()}</td>
+      </tr>
+    `).join("");
+    printPopup.document.write(`
+      <!doctype html>
+      <html>
+      <head>
+        <title>Out of Stock Restock List</title>
+        <meta charset="utf-8" />
+        <style>
+          body { font-family: system-ui, sans-serif; padding: 24px; color: #111; }
+          h1 { font-size: 18px; margin: 0 0 4px; }
+          p.meta { font-size: 12px; color: #555; margin: 0 0 16px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+          th { background: #f2f2f2; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>Out of Stock — Restock List</h1>
+        <p class="meta">${rows.length} order${rows.length === 1 ? "" : "s"} · Printed ${format(new Date(), "MMM d, yyyy HH:mm")}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Customer</th>
+              <th>Phone</th>
+              <th>City</th>
+              <th>Address</th>
+              <th>Product</th>
+              <th>Qty</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </body>
+      </html>
+    `);
+    printPopup.document.close();
+    setTimeout(() => printPopup.print(), 500);
   };
 
   const openPrintDialog = () => {
@@ -2769,6 +2867,23 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                     <Badge variant="outline" className="text-[10px]">{filteredOutOfStock.length} orders</Badge>
                   </CardTitle>
                   <div className="flex items-center gap-2">
+                    {selectedOutOfStockRows.length > 0 && (
+                      <>
+                        <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setSelectedOutOfStockIds(new Set())}>
+                          Clear {selectedOutOfStockRows.length}
+                        </Button>
+                        <Button size="sm" className="h-8 text-xs" onClick={() => printRestockList(selectedOutOfStockRows)}>
+                          <Printer className="h-3.5 w-3.5 mr-1.5" /> Print list ({selectedOutOfStockRows.length})
+                        </Button>
+                      </>
+                    )}
+                    <Select value={outOfStockProductFilter} onValueChange={setOutOfStockProductFilter}>
+                      <SelectTrigger className="h-8 w-[170px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All products</SelectItem>
+                        {outOfStockProducts.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                     <Select value={outOfStockCourierFilter} onValueChange={setOutOfStockCourierFilter}>
                       <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -2783,6 +2898,11 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                   <DispatchTable
                     rows={filteredOutOfStock}
                     loading={loadingOutOfStock}
+                    selectable
+                    selectedIds={selectedOutOfStockIds}
+                    allSelected={allDisplayedOutOfStockSelected}
+                    onToggleAll={toggleDisplayedOutOfStock}
+                    onToggleRow={toggleOutOfStockRow}
                     onRestockRow={restockAndRetry}
                     restockingId={restockingId}
                   />
