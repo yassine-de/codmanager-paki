@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-24 08:40 - Adil
+Last manual update: 2026-08-24 09:05 - Adil
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-24 09:05 - Adil
+- Commit: `51bbc87`
+- Area: Shipping / Carrier Routing
+- Change: Added carrier city aliases and unmatched-city logging. The carrier router now matches destination cities against both `city_name` and `aliases`, logs fallback cases to `carrier_city_unmatched`, and the Carrier Configuration page shows unresolved city fallbacks with an action to add the input city as an alias.
+- Reason: M&P may use different city spellings, for example `SARGODAH` while imported orders use `Sargodha`. Without aliases, those orders fall back to PostEx even when M&P can serve the city.
+- Notes: Migration `20260824085000_carrier_city_aliases_unmatched.sql` was applied and `carrier-shipping-sync` was deployed. Existing M&P city `SARGODAH` now has alias `SARGODHA`.
 
 ### 2026-08-24 08:40 - Adil
 - Commit: `9c0a35b`
