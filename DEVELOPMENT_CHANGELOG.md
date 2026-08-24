@@ -22,7 +22,7 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-08-24 10:26 - Adil
-- Commit: `pending`
+- Commit: `fe29c04`
 - Area: Shipping / M&P City Aliases
 - Change: Updated the M&P city sync to preserve existing city aliases during cache refreshes and restored all M&P aliases with carrier-scoped SQL.
 - Reason: The M&P city refresh deletes and reloads the cache; without preserving aliases, manual mappings disappear after a refresh.
