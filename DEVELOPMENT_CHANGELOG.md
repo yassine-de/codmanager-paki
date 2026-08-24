@@ -1,186 +1,186 @@
 # Development Changelog
 
-Dieses Dokument ist fuer das Entwicklerteam gedacht. Es haelt fest, welche Aenderungen wann und von wem ins Projekt gekommen sind.
+This document is for the development team. It records which changes were added to the project, when they were added, and who made them.
 
-Quelle fuer bestehende Eintraege: Git-Historie (`git log`). Zeiten sind lokale Zeiten aus der Entwicklerumgebung.
+Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Letzte manuelle Aktualisierung: 2026-08-24 08:40 - Adil
+Last manual update: 2026-08-24 08:40 - Adil
 
-## Arbeitsregel
+## Working Rule
 
-Bei jeder relevanten Aenderung bitte einen Eintrag ergaenzen:
+For every relevant change, add an entry before pushing:
 
 ```md
-### YYYY-MM-DD HH:mm - Autor
+### YYYY-MM-DD HH:mm - Author
 - Commit: `abc1234`
-- Bereich: Orders / Warehouse / WhatsApp / Shipping / Finance / Database / UI
-- Aenderung: Kurz beschreiben, was geaendert wurde.
-- Grund: Warum wurde es geaendert?
-- Hinweis: Risiken, Deploy, Migrationen oder Tests.
+- Area: Orders / Warehouse / WhatsApp / Shipping / Finance / Database / UI
+- Change: Briefly describe what changed.
+- Reason: Explain why the change was made.
+- Notes: Risks, deployment details, migrations, or tests.
 ```
 
-## Aenderungen
+## Changes
 
 ### 2026-08-24 08:40 - Adil
 - Commit: `9c0a35b`
-- Bereich: M&P Shipping / Tracking
-- Aenderung: M&P Status `Out-For-Delivery` wird jetzt korrekt als `out_for_delivery` erkannt statt faelschlich als `delivered`.
-- Grund: M&P sendet den Status mit Bindestrichen. Die bisherige Normalisierung erkannte nur `out for delivery` mit Leerzeichen.
-- Hinweis: Functions `mnp-carrier-status-sync` und `mnp-shipping-sync` wurden deployed. Bestehende falsch gesetzte Orders werden beim naechsten M&P Status-Sync korrigiert.
+- Area: M&P Shipping / Tracking
+- Change: M&P status `Out-For-Delivery` is now correctly recognized as `out_for_delivery` instead of being incorrectly mapped to `delivered`.
+- Reason: M&P sends this status with hyphens. The previous normalization only recognized `out for delivery` with spaces.
+- Notes: Functions `mnp-carrier-status-sync` and `mnp-shipping-sync` were deployed. Existing incorrectly marked orders should be corrected on the next M&P status sync.
 
 ### 2026-08-24 08:30 - Adil
 - Commit: `9bb261b`
-- Bereich: Dokumentation / Team Workflow
-- Aenderung: `DEVELOPMENT_CHANGELOG.md` als Team-Changelog erstellt und mit bestehenden Git-Aenderungen befuellt.
-- Grund: Drei Entwickler sollen nachvollziehen koennen, wer wann welche Aenderungen ins Projekt gebracht hat.
-- Hinweis: Das Dokument wird nicht automatisch aktualisiert. Entwickler muessen es beim Pushen mitpflegen.
+- Area: Documentation / Team Workflow
+- Change: Created `DEVELOPMENT_CHANGELOG.md` as the team changelog and populated it with existing Git changes.
+- Reason: The three developers need a readable overview of who changed what and when.
+- Notes: This document is not updated automatically. Developers must maintain it when pushing changes.
 
 ### 2026-08-23 15:22 - Adil
 - Commit: `966d044`
-- Bereich: M&P Shipping
-- Aenderung: M&P Destination-Reached Status-Sync erneut angepasst.
+- Area: M&P Shipping
+- Change: Retried and adjusted M&P destination-reached status sync.
 
 ### 2026-08-23 15:18 - Adil
 - Commit: `f0ac369`
-- Bereich: M&P Shipping
-- Aenderung: M&P Substatus `Destination Reached` bleibt sichtbar.
+- Area: M&P Shipping
+- Change: Kept the M&P substatus `Destination Reached` visible.
 
 ### 2026-08-23 15:15 - Adil
 - Commit: `9432aba`
-- Bereich: M&P Shipping
-- Aenderung: M&P Status `Destination Reached` wird intern als `shipped` gemappt.
+- Area: M&P Shipping
+- Change: Mapped M&P status `Destination Reached` internally to `shipped`.
 
 ### 2026-08-23 15:08 - Anwar Bounasser
 - Commit: `b346d75`
-- Bereich: WhatsApp / Shipping
-- Aenderung: Fuer M&P-Sendungen wird das M&P-spezifische Shipped-Template verwendet.
+- Area: WhatsApp / Shipping
+- Change: Use the M&P-specific shipped template for M&P shipments.
 
 ### 2026-08-23 13:41 - Adil
 - Commit: `6418537`
-- Bereich: M&P Tracking
-- Aenderung: Wrapped M&P Tracking Response wird korrekt gelesen.
+- Area: M&P Tracking
+- Change: Read wrapped M&P tracking responses correctly.
 
 ### 2026-08-23 13:36 - Adil
 - Commit: `f73a136`
-- Bereich: M&P Tracking
-- Aenderung: M&P Tracking Array Responses werden unterstuetzt.
+- Area: M&P Tracking
+- Change: Support M&P tracking array responses.
 
 ### 2026-08-23 13:32 - Adil
 - Commit: `3cf897e`
-- Bereich: M&P Tracking
-- Aenderung: Status-Updates aus M&P Tracking korrigiert.
+- Area: M&P Tracking
+- Change: Fixed M&P tracking status updates.
 
 ### 2026-08-23 13:26 - Adil
 - Commit: `efdbb4a`
-- Bereich: M&P Labels / Status Sync
-- Aenderung: M&P Label- und Status-Sync-Logik korrigiert.
+- Area: M&P Labels / Status Sync
+- Change: Fixed M&P label and status sync logic.
 
 ### 2026-08-22 15:04 - Anwar Bounasser
 - Commit: `26ef559`
-- Bereich: Orders
-- Aenderung: Courier-Filter in der Admin Orders Seite hinzugefuegt.
+- Area: Orders
+- Change: Added a courier filter to the admin Orders page.
 
 ### 2026-08-22 13:07 - Anwar Bounasser
 - Commit: `8bf3f0b`
-- Bereich: Warehouse
-- Aenderung: Delivery-Courier-Filter fuer Not Printed, Ready to Dispatch und Out of Stock hinzugefuegt.
+- Area: Warehouse
+- Change: Added a delivery courier filter to Not Printed, Ready to Dispatch, and Out of Stock.
 
 ### 2026-08-22 11:47 - Anwar Bounasser
 - Commit: `d61c7ca`
-- Bereich: WhatsApp Inbox
-- Aenderung: Zugewiesener Follow-up Agent wird in der Order Card angezeigt.
+- Area: WhatsApp Inbox
+- Change: Show the assigned Follow-up Agent in the order card.
 
 ### 2026-08-22 10:22 - Anwar Bounasser
 - Commit: `af83159`
-- Bereich: Follow Ups
-- Aenderung: Bereits retournierte Orders werden aus der stale re-attempt Warnung ausgeschlossen.
+- Area: Follow Ups
+- Change: Excluded already-returned orders from the stale re-attempt warning.
 
 ### 2026-08-22 10:13 - Anwar Bounasser
 - Commit: `916ae7b`
-- Bereich: Follow Ups
-- Aenderung: Stale re-attempted Orders werden markiert und oben angepinnt.
+- Area: Follow Ups
+- Change: Flag stale re-attempted orders and pin them to the top.
 
 ### 2026-08-21 20:58 - Adil
 - Commit: `41d57b8`
-- Bereich: M&P Labels
-- Aenderung: M&P Label PDF Handling korrigiert.
+- Area: M&P Labels
+- Change: Fixed M&P label PDF handling.
 
 ### 2026-08-21 20:31 - Adil
 - Commit: `6ce6eb6`
-- Bereich: M&P Tracking
-- Aenderung: Fehlerbehandlung fuer M&P Tracking verbessert.
+- Area: M&P Tracking
+- Change: Improved error handling for M&P tracking.
 
 ### 2026-08-21 17:45 - Adil
 - Commit: `f09682e`
-- Bereich: Shipping Router
-- Aenderung: Carrier-Fallback-Routing ergaenzt. Wenn der aktive Carrier eine Stadt nicht abdeckt, kann auf PostEx ausgewichen werden.
+- Area: Shipping Router
+- Change: Added carrier fallback routing. If the active carrier does not cover a city, the shipment can fall back to PostEx.
 
 ### 2026-08-21 17:31 - Adil
 - Commit: `4c13eac`
-- Bereich: Shipping
-- Aenderung: M&P Carrier Routing in `main` gemerged.
+- Area: Shipping
+- Change: Merged M&P carrier routing into `main`.
 
 ### 2026-08-21 17:24 - Adil
 - Commit: `aac0e20`
-- Bereich: Settings / Carriers
-- Aenderung: Konfigurationsseite fuer Carrier Routing hinzugefuegt.
+- Area: Settings / Carriers
+- Change: Added a configuration page for carrier routing.
 
 ### 2026-08-21 17:13 - Adil
 - Commit: `a85b850`
-- Bereich: M&P Tracking
-- Aenderung: Parsing der M&P Tracking Response korrigiert.
+- Area: M&P Tracking
+- Change: Fixed parsing of the M&P tracking response.
 
 ### 2026-08-21 17:11 - Adil
 - Commit: `fee9ca3`
-- Bereich: M&P Cities
-- Aenderung: Parsing der M&P City Response korrigiert.
+- Area: M&P Cities
+- Change: Fixed parsing of the M&P city response.
 
 ### 2026-08-21 11:28 - Anwar Bounasser
 - Commit: `4fd9ed3`
-- Bereich: Delivery Analytics
-- Aenderung: Delivery Analytics KPIs nach SellerAnalytics Event-Date Pattern ueberarbeitet und fehlendes `confirmed_at` korrigiert.
+- Area: Delivery Analytics
+- Change: Reworked Delivery Analytics KPIs to follow the SellerAnalytics event-date pattern and fixed missing `confirmed_at`.
 
 ### 2026-08-21 10:26 - Anwar Bounasser
 - Commit: `8be7a85`
-- Bereich: Analytics / Dashboard
-- Aenderung: Confirmation Analytics Attribution, Handling-Time-Metrik und My Dashboard Claimed Orders korrigiert.
+- Area: Analytics / Dashboard
+- Change: Fixed Confirmation Analytics attribution, the dead handling-time metric, and My Dashboard claimed orders.
 
 ### 2026-08-21 09:26 - Adil
 - Commit: `e7eb0e9`
-- Bereich: Shipping
-- Aenderung: Vorherige M&P Carrier Routing und Label-Aenderung zurueckgesetzt.
+- Area: Shipping
+- Change: Reverted the previous M&P carrier routing and label change.
 
 ### 2026-08-21 09:25 - Adil
 - Commit: `eacf482`
-- Bereich: Shipping
-- Aenderung: M&P Carrier Routing und Labels hinzugefuegt.
+- Area: Shipping
+- Change: Added M&P carrier routing and labels.
 
 ### 2026-08-21 08:57 - Anwar Bounasser
 - Commit: `cd9ff7c`
-- Bereich: Order Attribution
-- Aenderung: Confirmed-Order Attribution korrigiert, damit der echte bestaetigende User gutgeschrieben wird.
+- Area: Order Attribution
+- Change: Fixed confirmed-order attribution so the user who actually confirmed the order receives credit.
 
 ### 2026-08-21 08:23 - Anwar Bounasser
 - Commit: `4a68834`
-- Bereich: WhatsApp Inbox
-- Aenderung: Shipment Tracking Number wird in der WhatsApp Inbox Order Card angezeigt.
+- Area: WhatsApp Inbox
+- Change: Show the shipment tracking number in the WhatsApp Inbox order card.
 
 ### 2026-08-21 07:58 - Anwar Bounasser
 - Commit: `dbce1ae`
-- Bereich: WhatsApp Inbox / Follow Up
-- Aenderung: Kombinierbare Stage/Refine Filter und Follow Up Overview Stat hinzugefuegt.
+- Area: WhatsApp Inbox / Follow Up
+- Change: Added combinable Stage/Refine filters and a Follow Up overview stat.
 
 ### 2026-08-20 15:54 - Anwar Bounasser
 - Commit: `54f2d05`
-- Bereich: Follow Up
-- Aenderung: Follow Up Badge/Filter auf `failed_attempt` statt `shipped` begrenzt.
+- Area: Follow Up
+- Change: Scoped the Follow Up badge/filter to `failed_attempt` instead of `shipped`.
 
 ### 2026-08-20 15:43 - Anwar Bounasser
 - Commit: `fb33485`
-- Bereich: AI / WhatsApp
-- Aenderung: AI darf Address Flow nicht ueber alte Buttons bei bereits shipped Orders erneut oeffnen.
+- Area: AI / WhatsApp
+- Change: Prevented the AI from reopening the address flow on already-shipped orders through stale buttons.
 
 ### 2026-08-20 14:28 - Anwar Bounasser
 - Commit: `68b9542`
-- Bereich: Manual Orders
-- Aenderung: Telefonnummer bei manueller Order-Erstellung wird validiert.
+- Area: Manual Orders
+- Change: Added phone number validation for manual order creation.
