@@ -49,6 +49,13 @@ type Order = {
   }>;
 };
 
+type DeliveryStatusEvent = {
+  order_id: string;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+};
+
 type SortDir = "asc" | "desc";
 type DateField = "created" | "updated";
 
@@ -66,9 +73,20 @@ const CONFIRMED_DELIVERY_STATUSES = [
   "booked", "printed", "dispatched", "shipped", "in_transit", "with_courier", "out_for_delivery",
   "delivered", "paid", "failed_attempt", "returned", "return", "ready_for_return", "return_received",
 ];
-const DELIVERED_STATUSES = ["delivered", "paid"];
+const DELIVERED_STATUSES = ["delivered"];
+const SUCCESSFUL_DELIVERY_STATUSES = ["delivered", "paid"];
 const ACTIVE_SHIPPING_STATUSES = ["shipped", "in_transit", "with_courier", "out_for_delivery"];
 const RETURNED_STATUSES = ["returned", "return", "return_received"];
+const RETURN_RECEIVED_STATUSES = ["return_received"];
+const SHIPPED_POOL_STATUSES = [
+  ...ACTIVE_SHIPPING_STATUSES,
+  ...SUCCESSFUL_DELIVERY_STATUSES,
+  "failed_attempt",
+  "no_answer",
+  "postponed",
+  ...RETURNED_STATUSES,
+  "ready_for_return",
+];
 
 const DELIVERY_STATUS_OPTIONS = [
   { value: "booked", label: "Booked" },
@@ -186,6 +204,25 @@ async function fetchAllOrders(): Promise<Order[]> {
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     const page = (data || []) as Order[];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return rows;
+}
+
+async function fetchAllDeliveryStatusEvents(): Promise<DeliveryStatusEvent[]> {
+  const rows: DeliveryStatusEvent[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("order_history")
+      .select("order_id, old_value, new_value, created_at")
+      .eq("field_changed", "delivery_status")
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as DeliveryStatusEvent[];
     rows.push(...page);
     if (page.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
@@ -327,6 +364,11 @@ export default function DeliveryAnalytics() {
     queryFn: fetchAllOrders,
   });
 
+  const { data: deliveryStatusEvents = [] } = useQuery({
+    queryKey: ["delivery-analytics-status-events-v1"],
+    queryFn: fetchAllDeliveryStatusEvents,
+  });
+
   const { data: profiles = [] } = useQuery({
     queryKey: ["profiles-for-analytics"],
     queryFn: async () => {
@@ -341,6 +383,12 @@ export default function DeliveryAnalytics() {
     profiles.forEach((p) => { m[p.user_id] = p.name; });
     return m;
   }, [profiles]);
+
+  const orderByOrderId = useMemo(() => {
+    const m: Record<string, Order> = {};
+    orders.forEach((o) => { m[o.order_id] = o; });
+    return m;
+  }, [orders]);
 
   // ── Derived options ──────────────────────────────────────────────────────────
 
@@ -412,11 +460,50 @@ export default function DeliveryAnalytics() {
   };
 
   const kpis = useMemo(() => {
-    const matchesFilters = (o: Order) =>
+    const matchesNonStatusFilters = (o: Order) =>
       (sellerFilter === "all" || o.seller_id === sellerFilter) &&
-      (productFilter === "all" || o.product_name === productFilter) &&
+      (productFilter === "all" || o.product_name === productFilter);
+    const matchesFilters = (o: Order) =>
+      matchesNonStatusFilters(o) &&
       (deliveryStatusFilter === "all" || o.delivery_status === deliveryStatusFilter);
     const base = orders.filter(matchesFilters);
+    const baseWithoutStatusFilter = orders.filter(matchesNonStatusFilters);
+
+    const selectedStatusAllows = (statuses: string[]) =>
+      deliveryStatusFilter === "all" || statuses.includes(deliveryStatusFilter);
+
+    const countCurrentStatus = (statuses: string[], eventDate: (o: Order) => string | null = (o) => o.updated_at) => {
+      if (!selectedStatusAllows(statuses)) return 0;
+      return baseWithoutStatusFilter.filter((o) => {
+        if (!statuses.includes(o.delivery_status || "")) return false;
+        return inRangeByEvent(o, eventDate(o));
+      }).length;
+    };
+
+    const countDeliveryStatusEvents = (statuses: string[]) => {
+      if (!selectedStatusAllows(statuses)) return 0;
+
+      // In Created mode this page is a cohort view: count orders created in the
+      // selected period and show their current delivery status. In Updated mode
+      // every delivery KPI must mean "orders whose delivery_status changed to
+      // this status in the selected period", so use order_history.created_at.
+      if (dateField === "created") {
+        return countCurrentStatus(statuses, (o) => o.created_at);
+      }
+
+      const ids = new Set<string>();
+      deliveryStatusEvents.forEach((event) => {
+        const nextStatus = event.new_value || "";
+        if (!statuses.includes(nextStatus)) return;
+        if ((event.old_value || "") === nextStatus) return;
+        const order = orderByOrderId[event.order_id];
+        if (!order || !matchesNonStatusFilters(order)) return;
+        if (!isWithinRange(new Date(event.created_at), dateRange)) return;
+        ids.add(event.order_id);
+      });
+
+      return ids.size;
+    };
 
     const total = base.filter((o) => inRangeByEvent(o, o.updated_at)).length;
 
@@ -425,19 +512,16 @@ export default function DeliveryAnalytics() {
       && inRangeByEvent(o, o.confirmed_at)
     ).length;
 
-    const booked  = base.filter((o) => o.delivery_status === "booked" && inRangeByEvent(o, o.updated_at)).length;
-    const printed = base.filter((o) => o.delivery_status === "printed" && inRangeByEvent(o, o.updated_at)).length;
-    const dispatched = base.filter((o) => o.delivery_status === "dispatched" && inRangeByEvent(o, o.updated_at)).length;
-    const shipped = base.filter((o) => ACTIVE_SHIPPING_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.updated_at)).length;
-    const delivered = base.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
-    // Matches both "returned" and "return" (both values exist in the DB); no
-    // dedicated returned_at field, so delivered_at (the closest real event) is
-    // tried first, falling back to updated_at.
-    const returned = base.filter((o) => RETURNED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
-    const failedAttempt  = base.filter((o) => o.delivery_status === "failed_attempt" && inRangeByEvent(o, o.updated_at)).length;
-    const inReturnProcess = base.filter((o) => o.delivery_status === "ready_for_return" && inRangeByEvent(o, o.updated_at)).length;
+    const booked = countDeliveryStatusEvents(["booked"]);
+    const printed = countDeliveryStatusEvents(["printed"]);
+    const dispatched = countDeliveryStatusEvents(["dispatched"]);
+    const shipped = countDeliveryStatusEvents(ACTIVE_SHIPPING_STATUSES);
+    const delivered = countCurrentStatus(DELIVERED_STATUSES, (o) => dateField === "created" ? o.created_at : o.delivered_at);
+    const returned = countDeliveryStatusEvents(RETURN_RECEIVED_STATUSES);
+    const failedAttempt = countDeliveryStatusEvents(["failed_attempt"]);
+    const inReturnProcess = countDeliveryStatusEvents(["ready_for_return"]);
 
-    const poolCount = base.filter((o) => isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)).length;
+    const poolCount = countDeliveryStatusEvents(SHIPPED_POOL_STATUSES);
 
     return {
       total, confirmed, poolCount, booked, printed, dispatched, shipped, delivered,
@@ -446,7 +530,7 @@ export default function DeliveryAnalytics() {
       returnRate: pct(returned, poolCount),
       failedAttemptRate: pct(failedAttempt, poolCount),
     };
-  }, [orders, sellerFilter, productFilter, deliveryStatusFilter, dateField, dateRange]);
+  }, [orders, deliveryStatusEvents, orderByOrderId, sellerFilter, productFilter, deliveryStatusFilter, dateField, dateRange]);
 
   // ── By Courier ───────────────────────────────────────────────────────────────
 
@@ -846,7 +930,7 @@ export default function DeliveryAnalytics() {
             <KPICard
               title="Delivered"
               value={kpis.delivered}
-              subtitle="delivered + paid"
+              subtitle="status delivered"
               icon={CheckCircle2}
               colorBg="bg-green-100 dark:bg-green-900/30"
               colorIcon="text-green-600 dark:text-green-300"
@@ -867,6 +951,7 @@ export default function DeliveryAnalytics() {
             <KPICard
               title="Returned"
               value={kpis.returned}
+              subtitle="return received"
               icon={RotateCcw}
               colorBg="bg-red-100 dark:bg-red-900/30"
               colorIcon="text-red-600 dark:text-red-300"
