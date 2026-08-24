@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-24 09:51 - Adil
+Last manual update: 2026-08-24 09:56 - Adil
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-24 09:56 - Adil
+- Commit: `pending`
+- Area: Shipping / Carrier Configuration UI
+- Change: Added a mapped alias table to City Coverage and improved the Fallbacks tab with search and suggested carrier city matches for manual alias mapping.
+- Reason: The team needs to see which carrier city aliases already exist and which unmatched fallback cities still need manual review.
+- Notes: No database data was changed by this UI update. `npm run build` passed with existing CSS, Browserslist, and bundle-size warnings.
 
 ### 2026-08-24 09:51 - Adil
 - Commit: `fbefd99`

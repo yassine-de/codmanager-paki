@@ -89,6 +89,14 @@ const parseList = (value: string) => value.split(",").map((item) => item.trim())
 
 const stringifyCriteria = (criteria: Record<string, unknown>) => JSON.stringify(criteria, null, 2);
 
+const normalizeCity = (value: string) => value.toUpperCase().replace(/DISTRICT|TEHSIL|CITY|[^A-Z0-9]/g, "");
+
+const cityWords = (value: string) => value
+  .toUpperCase()
+  .replace(/[^A-Z0-9 ]/g, " ")
+  .split(/\s+/)
+  .filter((word) => word.length >= 3 && !["DISTRICT", "TEHSIL", "CITY"].includes(word));
+
 function capabilityBadges(carrier: Carrier) {
   return [
     carrier.supports_cod && "COD",
@@ -122,6 +130,8 @@ export default function CarrierManagement() {
     criteria: ruleTemplates.city,
   });
   const [aliasTargets, setAliasTargets] = useState<Record<string, string>>({});
+  const [citySearch, setCitySearch] = useState("");
+  const [fallbackSearch, setFallbackSearch] = useState("");
 
   const { data: carriers = [], isLoading: loadingCarriers } = useQuery({
     queryKey: ["carrier-management-carriers"],
@@ -217,6 +227,39 @@ export default function CarrierManagement() {
       .map(([city, carrierCodes]) => ({ city, carrierCodes: Array.from(carrierCodes).sort() }))
       .sort((a, b) => a.city.localeCompare(b.city));
   }, [carrierById, cityRows]);
+
+  const cityAliases = useMemo(() => (
+    cityRows
+      .filter((row) => Array.isArray(row.aliases) && row.aliases.length > 0)
+      .map((row) => ({
+        ...row,
+        carrierName: carrierById.get(row.carrier_id)?.name || row.carrier_id,
+        carrierCode: carrierById.get(row.carrier_id)?.code || row.carrier_id,
+      }))
+      .filter((row) => {
+        const search = citySearch.trim().toLowerCase();
+        if (!search) return true;
+        return (
+          row.city_name.toLowerCase().includes(search) ||
+          row.carrierName.toLowerCase().includes(search) ||
+          (row.aliases || []).some((alias) => alias.toLowerCase().includes(search))
+        );
+      })
+      .sort((a, b) => a.carrierName.localeCompare(b.carrierName) || a.city_name.localeCompare(b.city_name))
+  ), [carrierById, cityRows, citySearch]);
+
+  const openUnmatchedCities = useMemo(() => (
+    unmatchedCities.filter((row) => {
+      const search = fallbackSearch.trim().toLowerCase();
+      if (!search) return true;
+      return (
+        row.input_city.toLowerCase().includes(search) ||
+        (row.last_order_id || "").toLowerCase().includes(search) ||
+        String(row.last_system_id || "").includes(search) ||
+        (row.reason || "").toLowerCase().includes(search)
+      );
+    })
+  ), [fallbackSearch, unmatchedCities]);
 
   const routingStats = useMemo(() => {
     const enabledRules = rules.filter((rule) => rule.enabled);
@@ -400,6 +443,29 @@ export default function CarrierManagement() {
       return next;
     });
     refresh();
+  };
+
+  const getCitySuggestions = (unmatched: UnmatchedCarrierCity) => {
+    const carrierCities = cityRows.filter((city) => city.carrier_id === unmatched.carrier_id);
+    const input = normalizeCity(unmatched.input_city);
+    const inputWords = cityWords(unmatched.input_city);
+    return carrierCities
+      .map((city) => {
+        const cityName = normalizeCity(city.city_name);
+        const aliases = Array.isArray(city.aliases) ? city.aliases : [];
+        const aliasMatch = aliases.some((alias) => normalizeCity(alias) === input);
+        const directMatch = cityName === input;
+        const wordScore = cityWords(city.city_name).filter((word) => inputWords.some((inputWord) => inputWord.includes(word) || word.includes(inputWord))).length;
+        const prefixScore = cityName.startsWith(input.slice(0, 4)) || input.startsWith(cityName.slice(0, 4)) ? 1 : 0;
+        return {
+          city,
+          score: (directMatch ? 100 : 0) + (aliasMatch ? 90 : 0) + (wordScore * 10) + prefixScore,
+        };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.city.city_name.localeCompare(b.city.city_name))
+      .slice(0, 5)
+      .map((item) => item.city);
   };
 
   return (
@@ -705,6 +771,56 @@ export default function CarrierManagement() {
 
         <TabsContent value="cities" className="space-y-4">
           <Card className="border-border/60">
+            <CardHeader className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-sm">Mapped City Aliases</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Carrier city spellings that are accepted as aliases during automatic routing.</p>
+              </div>
+              <Input
+                className="h-8 w-full text-xs sm:w-[260px]"
+                value={citySearch}
+                onChange={(event) => setCitySearch(event.target.value)}
+                placeholder="Search city, alias, carrier..."
+              />
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="h-9 text-xs">Carrier</TableHead>
+                    <TableHead className="h-9 text-xs">Carrier City</TableHead>
+                    <TableHead className="h-9 text-xs">Aliases</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cityAliases.slice(0, 500).map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        <div className="text-sm font-medium">{row.carrierName}</div>
+                        <div className="font-mono text-[11px] text-muted-foreground">{row.carrierCode}</div>
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">{row.city_name}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {(row.aliases || []).map((alias) => (
+                            <Badge key={alias} variant="secondary" className="text-[10px]">{alias}</Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {cityAliases.length === 0 && (
+                    <TableRow><TableCell colSpan={3} className="text-sm text-muted-foreground">No mapped aliases found.</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+              {cityAliases.length > 500 ? (
+                <div className="border-t px-4 py-2 text-xs text-muted-foreground">Showing first 500 aliases. Use search to narrow the list.</div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60">
             <CardHeader className="py-3">
               <CardTitle className="text-sm">City Coverage</CardTitle>
             </CardHeader>
@@ -740,11 +856,20 @@ export default function CarrierManagement() {
 
         <TabsContent value="safety" className="space-y-4">
           <Card className="border-border/60">
-            <CardHeader className="py-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-primary" />
-                Unmatched Carrier Cities
-              </CardTitle>
+            <CardHeader className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <MapPin className="h-4 w-4 text-primary" />
+                  Unmatched Carrier Cities
+                </CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">Open fallback cases that can be manually mapped to a carrier city.</p>
+              </div>
+              <Input
+                className="h-8 w-full text-xs sm:w-[260px]"
+                value={fallbackSearch}
+                onChange={(event) => setFallbackSearch(event.target.value)}
+                placeholder="Search input city or order..."
+              />
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -762,12 +887,15 @@ export default function CarrierManagement() {
                 <TableBody>
                   {loadingUnmatched ? (
                     <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground">Loading unmatched cities...</TableCell></TableRow>
-                  ) : unmatchedCities.length === 0 ? (
+                  ) : openUnmatchedCities.length === 0 ? (
                     <TableRow><TableCell colSpan={7} className="text-sm text-muted-foreground">No unmatched city fallbacks right now.</TableCell></TableRow>
-                  ) : unmatchedCities.map((row) => {
+                  ) : openUnmatchedCities.map((row) => {
                     const carrier = carrierById.get(row.carrier_id);
                     const fallbackCarrier = row.fallback_carrier_id ? carrierById.get(row.fallback_carrier_id) : null;
                     const carrierCities = cityRows.filter((city) => city.carrier_id === row.carrier_id);
+                    const suggestions = getCitySuggestions(row);
+                    const suggestionIds = new Set(suggestions.map((city) => city.id));
+                    const remainingCarrierCities = carrierCities.filter((city) => !suggestionIds.has(city.id));
                     return (
                       <TableRow key={row.id}>
                         <TableCell>
@@ -785,11 +913,32 @@ export default function CarrierManagement() {
                           <Select value={aliasTargets[row.id] || ""} onValueChange={(value) => setAliasTargets((current) => ({ ...current, [row.id]: value }))}>
                             <SelectTrigger className="h-8 min-w-[190px] text-xs"><SelectValue placeholder="Select carrier city" /></SelectTrigger>
                             <SelectContent>
-                              {carrierCities.map((city) => (
+                              {suggestions.length > 0 ? (
+                                <>
+                                  {suggestions.map((city) => (
+                                    <SelectItem key={`suggested-${city.id}`} value={city.id}>{city.city_name}</SelectItem>
+                                  ))}
+                                </>
+                              ) : null}
+                              {remainingCarrierCities.map((city) => (
                                 <SelectItem key={city.id} value={city.id}>{city.city_name}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
+                          {suggestions.length > 0 ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {suggestions.map((city) => (
+                                <button
+                                  key={city.id}
+                                  type="button"
+                                  className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:border-primary hover:text-primary"
+                                  onClick={() => setAliasTargets((current) => ({ ...current, [row.id]: city.id }))}
+                                >
+                                  {city.city_name}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
                         </TableCell>
                         <TableCell>
                           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => addCityAlias(row)}>
