@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-24 15:43 - Anwar Bounasser
+Last manual update: 2026-08-24 21:52 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-24 21:52 - Anwar Bounasser
+- Commit: `323cf74`
+- Area: Delivery Analytics
+- Change: Reworked Delivery Analytics status KPI counts so Updated-mode delivery stages use delivery-status history events, Failed Attempt counts only real transitions into `failed_attempt`, Returned counts only real transitions into `return_received`, and Delivered uses the `delivered_at` timestamp for actual delivered orders.
+- Reason: The Yesterday/Updated view was showing inflated or misleading status counts because some cards were based on current status plus `updated_at`, while others needed exact status-change timing.
+- Notes: Frontend-only change. `npm run build` passed with existing Browserslist, Tailwind ambiguous duration, CSS import order, and chunk-size warnings.
 
 ### 2026-08-24 15:43 - Anwar Bounasser
 - Commit: `7057000`
