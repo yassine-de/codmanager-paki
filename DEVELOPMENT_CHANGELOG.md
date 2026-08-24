@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-24 13:45 - Anwar Bounasser
+Last manual update: 2026-08-24 15:43 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-24 15:43 - Anwar Bounasser
+- Commit: `7057000`
+- Area: Follow Ups
+- Change: Added a "Delivery Company" (courier) filter dropdown to the Follow Ups page toolbar, next to the existing Delivery status filter.
+- Reason: With two active couriers (PostEx and M&P), the follow-up team needs to filter the queue down to one courier's orders.
+- Notes: No migration or deploy needed — frontend-only change.
 
 ### 2026-08-24 13:45 - Anwar Bounasser
 - Commit: `6c95264`
