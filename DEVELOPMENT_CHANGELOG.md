@@ -22,7 +22,7 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-08-24 09:56 - Adil
-- Commit: `pending`
+- Commit: `db700ab`
 - Area: Shipping / Carrier Configuration UI
 - Change: Added a mapped alias table to City Coverage and improved the Fallbacks tab with search and suggested carrier city matches for manual alias mapping.
 - Reason: The team needs to see which carrier city aliases already exist and which unmatched fallback cities still need manual review.
