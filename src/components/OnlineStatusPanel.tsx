@@ -33,6 +33,13 @@ function formatTimeAgo(date: Date): string {
   return `${days}d ago`;
 }
 
+const roleAbbreviations: Record<string, string> = {
+  follow_up: "FU",
+  warehouse_manager: "WH",
+  warehouse_agent: "WH",
+  whatsapp_manager: "WA",
+};
+
 const statusConfig = {
   online: {
     color: "bg-emerald-500",
@@ -70,7 +77,7 @@ export default function OnlineStatusPanel() {
       const { data } = await supabase
         .from("user_roles")
         .select("user_id, role")
-        .in("role", ["agent", "admin", "follow_up"]);
+        .in("role", ["agent", "admin", "follow_up", "warehouse_manager", "warehouse_agent", "whatsapp_manager"]);
       return data || [];
     },
   });
@@ -205,7 +212,7 @@ export default function OnlineStatusPanel() {
                   <div className="flex items-center gap-1.5">
                     <p className="text-[11px] font-semibold truncate max-w-[100px]">{u.name}</p>
                     <span className="text-[8px] font-medium px-1 py-0.5 rounded bg-muted text-muted-foreground uppercase tracking-wider shrink-0">
-                      {u.role === "follow_up" ? "FU" : u.role}
+                      {roleAbbreviations[u.role] || u.role}
                     </span>
                   </div>
                   <p className={`text-[9px] font-medium ${cfg.text} mt-0.5 whitespace-nowrap`}>
