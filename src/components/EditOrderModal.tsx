@@ -59,17 +59,22 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
   const isSeller = authUser?.role === 'seller';
   const isAdmin = authUser?.role === 'admin';
 
-  // Fetch seller's own products for the dropdown
+  // Fetch the real product catalog for the dropdown — the seller's own
+  // products when a seller is editing, or the order's actual seller's
+  // products when an admin/agent is editing (never the mock `productNames`
+  // list, which showed unrelated demo products like "Ceramic Tagine" that
+  // don't exist in this seller's real catalog).
+  const productCatalogSellerId = isSeller ? authUser?.id : order.sellerId;
   const { data: sellerProducts } = useQuery({
-    queryKey: ['seller-products', authUser?.id],
+    queryKey: ['seller-products', productCatalogSellerId],
     queryFn: async () => {
-      const { data } = await supabase.from('products').select('name').eq('seller_id', authUser!.id);
+      const { data } = await supabase.from('products').select('name').eq('seller_id', productCatalogSellerId!);
       return data?.map(p => p.name) || [];
     },
-    enabled: isSeller && !!authUser?.id,
+    enabled: !!productCatalogSellerId,
   });
 
-  const availableProductNames = isSeller ? (sellerProducts || []) : productNames;
+  const availableProductNames = productCatalogSellerId ? (sellerProducts || []) : productNames;
 
   const [customer, setCustomer] = useState('');
   const [phone, setPhone] = useState('');

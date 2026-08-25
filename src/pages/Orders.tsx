@@ -688,6 +688,7 @@ export default function Orders() {
             deliveredAt: o.delivered_at || undefined,
             notes: o.note || undefined,
             seller: profileMap.get(o.seller_id) || "Unknown",
+            sellerId: o.seller_id || undefined,
             agentName: o.agent_id ? (profileMap.get(o.agent_id) || undefined) : (o.original_agent_id ? (profileMap.get(o.original_agent_id) || undefined) : undefined),
             upsell: false,
             warehouseState: "in_stock" as const,
