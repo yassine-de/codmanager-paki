@@ -94,12 +94,37 @@ export function isCarrierCityValueValid(value: string, cityNames: string[]): boo
 function useCityOptions() {
   const { data: cities = [], isLoading } = useCarrierCities();
   const cityOptions = React.useMemo(() => {
-    const cityMap = new Map<string, { carrier_city_id: string | null; city_name: string; province_name: string | null }>();
-    pakistanCities.forEach((city) => cityMap.set(normalizeCityName(city), { carrier_city_id: null, city_name: city, province_name: null }));
-    cities.forEach((city) => {
+    const cityMap = new Map<
+      string,
+      {
+        carrier_city_id: string | null;
+        city_name: string;
+        province_name: string | null;
+        carrier_code?: string;
+      }
+    >();
+
+    const addCity = (city: {
+      carrier_city_id: string | null;
+      city_name: string;
+      province_name: string | null;
+      carrier_code?: string;
+    }) => {
       const name = (city.city_name || "").trim();
-      if (name) cityMap.set(normalizeCityName(name), city);
-    });
+      if (!name) return;
+
+      const key = normalizeCityName(name);
+      const existing = cityMap.get(key);
+      cityMap.set(key, {
+        carrier_city_id: existing?.carrier_city_id || city.carrier_city_id,
+        city_name: existing?.city_name || name,
+        province_name: existing?.province_name || city.province_name,
+        carrier_code: existing?.carrier_code || city.carrier_code,
+      });
+    };
+
+    pakistanCities.forEach((city) => addCity({ carrier_city_id: null, city_name: city, province_name: null }));
+    cities.forEach(addCity);
     return Array.from(cityMap.values()).sort((a, b) => a.city_name.localeCompare(b.city_name));
   }, [cities]);
 
