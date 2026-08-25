@@ -1744,6 +1744,74 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     setTimeout(() => printPopup.print(), 500);
   };
 
+  const printProductSummary = (rows: FulfillmentRow[]) => {
+    if (rows.length === 0) {
+      toast.info("No orders to summarize");
+      return;
+    }
+    const totals = new Map<string, number>();
+    rows.forEach((row) => {
+      const name = (row.product_name || "Unknown product").trim();
+      totals.set(name, (totals.get(name) || 0) + Number(row.item_count || 1));
+    });
+    const sortedTotals = Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
+
+    const printPopup = window.open("", "_blank");
+    if (!printPopup) {
+      toast.error("Popup blocked — allow popups to print");
+      return;
+    }
+    printPopup.opener = null;
+    const rowsHtml = sortedTotals.map(([name, qty]) => `
+      <tr>
+        <td>${escapeHtml(name)}</td>
+        <td>${qty}</td>
+      </tr>
+    `).join("");
+    printPopup.document.write(`
+      <!doctype html>
+      <html>
+      <head>
+        <title>Picking List</title>
+        <meta charset="utf-8" />
+        <style>
+          @page { size: A4; margin: 18mm; }
+          body { font-family: system-ui, sans-serif; padding: 0; color: #111; }
+          h1 { font-size: 20px; margin: 0 0 4px; }
+          p.meta { font-size: 12px; color: #555; margin: 0 0 20px; }
+          table { width: 100%; border-collapse: collapse; font-size: 14px; }
+          th, td { border: 1px solid #ccc; padding: 10px 12px; text-align: left; }
+          th { background: #f2f2f2; }
+          td:last-child, th:last-child { text-align: right; width: 120px; }
+          tfoot td { font-weight: bold; border-top: 2px solid #333; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>Picking List</h1>
+        <p class="meta">${rows.length} shipment${rows.length === 1 ? "" : "s"} · ${sortedTotals.length} product${sortedTotals.length === 1 ? "" : "s"} · Printed ${format(new Date(), "MMM d, yyyy HH:mm")}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Quantity</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+          <tfoot>
+            <tr>
+              <td>Total</td>
+              <td>${sortedTotals.reduce((sum, [, qty]) => sum + qty, 0)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </body>
+      </html>
+    `);
+    printPopup.document.close();
+    setTimeout(() => printPopup.print(), 500);
+  };
+
   const openPrintDialog = () => {
     if (baseLabelRows.length === 0) {
       toast.info("No pending labels to print");
@@ -3315,6 +3383,15 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setLabelDialogOpen(false)} disabled={printingLabels}>Cancel</Button>
+            <Button
+              variant="outline"
+              onClick={() => printProductSummary(filteredLabelRows)}
+              disabled={filteredLabelRows.length === 0}
+              title="Print a picking list with total quantity needed per product"
+            >
+              <ClipboardList className="h-4 w-4 mr-2" />
+              Print Picking List
+            </Button>
             <Button onClick={() => printLabels(filteredLabelRows)} disabled={printingLabels || filteredLabelRows.length === 0}>
               <Printer className="h-4 w-4 mr-2" />
               Print {labelSummary.total} Labels
