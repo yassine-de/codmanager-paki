@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-25 06:21 - Anwar Bounasser
+Last manual update: 2026-08-25 07:39 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-25 07:39 - Anwar Bounasser
+- Commit: `31115f7`
+- Area: Orders / Edit Order
+- Change: The Edit Order modal's product dropdown now fetches the order's actual seller's real product catalog for admin/agent editors, instead of a hardcoded mock list (`productNames` in `src/lib/data.ts` — leftover demo data like "Ceramic Tagine", "Berber Rug").
+- Reason: When an admin/agent edited an order and tried to change its product, the dropdown showed unrelated fake demo products that don't exist in the seller's real catalog.
+- Notes: No migration or deploy needed — frontend-only change. Added `sellerId` to the `Order` type (`src/lib/data.ts`) and threaded it through the Orders page mapping so `EditOrderModal` can scope the products query correctly.
 
 ### 2026-08-25 06:21 - Anwar Bounasser
 - Commit: `6e978b8`
