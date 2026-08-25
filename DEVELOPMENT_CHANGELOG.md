@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-24 21:52 - Anwar Bounasser
+Last manual update: 2026-08-25 06:21 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-25 06:21 - Anwar Bounasser
+- Commit: `6e978b8`
+- Area: Dashboard / Team Status
+- Change: The Team Status panel now includes Warehouse Manager and WhatsApp Manager roles (badges "WH" and "WA"), previously only agent/admin/follow_up were queried.
+- Reason: Warehouse and WhatsApp managers were invisible in the online/offline team widget even when active.
+- Notes: No migration or deploy needed — frontend-only change. Verified live against `user_presence` data that both roles now compute the correct online/idle/offline status.
 
 ### 2026-08-24 21:52 - Anwar Bounasser
 - Commit: `323cf74`
