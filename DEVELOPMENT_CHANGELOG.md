@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-25 07:39 - Anwar Bounasser
+Last manual update: 2026-08-25 10:01 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-25 10:01 - Anwar Bounasser
+- Commit: `e98fed0`
+- Area: Warehouse / Label Printing
+- Change: Added a "Print Picking List" button to the Confirm Label Print dialog (Not Printed tab). It opens an A4-formatted sheet totaling the quantity needed per product across every shipment in the current filtered print batch.
+- Reason: Before printing shipping labels, the warehouse team needs a single sheet listing each product and how many units to pull from stock for that batch, instead of reading it off each order individually.
+- Notes: No migration or deploy needed — frontend-only change.
 
 ### 2026-08-25 07:39 - Anwar Bounasser
 - Commit: `31115f7`
