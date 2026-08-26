@@ -98,6 +98,7 @@ function normalizeStatus(status?: string | null) {
     .replace(/\s+/g, " ");
   if (!value || value === "booked") return "booked";
   if (value.includes("return to shipper") || value === "returned" || value.includes("returned")) return "returned";
+  if (value.includes("failed deliver") || value.includes("failed to deliver") || value.includes("delivery failed")) return "failed_attempt";
   if (value.includes("out for delivery")) return "out_for_delivery";
   if (value.includes("attempt") || value.includes("undeliver") || value.includes("consignee not")) return "failed_attempt";
   if (value.includes("reached at destination") || value.includes("reached destination")) return "reached_at_destination";
