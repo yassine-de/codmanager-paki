@@ -597,7 +597,14 @@ export default function Orders() {
             if (!isAdmin && f.confirmation === 'new') q = q.in('confirmation_status', ['new', 'new_wts']);
             else q = q.eq('confirmation_status', f.confirmation);
           }
-          if (f.delivery !== 'all') q = q.eq('delivery_status', f.delivery);
+          if (f.delivery !== 'all') {
+            // Orders that haven't shipped yet store delivery_status as NULL, not
+            // the literal string "pending" — the UI just displays NULL as
+            // "Pending". An exact eq('delivery_status','pending') therefore
+            // never matches any row even though those orders are visibly shown
+            // as Pending in the unfiltered list.
+            q = f.delivery === 'pending' ? q.is('delivery_status', null) : q.eq('delivery_status', f.delivery);
+          }
           if (f.channel !== 'all') {
             q = f.channel === 'agent'
               ? q.or('confirmation_channel.eq.agent,confirmation_channel.is.null')
