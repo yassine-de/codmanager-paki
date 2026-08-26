@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-26 08:28 - Anwar Bounasser
+Last manual update: 2026-08-26 21:35 - Adil
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-26 21:35 - Adil
+- Commit: `3a9852b`
+- Area: Shipping / M&P Status Synchronization
+- Change: Mapped M&P statuses `Failed Delivered`, `Failed Delivery`, `Failed to Deliver`, and `Delivery Failed` to `failed_attempt` before applying the generic delivered-status rule.
+- Reason: M&P uses `Failed Delivered` (tracking tag 16) for an unsuccessful delivery, but the previous text matcher saw the word `deliver` and incorrectly marked these shipments as delivered.
+- Notes: Deployed `mnp-carrier-status-sync` and `mnp-shipping-sync`. Re-synchronized AB-2085, AB-2088, HG-40, AB-2121, and AB-2188; all five now have `delivery_status = failed_attempt`, `normalized_status = failed_attempt`, and no `delivered_at` value. PostEx behavior was not changed.
 
 ### 2026-08-26 08:28 - Anwar Bounasser
 - Commit: `bbffdd6`
