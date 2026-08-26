@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-25 10:01 - Anwar Bounasser
+Last manual update: 2026-08-26 08:28 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-26 08:28 - Anwar Bounasser
+- Commit: `bbffdd6`
+- Area: Orders
+- Change: Fixed the Delivery=Pending filter on the Orders page, which always returned zero results.
+- Reason: Orders that haven't shipped yet store `delivery_status` as NULL, not the literal string `"pending"` (the UI only displays NULL as "Pending" for readability), so `eq('delivery_status','pending')` never matched a row. The filter now uses `IS NULL` when "Pending" is selected.
+- Notes: No migration or deploy needed — frontend-only change. Audited the other Orders filters (Confirmation, Delivery's other statuses, Product, Sub Status, Courier, Channel) while investigating — all use real, non-null DB values and work correctly. Also confirmed the "Upsell = Yes" filter is a pre-existing dead filter (the app never sets `upsell = true` anywhere) — left as-is per the user's decision, not a new bug.
 
 ### 2026-08-25 10:01 - Anwar Bounasser
 - Commit: `e98fed0`
