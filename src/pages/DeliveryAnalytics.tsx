@@ -4,6 +4,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie, Legend,
 } from "recharts";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import {
   Truck, Package, CheckCircle2, XCircle, AlertTriangle, RotateCcw,
   MapPin, Users, Award, TrendingUp, BarChart2, ChevronUp, ChevronDown,
   ChevronsUpDown, Loader2, ArrowRight, PackageX, PackageCheck, Navigation,
-  Printer, Send,
+  Printer, Send, Layers, Activity,
 } from "lucide-react";
 import {
   formatPKT as format,
@@ -49,6 +50,13 @@ type Order = {
   }>;
 };
 
+type FollowUpRow = {
+  order_id: string;
+  follow_up_status: string;
+  updated_by: string | null;
+  updated_at: string;
+};
+
 type DeliveryStatusEvent = {
   order_id: string;
   old_value: string | null;
@@ -78,6 +86,18 @@ const SUCCESSFUL_DELIVERY_STATUSES = ["delivered", "paid"];
 const ACTIVE_SHIPPING_STATUSES = ["shipped", "in_transit", "with_courier", "out_for_delivery"];
 const RETURNED_STATUSES = ["returned", "return", "return_received"];
 const RETURN_RECEIVED_STATUSES = ["return_received"];
+// Matches FollowUps.tsx's RETURN_DELIVERY_STATUSES / STALE_REATTEMPT_MS exactly,
+// so "stale re-attempt" here means the same thing as the warning shown there.
+const RETURN_LIKE_STATUSES = ["returned", "return", "ready_for_return", "return_received"];
+const STALE_REATTEMPT_MS = 24 * 60 * 60 * 1000;
+// Only these two follow_up_status values represent an actual attempt to
+// rescue the delivery. "refused"/"area_restricted" are correct triage calls
+// (the customer said no / the address can't be served) — blending them into
+// a single "effectiveness" number makes real rescue attempts look far worse
+// than they are, since refused orders are ~1% delivered by nature, not by
+// a failure of follow-up. "no_answer"/"postponed" are still-open, not a
+// completed rescue attempt either way.
+const RESCUE_ATTEMPT_STATUSES = ["re_attempted", "pushed_delivery"];
 const SHIPPED_POOL_STATUSES = [
   ...ACTIVE_SHIPPING_STATUSES,
   ...SUCCESSFUL_DELIVERY_STATUSES,
@@ -183,6 +203,19 @@ function rateLabel(rate: number): string {
   return "Poor";
 }
 
+// Categorize a raw carrier sub-status string (e.g. "Delivered to Customer",
+// "Attempt Made: RFD(REFUSED TO RECEIVE)") into a tone for the sub-status
+// breakdown table — purely presentational, does not affect any KPI math.
+function subStatusTone(status: string): { bg: string; text: string; dot: string } {
+  const s = status.toLowerCase();
+  if (s.includes("delivered")) return { bg: "bg-emerald-100 dark:bg-emerald-900/30", text: "text-emerald-700 dark:text-emerald-300", dot: "#10b981" };
+  if (s.includes("return")) return { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-300", dot: "#ef4444" };
+  if (s.includes("attempt") || s.includes("refused") || s.includes("unsuccessful") || s.includes("failed")) return { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-300", dot: "#f59e0b" };
+  if (s.includes("transit") || s.includes("enroute") || s.includes("dispatch") || s.includes("departed") || s.includes("out-for-delivery") || s.includes("out for delivery")) return { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-300", dot: "#3b82f6" };
+  if (s.includes("book")) return { bg: "bg-violet-100 dark:bg-violet-900/30", text: "text-violet-700 dark:text-violet-300", dot: "#8b5cf6" };
+  return { bg: "bg-gray-100 dark:bg-gray-800", text: "text-gray-700 dark:text-gray-300", dot: "#6b7280" };
+}
+
 function isWithinRange(date: Date, range: DateRange | undefined): boolean {
   if (!range?.from) return true;
   if (date < startOfDay(range.from)) return false;
@@ -230,6 +263,24 @@ async function fetchAllDeliveryStatusEvents(): Promise<DeliveryStatusEvent[]> {
   return rows;
 }
 
+async function fetchAllFollowUps(): Promise<FollowUpRow[]> {
+  const rows: FollowUpRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("order_follow_ups" as any)
+      .select("order_id, follow_up_status, updated_by, updated_at")
+      .order("updated_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as FollowUpRow[];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return rows;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 interface KPICardProps {
@@ -242,37 +293,51 @@ interface KPICardProps {
   gradient: string;
   delay?: number;
   pool?: number;
+  onClick?: () => void;
 }
 
-function KPICard({ title, value, subtitle, icon: Icon, colorBg, colorIcon, gradient, delay = 0, pool }: KPICardProps) {
+function KPICard({ title, value, subtitle, icon: Icon, colorBg, colorIcon, gradient, delay = 0, pool, onClick }: KPICardProps) {
   const numVal = typeof value === "number" ? value : 0;
   const poolPct = pool && pool > 0 ? pct(numVal, pool) : null;
 
   return (
     <div
-      className="relative overflow-hidden rounded-2xl bg-card border border-border/60 shadow-sm hover:shadow-md transition-all duration-300 animate-slide-up"
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+      className={cn(
+        "group relative overflow-hidden rounded-2xl bg-card border border-border/50",
+        "shadow-[0_1px_2px_rgba(0,0,0,0.04),0_10px_28px_-16px_rgba(0,0,0,0.16)]",
+        "transition-all duration-300 ease-out animate-slide-up",
+        onClick
+          ? "cursor-pointer hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_1px_2px_rgba(0,0,0,0.06),0_18px_36px_-16px_rgba(0,0,0,0.22)]"
+          : "hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_16px_32px_-16px_rgba(0,0,0,0.2)]",
+      )}
       style={{ animationDelay: `${delay}ms` }}
     >
-      <div className={cn("h-1 w-full bg-gradient-to-r", gradient)} />
-      <div className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div className={cn("p-2 rounded-xl", colorBg)}>
+      {/* Soft glow accent behind the top edge */}
+      <div className={cn("pointer-events-none absolute -top-2 inset-x-6 h-4 rounded-full bg-gradient-to-r blur-md opacity-30", gradient)} />
+      <div className={cn("relative h-[3px] w-full bg-gradient-to-r", gradient)} />
+      <div className="relative p-4">
+        <div className="flex items-start justify-between mb-3.5">
+          <div className={cn("p-2.5 rounded-2xl ring-1 ring-inset ring-black/5 dark:ring-white/10 shadow-sm", colorBg)}>
             <Icon className={cn("h-4 w-4", colorIcon)} />
           </div>
           {poolPct !== null && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/50">
+            <span className="text-[10px] font-bold tabular-nums px-2 py-0.5 rounded-full bg-muted/70 text-muted-foreground border border-border/40 backdrop-blur-sm">
               {fmtPct(poolPct)}
             </span>
           )}
         </div>
-        <div className="space-y-0.5">
-          <div className="text-2xl font-bold tracking-tight text-foreground">
+        <div className="space-y-1">
+          <div className="text-[26px] leading-none font-bold tracking-tight text-foreground tabular-nums">
             {typeof value === "number" ? value.toLocaleString() : value}
           </div>
-          <p className="text-xs text-muted-foreground font-medium">{title}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{title}</p>
           {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
           {poolPct !== null && (
-            <div className="h-1 bg-muted rounded-full overflow-hidden mt-2">
+            <div className="h-1.5 bg-muted/70 rounded-full overflow-hidden mt-2.5 shadow-inner">
               <div
                 className={cn("h-full rounded-full bg-gradient-to-r transition-all duration-700", gradient)}
                 style={{ width: `${Math.min(poolPct, 100)}%` }}
@@ -290,11 +355,11 @@ function SectionHeader({
 }: { icon: React.ElementType; title: string; subtitle?: string; iconBg: string; iconColor: string }) {
   return (
     <div className="flex items-center gap-3 mb-5">
-      <div className={cn("p-2 rounded-xl", iconBg)}>
+      <div className={cn("p-2.5 rounded-xl ring-1 ring-inset ring-black/5 dark:ring-white/10 shadow-sm", iconBg)}>
         <Icon className={cn("h-4 w-4", iconColor)} />
       </div>
       <div>
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        <h2 className="text-[13px] font-bold tracking-tight text-foreground">{title}</h2>
         {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
       </div>
     </div>
@@ -340,6 +405,7 @@ function SkeletonBlock() {
 export default function DeliveryAnalytics() {
   const [sellerFilter, setSellerFilter] = useState("all");
   const [productFilter, setProductFilter] = useState("all");
+  const [courierFilter, setCourierFilter] = useState("all");
   const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all");
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
@@ -357,6 +423,8 @@ export default function DeliveryAnalytics() {
   const [agentSort, setAgentSort] = useState<AgentSortField>("rate");
   const [agentSortDir, setAgentSortDir] = useState<SortDir>("desc");
 
+  const [showFailedAttemptDetail, setShowFailedAttemptDetail] = useState(false);
+
   // ── Data Queries ─────────────────────────────────────────────────────────────
 
   const { data: orders = [], isLoading } = useQuery({
@@ -367,6 +435,11 @@ export default function DeliveryAnalytics() {
   const { data: deliveryStatusEvents = [] } = useQuery({
     queryKey: ["delivery-analytics-status-events-v1"],
     queryFn: fetchAllDeliveryStatusEvents,
+  });
+
+  const { data: followUps = [] } = useQuery({
+    queryKey: ["delivery-analytics-follow-ups-v1"],
+    queryFn: fetchAllFollowUps,
   });
 
   const { data: profiles = [] } = useQuery({
@@ -390,6 +463,14 @@ export default function DeliveryAnalytics() {
     return m;
   }, [orders]);
 
+  // order_follow_ups is upserted one row per order_id (onConflict: "order_id"),
+  // so this is a safe 1:1 lookup.
+  const followUpByOrderId = useMemo(() => {
+    const m: Record<string, FollowUpRow> = {};
+    followUps.forEach((f) => { m[f.order_id] = f; });
+    return m;
+  }, [followUps]);
+
   // ── Derived options ──────────────────────────────────────────────────────────
 
   const sellerOptions = useMemo(() => {
@@ -405,18 +486,24 @@ export default function DeliveryAnalytics() {
     return names.sort().map((n) => ({ value: n, label: n }));
   }, [orders, sellerFilter]);
 
+  const courierOptions = useMemo(() => {
+    const names = [...new Set(orders.map((o) => detectCourier(o)))].filter(Boolean);
+    return names.sort().map((n) => ({ value: n, label: n }));
+  }, [orders]);
+
   // ── Filtered orders ──────────────────────────────────────────────────────────
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
       if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
       if (productFilter !== "all" && o.product_name !== productFilter) return false;
+      if (courierFilter !== "all" && detectCourier(o) !== courierFilter) return false;
       if (deliveryStatusFilter !== "all" && o.delivery_status !== deliveryStatusFilter) return false;
       const dt = dateField === "created" ? o.created_at : o.updated_at;
       if (!isWithinRange(new Date(dt), dateRange)) return false;
       return true;
     });
-  }, [orders, sellerFilter, productFilter, deliveryStatusFilter, dateField, dateRange]);
+  }, [orders, sellerFilter, productFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
 
   // ── KPI Calculations ─────────────────────────────────────────────────────────
 
@@ -427,10 +514,11 @@ export default function DeliveryAnalytics() {
     return orders.filter((o) => {
       if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
       if (productFilter !== "all" && o.product_name !== productFilter) return false;
+      if (courierFilter !== "all" && detectCourier(o) !== courierFilter) return false;
       if (deliveryStatusFilter !== "all" && o.delivery_status !== deliveryStatusFilter) return false;
       return true;
     });
-  }, [orders, sellerFilter, productFilter, deliveryStatusFilter]);
+  }, [orders, sellerFilter, productFilter, courierFilter, deliveryStatusFilter]);
 
   // Same basis-aware event rule used by SellerAnalytics.tsx (the page this was
   // reconciled against): in "created" mode every metric is scoped by
@@ -462,7 +550,8 @@ export default function DeliveryAnalytics() {
   const kpis = useMemo(() => {
     const matchesNonStatusFilters = (o: Order) =>
       (sellerFilter === "all" || o.seller_id === sellerFilter) &&
-      (productFilter === "all" || o.product_name === productFilter);
+      (productFilter === "all" || o.product_name === productFilter) &&
+      (courierFilter === "all" || detectCourier(o) === courierFilter);
     const matchesFilters = (o: Order) =>
       matchesNonStatusFilters(o) &&
       (deliveryStatusFilter === "all" || o.delivery_status === deliveryStatusFilter);
@@ -530,7 +619,157 @@ export default function DeliveryAnalytics() {
       returnRate: pct(returned, poolCount),
       failedAttemptRate: pct(failedAttempt, poolCount),
     };
-  }, [orders, deliveryStatusEvents, orderByOrderId, sellerFilter, productFilter, deliveryStatusFilter, dateField, dateRange]);
+  }, [orders, deliveryStatusEvents, orderByOrderId, sellerFilter, productFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
+
+  // The actual order rows behind the "Failed Attempt" KPI number — mirrors
+  // countDeliveryStatusEvents(["failed_attempt"])'s exact logic (event-scoped
+  // in Updated mode, cohort-scoped in Created mode) so the popup's total
+  // always matches the KPI card's own count.
+  const failedAttemptOrders = useMemo(() => {
+    if (deliveryStatusFilter !== "all" && deliveryStatusFilter !== "failed_attempt") return [];
+    const matchesNonStatusFilters = (o: Order) =>
+      (sellerFilter === "all" || o.seller_id === sellerFilter) &&
+      (productFilter === "all" || o.product_name === productFilter) &&
+      (courierFilter === "all" || detectCourier(o) === courierFilter);
+
+    if (dateField === "created") {
+      return orders.filter((o) => matchesNonStatusFilters(o) && o.delivery_status === "failed_attempt" && inRangeByEvent(o, o.created_at));
+    }
+
+    const ids = new Set<string>();
+    deliveryStatusEvents.forEach((event) => {
+      if (event.new_value !== "failed_attempt") return;
+      if ((event.old_value || "") === "failed_attempt") return;
+      const order = orderByOrderId[event.order_id];
+      if (!order || !matchesNonStatusFilters(order)) return;
+      if (!isWithinRange(new Date(event.created_at), dateRange)) return;
+      ids.add(event.order_id);
+    });
+    return [...ids].map((id) => orderByOrderId[id]).filter(Boolean) as Order[];
+  }, [orders, deliveryStatusEvents, orderByOrderId, sellerFilter, productFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
+
+  const failedAttemptReasonRows = useMemo(() => {
+    const map: Record<string, number> = {};
+    failedAttemptOrders.forEach((o) => {
+      const reason = o.shipping_status?.trim() || "No reason recorded";
+      map[reason] = (map[reason] || 0) + 1;
+    });
+    const total = failedAttemptOrders.length;
+    return Object.entries(map)
+      .map(([reason, count]) => ({ reason, count, pct: pct(count, total) }))
+      .sort((a, b) => b.count - a.count);
+  }, [failedAttemptOrders]);
+
+  const failedAttemptCourierRows = useMemo(() => {
+    const map: Record<string, number> = {};
+    failedAttemptOrders.forEach((o) => {
+      const co = detectCourier(o);
+      map[co] = (map[co] || 0) + 1;
+    });
+    return Object.entries(map).map(([courier, count]) => ({ courier, count })).sort((a, b) => b.count - a.count);
+  }, [failedAttemptOrders]);
+
+  const failedAttemptCityRows = useMemo(() => {
+    const map: Record<string, number> = {};
+    failedAttemptOrders.forEach((o) => {
+      const city = o.customer_city?.trim() || "Unknown";
+      map[city] = (map[city] || 0) + 1;
+    });
+    return Object.entries(map).map(([city, count]) => ({ city, count })).sort((a, b) => b.count - a.count).slice(0, 10);
+  }, [failedAttemptOrders]);
+
+  // ── Follow-Up Effectiveness ──────────────────────────────────────────────────
+  // Answers two questions: (1) is Follow Up actually working the orders that
+  // currently need it (coverage), and (2) when they do act, does it actually
+  // rescue the order (effectiveness — delivered vs still stuck/returned).
+  const isStale = (order: Order, fu: FollowUpRow | undefined) => {
+    if (!fu || fu.follow_up_status !== "re_attempted") return false;
+    if (order.delivery_status === "delivered") return false;
+    if (RETURN_LIKE_STATUSES.includes(order.delivery_status || "")) return false;
+    return Date.now() - new Date(fu.updated_at).getTime() > STALE_REATTEMPT_MS;
+  };
+
+  const followUpStats = useMemo(() => {
+    // Orders that currently need follow-up attention right now.
+    const needsFollowUpPool = filteredOrders.filter((o) => o.delivery_status === "failed_attempt");
+    const workedInPool = needsFollowUpPool.filter((o) => {
+      const fu = followUpByOrderId[o.order_id];
+      return !!fu && fu.follow_up_status !== "pending";
+    });
+    const untouchedInPool = needsFollowUpPool.length - workedInPool.length;
+
+    // Every order Follow Up has ever acted on (regardless of its current
+    // status — an order that got rescued and delivered no longer shows
+    // delivery_status='failed_attempt', so this must NOT be scoped to the
+    // pool above or "effectiveness" would always look like 0%).
+    const touchedOrders = filteredOrders.filter((o) => {
+      const fu = followUpByOrderId[o.order_id];
+      return !!fu && fu.follow_up_status !== "pending";
+    });
+    const deliveredAfterTouch = touchedOrders.filter((o) => o.delivery_status === "delivered");
+    const returnedAfterTouch = touchedOrders.filter((o) => RETURNED_STATUSES.includes(o.delivery_status || ""));
+    const stillStuck = touchedOrders.filter((o) => o.delivery_status === "failed_attempt");
+
+    // Rescue rate: scoped ONLY to orders actually marked re_attempted/
+    // pushed_delivery — a fair "did the rescue attempt work" number, not
+    // diluted by refused/area_restricted orders that were never rescuable.
+    const rescueAttempts = touchedOrders.filter((o) => RESCUE_ATTEMPT_STATUSES.includes(followUpByOrderId[o.order_id]?.follow_up_status || ""));
+    const rescuedDelivered = rescueAttempts.filter((o) => o.delivery_status === "delivered");
+
+    const staleReattempts = filteredOrders.filter((o) => isStale(o, followUpByOrderId[o.order_id]));
+
+    return {
+      needsFollowUp: needsFollowUpPool.length,
+      worked: workedInPool.length,
+      untouched: untouchedInPool,
+      coveragePct: pct(workedInPool.length, needsFollowUpPool.length),
+      touched: touchedOrders.length,
+      delivered: deliveredAfterTouch.length,
+      returned: returnedAfterTouch.length,
+      stillStuck: stillStuck.length,
+      rescueAttempts: rescueAttempts.length,
+      rescuedDelivered: rescuedDelivered.length,
+      rescueRatePct: pct(rescuedDelivered.length, rescueAttempts.length),
+      staleCount: staleReattempts.length,
+    };
+  }, [filteredOrders, followUpByOrderId]);
+
+  const followUpOutcomeByStatus = useMemo(() => {
+    const map: Record<string, { total: number; delivered: number }> = {};
+    filteredOrders.forEach((o) => {
+      const fu = followUpByOrderId[o.order_id];
+      if (!fu || fu.follow_up_status === "pending") return;
+      if (!map[fu.follow_up_status]) map[fu.follow_up_status] = { total: 0, delivered: 0 };
+      map[fu.follow_up_status].total++;
+      if (o.delivery_status === "delivered") map[fu.follow_up_status].delivered++;
+    });
+    return Object.entries(map)
+      .map(([status, d]) => ({ status, total: d.total, delivered: d.delivered, rate: pct(d.delivered, d.total) }))
+      .sort((a, b) => b.total - a.total);
+  }, [filteredOrders, followUpByOrderId]);
+
+  const followUpAgentRows = useMemo(() => {
+    const map: Record<string, { handled: number; delivered: number; stale: number }> = {};
+    filteredOrders.forEach((o) => {
+      const fu = followUpByOrderId[o.order_id];
+      if (!fu || fu.follow_up_status === "pending" || !fu.updated_by) return;
+      const agentId = fu.updated_by;
+      if (!map[agentId]) map[agentId] = { handled: 0, delivered: 0, stale: 0 };
+      map[agentId].handled++;
+      if (o.delivery_status === "delivered") map[agentId].delivered++;
+      if (isStale(o, fu)) map[agentId].stale++;
+    });
+    return Object.entries(map)
+      .map(([id, d]) => ({
+        id,
+        name: profileMap[id] || id.slice(0, 8),
+        handled: d.handled,
+        delivered: d.delivered,
+        stale: d.stale,
+        rate: pct(d.delivered, d.handled),
+      }))
+      .sort((a, b) => b.handled - a.handled);
+  }, [filteredOrders, followUpByOrderId, profileMap]);
 
   // ── By Courier ───────────────────────────────────────────────────────────────
 
@@ -611,6 +850,23 @@ export default function DeliveryAnalytics() {
   }, [cityRows, citySort, citySortDir]);
 
   const visibleCityRows = showAllCities ? sortedCityRows : sortedCityRows.slice(0, 15);
+
+  // ── By Sub-Status ────────────────────────────────────────────────────────────
+  // Raw carrier sub-status text (e.g. "Delivered to Customer", "Attempt Made:
+  // RFD(REFUSED TO RECEIVE)") — one level more granular than delivery_status,
+  // synced onto orders.shipping_status by the carrier status-sync functions.
+  const subStatusRows = useMemo(() => {
+    const map: Record<string, number> = {};
+    filteredOrders.forEach((o) => {
+      if (!isInShippedDeliveryPool(o.delivery_status)) return;
+      const status = o.shipping_status?.trim() || "No sub-status";
+      map[status] = (map[status] || 0) + 1;
+    });
+    const total = Object.values(map).reduce((sum, n) => sum + n, 0);
+    return Object.entries(map)
+      .map(([status, count]) => ({ status, count, pct: pct(count, total) }))
+      .sort((a, b) => b.count - a.count);
+  }, [filteredOrders]);
 
   // ── Daily Trend ──────────────────────────────────────────────────────────────
 
@@ -766,27 +1022,30 @@ export default function DeliveryAnalytics() {
     else { setAgentSort(field); setAgentSortDir("desc"); }
   }
 
-  const hasFilters = sellerFilter !== "all" || productFilter !== "all" || deliveryStatusFilter !== "all" || !!dateRange;
+  const hasFilters = sellerFilter !== "all" || productFilter !== "all" || courierFilter !== "all" || deliveryStatusFilter !== "all" || !!dateRange;
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6 w-full max-w-none">
       {/* Page Header */}
-      <div className="animate-fade-in">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-md">
+      <div className="relative animate-fade-in">
+        <div className="pointer-events-none absolute -top-8 -left-4 w-56 h-56 rounded-full bg-gradient-to-br from-indigo-500/20 to-violet-600/10 blur-3xl" />
+        <div className="relative flex items-center gap-3.5">
+          <div className="relative p-3 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-[0_8px_24px_-8px_rgba(99,102,241,0.5)] ring-1 ring-inset ring-white/20">
             <Truck className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Delivery Analytics</h1>
+            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+              Delivery Analytics
+            </h1>
             <p className="text-muted-foreground text-sm mt-0.5">Shipping & delivery performance insights</p>
           </div>
         </div>
       </div>
 
       {/* ── Sticky Filter Bar ────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-20 backdrop-blur-md bg-background/80 border border-border/60 rounded-2xl p-3 shadow-sm animate-fade-in">
+      <div className="sticky top-0 z-20 backdrop-blur-xl bg-background/75 border border-border/50 rounded-2xl p-3 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.15)] animate-fade-in">
         <div className="flex flex-wrap gap-2 items-center">
           <DatePresetFilter
             dateRange={dateRange}
@@ -808,6 +1067,14 @@ export default function DeliveryAnalytics() {
             options={productOptions}
             placeholder="Product"
             allLabel="All Products"
+            className="w-[150px]"
+          />
+          <SearchableSelect
+            value={courierFilter}
+            onValueChange={setCourierFilter}
+            options={courierOptions}
+            placeholder="Courier"
+            allLabel="All Couriers"
             className="w-[150px]"
           />
           <SearchableSelect
@@ -845,6 +1112,7 @@ export default function DeliveryAnalytics() {
               onClick={() => {
                 setSellerFilter("all");
                 setProductFilter("all");
+                setCourierFilter("all");
                 setDeliveryStatusFilter("all");
                 setDatePreset("maximum");
                 setDateRange(undefined);
@@ -947,6 +1215,7 @@ export default function DeliveryAnalytics() {
               gradient="from-amber-500 to-yellow-400"
               delay={250}
               pool={kpis.poolCount}
+              onClick={() => setShowFailedAttemptDetail(true)}
             />
             <KPICard
               title="Returned"
@@ -995,24 +1264,25 @@ export default function DeliveryAnalytics() {
             ].map(({ label, value, sub, icon: Icon }, i) => (
               <div
                 key={label}
-                className="relative overflow-hidden rounded-2xl bg-card border border-border/60 shadow-sm p-5 animate-slide-up"
+                className="group relative overflow-hidden rounded-2xl bg-card border border-border/50 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_16px_40px_-24px_rgba(0,0,0,0.2)] p-5 animate-slide-up transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_22px_44px_-20px_rgba(0,0,0,0.24)]"
                 style={{ animationDelay: `${400 + i * 60}ms` }}
               >
-                <div className={cn("absolute top-0 left-0 right-0 h-1 bg-gradient-to-r", rateGradient(value))} />
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-2 rounded-xl bg-muted">
+                <div className={cn("pointer-events-none absolute -top-3 inset-x-8 h-6 rounded-full bg-gradient-to-r blur-lg opacity-25", rateGradient(value))} />
+                <div className={cn("absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r", rateGradient(value))} />
+                <div className="relative flex items-start justify-between mb-4">
+                  <div className="p-2.5 rounded-xl bg-muted/70 ring-1 ring-inset ring-black/5 dark:ring-white/10">
                     <Icon className="h-4 w-4 text-muted-foreground" />
                   </div>
-                  <Badge className={cn("text-xs font-semibold border-0", rateBadgeClass(value))}>
+                  <Badge className={cn("text-[11px] font-bold border-0 tracking-wide", rateBadgeClass(value))}>
                     {rateLabel(value)}
                   </Badge>
                 </div>
-                <div className="text-4xl font-bold tracking-tight" style={{ color: rateColor(value) }}>
+                <div className="relative text-[42px] leading-none font-bold tracking-tight tabular-nums" style={{ color: rateColor(value) }}>
                   {fmtPct(value)}
                 </div>
-                <p className="text-sm font-medium text-foreground mt-1">{label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>
-                <div className="mt-4 h-2 bg-muted rounded-full overflow-hidden">
+                <p className="relative text-sm font-semibold text-foreground mt-2">{label}</p>
+                <p className="relative text-xs text-muted-foreground mt-0.5">{sub}</p>
+                <div className="relative mt-4 h-2 bg-muted/70 rounded-full overflow-hidden shadow-inner">
                   <div
                     className={cn("h-full rounded-full bg-gradient-to-r transition-all duration-700", rateGradient(value))}
                     style={{ width: `${Math.min(value, 100)}%` }}
@@ -1022,10 +1292,118 @@ export default function DeliveryAnalytics() {
             ))}
           </div>
 
+          {/* ── Section 2b: Follow-Up Effectiveness ───────────────────────────── */}
+          <div
+            className="rounded-2xl bg-card border border-border/50 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_16px_40px_-24px_rgba(0,0,0,0.2)] p-5 animate-slide-up"
+            style={{ animationDelay: "120ms" }}
+          >
+            <SectionHeader
+              icon={Activity}
+              title="Follow-Up Effectiveness"
+              subtitle="Is the Follow Up team actually working failed deliveries, and does it help?"
+              iconBg="bg-fuchsia-100 dark:bg-fuchsia-900/30"
+              iconColor="text-fuchsia-600 dark:text-fuchsia-300"
+            />
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+              <div className="rounded-xl border border-border/60 p-3.5">
+                <div className="text-2xl font-bold tabular-nums">{followUpStats.needsFollowUp.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground mt-0.5">Needs Follow-Up now</p>
+                <p className="text-[11px] text-muted-foreground">currently Failed Attempt</p>
+              </div>
+              <div className="rounded-xl border border-border/60 p-3.5">
+                <div className="text-2xl font-bold tabular-nums" style={{ color: rateColor(followUpStats.coveragePct) }}>
+                  {fmtPct(followUpStats.coveragePct)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">Coverage</p>
+                <p className="text-[11px] text-muted-foreground">{followUpStats.worked.toLocaleString()} worked / {followUpStats.untouched.toLocaleString()} untouched</p>
+              </div>
+              <div className="rounded-xl border border-border/60 p-3.5">
+                <div className="text-2xl font-bold tabular-nums" style={{ color: rateColor(followUpStats.rescueRatePct) }}>
+                  {fmtPct(followUpStats.rescueRatePct)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">Rescue Rate</p>
+                <p className="text-[11px] text-muted-foreground">{followUpStats.rescuedDelivered.toLocaleString()} delivered / {followUpStats.rescueAttempts.toLocaleString()} re-attempted or pushed</p>
+              </div>
+              <div className={cn("rounded-xl border p-3.5", followUpStats.staleCount > 0 ? "border-red-300/60 bg-red-50/50 dark:bg-red-900/10 dark:border-red-900/40" : "border-border/60")}>
+                <div className={cn("text-2xl font-bold tabular-nums", followUpStats.staleCount > 0 && "text-red-600 dark:text-red-400")}>
+                  {followUpStats.staleCount.toLocaleString()}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">Stale Re-Attempts</p>
+                <p className="text-[11px] text-muted-foreground">re-attempted &gt;24h, still stuck</p>
+              </div>
+            </div>
+
+            {followUpAgentRows.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/60 text-xs text-muted-foreground">
+                      <th className="text-left py-2.5 pr-4 font-semibold">Follow-Up Agent</th>
+                      <th className="text-right py-2.5 px-3 font-semibold">Handled</th>
+                      <th className="text-right py-2.5 px-3 font-semibold">Delivered</th>
+                      <th className="text-right py-2.5 px-3 font-semibold">Stale</th>
+                      <th className="text-right py-2.5 pl-3 font-semibold min-w-[160px]">Rescue Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {followUpAgentRows.map((row) => (
+                      <tr key={row.id} className="border-b border-border/40 last:border-0 hover:bg-muted/40 transition-colors">
+                        <td className="py-3 pr-4 font-medium">{row.name}</td>
+                        <td className="py-3 px-3 text-right tabular-nums">{row.handled.toLocaleString()}</td>
+                        <td className="py-3 px-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-medium">{row.delivered.toLocaleString()}</td>
+                        <td className={cn("py-3 px-3 text-right tabular-nums font-medium", row.stale > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>
+                          {row.stale.toLocaleString()}
+                        </td>
+                        <td className="py-3 pl-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(row.rate, 100)}%`, backgroundColor: rateColor(row.rate) }} />
+                            </div>
+                            <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", rateBadgeClass(row.rate))}>
+                              {fmtPct(row.rate)}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {followUpAgentRows.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">No follow-up activity for the selected filters.</p>
+            )}
+
+            {followUpOutcomeByStatus.length > 0 && (
+              <div className="mt-5 pt-5 border-t border-border/60">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Outcome by Follow-Up Status
+                </h3>
+                <p className="text-[11px] text-muted-foreground mb-3">
+                  "Refused"/"Area Restricted" are correct triage calls, not failed rescues — their low delivered % is expected, not a sign of poor follow-up work.
+                </p>
+                <div className="space-y-1.5">
+                  {followUpOutcomeByStatus.map((row) => (
+                    <div key={row.status} className="flex items-center gap-3">
+                      <span className="text-xs font-medium w-32 shrink-0 capitalize">{row.status.replace(/_/g, " ")}</span>
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(row.rate, 100)}%`, backgroundColor: rateColor(row.rate) }} />
+                      </div>
+                      <span className="text-xs font-semibold tabular-nums text-muted-foreground w-28 text-right shrink-0">
+                        {row.delivered.toLocaleString()} / {row.total.toLocaleString()} ({fmtPct(row.rate)})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* ── Section 3: Delivery by Agent ─────────────────────────────────── */}
           {sortedAgentRows.length > 0 && (
             <div
-              className="rounded-2xl bg-card border border-border/60 shadow-sm p-5 animate-slide-up"
+              className="rounded-2xl bg-card border border-border/50 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_16px_40px_-24px_rgba(0,0,0,0.2)] p-5 animate-slide-up"
               style={{ animationDelay: "140ms" }}
             >
               <SectionHeader
@@ -1148,7 +1526,7 @@ export default function DeliveryAnalytics() {
           {/* ── Section 4: Delivery Rate by Courier ───────────────────────────── */}
           {sortedCourierRows.length > 0 && (
             <div
-              className="rounded-2xl bg-card border border-border/60 shadow-sm p-5 animate-slide-up overflow-hidden"
+              className="rounded-2xl bg-card border border-border/50 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_16px_40px_-24px_rgba(0,0,0,0.2)] p-5 animate-slide-up overflow-hidden"
               style={{ animationDelay: "180ms" }}
             >
               <SectionHeader
@@ -1264,7 +1642,7 @@ export default function DeliveryAnalytics() {
           {/* ── Section 4: Delivery Rate by City ──────────────────────────────── */}
           {sortedCityRows.length > 0 && (
             <div
-              className="rounded-2xl bg-card border border-border/60 shadow-sm p-5 animate-slide-up"
+              className="rounded-2xl bg-card border border-border/50 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_16px_40px_-24px_rgba(0,0,0,0.2)] p-5 animate-slide-up"
               style={{ animationDelay: "220ms" }}
             >
               <SectionHeader
@@ -1368,10 +1746,61 @@ export default function DeliveryAnalytics() {
             </div>
           )}
 
+          {/* ── Section 4b: Delivery Sub-Status Breakdown ─────────────────────── */}
+          {subStatusRows.length > 0 && (
+            <div
+              className="rounded-2xl bg-card border border-border/50 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_16px_40px_-24px_rgba(0,0,0,0.2)] p-5 animate-slide-up"
+              style={{ animationDelay: "240ms" }}
+            >
+              <SectionHeader
+                icon={Layers}
+                title="Delivery Sub-Status Breakdown"
+                subtitle="Raw carrier status per shipment (e.g. PostEx/M&P sub-statuses) — one level more detailed than the delivery stage above"
+                iconBg="bg-teal-100 dark:bg-teal-900/30"
+                iconColor="text-teal-600 dark:text-teal-300"
+              />
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/60 text-xs text-muted-foreground">
+                      <th className="text-left py-2.5 pr-4 font-semibold">Sub-Status</th>
+                      <th className="text-right py-2.5 px-3 font-semibold">Orders</th>
+                      <th className="text-right py-2.5 pl-3 font-semibold min-w-[160px]">Share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subStatusRows.map((row) => {
+                      const tone = subStatusTone(row.status);
+                      return (
+                        <tr key={row.status} className="border-b border-border/40 last:border-0 hover:bg-muted/40 transition-colors">
+                          <td className="py-3 pr-4">
+                            <span className={cn("inline-flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-full", tone.bg, tone.text)}>
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tone.dot }} />
+                              {row.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-right tabular-nums font-medium">{row.count.toLocaleString()}</td>
+                          <td className="py-3 pl-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${Math.min(row.pct, 100)}%`, backgroundColor: tone.dot }} />
+                              </div>
+                              <span className="text-xs font-semibold text-muted-foreground min-w-[42px] text-right">{fmtPct(row.pct)}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* ── Section 5: Daily Trend Chart ───────────────────────────────────── */}
           {trendData.length > 0 && (
             <div
-              className="rounded-2xl bg-card border border-border/60 shadow-sm p-5 animate-slide-up"
+              className="rounded-2xl bg-card border border-border/50 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_16px_40px_-24px_rgba(0,0,0,0.2)] p-5 animate-slide-up"
               style={{ animationDelay: "260ms" }}
             >
               <SectionHeader
@@ -1387,15 +1816,15 @@ export default function DeliveryAnalytics() {
                   { label: "Delivered", color: "#10b981" },
                   { label: "Returned", color: "#ef4444" },
                 ].map(({ label, color }) => (
-                  <div key={label} className="flex items-center gap-1.5">
-                    <div className="w-3 h-0.5 rounded-full" style={{ backgroundColor: color }} />
-                    <span className="text-muted-foreground">{label}</span>
+                  <div key={label} className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted/50">
+                    <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: color }} />
+                    <span className="text-muted-foreground font-medium">{label}</span>
                   </div>
                 ))}
               </div>
               <ResponsiveContainer width="100%" height={260}>
                 <LineChart data={trendData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <CartesianGrid strokeDasharray="2 6" stroke="hsl(var(--border))" strokeOpacity={0.6} vertical={false} />
                   <XAxis
                     dataKey="date"
                     tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
@@ -1410,16 +1839,19 @@ export default function DeliveryAnalytics() {
                   />
                   <Tooltip
                     contentStyle={{
-                      borderRadius: "12px",
-                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "14px",
+                      border: "1px solid hsl(var(--border) / 0.6)",
                       fontSize: "12px",
+                      fontWeight: 500,
                       background: "hsl(var(--card))",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.08), 0 16px 40px -16px rgba(0,0,0,0.25)",
+                      padding: "10px 14px",
                     }}
+                    cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1, strokeDasharray: "3 3" }}
                   />
-                  <Line type="monotone" dataKey="confirmed" stroke="#6366f1" strokeWidth={2} dot={false} name="Confirmed" />
-                  <Line type="monotone" dataKey="delivered" stroke="#10b981" strokeWidth={2} dot={false} name="Delivered" />
-                  <Line type="monotone" dataKey="returned" stroke="#ef4444" strokeWidth={2} dot={false} name="Returned" />
+                  <Line type="monotone" dataKey="confirmed" stroke="#6366f1" strokeWidth={2.5} strokeLinecap="round" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }} name="Confirmed" />
+                  <Line type="monotone" dataKey="delivered" stroke="#10b981" strokeWidth={2.5} strokeLinecap="round" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }} name="Delivered" />
+                  <Line type="monotone" dataKey="returned" stroke="#ef4444" strokeWidth={2.5} strokeLinecap="round" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }} name="Returned" />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -1428,7 +1860,7 @@ export default function DeliveryAnalytics() {
           {/* ── Section 6: Delivery Rate by Product ───────────────────────────── */}
           {productRows.length > 0 && (
             <div
-              className="rounded-2xl bg-card border border-border/60 shadow-sm p-5 animate-slide-up"
+              className="rounded-2xl bg-card border border-border/50 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_16px_40px_-24px_rgba(0,0,0,0.2)] p-5 animate-slide-up"
               style={{ animationDelay: "300ms" }}
             >
               <SectionHeader
@@ -1515,7 +1947,7 @@ export default function DeliveryAnalytics() {
 
           {/* Empty state */}
           {filteredOrders.length === 0 && (
-            <div className="rounded-2xl bg-card border border-border/60 p-16 text-center animate-fade-in">
+            <div className="rounded-2xl bg-card border border-border/50 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_16px_40px_-24px_rgba(0,0,0,0.2)] p-16 text-center animate-fade-in">
               <div className="w-12 h-12 rounded-2xl bg-muted mx-auto flex items-center justify-center mb-4">
                 <Package className="h-6 w-6 text-muted-foreground" />
               </div>
@@ -1525,6 +1957,93 @@ export default function DeliveryAnalytics() {
           )}
         </>
       )}
+
+      {/* ── Failed Attempt detail popup ─────────────────────────────────────── */}
+      <Dialog open={showFailedAttemptDetail} onOpenChange={setShowFailedAttemptDetail}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Failed Attempt — {failedAttemptOrders.length.toLocaleString()} order{failedAttemptOrders.length === 1 ? "" : "s"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            {/* Reasons */}
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">By Reason</h3>
+              {failedAttemptReasonRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No data for the selected filters.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {failedAttemptReasonRows.map((row) => {
+                    const tone = subStatusTone(row.reason);
+                    return (
+                      <div key={row.reason} className="flex items-center gap-3">
+                        <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full shrink-0", tone.bg, tone.text)}>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tone.dot }} />
+                          {row.reason}
+                        </span>
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(row.pct, 100)}%`, backgroundColor: tone.dot }} />
+                        </div>
+                        <span className="text-xs font-semibold tabular-nums text-muted-foreground w-16 text-right shrink-0">
+                          {row.count.toLocaleString()} ({fmtPct(row.pct)})
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* By courier */}
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">By Courier</h3>
+              {failedAttemptCourierRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No data for the selected filters.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {failedAttemptCourierRows.map((row) => {
+                    const cc = courierColor(row.courier);
+                    return (
+                      <div key={row.courier} className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={cn("w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0", cc.bg, cc.text)}>
+                            {row.courier.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="text-sm font-medium truncate">{row.courier}</span>
+                        </div>
+                        <span className="text-sm font-semibold tabular-nums shrink-0">{row.count.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Top cities */}
+            <div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Top Cities</h3>
+              {failedAttemptCityRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No data for the selected filters.</p>
+              ) : (
+                <div className="space-y-1">
+                  {failedAttemptCityRows.map((row, i) => (
+                    <div key={row.city} className="flex items-center justify-between text-sm py-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-muted text-[10px] font-bold flex items-center justify-center text-muted-foreground">{i + 1}</span>
+                        <span className="font-medium">{row.city}</span>
+                      </div>
+                      <span className="tabular-nums font-semibold">{row.count.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
