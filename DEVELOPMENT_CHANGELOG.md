@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-27 09:03 - Anwar Bounasser
+Last manual update: 2026-08-27 11:38 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-27 11:38 - Anwar Bounasser
+- Commit: `694c47a`
+- Area: Delivery Analytics
+- Change: Added a Delivery Sub-Status Breakdown section, a clickable Failed Attempt KPI card with a drill-down popup (by reason/courier/city), a Follow-Up Effectiveness section (coverage, rescue rate, stale re-attempts, per-agent table, outcome-by-status breakdown), a new Courier filter applied page-wide, and a premium visual redesign (KPI cards, section headers/cards, page header, filter bar, trend chart).
+- Reason: Admin needed a way to see where delivery problems are concentrated and whether the Follow Up team is actually working/rescuing failed deliveries, plus a courier-level filter and a more polished look for the page.
+- Notes: No migration or deploy needed — frontend-only change. All new KPIs/tables were verified against live data via direct SQL replication of their exact logic before shipping (Failed Attempt breakdown sums to the KPI total, Follow-Up rescue rate correctly excludes refused/area_restricted triage outcomes from the denominator, courier options match real carrier data). The visual redesign is styling-only — no data/logic changes.
 
 ### 2026-08-27 09:03 - Anwar Bounasser
 - Commit: `d8c8535`
