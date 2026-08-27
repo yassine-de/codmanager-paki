@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-26 21:35 - Adil
+Last manual update: 2026-08-27 09:03 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-27 09:03 - Anwar Bounasser
+- Commit: `d8c8535`
+- Area: WhatsApp Inbox
+- Change: Added "Delivery Company" as its own labeled field on the order card (next to City/Created), instead of only showing the courier name as a small suffix on the Tracking Number label.
+- Reason: The follow-up/confirmation team needs to see which courier an order is with at a glance, not just as secondary text buried in the tracking field.
+- Notes: No migration or deploy needed — frontend-only change.
 
 ### 2026-08-26 21:35 - Adil
 - Commit: `3a9852b`
