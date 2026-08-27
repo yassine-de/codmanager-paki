@@ -3362,11 +3362,15 @@ export default function WhatsappInbox() {
                     <div className="text-[11px] text-muted-foreground">Created</div>
                     <div>{order.created_at ? format(new Date(order.created_at), "dd/MM/yyyy HH:mm") : "—"}</div>
                   </div>
+                  {latestShipment?.carriers?.name && (
+                    <div>
+                      <div className="text-[11px] text-muted-foreground">Delivery Company</div>
+                      <div className="text-sm font-medium">{latestShipment.carriers.name}</div>
+                    </div>
+                  )}
                   {latestShipment?.tracking_number && (
                     <div className="col-span-2">
-                      <div className="text-[11px] text-muted-foreground">
-                        Tracking Number{latestShipment.carriers?.name ? ` · ${latestShipment.carriers.name}` : ""}
-                      </div>
+                      <div className="text-[11px] text-muted-foreground">Tracking Number</div>
                       <button
                         type="button"
                         onClick={() => {
