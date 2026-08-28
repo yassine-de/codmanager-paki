@@ -1483,6 +1483,18 @@ export default function Orders() {
               updated_at: new Date().toISOString(),
             };
 
+            // Every other confirm/deliver code path in the app sets these event
+            // timestamps — this manual admin edit must too, or the order silently
+            // vanishes from every delivered_at/confirmed_at-based analytics chart
+            // (Dashboard's Delivered sparkline, Delivery/Seller Analytics' Updated
+            // mode, etc.) even though its status genuinely changed.
+            if (updated.confirmationStatus === 'confirmed' && editOrder.confirmationStatus !== 'confirmed') {
+              dbUpdate.confirmed_at = dbUpdate.updated_at;
+            }
+            if (updated.deliveryStatus === 'delivered' && editOrder.deliveryStatus !== 'delivered') {
+              dbUpdate.delivered_at = dbUpdate.updated_at;
+            }
+
             const { error } = await supabase
               .from('orders')
               .update(dbUpdate)
