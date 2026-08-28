@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-27 11:38 - Anwar Bounasser
+Last manual update: 2026-08-28 11:05 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-28 11:05 - Anwar Bounasser
+- Commit: `3b97abc`
+- Area: Orders
+- Change: Added an admin-only "Updated At" date range filter to the Orders page filter panel, next to Date Range (created) and Delivered At.
+- Reason: Admin needed to filter orders by when they were last updated, not just when they were created or delivered.
+- Notes: No migration or deploy needed — frontend-only change. Verified the PKT date-boundary logic against live data (SQL count vs. the exact REST query the frontend sends both returned 325 for "Today").
 
 ### 2026-08-27 11:38 - Anwar Bounasser
 - Commit: `694c47a`
