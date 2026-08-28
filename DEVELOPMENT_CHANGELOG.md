@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-28 14:11 - Anwar Bounasser
+Last manual update: 2026-08-28 15:04 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,20 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-28 15:04 - Anwar Bounasser
+- Commit: `c0fcfcf`
+- Area: Follow Ups / Database
+- Change: Switched the follow-up auto-assignment function (`assign_follow_up_agent_for_order`) from load-based ordering to pure round-robin (whichever eligible agent was assigned an order longest ago wins the next one).
+- Reason: The old load-based ordering picked the agent with the lowest lifetime assigned-order count, which almost never decreases (delivered/returned orders still count), so once one agent built a historical lead the other got 0% of new assignments for an extended stretch — confirmed live: all 491 orders assigned in the last 7 days went to a single agent (MEERAB got none).
+- Notes: Migration `20260828150000_follow_up_round_robin_assignment.sql` applied live to Supabase. Verified end-to-end on a real order (temporarily unassigned, re-ran the function, confirmed it picked the other agent, then restored the original assignment — no live data left altered). Did not touch the 598 already-unassigned backlog orders (599 pre-date both current agents' `assignment_started_at` gate by design; 597 of those are already delivered/returned and don't need follow-up).
+
+### 2026-08-28 15:04 - Anwar Bounasser
+- Commit: `6b94684`
+- Area: Follow Ups
+- Change: Fixed the "FU Updated" date filter, which was falling back to `order_updated_at` for orders with no `order_follow_ups` row, flooding results with orders Follow Up never actually touched.
+- Reason: Live-verified 37% of "FU Updated today" matches (57 of 154) were this fallback noise, not real follow-up activity — defeats the purpose of using this filter to audit what Follow Up did on a given day.
+- Notes: No migration or deploy needed — frontend-only change.
 
 ### 2026-08-28 14:11 - Anwar Bounasser
 - Commit: `d3d2215`
