@@ -466,8 +466,14 @@ export default function FollowUps() {
     }
     if (dateRange?.from) {
       try {
+        // "FU Updated" means "when did Follow Up last act on this order" — an
+        // order with no order_follow_ups row at all has no such event, so it
+        // must be excluded rather than falling back to order_updated_at (which
+        // bumps from unrelated things like courier status syncs and would
+        // otherwise flood this mode with orders Follow Up never touched).
+        if (dateField === "fu_updated" && !r.follow_up_updated_at) return false;
         const ts = dateField === "created" ? r.order_created_at
-          : dateField === "fu_updated"     ? (r.follow_up_updated_at ?? r.order_updated_at)
+          : dateField === "fu_updated"     ? r.follow_up_updated_at
           : r.order_updated_at;
         const target = new Date(ts);
         const start  = startOfDay(dateRange.from);
