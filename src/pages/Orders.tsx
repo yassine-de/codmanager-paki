@@ -336,6 +336,8 @@ export default function Orders() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [deliveredDatePreset, setDeliveredDatePreset] = useState<DatePresetValue>("maximum");
   const [deliveredDateRange, setDeliveredDateRange] = useState<DateRange | undefined>();
+  const [updatedDatePreset, setUpdatedDatePreset] = useState<DatePresetValue>("maximum");
+  const [updatedDateRange, setUpdatedDateRange] = useState<DateRange | undefined>();
   const [filterProduct, setFilterProduct] = useState('all');
   const [filterSeller, setFilterSeller] = useState('all');
   const [filterAgent, setFilterAgent] = useState('all');
@@ -379,6 +381,7 @@ export default function Orders() {
     return {
       dateRange: undefined as DateRange | undefined,
       deliveredRange: undefined as DateRange | undefined,
+      updatedRange: undefined as DateRange | undefined,
       product: 'all', seller: 'all', agent: 'all',
       confirmation: conf || 'all',
       delivery: del || 'all',
@@ -588,6 +591,10 @@ export default function Orders() {
             q = q.gte('delivered_at', startOfDay(f.deliveredRange.from).toISOString())
                  .lte('delivered_at', endOfDayPKT(f.deliveredRange.to ?? f.deliveredRange.from).toISOString());
           }
+          if (f.updatedRange?.from) {
+            q = q.gte('updated_at', startOfDay(f.updatedRange.from).toISOString())
+                 .lte('updated_at', endOfDayPKT(f.updatedRange.to ?? f.updatedRange.from).toISOString());
+          }
           if (f.seller !== 'all') q = q.eq('seller_id', f.seller);
           if (f.agent !== 'all') {
             q = q.or(`agent_id.eq.${f.agent},and(agent_id.is.null,original_agent_id.eq.${f.agent})`);
@@ -728,7 +735,7 @@ export default function Orders() {
 
   const applyFilters = useCallback(() => {
     setAppliedFilters({
-      dateRange, deliveredRange: deliveredDateRange,
+      dateRange, deliveredRange: deliveredDateRange, updatedRange: updatedDateRange,
       product: filterProduct, seller: filterSeller, agent: filterAgent,
       confirmation: filterConfirmation, delivery: filterDelivery,
       subStatus: filterSubStatus,
@@ -736,11 +743,12 @@ export default function Orders() {
       upsell: filterUpsell,
       courier: filterCourier,
     });
-  }, [dateRange, deliveredDateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell, filterCourier]);
+  }, [dateRange, deliveredDateRange, updatedDateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell, filterCourier]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
     setDeliveredDateRange(undefined); setDeliveredDatePreset('maximum');
+    setUpdatedDateRange(undefined); setUpdatedDatePreset('maximum');
     setFilterProduct('all'); setFilterSeller('all'); setFilterAgent('all');
     setFilterConfirmation('all'); setFilterDelivery('all');
     setFilterSubStatus('all');
@@ -748,7 +756,7 @@ export default function Orders() {
     setFilterUpsell('all');
     setFilterCourier('all');
     setAppliedFilters({
-      dateRange: undefined, deliveredRange: undefined, product: 'all', seller: 'all', agent: 'all',
+      dateRange: undefined, deliveredRange: undefined, updatedRange: undefined, product: 'all', seller: 'all', agent: 'all',
       confirmation: 'all', delivery: 'all', subStatus: 'all', channel: 'all', upsell: 'all', courier: 'all',
     });
   }, []);
@@ -757,6 +765,7 @@ export default function Orders() {
     let count = 0;
     if (appliedFilters.dateRange?.from) count++;
     if (appliedFilters.deliveredRange?.from) count++;
+    if (appliedFilters.updatedRange?.from) count++;
     if (appliedFilters.product !== 'all') count++;
     if (appliedFilters.seller !== 'all') count++;
     if (appliedFilters.agent !== 'all') count++;
@@ -893,6 +902,21 @@ export default function Orders() {
                   <span className="text-[11px] font-medium text-[hsl(155,50%,42%)]/80">delivered</span>
                 </div>
               )}
+            </div>
+            )}
+            {/* Updated At - admin only */}
+            {isAdmin && (
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <CalendarIcon className="h-3.5 w-3.5 text-primary" />
+                Updated At
+              </label>
+              <DatePresetFilter
+                dateRange={updatedDateRange}
+                onDateRangeChange={setUpdatedDateRange}
+                preset={updatedDatePreset}
+                onPresetChange={setUpdatedDatePreset}
+              />
             </div>
             )}
             {/* Product */}
