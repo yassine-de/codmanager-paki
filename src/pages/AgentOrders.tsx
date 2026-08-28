@@ -1201,7 +1201,21 @@ const AgentOrders = () => {
                 </div>
               )}
               <div className="flex gap-2 pt-1">
-                <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => navigator.clipboard.writeText(editCustomer.phone).then(() => toast.info("Phone copied!"))}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs gap-1.5"
+                  onClick={() => {
+                    // A real tel: navigation hands the number off to whatever
+                    // calling app is registered on this PC (Windows Phone Link
+                    // paired with the agent's Android phone, a softphone, Skype,
+                    // etc.) so the agent doesn't have to retype it — falls back
+                    // to copying the number if nothing handles tel: links here.
+                    navigator.clipboard.writeText(editCustomer.phone).catch(() => {});
+                    window.location.href = `tel:${editCustomer.phone.replace(/[^\d+]/g, "")}`;
+                    toast.info("Dialing… (number also copied)");
+                  }}
+                >
                   <Phone className="h-3 w-3" /> Call
                 </Button>
                 <Button variant="outline" size="sm" className="text-xs gap-1.5 text-emerald-600 hover:text-emerald-700" onClick={handleWhatsApp}>
