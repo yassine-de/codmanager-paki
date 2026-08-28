@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-28 11:05 - Anwar Bounasser
+Last manual update: 2026-08-28 14:11 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,20 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-28 14:11 - Anwar Bounasser
+- Commit: `d3d2215`
+- Area: Orders / Edit Order
+- Change: The admin "Edit Order" modal now sets `delivered_at`/`confirmed_at` when it changes delivery_status to "delivered" or confirmation_status to "confirmed" — it was previously only updating the status column itself.
+- Reason: Orders edited this way silently disappeared from every `delivered_at`/`confirmed_at`-based analytics chart (Dashboard's Delivered sparkline, Delivery/Seller Analytics' Updated mode) even though their status genuinely changed — found live via AB-2772, which an admin marked delivered but never appeared in the Delivered sparkline.
+- Notes: No migration or deploy needed — frontend-only change. Backfilled `delivered_at` for the 2 live orders already affected (AB-2772, AB-2302) using their `order_history` delivery_status-change timestamp as evidence.
+
+### 2026-08-28 14:11 - Anwar Bounasser
+- Commit: `9db79cb`
+- Area: Agent Orders
+- Change: The agent-facing "Call" button on the confirmation screen now triggers a real `tel:` navigation instead of only copying the phone number to the clipboard (still copies it too, as a fallback).
+- Reason: Agent asked for a way to call the customer directly from the PC without retyping the number. A `tel:` link hands off to whatever calling app is registered on the PC (e.g. Windows Phone Link paired with the agent's phone) — this only works if such an app is set up locally, it's not a full VOIP/click-to-call integration.
+- Notes: No migration or deploy needed — frontend-only change.
 
 ### 2026-08-28 11:05 - Anwar Bounasser
 - Commit: `3b97abc`
