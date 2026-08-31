@@ -875,10 +875,19 @@ async function startNewRuns(triggerType: string, orderId: string) {
     .eq("status", "active");
 
   // delivery_status_changed automations are configured with a specific target
-  // status (trigger_config.to) — only run the ones matching what the order
-  // actually became, not every active automation of this trigger type.
+  // status (trigger_config.to) and/or one or more granular carrier
+  // sub-statuses (trigger_config.subStatuses, matched against
+  // orders.shipping_status) — only run the ones whose configured filters all
+  // match what the order actually is right now, not every active automation
+  // of this trigger type.
   const autos = triggerType === "delivery_status_changed"
-    ? (autosRaw ?? []).filter((a: any) => a.trigger_config?.to === order.delivery_status)
+    ? (autosRaw ?? []).filter((a: any) => {
+        const cfg = a.trigger_config as any;
+        if (cfg?.to && cfg.to !== order.delivery_status) return false;
+        const subStatuses: string[] = Array.isArray(cfg?.subStatuses) ? cfg.subStatuses : [];
+        if (subStatuses.length > 0 && !subStatuses.includes(order.shipping_status)) return false;
+        return true;
+      })
     : autosRaw;
 
   if (!autos?.length) {
@@ -1462,7 +1471,8 @@ async function tickDelays() {
   const recovered = await sweepMissedNewOrders();
   const handedOff = await tickPendingIntentHandoff();
   const deliveryStatusStarted = await sweepDeliveryStatusChanges();
-  return { processed: due?.length ?? 0, switched, recovered, handedOff, deliveryStatusStarted };
+  const subStatusStarted = await sweepSubStatusChanges();
+  return { processed: due?.length ?? 0, switched, recovered, handedOff, deliveryStatusStarted, subStatusStarted };
 }
 
 // Hand off conversations stuck on a `pending_button_intent` for too long to a
@@ -1681,6 +1691,58 @@ async function sweepDeliveryStatusChanges() {
       if (r.started) started += r.started;
     } catch (e) {
       errLog("sweepDeliveryStatusChanges startNewRuns failed", o.order_id, (e as Error).message);
+    }
+  }
+  return started;
+}
+
+// Sweep orders whose carrier sub-status (orders.shipping_status) matches what
+// some active delivery_status_changed automation targets via
+// trigger_config.subStatus. Unlike delivery_status, shipping_status changes
+// are never written to order_history (confirmed: 0 rows), so there's no
+// event trail to sweep off of — poll orders directly by recent updated_at
+// instead. startNewRuns()'s per-(automation, order) dedup guard makes
+// re-matching the same order across ticks (or across unrelated updated_at
+// bumps) harmless, so this doesn't risk duplicate sends.
+async function sweepSubStatusChanges() {
+  const { data: autos, error: autosErr } = await admin
+    .from("whatsapp_automations")
+    .select("trigger_config")
+    .eq("trigger_type", "delivery_status_changed")
+    .eq("status", "active");
+  if (autosErr) {
+    errLog("sweepSubStatusChanges autos query", autosErr.message);
+    return 0;
+  }
+  const targetSubStatuses = Array.from(
+    new Set(
+      (autos ?? []).flatMap((a: any) => (Array.isArray(a.trigger_config?.subStatuses) ? a.trigger_config.subStatuses : []))
+    )
+  );
+  if (targetSubStatuses.length === 0) return 0;
+
+  // 2h lookback, matching sweepDeliveryStatusChanges' reasoning — survives a
+  // cron gap or deploy restart without silently dropping an order.
+  const sinceIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const { data: rows, error } = await admin
+    .from("orders")
+    .select("order_id")
+    .in("shipping_status", targetSubStatuses)
+    .gte("updated_at", sinceIso)
+    .limit(200);
+  if (error) {
+    errLog("sweepSubStatusChanges orders query", error.message);
+    return 0;
+  }
+  if (!rows?.length) return 0;
+
+  let started = 0;
+  for (const o of rows) {
+    try {
+      const r = await startNewRuns("delivery_status_changed", o.order_id);
+      if (r.started) started += r.started;
+    } catch (e) {
+      errLog("sweepSubStatusChanges startNewRuns failed", o.order_id, (e as Error).message);
     }
   }
   return started;

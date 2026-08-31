@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -143,8 +145,8 @@ export default function WhatsappAutomationBuilder() {
     // trigger config validation
     if (automation?.trigger_type === "confirmation_status_changed" && !triggerConfig.to)
       errors.push("Confirmation trigger needs target status");
-    if (automation?.trigger_type === "delivery_status_changed" && !triggerConfig.to)
-      errors.push("Delivery trigger needs target status");
+    if (automation?.trigger_type === "delivery_status_changed" && !triggerConfig.to && !(triggerConfig.subStatuses?.length))
+      errors.push("Delivery trigger needs a target status and/or sub status");
     if (automation?.trigger_type === "follow_up_status_changed" && !triggerConfig.to)
       errors.push("Follow-up trigger needs target status");
     if (automation?.trigger_type === "from_template" && !triggerConfig.template_id)
@@ -720,6 +722,24 @@ export default function WhatsappAutomationBuilder() {
 function TriggerConfigInline({
   type, config, onChange,
 }: { type: string; config: any; onChange: (c: any) => void }) {
+  // Raw carrier sub-status text (e.g. "Out-For-Delivery", "Attempt Made:
+  // RFD(REFUSED TO RECEIVE)") — one level more granular than delivery_status,
+  // synced onto orders.shipping_status by the carrier status-sync functions.
+  const { data: subStatusOptions = [] } = useQuery({
+    queryKey: ["automation-substatus-options"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("shipping_status")
+        .not("shipping_status", "is", null)
+        .limit(5000);
+      if (error) throw error;
+      return Array.from(new Set((data ?? []).map((r: any) => r.shipping_status).filter(Boolean))).sort();
+    },
+    enabled: type === "delivery_status_changed",
+    staleTime: 5 * 60_000,
+  });
+
   if (type === "new_order") {
     const sw = config.switch_to_agent ?? {};
     const enabled = !!sw.enabled;
@@ -824,14 +844,26 @@ function TriggerConfigInline({
   }
   if (type === "delivery_status_changed") {
     return (
-      <div className="mt-3 space-y-1.5">
-        <Label className="text-[10px] text-muted-foreground">Becomes</Label>
-        <Select value={config.to ?? ""} onValueChange={(v) => onChange({ ...config, to: v })}>
-          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Any status" /></SelectTrigger>
-          <SelectContent>
-            {DELIVERY_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div className="mt-3 space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-[10px] text-muted-foreground">Becomes</Label>
+          <Select value={config.to ?? ""} onValueChange={(v) => onChange({ ...config, to: v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Any status" /></SelectTrigger>
+            <SelectContent>
+              {DELIVERY_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-[10px] text-muted-foreground">
+            Sub Status <span className="opacity-60">(optional, carrier detail — pick one or more, e.g. "Out-For-Delivery")</span>
+          </Label>
+          <SubStatusMultiSelect
+            options={subStatusOptions}
+            selected={Array.isArray(config.subStatuses) ? config.subStatuses : []}
+            onChange={(next) => onChange({ ...config, subStatuses: next.length > 0 ? next : undefined })}
+          />
+        </div>
       </div>
     );
   }
@@ -863,6 +895,52 @@ function TriggerConfigInline({
     return <FromTemplateConfig config={config} onChange={onChange} />;
   }
   return null;
+}
+
+function SubStatusMultiSelect({
+  options, selected, onChange,
+}: { options: string[]; selected: string[]; onChange: (next: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const toggle = (value: string) => {
+    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="h-8 w-full justify-start text-xs font-normal"
+        >
+          {selected.length === 0
+            ? <span className="text-muted-foreground">Any sub status</span>
+            : <span className="truncate">{selected.length} selected: {selected.join(", ")}</span>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[320px] p-0" align="start">
+        <div className="max-h-64 overflow-y-auto p-1.5">
+          {options.length === 0 && (
+            <p className="px-2 py-3 text-xs text-muted-foreground">No sub-status values found yet.</p>
+          )}
+          {options.map((s) => (
+            <label
+              key={s}
+              className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs cursor-pointer hover:bg-muted"
+            >
+              <Checkbox checked={selected.includes(s)} onCheckedChange={() => toggle(s)} />
+              <span className="truncate">{s}</span>
+            </label>
+          ))}
+        </div>
+        {selected.length > 0 && (
+          <div className="border-t p-1.5">
+            <Button variant="ghost" size="sm" className="h-7 w-full text-xs" onClick={() => onChange([])}>
+              Clear selection
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function FromTemplateConfig({
