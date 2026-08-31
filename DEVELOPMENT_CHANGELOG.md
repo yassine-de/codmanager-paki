@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-31 10:56 - Anwar Bounasser
+Last manual update: 2026-08-31 12:42 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-31 12:42 - Anwar Bounasser
+- Commit: `beeb902`
+- Area: WhatsApp Automations
+- Change: Added a "Sub Status" filter (multi-select) to the "Delivery Status Changed" trigger, matched against `orders.shipping_status` (raw carrier text like "Out-for-Delivery"), usable alongside or instead of the existing "Becomes" delivery-status filter. Since `shipping_status` changes aren't logged to `order_history` (unlike `delivery_status`), added a separate polling sweep (`sweepSubStatusChanges`) so automations relying on sub-status alone still fire.
+- Reason: Requested to trigger the new "Out for Delivery" WhatsApp template specifically when the carrier sub-status becomes "Out-for-Delivery" — the coarse delivery_status often doesn't change at that moment, so the existing "Becomes" filter alone couldn't express this.
+- Notes: Deployed `whatsapp-automation-runner` (twice — once for the initial single-value version, once after switching to multi-select). Verified live end-to-end: created a temporary test automation, invoked the function directly against a real order with a matching `shipping_status` (fired correctly, run completed) and one with a non-matching value (correctly did not fire), then deleted the test automation and its run — no real customer message was sent.
 
 ### 2026-08-31 10:56 - Anwar Bounasser
 - Commit: `bedf833`
