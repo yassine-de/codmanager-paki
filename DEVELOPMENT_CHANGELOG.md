@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-28 15:04 - Anwar Bounasser
+Last manual update: 2026-08-31 10:56 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-08-31 10:56 - Anwar Bounasser
+- Commit: `bedf833`
+- Area: Invoices / Database
+- Change: Fixed "Failed to finalize invoice" — the `notify_seller_invoice_ready` trigger built its notification message with `... || NEW.period_start || ... || NEW.period_end || ...`; since every invoice auto-created by the finalize flow starts with a NULL period, the whole concatenation collapsed to NULL and violated `seller_notifications.message`'s NOT NULL constraint, rolling back the entire invoice UPDATE. Also hardened `notify_admin_invoice_payout_due` against a NULL `net_payable` the same way.
+- Reason: Admin reported every invoice finalize attempt failing. Root cause confirmed live by reproducing the exact Postgres error (23502 NOT NULL violation) on a real invoice (HG-INV-001), then re-testing successfully after the fix.
+- Notes: Migration `20260831100000_fix_invoice_finalize_null_period.sql` applied live to Supabase. No invoice calculation logic (subtotal/fees/net_payable) was touched — only how the notification message text is built when period_start/period_end are unset.
 
 ### 2026-08-28 15:04 - Anwar Bounasser
 - Commit: `c0fcfcf`
