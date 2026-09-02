@@ -95,7 +95,7 @@ function colLetterToIndex(letter: string): number {
 
 const DEFAULT_MAPPING: Record<string, string> = {
   order_id: "A", customer_name: "B", phone: "C", address: "D", city: "E",
-  product_name: "F", sku: "G", quantity: "H", price: "I", total: "J",
+  product_name: "F", sku: "G", quantity: "H", price: "I", total: "J", utm: "L",
 };
 
 function getCell(row: string[], mapping: Record<string, string>, key: string): string {
@@ -314,6 +314,7 @@ Deno.serve(async (req) => {
         const qtyStr = getCell(row, mapping, "quantity");
         const priceStr = getCell(row, mapping, "price");
         const totalStr = getCell(row, mapping, "total");
+        const utm = getCell(row, mapping, "utm").trim();
 
         if (!sku || !customerName || !phone) { skipped++; continue; }
 
@@ -328,6 +329,7 @@ Deno.serve(async (req) => {
           quantity: qtyStr || "",
           unit_price: priceStr || "",
           total_amount: totalStr || "",
+          utm: utm || "",
         };
 
         let rawItems;
@@ -480,6 +482,7 @@ Deno.serve(async (req) => {
             total_amount: totalAmount,
             weight: totalWeight,
             source_sheet_id: sheet.id,
+            source_ref: utm || null,
             confirmation_status: routeToWhatsapp ? "new_wts" : "new",
             confirmation_channel: routeToWhatsapp ? "whatsapp" : "agent",
             whatsapp_status: routeToWhatsapp ? "pending" : "",

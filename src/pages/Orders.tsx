@@ -129,7 +129,7 @@ function mapOrderProducts(row: any): Order["products"] {
 }
 
 /* ── Column definitions ── */
-type ColumnKey = 'systemId' | 'id' | 'carrierId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'channel' | 'deliveryStatus' | 'subStatus' | 'attempts' | 'financial';
+type ColumnKey = 'systemId' | 'id' | 'carrierId' | 'createdAt' | 'updatedAt' | 'seller' | 'customer' | 'city' | 'phone' | 'product' | 'amount' | 'confirmationStatus' | 'channel' | 'deliveryStatus' | 'subStatus' | 'attempts' | 'financial' | 'utm';
 
 const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; adminOnly?: boolean }[] = [
   { key: 'systemId', label: 'System ID', defaultVisible: true, adminOnly: true },
@@ -144,6 +144,7 @@ const allColumns: { key: ColumnKey; label: string; defaultVisible: boolean; admi
   { key: 'amount', label: 'Amount', defaultVisible: true },
   { key: 'confirmationStatus', label: 'Confirmation', defaultVisible: true },
   { key: 'channel', label: 'Channel', defaultVisible: true, adminOnly: true },
+  { key: 'utm', label: 'UTM Source', defaultVisible: false, adminOnly: true },
   { key: 'attempts', label: 'Attempts', defaultVisible: true },
   { key: 'deliveryStatus', label: 'Delivery', defaultVisible: true },
   { key: 'subStatus', label: 'Sub Status', defaultVisible: true, adminOnly: true },
@@ -227,6 +228,7 @@ export default function Orders() {
   const [productNames, setProductNames] = useState<string[]>([]);
   const [subStatusOptions, setSubStatusOptions] = useState<string[]>([]);
   const [courierOptions, setCourierOptions] = useState<{ code: string; name: string }[]>([]);
+  const [utmOptions, setUtmOptions] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -347,6 +349,7 @@ export default function Orders() {
   const [filterChannel, setFilterChannel] = useState('all');
   const [filterUpsell, setFilterUpsell] = useState('all');
   const [filterCourier, setFilterCourier] = useState('all');
+  const [filterUtm, setFilterUtm] = useState('all');
   
   
 
@@ -389,6 +392,7 @@ export default function Orders() {
       channel: 'all',
       upsell: 'all',
       courier: 'all',
+      utm: 'all',
     };
   });
 
@@ -459,6 +463,15 @@ export default function Orders() {
         .select("code, name")
         .order("name", { ascending: true });
       if (!cancelled) setCourierOptions((carriers || []) as { code: string; name: string }[]);
+
+      const { data: utmRows } = await supabase
+        .from("orders")
+        .select("source_ref")
+        .not("source_ref", "is", null)
+        .limit(3000);
+      const utmSet = new Set<string>();
+      (utmRows || []).forEach((r: any) => { if (r.source_ref) utmSet.add(r.source_ref); });
+      if (!cancelled) setUtmOptions([...utmSet].sort());
     };
     loadOptions();
     return () => { cancelled = true; };
@@ -596,6 +609,7 @@ export default function Orders() {
                  .lte('updated_at', endOfDayPKT(f.updatedRange.to ?? f.updatedRange.from).toISOString());
           }
           if (f.seller !== 'all') q = q.eq('seller_id', f.seller);
+          if (isAdmin && f.utm !== 'all') q = q.eq('source_ref', f.utm);
           if (f.agent !== 'all') {
             q = q.or(`agent_id.eq.${f.agent},and(agent_id.is.null,original_agent_id.eq.${f.agent})`);
           }
@@ -703,6 +717,7 @@ export default function Orders() {
             notes: o.note || undefined,
             seller: profileMap.get(o.seller_id) || "Unknown",
             sellerId: o.seller_id || undefined,
+            sourceRef: o.source_ref || null,
             agentName: o.agent_id ? (profileMap.get(o.agent_id) || undefined) : (o.original_agent_id ? (profileMap.get(o.original_agent_id) || undefined) : undefined),
             upsell: false,
             warehouseState: "in_stock" as const,
@@ -742,8 +757,9 @@ export default function Orders() {
       channel: filterChannel,
       upsell: filterUpsell,
       courier: filterCourier,
+      utm: filterUtm,
     });
-  }, [dateRange, deliveredDateRange, updatedDateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell, filterCourier]);
+  }, [dateRange, deliveredDateRange, updatedDateRange, filterProduct, filterSeller, filterAgent, filterConfirmation, filterDelivery, filterSubStatus, filterChannel, filterUpsell, filterCourier, filterUtm]);
 
   const clearFilters = useCallback(() => {
     setDateRange(undefined);
@@ -755,9 +771,10 @@ export default function Orders() {
     setFilterChannel('all');
     setFilterUpsell('all');
     setFilterCourier('all');
+    setFilterUtm('all');
     setAppliedFilters({
       dateRange: undefined, deliveredRange: undefined, updatedRange: undefined, product: 'all', seller: 'all', agent: 'all',
-      confirmation: 'all', delivery: 'all', subStatus: 'all', channel: 'all', upsell: 'all', courier: 'all',
+      confirmation: 'all', delivery: 'all', subStatus: 'all', channel: 'all', upsell: 'all', courier: 'all', utm: 'all',
     });
   }, []);
 
@@ -775,6 +792,7 @@ export default function Orders() {
     if (appliedFilters.channel !== 'all') count++;
     if (appliedFilters.upsell !== 'all') count++;
     if (appliedFilters.courier !== 'all') count++;
+    if (appliedFilters.utm !== 'all') count++;
     return count;
   }, [appliedFilters]);
 
@@ -1029,6 +1047,20 @@ export default function Orders() {
               />
             </div>
             )}
+            {/* UTM source - admin only */}
+            {isAdmin && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">UTM Source</label>
+              <SearchableSelect
+                value={filterUtm}
+                onValueChange={setFilterUtm}
+                options={utmOptions.map(u => ({ value: u, label: u }))}
+                placeholder="UTM Source"
+                allLabel="All"
+                className="w-full"
+              />
+            </div>
+            )}
             {/* Upsell */}
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Upsell</label>
@@ -1172,7 +1204,8 @@ export default function Orders() {
                 {isCol('amount') && <th className="text-right py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Amount</th>}
                 {isCol('confirmationStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Confirmation</th>}
                 {isAdmin && isCol('channel') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Channel</th>}
-                
+                {isAdmin && isCol('utm') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">UTM Source</th>}
+
                 {isCol('deliveryStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Delivery</th>}
                 {isAdmin && isCol('subStatus') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Sub Status</th>}
                 {isAdmin && isCol('financial') && <th className="text-left py-3 px-4 font-medium text-xs text-muted-foreground uppercase tracking-wider">Invoice</th>}
@@ -1282,6 +1315,7 @@ export default function Orders() {
                     return <StatusBadge {...confirmationConfig[effectiveStatus]} attemptCount={effectiveStatus === 'no_answer' ? order.attemptCount : undefined} />;
                   })()}</td>}
                   {isAdmin && isCol('channel') && <td className="py-2.5 px-4">{(() => { const ch = order.confirmationChannel || 'agent'; const cfg = channelConfig[ch] || { label: ch, cls: 'bg-muted text-muted-foreground border-border' }; return <StatusBadge label={cfg.label} cls={cfg.cls} />; })()}</td>}
+                  {isAdmin && isCol('utm') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.sourceRef || '—'}</td>}
                   {isCol('deliveryStatus') && <td className="py-2.5 px-4"><StatusBadge {...deliveryConfig[order.deliveryStatus]} /></td>}
                   {isAdmin && isCol('subStatus') && (
                     <td className="py-2.5 px-4">

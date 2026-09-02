@@ -46,6 +46,7 @@ export interface Order {
   notes?: string;
   seller: string;
   sellerId?: string;
+  sourceRef?: string | null;
   agentName?: string;
   upsell: boolean;
   warehouseState: 'in_stock' | 'out_of_stock' | 'reserved';

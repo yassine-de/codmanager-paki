@@ -23,11 +23,12 @@ interface ColumnMapping {
   quantity: string;
   price: string;
   total: string;
+  utm: string;
 }
 
 const DEFAULT_MAPPING: ColumnMapping = {
   order_id: "A", customer_name: "B", phone: "C", address: "D", city: "E",
-  product_name: "F", sku: "G", quantity: "H", price: "I", total: "J",
+  product_name: "F", sku: "G", quantity: "H", price: "I", total: "J", utm: "L",
 };
 
 interface IntegrationSheet {
@@ -708,7 +709,7 @@ const Integrations = () => {
                   onClick={() => setForm((f) => ({ ...f, column_mapping: { ...DEFAULT_MAPPING } }))}
                   className="text-[10px] text-primary hover:underline"
                 >
-                  Reset to defaults (A → J)
+                  Reset to defaults (A → L)
                 </button>
               </div>
               <p className="text-[10px] text-muted-foreground">
@@ -726,6 +727,7 @@ const Integrations = () => {
                   ["quantity", "Quantity"],
                   ["price", "Price"],
                   ["total", "Total"],
+                  ["utm", "UTM Source"],
                 ] as const).map(([key, label]) => (
                   <div key={key} className="flex items-center gap-2">
                     <Label className="text-[10px] flex-1 truncate">{label}</Label>
