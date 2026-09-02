@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-08-31 12:42 - Anwar Bounasser
+Last manual update: 2026-09-02 07:31 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-02 07:31 - Anwar Bounasser
+- Commit: `75cf2b4`
+- Area: Orders / Integrations / Database
+- Change: Added UTM source tracking. `import-sheets` now reads a "UTM Source" column (default L, configurable per sheet in Integrations' Column Mapping) from each seller's Google Sheet and stores it on `orders.source_ref`. Manually-created orders from an agent are tagged `source_ref = 'Agent Created'`. Added a "UTM Source" filter + column to the admin Orders page.
+- Reason: Admin needed to see which channel (Facebook/TikTok ads, or an agent typing the order in directly) each order actually came from — the sheet already had this data per order, it just wasn't being captured.
+- Notes: Migrations `20260902110000_capture_utm_from_sheet_import.sql` and `20260902120000_tag_agent_created_orders_source.sql` applied live; `import-sheets` deployed. `orders.source_ref` was an existing, previously-unused column, reused for this rather than adding a new one — cleared 23 stale unrelated values (old debug/test markers like `duplicated_from:X`, `mnp-label-test-...`) that predated this reuse so the new filter only shows real sources. Verified live: a real order (AB-3082) came through the sheet import with `source_ref='facebook'` correctly captured right after deploy.
 
 ### 2026-08-31 12:42 - Anwar Bounasser
 - Commit: `beeb902`
