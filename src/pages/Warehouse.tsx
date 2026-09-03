@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Barcode,
   Boxes,
+  Camera,
   ChevronDown,
   ChevronRight,
   CheckCircle2,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { QrScannerDialog } from "@/components/QrScannerDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +39,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -309,6 +312,40 @@ const code128Patterns = [
   "10111101110", "11101011110", "11110101110", "11010000100", "11010010000", "11010011100", "1100011101011",
 ];
 
+let scanAudioCtx: AudioContext | null = null;
+
+function playScanTone(frequency: number, duration: number, type: OscillatorType = "sine") {
+  try {
+    if (!scanAudioCtx) {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      scanAudioCtx = new Ctx();
+    }
+    if (scanAudioCtx.state === "suspended") scanAudioCtx.resume().catch(() => {});
+    const osc = scanAudioCtx.createOscillator();
+    const gain = scanAudioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.18, scanAudioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, scanAudioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(scanAudioCtx.destination);
+    osc.start();
+    osc.stop(scanAudioCtx.currentTime + duration);
+  } catch {
+    // Web Audio unavailable — scanning still works, just silent
+  }
+}
+
+function playScanSuccessTone() {
+  playScanTone(1500, 0.1);
+  setTimeout(() => playScanTone(1900, 0.12), 90);
+}
+
+function playScanErrorTone() {
+  playScanTone(220, 0.28, "square");
+}
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
 }
@@ -437,6 +474,22 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const [selectedReadyIds, setSelectedReadyIds] = useState<Set<string>>(new Set());
   const [readyScan, setReadyScan] = useState("");
   const [dispatchCandidate, setDispatchCandidate] = useState<FulfillmentRow | null>(null);
+  const [readyCameraScanOpen, setReadyCameraScanOpen] = useState(false);
+  const [autoDispatch, setAutoDispatch] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("warehouse_auto_dispatch") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleAutoDispatch = (value: boolean) => {
+    setAutoDispatch(value);
+    try {
+      localStorage.setItem("warehouse_auto_dispatch", value ? "1" : "0");
+    } catch {
+      // storage unavailable — preference just won't persist across reloads
+    }
+  };
 
   const [outOfStockSearch, setOutOfStockSearch] = useState("");
   const [outOfStockCourierFilter, setOutOfStockCourierFilter] = useState("all");
@@ -445,6 +498,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const [restockingId, setRestockingId] = useState<string | null>(null);
 
   const [returnScan, setReturnScan] = useState("");
+  const [returnCameraScanOpen, setReturnCameraScanOpen] = useState(false);
   const [returnCondition, setReturnCondition] = useState<ReturnCondition>("sellable");
   const [returnDialogOrder, setReturnDialogOrder] = useState<FulfillmentRow | null>(null);
   const [returnNote, setReturnNote] = useState("");
@@ -2074,52 +2128,94 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     }
   };
 
-  const submitReadyScan = (event: FormEvent) => {
-    event.preventDefault();
-    const code = readyScan.trim();
+  const resolveReadyScan = (rawCode: string) => {
+    const code = rawCode.trim();
     if (!code) return;
     const printed = readyRows.find((row) => row.tracking_number === code || row.order_id === code || String(row.system_id || "") === code);
     const notPrinted = notPrintedRows.find((row) => row.tracking_number === code || row.order_id === code || String(row.system_id || "") === code);
     const dispatched = dispatchedRows.find((row) => row.tracking_number === code || row.order_id === code || String(row.system_id || "") === code);
     if (dispatched) {
       toast.error("Already dispatched");
+      playScanErrorTone();
       return;
     }
     if (notPrinted) {
       toast.error("Label not printed yet");
+      playScanErrorTone();
       return;
     }
     if (!printed) {
       toast.error("Order not found");
+      playScanErrorTone();
+      return;
+    }
+    if (autoDispatch) {
+      // Fast path: clear + refocus immediately so the next scan isn't blocked
+      // on this one's network round trip; feedback (toast + tone) lands once it resolves.
+      setReadyScan("");
+      setTimeout(() => readyScanInput.current?.focus(), 30);
+      performDispatch(printed).then(() => refreshWarehouse());
       return;
     }
     setDispatchCandidate(printed);
+  };
+
+  const submitReadyScan = (event: FormEvent) => {
+    event.preventDefault();
+    resolveReadyScan(readyScan);
+  };
+
+  const handleReadyCameraDetected = (code: string) => {
+    setReadyScan(code);
+    resolveReadyScan(code);
+  };
+
+  // Shared by the manual "Confirm & Dispatch" dialog button and the Auto Dispatch fast path.
+  const performDispatch = async (row: FulfillmentRow): Promise<boolean> => {
+    if (!row.tracking_number) {
+      toast.error(`${row.order_id}: No tracking number on file`);
+      playScanErrorTone();
+      return false;
+    }
+    try {
+      const { data, error } = await supabase.rpc("scan_outbound_shipment" as any, {
+        p_tracking_number: row.tracking_number,
+        p_scanned_by: authUser?.id,
+      });
+      if (error) throw error;
+      const result = data as any;
+      if (result?.result === "duplicate") {
+        toast.error(`${row.order_id}: Already dispatched`);
+        playScanErrorTone();
+        return false;
+      }
+      if (result?.result === "unknown") {
+        toast.error(`${row.order_id}: Order not found`);
+        playScanErrorTone();
+        return false;
+      }
+      await updateOrderDeliveryStatus([row], "dispatched", "warehouse_dispatch_scan");
+      toast.success(`${row.order_id} dispatched`);
+      playScanSuccessTone();
+      return true;
+    } catch (error: any) {
+      toast.error(error.message || "Dispatch failed");
+      playScanErrorTone();
+      return false;
+    }
   };
 
   const dispatchOrder = async () => {
     if (!dispatchCandidate?.tracking_number) return;
     setBusy(true);
     try {
-      const { data, error } = await supabase.rpc("scan_outbound_shipment" as any, {
-        p_tracking_number: dispatchCandidate.tracking_number,
-        p_scanned_by: authUser?.id,
-      });
-      if (error) throw error;
-      const result = data as any;
-      if (result?.result === "duplicate") toast.error("Already dispatched");
-      else if (result?.result === "unknown") toast.error("Order not found");
-      else {
-        await updateOrderDeliveryStatus([dispatchCandidate], "dispatched", "warehouse_dispatch_scan");
-        toast.success("Order dispatched");
-      }
+      await performDispatch(dispatchCandidate);
+    } finally {
       setReadyScan("");
       setDispatchCandidate(null);
       refreshWarehouse();
-      setTimeout(() => readyScanInput.current?.focus(), 50);
-    } catch (error: any) {
-      toast.error(error.message || "Dispatch failed");
-    } finally {
       setBusy(false);
+      setTimeout(() => readyScanInput.current?.focus(), 50);
     }
   };
 
@@ -2204,9 +2300,8 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
     }
   };
 
-  const submitReturnScan = (event: FormEvent) => {
-    event.preventDefault();
-    const code = returnScan.trim();
+  const resolveReturnScan = (rawCode: string) => {
+    const code = rawCode.trim();
     if (!code) return;
     const order = [...readyRows, ...dispatchedRows, ...notPrintedRows].find((row) => row.tracking_number === code || row.order_id === code || String(row.system_id || "") === code);
     const returnedOrder = pendingReturnOrders.find((row) => {
@@ -2242,6 +2337,16 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
         item_count: returnedOrder.order_items?.length || null,
       });
     }
+  };
+
+  const submitReturnScan = (event: FormEvent) => {
+    event.preventDefault();
+    resolveReturnScan(returnScan);
+  };
+
+  const handleReturnCameraDetected = (code: string) => {
+    setReturnScan(code);
+    resolveReturnScan(code);
   };
 
   const receiveReturn = async () => {
@@ -2869,8 +2974,24 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                 <CardContent className="p-4">
                   <form className="flex gap-2" onSubmit={submitReadyScan}>
                     <Input ref={readyScanInput} value={readyScan} onChange={(e) => setReadyScan(e.target.value)} className="h-14 text-lg font-mono bg-background" placeholder="Scan internal QR, order code or tracking number" autoComplete="off" />
+                    <Button type="button" variant="outline" className="h-14 px-4" onClick={() => setReadyCameraScanOpen(true)} title="Scan with camera">
+                      <Camera className="h-4 w-4" />
+                    </Button>
                     <Button type="submit" className="h-14 px-7"><ScanLine className="h-4 w-4 mr-2" /> Scan</Button>
                   </form>
+                  <QrScannerDialog
+                    open={readyCameraScanOpen}
+                    onOpenChange={setReadyCameraScanOpen}
+                    onDetected={handleReadyCameraDetected}
+                    title="Scan Ticket QR"
+                  />
+                  <div className="flex items-center gap-2.5 mt-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2">
+                    <Switch id="auto-dispatch" checked={autoDispatch} onCheckedChange={toggleAutoDispatch} />
+                    <Label htmlFor="auto-dispatch" className="text-sm font-medium cursor-pointer">Auto Dispatch</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {autoDispatch ? "On — every scan dispatches instantly, no confirm step" : "Off — each scan opens a confirm dialog first"}
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
               <Card className="border-border/60 mt-3">
@@ -3028,7 +3149,18 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                 </CardHeader>
                 <CardContent>
                   <form className="space-y-3" onSubmit={submitReturnScan}>
-                    <Input ref={returnScanInput} className="h-14 text-lg font-mono bg-background" value={returnScan} onChange={(e) => setReturnScan(e.target.value)} placeholder="Scan internal QR, order code or tracking number" autoComplete="off" />
+                    <div className="flex gap-2">
+                      <Input ref={returnScanInput} className="h-14 text-lg font-mono bg-background" value={returnScan} onChange={(e) => setReturnScan(e.target.value)} placeholder="Scan internal QR, order code or tracking number" autoComplete="off" />
+                      <Button type="button" variant="outline" className="h-14 px-4" onClick={() => setReturnCameraScanOpen(true)} title="Scan with camera">
+                        <Camera className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <QrScannerDialog
+                      open={returnCameraScanOpen}
+                      onOpenChange={setReturnCameraScanOpen}
+                      onDetected={handleReturnCameraDetected}
+                      title="Scan Ticket QR"
+                    />
                     <div className="flex gap-2">
                       <Select value={returnCondition} onValueChange={(value: ReturnCondition) => setReturnCondition(value)}>
                         <SelectTrigger className="h-10 w-[180px]"><SelectValue /></SelectTrigger>
