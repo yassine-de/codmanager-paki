@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-03 07:04 - Anwar Bounasser
+Last manual update: 2026-09-03 09:19 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-03 09:19 - Anwar Bounasser
+- Commit: `2a29753`
+- Area: Warehouse
+- Change: Made the QR/barcode camera scanner (`QrScannerDialog`) continuous instead of single-shot — it used to close itself right after the first successful decode; now it stays open and keeps scanning tickets one after another until the operator closes it ("Done" button). Added a 2.5s debounce per code so a ticket sitting in frame doesn't get re-fired multiple times a second, and a "Scanned: <code>" confirmation line for visual feedback per scan.
+- Reason: Requested — the real dispatch workflow is scanning many tickets back to back, and reopening the camera dialog after every single one was slow and annoying.
+- Notes: No migrations. Verified clean `tsc --noEmit` and clean dev server logs; live continuous-scan behavior needs a real camera to confirm, asked Anwar to re-test.
 
 ### 2026-09-03 07:04 - Anwar Bounasser
 - Commit: `7b986b0`
