@@ -14,19 +14,28 @@ interface QrScannerDialogProps {
 // Reads QR codes and common 1D barcodes (Code128, EAN, etc.) off the device camera.
 // Deliberately built on the low-level Html5Qrcode class instead of the packaged
 // Html5QrcodeScanner widget so the UI matches the rest of the app.
+// Ignore a repeat decode of the same code within this window — the ticket
+// usually sits in frame for a moment after a scan, and without this the
+// camera (10 fps) would re-fire the same code many times a second.
+const REPEAT_DEBOUNCE_MS = 2500;
+
 export function QrScannerDialog({ open, onOpenChange, onDetected, title }: QrScannerDialogProps) {
   // Unique per instance so two scanner dialogs mounted at once (e.g. one per tab)
   // never fight over the same DOM element id.
   const readerElementId = `warehouse-qr-scanner-reader-${useId()}`.replace(/:/g, "");
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const lastDetectionRef = useRef<{ code: string; at: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
+  const [lastScanned, setLastScanned] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setError(null);
     setStarting(true);
+    setLastScanned(null);
+    lastDetectionRef.current = null;
 
     // Everything below is wrapped in try/catch deliberately: html5-qrcode's
     // constructor throws a *raw string* (not even an Error) synchronously if
@@ -62,9 +71,19 @@ export function QrScannerDialog({ open, onOpenChange, onDetected, title }: QrSca
           { fps: 10, qrbox: { width: 250, height: 250 } },
           (decodedText) => {
             if (cancelled) return;
-            cancelled = true;
-            onDetected(decodedText.trim());
-            onOpenChange(false);
+            const code = decodedText.trim();
+            if (!code) return;
+            const now = Date.now();
+            const last = lastDetectionRef.current;
+            if (last && last.code === code && now - last.at < REPEAT_DEBOUNCE_MS) {
+              return; // same ticket still sitting in frame — don't refire
+            }
+            lastDetectionRef.current = { code, at: now };
+            setLastScanned(code);
+            onDetected(code);
+            // Deliberately stays open and keeps scanning — continuous mode,
+            // the operator scans one ticket after another and closes it
+            // themselves (Cancel) once done, instead of it closing after one.
           },
           () => {
             // per-frame decode miss — expected constantly while aiming, ignore
@@ -112,12 +131,17 @@ export function QrScannerDialog({ open, onOpenChange, onDetected, title }: QrSca
             <>
               <div id={readerElementId} className="w-full overflow-hidden rounded-lg bg-black" />
               <p className="text-center text-xs text-muted-foreground">
-                {starting ? "Starting camera…" : "Point the camera at the ticket's QR code or barcode"}
+                {starting ? "Starting camera…" : "Scanning continuously — point at each ticket in turn"}
               </p>
+              {lastScanned && (
+                <p className="text-center text-xs font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                  ✓ Scanned: {lastScanned}
+                </p>
+              )}
             </>
           )}
           <Button variant="outline" className="w-full" onClick={() => onOpenChange(false)}>
-            Cancel
+            Done
           </Button>
         </div>
       </DialogContent>
