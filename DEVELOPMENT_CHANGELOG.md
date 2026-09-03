@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-03 06:45 - Anwar Bounasser
+Last manual update: 2026-09-03 06:52 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-03 06:52 - Anwar Bounasser
+- Commit: `32424fd`
+- Area: Warehouse
+- Change: Fixed the new camera QR/barcode scanner (`QrScannerDialog`, added earlier today) crashing the entire app to a blank page when the camera failed to initialize. `html5-qrcode`'s constructor throws a raw string synchronously if its target DOM element isn't ready yet, which wasn't caught — an uncaught error with no error boundary anywhere in this app unmounts the whole React tree. Wrapped the whole start sequence in try/catch and added a short retry loop that waits for the target element before constructing the scanner.
+- Reason: Reported clicking the camera button showed a fully black page (no dialog, no title, no cancel button) instead of a normal error — traced to this uncaught synchronous exception rather than a permissions/camera issue.
+- Notes: No migrations. Verified clean `tsc --noEmit` and clean dev server/build logs; could not reproduce the live camera failure directly (no camera in this environment) so asked Anwar to re-test. Flagged separately (not fixed here, out of scope) that this app has zero React error boundaries anywhere — any future uncaught error in any component will still blank the whole page the same way; a background task was queued for that as a follow-up.
 
 ### 2026-09-03 06:45 - Anwar Bounasser
 - Commit: `4b8a52d`
