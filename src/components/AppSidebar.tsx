@@ -91,6 +91,17 @@ const warehouseSubItems = [
 
 const warehouseReceivingStatuses = ["ordered", "shipped", "arrived", "ready_to_receive", "ready_to_receive_in_warehouse"];
 
+// General Manager: a custom, cross-section role (not a full admin clone) —
+// Orders (without seller identity, enforced inside Orders.tsx), Follow Ups,
+// Warehouse, Adjustments, and WhatsApp Inbox, listed here explicitly rather
+// than via the permissions table since most of these pages aren't
+// permission-gated at all today (see Orders.tsx/Warehouse.tsx/FollowUps.tsx
+// role checks). Analytics gets its own narrower allowlist below since
+// access_to_analytics also covers Seller/Finance analytics, which surface
+// exactly the seller/money data this role shouldn't see.
+const GENERAL_MANAGER_NAV_URLS = new Set(["/", "/orders", "/warehouse", "/follow-ups", "/adjustments", "/agent-whatsapp"]);
+const GENERAL_MANAGER_ANALYTICS_URLS = new Set(["/analytics/confirmation", "/analytics/delivery", "/analytics/agent-monitoring"]);
+
 const iconToneByUrl: Record<string, string> = {
   "/": "from-sky-500/25 via-blue-500/15 to-cyan-400/10 text-sky-200 ring-sky-400/25",
   "/orders": "from-blue-500/30 via-indigo-500/18 to-violet-400/12 text-blue-100 ring-blue-400/30",
@@ -159,6 +170,7 @@ export function AppSidebar() {
   const isWarehouse = authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager";
   const isWarehouseManager = authUser?.role === "warehouse_manager";
   const isWhatsappManager = authUser?.role === "whatsapp_manager";
+  const isGeneralManager = authUser?.role === "general_manager";
 
   const { data: orderCount = 0 } = useQuery({
     queryKey: ["sidebar-order-count"],
@@ -334,6 +346,7 @@ export function AppSidebar() {
   const hasWhatsappException = WHATSAPP_ALLOWED_EMAILS.includes(authUser?.email ?? "");
 
   const visibleItems = navItems.filter((item: any) => {
+    if (isGeneralManager) return GENERAL_MANAGER_NAV_URLS.has(item.url);
     if (item.followUpOnly) return isFollowUp;
     if (item.warehouseVisible) return isAdmin || isWarehouse;
     if (item.agentOnly) return isAgent;
@@ -349,7 +362,9 @@ export function AppSidebar() {
     if (isSeller) return !item.permission || item.sellerVisible;
     return !item.permission || hasPermission(item.permission);
   });
-  const visibleAnalyticsItems = analyticsSubItems.filter((item) => hasPermission(item.permission));
+  const visibleAnalyticsItems = analyticsSubItems.filter((item) =>
+    hasPermission(item.permission) || (isGeneralManager && GENERAL_MANAGER_ANALYTICS_URLS.has(item.url))
+  );
   const showAnalytics = visibleAnalyticsItems.length > 0;
   const isAnalyticsActive = location.pathname.startsWith("/analytics");
 

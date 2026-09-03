@@ -341,7 +341,7 @@ export default function FollowUps() {
       }
       return rows;
     },
-    enabled: !!authUser && ["admin", "agent", "follow_up"].includes(authUser.role),
+    enabled: !!authUser && ["admin", "agent", "follow_up", "general_manager"].includes(authUser.role),
     refetchInterval: 30000,
     staleTime: 25_000,
     placeholderData: (prev) => prev,
@@ -367,7 +367,7 @@ export default function FollowUps() {
       (profs ?? []).forEach((p) => { nameById[p.user_id] = p.name; });
       return ids.map((id) => ({ id, name: nameById[id] || id }));
     },
-    enabled: !!authUser && authUser.role === "admin",
+    enabled: !!authUser && ["admin", "general_manager"].includes(authUser.role),
     staleTime: 5 * 60_000,
   });
 
@@ -378,7 +378,7 @@ export default function FollowUps() {
       if (error) throw error;
       return Number(data ?? 0);
     },
-    enabled: !!authUser && ["admin", "agent", "follow_up"].includes(authUser.role),
+    enabled: !!authUser && ["admin", "agent", "follow_up", "general_manager"].includes(authUser.role),
     refetchInterval: 30000,
     staleTime: 25_000,
     refetchOnWindowFocus: false,
@@ -640,7 +640,7 @@ export default function FollowUps() {
     setNoteDialog({ orderId, currentNote });
   }
 
-  if (!authLoading && authUser && !["admin","agent","follow_up"].includes(authUser.role)) {
+  if (!authLoading && authUser && !["admin","agent","follow_up","general_manager"].includes(authUser.role)) {
     return <Navigate to="/" replace />;
   }
 
@@ -844,8 +844,8 @@ export default function FollowUps() {
             </SelectContent>
           </Select>
 
-          {/* Follow-up agent filter — which follow-up agent the order is assigned to (admin-only) */}
-          {authUser?.role === "admin" && (
+          {/* Follow-up agent filter — which follow-up agent the order is assigned to (admin / general_manager) */}
+          {(authUser?.role === "admin" || authUser?.role === "general_manager") && (
             <Select value={filterFollowUpAgent} onValueChange={setFilterFollowUpAgent}>
               <SelectTrigger className="h-8 text-xs w-[160px]">
                 <SelectValue placeholder="Follow-up Agent" />

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Users, Wifi, WifiOff, Clock } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 
 type PresenceStatus = "online" | "idle" | "offline";
 
@@ -38,6 +39,7 @@ const roleAbbreviations: Record<string, string> = {
   warehouse_manager: "WH",
   warehouse_agent: "WH",
   whatsapp_manager: "WA",
+  general_manager: "GM",
 };
 
 const statusConfig = {
@@ -62,6 +64,9 @@ const statusConfig = {
 };
 
 export default function OnlineStatusPanel() {
+  const { authUser } = useAuth();
+  const isGeneralManager = authUser?.role === "general_manager";
+
   const { data: presenceData = [] } = useQuery({
     queryKey: ["user-presence"],
     queryFn: async () => {
@@ -77,7 +82,7 @@ export default function OnlineStatusPanel() {
       const { data } = await supabase
         .from("user_roles")
         .select("user_id, role")
-        .in("role", ["agent", "admin", "follow_up", "warehouse_manager", "warehouse_agent", "whatsapp_manager"]);
+        .in("role", ["agent", "admin", "follow_up", "warehouse_manager", "warehouse_agent", "whatsapp_manager", "general_manager"]);
       return data || [];
     },
   });
@@ -104,24 +109,26 @@ export default function OnlineStatusPanel() {
     const presenceMap: Record<string, any> = {};
     presenceData.forEach((p: any) => { presenceMap[p.user_id] = p; });
 
-    return rolesData.map((r) => {
-      const presence = presenceMap[r.user_id];
-      const lastSeen = presence ? new Date(presence.last_seen) : new Date(0);
-      const isActive = presence?.is_active ?? false;
-      const status = presence ? getStatus(lastSeen, isActive) : "offline";
-      return {
-        user_id: r.user_id,
-        name: profileMap[r.user_id] || "Unknown",
-        role: r.role,
-        status,
-        lastSeen,
-        timeAgo: formatTimeAgo(lastSeen),
-      };
-    }).sort((a, b) => {
-      const order = { online: 0, idle: 1, offline: 2 };
-      return order[a.status] - order[b.status];
-    });
-  }, [rolesData, profiles, presenceData]);
+    return rolesData
+      .filter((r) => !(isGeneralManager && r.role === "admin"))
+      .map((r) => {
+        const presence = presenceMap[r.user_id];
+        const lastSeen = presence ? new Date(presence.last_seen) : new Date(0);
+        const isActive = presence?.is_active ?? false;
+        const status = presence ? getStatus(lastSeen, isActive) : "offline";
+        return {
+          user_id: r.user_id,
+          name: profileMap[r.user_id] || "Unknown",
+          role: r.role,
+          status,
+          lastSeen,
+          timeAgo: formatTimeAgo(lastSeen),
+        };
+      }).sort((a, b) => {
+        const order = { online: 0, idle: 1, offline: 2 };
+        return order[a.status] - order[b.status];
+      });
+  }, [rolesData, profiles, presenceData, isGeneralManager]);
 
   const [activeFilter, setActiveFilter] = useState<PresenceStatus | null>(null);
 

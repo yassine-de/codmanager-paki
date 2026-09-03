@@ -171,13 +171,13 @@ function AppRoutes() {
         <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
         <Route path="/products/:id" element={<ProtectedRoute><ProductDetail /></ProtectedRoute>} />
         <Route path="/analytics" element={<ProtectedRoute permission="access_to_analytics"><ConfirmationAnalytics /></ProtectedRoute>} />
-        <Route path="/analytics/confirmation" element={<ProtectedRoute permission="access_to_analytics"><ConfirmationAnalytics /></ProtectedRoute>} />
-        <Route path="/analytics/delivery" element={<ProtectedRoute permission="access_to_analytics"><DeliveryAnalytics /></ProtectedRoute>} />
+        <Route path="/analytics/confirmation" element={<ProtectedRoute permission="access_to_analytics" roles={["general_manager"]}><ConfirmationAnalytics /></ProtectedRoute>} />
+        <Route path="/analytics/delivery" element={<ProtectedRoute permission="access_to_analytics" roles={["general_manager"]}><DeliveryAnalytics /></ProtectedRoute>} />
         <Route path="/analytics/seller" element={<ProtectedRoute permission="access_to_analytics"><SellerAnalytics /></ProtectedRoute>} />
         <Route path="/analytics/finance" element={<ProtectedRoute permission="access_to_analytics"><FinanceAnalytics /></ProtectedRoute>} />
         <Route path="/analytics/finance2" element={<ProtectedRoute permission="access_to_analytics"><Finance2 /></ProtectedRoute>} />
         <Route path="/analytics/follow-up" element={<ProtectedRoute permission="access_to_analytics"><FollowUpAnalytics /></ProtectedRoute>} />
-        <Route path="/analytics/agent-monitoring" element={<ProtectedRoute permission="access_to_analytics"><AgentMonitoring /></ProtectedRoute>} />
+        <Route path="/analytics/agent-monitoring" element={<ProtectedRoute permission="access_to_analytics" roles={["general_manager"]}><AgentMonitoring /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute permission="access_to_settings"><SettingsPage /></ProtectedRoute>} />
         <Route path="/rates" element={<ProtectedRoute permission="access_to_settings"><RatesManagement /></ProtectedRoute>} />
         <Route path="/integrations" element={<ProtectedRoute permission="access_to_settings"><Integrations /></ProtectedRoute>} />
@@ -194,7 +194,7 @@ function AppRoutes() {
         <Route path="/agent-whatsapp" element={<ProtectedRoute><WhatsappInbox /></ProtectedRoute>} />
         <Route path="/support" element={<ProtectedRoute permission="access_to_settings"><Support /></ProtectedRoute>} />
         <Route path="/alerts" element={<ProtectedRoute permission="access_to_settings"><Alerts /></ProtectedRoute>} />
-        <Route path="/adjustments" element={<ProtectedRoute permission="access_to_settings"><Adjustments /></ProtectedRoute>} />
+        <Route path="/adjustments" element={<ProtectedRoute permission="access_to_settings" roles={["general_manager"]}><Adjustments /></ProtectedRoute>} />
         <Route path="/system-health" element={<ProtectedRoute permission="access_to_settings"><SystemHealth /></ProtectedRoute>} />
         <Route path="/carriers" element={<ProtectedRoute permission="access_to_settings"><CarrierManagement /></ProtectedRoute>} />
         <Route path="/warehouse" element={<ProtectedRoute><Navigate to="/warehouse/dashboard" replace /></ProtectedRoute>} />

@@ -14,10 +14,13 @@ import { SmartRecommendations } from "@/components/SmartRecommendations";
 import { DailyConfirmationReport } from "@/components/DailyConfirmationReport";
 import { confirmationRatePercent } from "@/lib/confirmation-rate";
 import { deliveryRatePercent, isDeliveredStatus, isInShippedDeliveryPool } from "@/lib/delivery-rate";
+import { useAuth } from "@/contexts/AuthContext";
 
 type DateField = "created" | "updated";
 
 export default function ConfirmationAnalytics() {
+  const { authUser } = useAuth();
+  const isGeneralManager = authUser?.role === "general_manager";
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [sellerFilter, setSellerFilter] = useState<string>("all");
   const [productFilter, setProductFilter] = useState<string>("all");
@@ -668,6 +671,7 @@ export default function ConfirmationAnalytics() {
           allLabel="All Agents"
           className="w-[160px]"
         />
+        {!isGeneralManager && (
         <SearchableSelect
           value={sellerFilter}
           onValueChange={(v) => { setSellerFilter(v); setProductFilter("all"); }}
@@ -676,6 +680,7 @@ export default function ConfirmationAnalytics() {
           allLabel="All Sellers"
           className="w-[160px]"
         />
+        )}
         <SearchableSelect
           value={productFilter}
           onValueChange={setProductFilter}

@@ -210,7 +210,14 @@ export default function Orders() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { authUser } = useAuth();
-  const isAdmin = authUser?.role === 'admin';
+  // General Manager gets the same rich admin-style Orders view as admin
+  // (columns, filters, actions) EXCEPT seller identity — `isAdmin` below is
+  // deliberately broadened to cover both, and `isTrueAdmin` is kept as the
+  // narrow flag for the two spots (seller options fetch, Seller filter) that
+  // must stay admin-only.
+  const isTrueAdmin = authUser?.role === 'admin';
+  const isGeneralManager = authUser?.role === 'general_manager';
+  const isAdmin = isTrueAdmin || isGeneralManager;
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
@@ -425,8 +432,12 @@ export default function Orders() {
 
       if (!isAdmin) return;
 
+      // Seller options are fetched only for a true admin — general_manager
+      // gets everything else on this page but never sees seller identity.
       const [{ data: sellerRoles }, { data: agentRoles }] = await Promise.all([
-        supabase.from("user_roles").select("user_id").eq("role", "seller"),
+        isTrueAdmin
+          ? supabase.from("user_roles").select("user_id").eq("role", "seller")
+          : Promise.resolve({ data: [] as any[] }),
         supabase.from("user_roles").select("user_id").eq("role", "agent"),
       ]);
       const sellerIds = (sellerRoles || []).map((r: any) => r.user_id);
@@ -439,7 +450,9 @@ export default function Orders() {
       const nameOf = (id: string) => (allProfiles || []).find((p: any) => p.user_id === id)?.name || "Unknown";
 
       if (!cancelled) {
-        setSellerOptions(sellerIds.map((id: string) => ({ id, name: nameOf(id) })).sort((a, b) => a.name.localeCompare(b.name)));
+        if (isTrueAdmin) {
+          setSellerOptions(sellerIds.map((id: string) => ({ id, name: nameOf(id) })).sort((a, b) => a.name.localeCompare(b.name)));
+        }
         setAgentOptions(agentIds.map((id: string) => ({ id, name: nameOf(id) })).sort((a, b) => a.name.localeCompare(b.name)));
       }
 
@@ -475,7 +488,7 @@ export default function Orders() {
     };
     loadOptions();
     return () => { cancelled = true; };
-  }, [isAdmin, refreshKey]);
+  }, [isAdmin, isTrueAdmin, refreshKey]);
 
   // Sparkline / summary KPI cards reflect ALL orders (all-time totals + last 7
   // days), independent of the table's active filters — matches prior behavior,
@@ -949,8 +962,8 @@ export default function Orders() {
                 className="w-full"
               />
             </div>
-            {/* Seller - admin only */}
-            {isAdmin && (
+            {/* Seller - true admin only, general_manager doesn't see seller identity */}
+            {isTrueAdmin && (
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Seller</label>
               <SearchableSelect

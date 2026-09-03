@@ -3,7 +3,7 @@ import {
   ShoppingCart, CheckCircle2, Truck, DollarSign, XCircle, RotateCcw,
   Sparkles, PhoneOff, CalendarClock, TrendingUp, TrendingDown,
   Package, Copy, PhoneForwarded, Navigation, UserCheck, Banknote,
-  Clock, Store, Award, Activity, PackageCheck, Hourglass, PhoneMissed,
+  Clock, Store, Award, PhoneMissed,
   Printer, Send,
 } from "lucide-react";
 import {
@@ -329,6 +329,10 @@ function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; 
 export default function Dashboard() {
   const { authUser } = useAuth();
   const isSeller = authUser?.role === "seller";
+  // General Manager sees the full ops dashboard but not the money — no revenue
+  // hero card, no Financial Overview section, and (same reasoning as Orders)
+  // no seller identity in the Top Sellers leaderboard.
+  const isGeneralManager = authUser?.role === "general_manager";
   const navigate = useNavigate();
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
@@ -353,31 +357,6 @@ export default function Dashboard() {
   }, [topSellers, sellerProfiles]);
 
   const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 100) : 0;
-
-  // ── Follow-Up KPIs (admin only) ──
-  const { data: fuRows = [] } = useQuery({
-    queryKey: ["dashboard-follow-ups-kpis"],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_follow_ups_data");
-      if (error) throw error;
-      return (data ?? []) as { delivery_status: string | null; follow_up_status: string }[];
-    },
-    enabled: !isSeller,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
-  });
-  const fuKpis = useMemo(() => {
-    const total     = fuRows.length;
-    const shipped   = fuRows.filter((r) => ["printed","dispatched","shipped","in_transit","with_courier","out_for_delivery"].includes(r.delivery_status ?? "")).length;
-    const delivered = fuRows.filter((r) => r.delivery_status === "delivered").length;
-    const needAction = fuRows.filter((r) => r.follow_up_status !== "closed").length;
-    return {
-      total, shipped, delivered, needAction,
-      shippedPct:     total > 0 ? Math.round((shipped    / total) * 100) : 0,
-      deliveredPct:   total > 0 ? Math.round((delivered  / total) * 100) : 0,
-      needActionPct:  total > 0 ? Math.round((needAction / total) * 100) : 0,
-    };
-  }, [fuRows]);
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -427,8 +406,8 @@ export default function Dashboard() {
         {/* ═══════════ TEAM STATUS (admin only) ═══════════ */}
         {!isSeller && <OnlineStatusPanel />}
 
-        {/* ═══════════ SYSTEM STATUS (admin only) ═══════════ */}
-        {!isSeller && <SystemStatusPanel dateRange={dateRange} />}
+        {/* ═══════════ SYSTEM STATUS (admin only, not General Manager) ═══════════ */}
+        {!isSeller && !isGeneralManager && <SystemStatusPanel dateRange={dateRange} />}
 
         {/* ═══════════ HERO KPIs ═══════════ */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -471,7 +450,8 @@ export default function Dashboard() {
                 onClick: () => navigate("/finance"),
               },
             ];
-            return heroCards.map((c, i) => {
+            const visibleHeroCards = isGeneralManager ? heroCards.filter((c) => c.title !== "Revenue (PKR)") : heroCards;
+            return visibleHeroCards.map((c, i) => {
               const Icon = c.icon;
               return (
                 <button
@@ -511,7 +491,8 @@ export default function Dashboard() {
           <RadialGauge rate={kpis.deliveryRate} title="Delivery Rate" delay={150} />
         </div>
 
-        {/* ═══════════ FINANCIAL OVERVIEW ═══════════ */}
+        {/* ═══════════ FINANCIAL OVERVIEW (hidden from General Manager) ═══════════ */}
+        {!isGeneralManager && (
         <div className="space-y-3">
           <SectionHeader icon={DollarSign} title="Financial Overview" color="text-primary" iconBg="bg-primary/10" delay={160} />
           <div className="mb-2 flex items-center gap-2">
@@ -527,6 +508,7 @@ export default function Dashboard() {
               highlight delay={190} />
           </div>
         </div>
+        )}
 
         {/* ═══════════ CONFIRMATION PERFORMANCE ═══════════ */}
         <div className="space-y-3">
@@ -600,23 +582,10 @@ export default function Dashboard() {
 
         {/* Team status moved to top */}
 
-        {/* ═══════════ FOLLOW-UP OVERVIEW (admin only) ═══════════ */}
-        {!isSeller && (
-          <div className="space-y-3">
-            <SectionHeader icon={Truck} title="Follow-Up Overview" color="text-primary" iconBg="bg-primary/10" delay={340} />
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <FuKPICard icon={Truck}       label="Total Orders"   value={fuKpis.total}      sub="Synced to carrier"                   pct={100}                    tone="muted"   delay={345} />
-              <FuKPICard icon={Activity}    label="In Transit"     value={fuKpis.shipped}    sub={`${fuKpis.shippedPct}% of total`}    pct={fuKpis.shippedPct}     tone="info"    delay={350} />
-              <FuKPICard icon={PackageCheck} label="Delivered"     value={fuKpis.delivered}  sub={`${fuKpis.deliveredPct}% of total`}  pct={fuKpis.deliveredPct}   tone="success" delay={355} />
-              <FuKPICard icon={Hourglass}   label="Need Action"    value={fuKpis.needAction} sub={`${fuKpis.needActionPct}% pending`}  pct={fuKpis.needActionPct}  tone="warning" delay={360} />
-            </div>
-          </div>
-        )}
-
         {/* ═══════════ TOP PERFORMERS ═══════════ */}
-        <div className={`grid grid-cols-1 ${!isSeller ? 'lg:grid-cols-2' : ''} gap-4`}>
-          {/* Top Sellers - admin only */}
-          {!isSeller && (
+        <div className={`grid grid-cols-1 ${!isSeller && !isGeneralManager ? 'lg:grid-cols-2' : ''} gap-4`}>
+          {/* Top Sellers - admin only, general_manager doesn't see seller identity */}
+          {!isSeller && !isGeneralManager && (
             <div className="bg-card rounded-xl border shadow-soft animate-slide-up overflow-hidden" style={{ animationDelay: "370ms" }}>
               <div className="px-4 py-2.5 border-b flex items-center gap-2">
                 <div className="p-1 rounded-md bg-primary/10 text-primary"><Store className="w-3.5 h-3.5" /></div>
@@ -674,60 +643,3 @@ export default function Dashboard() {
   );
 }
 
-/* ── Follow-Up KPI Card (used in Follow-Up Overview section) ── */
-function FuKPICard({
-  icon: Icon, label, value, sub, pct, tone, delay = 0,
-}: {
-  icon: typeof Truck;
-  label: string;
-  value: number;
-  sub: string;
-  pct: number;
-  tone: "muted" | "info" | "success" | "warning";
-  delay?: number;
-}) {
-  const iconCls = {
-    muted:   "bg-muted/80 text-muted-foreground",
-    info:    "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)]",
-    success: "bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)]",
-    warning: "bg-[hsl(25,85%,55%)]/12  text-[hsl(25,85%,55%)]",
-  }[tone];
-
-  const barCls = {
-    muted:   "bg-foreground/20",
-    info:    "bg-[hsl(210,60%,52%)]",
-    success: "bg-[hsl(155,50%,42%)]",
-    warning: "bg-[hsl(25,85%,55%)]",
-  }[tone];
-
-  const borderCls = {
-    muted:   "border-t-border",
-    info:    "border-t-[hsl(210,60%,52%)]/30",
-    success: "border-t-[hsl(155,50%,42%)]/30",
-    warning: "border-t-[hsl(25,85%,55%)]/30",
-  }[tone];
-
-  return (
-    <div
-      className={`bg-card rounded-xl border border-t-2 ${borderCls} shadow-soft px-4 py-4 animate-slide-up hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 overflow-hidden`}
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold truncate">{label}</p>
-          <p className="text-2xl font-bold tabular-nums mt-1.5 leading-none">{value.toLocaleString()}</p>
-          <p className="text-[11px] text-muted-foreground mt-1.5 leading-none">{sub}</p>
-        </div>
-        <div className={`p-2 rounded-xl flex-shrink-0 ${iconCls}`}>
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-      <div className="mt-3.5 h-1 rounded-full bg-muted overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${barCls}`}
-          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-        />
-      </div>
-    </div>
-  );
-}

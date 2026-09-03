@@ -103,6 +103,7 @@ function getActor(group: GroupedEntry): string {
     case "warehouse":
     case "warehouse_agent": return "Warehouse";
     case "warehouse_manager": return "Warehouse Manager";
+    case "general_manager": return "General Manager";
     case "follow_up": return "Follow-up Agent";
     case "system": return "System";
     default: return group.changed_by_role || "User";

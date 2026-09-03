@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { isDeliveredStatus, isInShippedDeliveryPool } from "@/lib/delivery-rate";
+import { useAuth } from "@/contexts/AuthContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -403,6 +404,8 @@ function SkeletonBlock() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function DeliveryAnalytics() {
+  const { authUser } = useAuth();
+  const isGeneralManager = authUser?.role === "general_manager";
   const [sellerFilter, setSellerFilter] = useState("all");
   const [productFilter, setProductFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
@@ -1053,6 +1056,7 @@ export default function DeliveryAnalytics() {
             preset={datePreset}
             onPresetChange={setDatePreset}
           />
+          {!isGeneralManager && (
           <SearchableSelect
             value={sellerFilter}
             onValueChange={(v) => { setSellerFilter(v); setProductFilter("all"); }}
@@ -1061,6 +1065,7 @@ export default function DeliveryAnalytics() {
             allLabel="All Sellers"
             className="w-[150px]"
           />
+          )}
           <SearchableSelect
             value={productFilter}
             onValueChange={setProductFilter}

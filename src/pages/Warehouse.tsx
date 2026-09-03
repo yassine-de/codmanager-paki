@@ -528,9 +528,11 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
   const [historyUserFilter, setHistoryUserFilter] = useState("all");
   const [historySearch, setHistorySearch] = useState("");
 
-  const isWarehouseUser = authUser?.role === "admin" || authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager";
-  const canAdjustStock = authUser?.role === "admin" || authUser?.role === "warehouse_manager";
-  const canReprint = authUser?.role === "admin" || authUser?.role === "warehouse_manager";
+  // general_manager gets full Warehouse access (unlike warehouse_manager, seller
+  // info stays visible here — the "no sellers" restriction is Orders-specific).
+  const isWarehouseUser = authUser?.role === "admin" || authUser?.role === "warehouse_agent" || authUser?.role === "warehouse_manager" || authUser?.role === "general_manager";
+  const canAdjustStock = authUser?.role === "admin" || authUser?.role === "warehouse_manager" || authUser?.role === "general_manager";
+  const canReprint = authUser?.role === "admin" || authUser?.role === "warehouse_manager" || authUser?.role === "general_manager";
   const hideSellerInfo = authUser?.role === "warehouse_manager";
   const dashboardDateRange = useMemo(
     () => getDashboardRange(dashboardRange, dashboardCustomStart, dashboardCustomEnd),
