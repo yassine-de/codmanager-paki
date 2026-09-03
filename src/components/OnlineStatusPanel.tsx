@@ -13,6 +13,7 @@ interface UserPresence {
   status: PresenceStatus;
   lastSeen: Date;
   timeAgo: string;
+  onlineSeconds: number;
 }
 
 function getStatus(lastSeen: Date, isActive: boolean): PresenceStatus {
@@ -32,6 +33,14 @@ function formatTimeAgo(date: Date): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+function formatOnlineTime(seconds: number): string {
+  if (seconds < 60) return "<1m today";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours === 0) return `${minutes}m today`;
+  return `${hours}h ${minutes}m today`;
 }
 
 const roleAbbreviations: Record<string, string> = {
@@ -65,6 +74,7 @@ const statusConfig = {
 
 export default function OnlineStatusPanel() {
   const { authUser } = useAuth();
+  const isAdmin = authUser?.role === "admin";
   const isGeneralManager = authUser?.role === "general_manager";
 
   const { data: presenceData = [] } = useQuery({
@@ -102,12 +112,28 @@ export default function OnlineStatusPanel() {
     enabled: userIds.length > 0,
   });
 
+  // Today's accumulated online time per user (Asia/Karachi day), admin /
+  // general_manager only — see track_user_online_time() migration.
+  const { data: onlineHoursData = [] } = useQuery({
+    queryKey: ["online-hours-today"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_online_hours_today" as any);
+      if (error) throw error;
+      return (data || []) as { user_id: string; online_seconds: number }[];
+    },
+    enabled: isAdmin || isGeneralManager,
+    refetchInterval: 60_000,
+  });
+
   const users: UserPresence[] = useMemo(() => {
     const profileMap: Record<string, string> = {};
     profiles.forEach((p) => { profileMap[p.user_id] = p.name; });
 
     const presenceMap: Record<string, any> = {};
     presenceData.forEach((p: any) => { presenceMap[p.user_id] = p; });
+
+    const onlineSecondsMap: Record<string, number> = {};
+    onlineHoursData.forEach((r) => { onlineSecondsMap[r.user_id] = r.online_seconds; });
 
     return rolesData
       .filter((r) => !(isGeneralManager && r.role === "admin"))
@@ -123,12 +149,13 @@ export default function OnlineStatusPanel() {
           status,
           lastSeen,
           timeAgo: formatTimeAgo(lastSeen),
+          onlineSeconds: onlineSecondsMap[r.user_id] || 0,
         };
       }).sort((a, b) => {
         const order = { online: 0, idle: 1, offline: 2 };
         return order[a.status] - order[b.status];
       });
-  }, [rolesData, profiles, presenceData, isGeneralManager]);
+  }, [rolesData, profiles, presenceData, onlineHoursData, isGeneralManager]);
 
   const [activeFilter, setActiveFilter] = useState<PresenceStatus | null>(null);
 
@@ -229,6 +256,11 @@ export default function OnlineStatusPanel() {
                       ? `Away ${u.timeAgo}`
                       : u.timeAgo}
                   </p>
+                  {(isAdmin || isGeneralManager) && (
+                    <p className="text-[9px] text-muted-foreground/70 mt-0.5 whitespace-nowrap">
+                      {formatOnlineTime(u.onlineSeconds)}
+                    </p>
+                  )}
                 </div>
               </div>
             );
