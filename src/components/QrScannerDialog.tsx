@@ -28,39 +28,57 @@ export function QrScannerDialog({ open, onOpenChange, onDetected, title }: QrSca
     setError(null);
     setStarting(true);
 
-    const scanner = new Html5Qrcode(readerElementId, {
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.QR_CODE,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.EAN_13,
-      ],
-      verbose: false,
-    });
-    scannerRef.current = scanner;
+    // Everything below is wrapped in try/catch deliberately: html5-qrcode's
+    // constructor throws a *raw string* (not even an Error) synchronously if
+    // its target element isn't in the DOM yet, and an exception thrown inside
+    // a useEffect that escapes uncaught takes the whole React tree down with
+    // it (no error boundary in this app) — i.e. exactly the "whole page goes
+    // black" report this guards against, rather than a normal error message.
+    const startScanning = async () => {
+      try {
+        // Small safety net for any dialog mount/animation timing edge case —
+        // wait a couple of frames for the reader div to actually exist.
+        for (let attempt = 0; attempt < 10 && !document.getElementById(readerElementId); attempt++) {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+        if (cancelled) return;
+        if (!document.getElementById(readerElementId)) {
+          throw new Error("Scanner failed to initialize — try closing and reopening this dialog");
+        }
 
-    scanner
-      .start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          if (cancelled) return;
-          cancelled = true;
-          onDetected(decodedText.trim());
-          onOpenChange(false);
-        },
-        () => {
-          // per-frame decode miss — expected constantly while aiming, ignore
-        },
-      )
-      .then(() => {
+        const scanner = new Html5Qrcode(readerElementId, {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+          ],
+          verbose: false,
+        });
+        scannerRef.current = scanner;
+
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            if (cancelled) return;
+            cancelled = true;
+            onDetected(decodedText.trim());
+            onOpenChange(false);
+          },
+          () => {
+            // per-frame decode miss — expected constantly while aiming, ignore
+          },
+        );
         if (!cancelled) setStarting(false);
-      })
-      .catch((err: any) => {
+      } catch (err: any) {
         if (cancelled) return;
         setStarting(false);
-        setError(err?.message || "Could not access camera");
-      });
+        setError(typeof err === "string" ? err : err?.message || "Could not access camera");
+      }
+    };
+
+    startScanning();
 
     return () => {
       cancelled = true;
