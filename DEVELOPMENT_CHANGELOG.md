@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-03 13:47 - Anwar Bounasser
+Last manual update: 2026-09-03 14:43 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-03 14:43 - Anwar Bounasser
+- Commit: `764b303`
+- Area: Database / Dashboard
+- Change: Added daily online-time tracking per account. `user_presence` only ever held each user's current state (overwritten every 30s heartbeat, no history), so a trigger on it now accumulates the elapsed time between consecutive heartbeats into a running daily total (`user_online_daily`, keyed by user_id + Asia/Karachi day — correctly keeps growing across multiple login/logout sessions in the same day, resets only on a new day). A single gap is capped at 90s so a stale heartbeat after a dropped connection doesn't inflate the total. New admin/general_manager-only RPC `get_online_hours_today()` feeds a "Xh Ym today" line under each person's card in the Team Status panel.
+- Reason: Asked how long a specific agent had been online today, which the system had no way to answer (presence was point-in-time only) — requested it be added properly for every account, visible to admin.
+- Notes: Migration `20260903150000_track_daily_online_time.sql` applied live. Verified end-to-end against real heartbeats from live users while building it (values growing in lockstep with the 30s heartbeat interval) and the RPC's auth gate (confirmed "Not authorized" without a real admin/general_manager session). No client-side heartbeat changes needed — reuses the existing `usePresence.ts` hook as-is.
 
 ### 2026-09-03 13:47 - Anwar Bounasser
 - Commit: `300ef64`
