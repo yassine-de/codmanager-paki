@@ -314,6 +314,26 @@ const code128Patterns = [
 
 let scanAudioCtx: AudioContext | null = null;
 
+// Browsers only allow an AudioContext to start/resume from inside a real user
+// gesture (click/tap/keypress) — not from an async callback like an RPC
+// response or a camera frame-detection loop. Beeps for auto-dispatch and
+// camera scans fire *after* an await, well outside that gesture, so the
+// context must be created+resumed synchronously during the gesture that
+// kicks the flow off (Scan submit, camera button, Auto Dispatch toggle).
+// Once resumed it stays running, so the later async beep still plays.
+function ensureScanAudioUnlocked() {
+  try {
+    if (!scanAudioCtx) {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      scanAudioCtx = new Ctx();
+    }
+    if (scanAudioCtx.state === "suspended") scanAudioCtx.resume().catch(() => {});
+  } catch {
+    // Web Audio unavailable — scanning still works, just silent
+  }
+}
+
 function playScanTone(frequency: number, duration: number, type: OscillatorType = "sine") {
   try {
     if (!scanAudioCtx) {
@@ -2162,6 +2182,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
 
   const submitReadyScan = (event: FormEvent) => {
     event.preventDefault();
+    ensureScanAudioUnlocked();
     resolveReadyScan(readyScan);
   };
 
@@ -2974,7 +2995,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                 <CardContent className="p-4">
                   <form className="flex gap-2" onSubmit={submitReadyScan}>
                     <Input ref={readyScanInput} value={readyScan} onChange={(e) => setReadyScan(e.target.value)} className="h-14 text-lg font-mono bg-background" placeholder="Scan internal QR, order code or tracking number" autoComplete="off" />
-                    <Button type="button" variant="outline" className="h-14 px-4" onClick={() => setReadyCameraScanOpen(true)} title="Scan with camera">
+                    <Button type="button" variant="outline" className="h-14 px-4" onClick={() => { ensureScanAudioUnlocked(); setReadyCameraScanOpen(true); }} title="Scan with camera">
                       <Camera className="h-4 w-4" />
                     </Button>
                     <Button type="submit" className="h-14 px-7"><ScanLine className="h-4 w-4 mr-2" /> Scan</Button>
@@ -2986,7 +3007,7 @@ export default function Warehouse({ section = "dashboard" }: { section?: Warehou
                     title="Scan Ticket QR"
                   />
                   <div className="flex items-center gap-2.5 mt-3 rounded-lg border border-border/60 bg-background/60 px-3 py-2">
-                    <Switch id="auto-dispatch" checked={autoDispatch} onCheckedChange={toggleAutoDispatch} />
+                    <Switch id="auto-dispatch" checked={autoDispatch} onCheckedChange={(value) => { ensureScanAudioUnlocked(); toggleAutoDispatch(value); }} />
                     <Label htmlFor="auto-dispatch" className="text-sm font-medium cursor-pointer">Auto Dispatch</Label>
                     <span className="text-xs text-muted-foreground">
                       {autoDispatch ? "On — every scan dispatches instantly, no confirm step" : "Off — each scan opens a confirm dialog first"}
