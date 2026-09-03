@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-02 07:31 - Anwar Bounasser
+Last manual update: 2026-09-03 06:45 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-03 06:45 - Anwar Bounasser
+- Commit: `4b8a52d`
+- Area: Warehouse
+- Change: Added camera-based QR/barcode scanning to the Ready to Dispatch and Returns scan inputs (new `QrScannerDialog` component, `html5-qrcode`) so a phone camera can scan the courier's own ticket QR instead of relying on a hardware scanner reading the printed barcode. Added an "Auto Dispatch" toggle on Ready to Dispatch: when on, a recognized scan dispatches the order immediately with no confirm dialog, and plays an audible beep on success / buzz on failure (Web Audio API, no asset files) so the scanning operator gets feedback without watching the screen.
+- Reason: Reported that PostEx's printed barcode is sometimes visually compressed/hard to scan; the courier's ticket already carries a clean QR with the tracking number, so the fix was to let warehouse staff scan that QR from a phone camera instead. The Auto Dispatch mode + sound was a follow-up request to make continuous scanning during dispatch faster, without a confirm click per order.
+- Notes: An earlier version of this change also generated and printed our own QR ticket per order — removed after confirmation that it was redundant (courier's ticket already has a working QR). `qrcode` npm package added then removed for the same reason; `html5-qrcode` is the only new runtime dependency. No DB/migration changes — the scanned QR value is matched against `order_id`/`tracking_number`/`system_id` using the exact same lookup already used by manual scan input. Verified: clean `tsc --noEmit`, clean `eslint` (no new issues beyond the file's pre-existing `any` usage), clean dev server + browser console. Could not verify the live camera scan / audio / auto-dispatch flow directly — needs an authenticated session and a real camera, both unavailable in this environment; asked Anwar to test live.
 
 ### 2026-09-02 07:31 - Anwar Bounasser
 - Commit: `75cf2b4`
