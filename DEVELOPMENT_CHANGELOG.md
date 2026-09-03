@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-03 06:52 - Anwar Bounasser
+Last manual update: 2026-09-03 07:04 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-03 07:04 - Anwar Bounasser
+- Commit: `7b986b0`
+- Area: Warehouse
+- Change: Fixed the scan success/error beep never being audible. It was started inside `performDispatch`, which runs after `await`ing the dispatch RPC — by then the browser no longer treats it as inside the original user gesture, so `AudioContext.resume()` stayed silently suspended. Added `ensureScanAudioUnlocked()`, called synchronously from the real click/submit handlers (Scan form submit, camera button, Auto Dispatch toggle) so the AudioContext starts running while still inside the gesture; the later async beep now actually plays.
+- Reason: Reported the scan flow worked (dispatch + camera scan both fine after the earlier crash fix) but no sound was ever heard on scan.
+- Notes: No migrations. Verified clean `tsc --noEmit` and clean dev server logs; audio playback itself can't be verified from this environment (no speaker/audio capture here), asked Anwar to re-test live.
 
 ### 2026-09-03 06:52 - Anwar Bounasser
 - Commit: `32424fd`
