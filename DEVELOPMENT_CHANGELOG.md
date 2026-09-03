@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-03 09:19 - Anwar Bounasser
+Last manual update: 2026-09-03 13:47 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-03 13:47 - Anwar Bounasser
+- Commit: `300ef64`
+- Area: Database / Orders / Warehouse / Follow Ups / WhatsApp / Analytics / Dashboard / Users
+- Change: Added a new "General Manager" role — custom cross-section access, not a full admin clone. Full: Follow Ups, Warehouse, Adjustments. Orders and the Dashboard minus seller identity/money (no Seller filter, no Revenue card, no Financial Overview, no Top Sellers leaderboard, no System Status panel, admins hidden from the Team Status panel). WhatsApp Inbox only (not Automations/Campaigns/Templates). Analytics limited to Confirmation, Delivery (both with the Seller filter hidden) and Agent Monitoring — not Seller/Finance analytics. No access to Users, Settings, Products, Confirmations, or Sourcing. Also removed the "Follow-Up Overview" dashboard section entirely for every role (admin included) — unrelated cleanup done in the same pass.
+- Reason: Requested a role for oversight staff who need broad day-to-day visibility across ops (orders, follow-ups, warehouse, delivery/confirmation performance) without seller-identifying data, financial figures, or admin-level system access (users/settings/system health).
+- Notes: Migrations `20260903100000_add_general_manager_role.sql` (enum value) and `20260903100100_general_manager_staff_access.sql` (is_staff()) applied live; `manage-users` edge function redeployed so an account can be created with this role from Users → role dropdown. Implemented via explicit per-page role checks rather than the permissions table, since most of the target pages (Warehouse, FollowUps, the 3 analytics pages, Adjustments) aren't permission-gated at all today, and the one permission that is (`access_to_analytics`) also covers Finance/Seller analytics, which this role must not see. Verified: clean `tsc --noEmit` and `eslint` across all 16 touched files (zero new issues, all pre-existing warnings), clean dev server/browser console, live DB confirmation of the new enum value and `is_staff()`. Could not verify the live click-through experience directly — no login credentials available in the dev environment — asked Anwar to create a test account and confirm each section live.
 
 ### 2026-09-03 09:19 - Anwar Bounasser
 - Commit: `2a29753`
