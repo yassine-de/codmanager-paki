@@ -160,6 +160,31 @@ export default function ConfirmationAnalytics() {
     return [...names].map(n => ({ value: n, label: n })).sort((a, b) => a.label.localeCompare(b.label));
   }, [orders, sellerFilter]);
 
+  // Always-on ground truth: for EVERY order, who made the LATEST
+  // confirmation_status action on it and what they set it to — independent of
+  // any date/agent filter. An order's current agent_id/original_agent_id
+  // reflects reassignment/ownership, not who actually did the work (an order
+  // can be attempted by several agents over its life; whoever's action this
+  // was should get credit for it, even after someone else later confirms it).
+  // statusActionsInPeriod below re-derives this scoped to the active filters
+  // when one is set; this map is what filteredOrders falls back to for
+  // attribution when neither a date range nor an agent filter is active
+  // (previously that case fell all the way back to raw ownership, silently
+  // misattributing per-agent breakdowns — reported: an agent's whole-history
+  // totals included orders she'd marked no_answer/cancelled that a DIFFERENT
+  // agent later confirmed, while that agent's own "confirmed" got no credit).
+  const latestActionByOrder = useMemo(() => {
+    const map = new Map<string, { status: string; changedBy: string; at: string }>();
+    orderHistory.forEach(h => {
+      if (h.field_changed !== "confirmation_status" || !h.new_value) return;
+      const prev = map.get(h.order_id);
+      if (!prev || new Date(h.created_at) > new Date(prev.at)) {
+        map.set(h.order_id, { status: h.new_value, changedBy: h.changed_by || "", at: h.created_at });
+      }
+    });
+    return map;
+  }, [orderHistory]);
+
   // STATUS-EVENT BASED FILTERING
   // All confirmation analytics are based on order_history confirmation_status events.
   // For each order, we keep the LAST status-change action that matches the active filters
@@ -199,8 +224,35 @@ export default function ConfirmationAnalytics() {
         });
       }
     });
+
+    // Same untracked-order fallback as agentActionsInPeriod below: an order
+    // with zero confirmation_status history from anyone (created
+    // already-confirmed via a WhatsApp/import/manual flow) still counts,
+    // credited to whoever currently/originally owns it. Without this, this
+    // map's population silently disagreed with agentActionsInPeriod's — the
+    // page's own KPI totals (stats, Cancel Reasons, Confirmation/Delivery by
+    // Product) undercounting relative to the Agent Performance Breakdown
+    // right below them on the same page.
+    orders.forEach(o => {
+      if (latestActionByOrder.has(o.order_id)) return; // someone has history for it
+      if (o.confirmation_status === "new") return;
+      const owner = o.agent_id || o.original_agent_id;
+      if (!owner) return;
+      if (hasAgentFilter && owner !== agentFilter) return;
+      if (useHistoryDate) {
+        const tsRaw = (o.confirmation_status === "confirmed" && o.confirmed_at)
+          ? o.confirmed_at
+          : (o.last_attempt_at || o.last_activity_at || o.updated_at || o.created_at);
+        if (!tsRaw) return;
+        const ts = new Date(tsRaw);
+        if (dateRange?.from && ts < dateRange.from) return;
+        if (dateRange?.to   && ts > dateRange.to)   return;
+      }
+      map.set(o.order_id, { lastStatus: o.confirmation_status, lastAt: o.updated_at, changedBy: owner });
+    });
+
     return map;
-  }, [orderHistory, agentFilter, dateRange, dateField]);
+  }, [orders, orderHistory, latestActionByOrder, agentFilter, dateRange, dateField]);
 
   const filteredOrders = useMemo(() => {
     // No deduplication — orders that share the same text order_id (generate_order_id
@@ -237,12 +289,22 @@ export default function ConfirmationAnalytics() {
           // orders he originally owned that OTHER agents reattempted today).
           return { ...o, confirmation_status: action.lastStatus, _actedBy: action.changedBy || null };
         });
+    } else {
+      // No date/agent filter active — population and current status stay
+      // exactly as-is (orders.confirmation_status already IS the current
+      // status), but attribution still needs latestActionByOrder rather than
+      // being left unset (which would silently fall back to raw ownership
+      // downstream). See latestActionByOrder above for why.
+      filtered = filtered.map(o => ({
+        ...o,
+        _actedBy: latestActionByOrder.get(o.order_id)?.changedBy || null,
+      }));
     }
 
     if (sellerFilter !== "all") filtered = filtered.filter(o => o.seller_id === sellerFilter);
     if (productFilter !== "all") filtered = filtered.filter(o => o.product_name === productFilter);
     return filtered;
-  }, [orders, statusActionsInPeriod, sellerFilter, productFilter, dateRange, dateField]);
+  }, [orders, statusActionsInPeriod, latestActionByOrder, sellerFilter, productFilter, dateRange, dateField]);
 
   // Stats — Claimed/Treated/Confirmed/Cancelled/Postponed/Unreachable must use
   // the SAME population as the Status Distribution breakdown and Agent Scores
@@ -445,73 +507,106 @@ export default function ConfirmationAnalytics() {
     };
   }, [orderHistory, filteredOrders, agentFilter]);
 
-  // order_id -> agent who actually pressed confirm, taken from order_history's
-  // LATEST confirmation_status->confirmed event (orderHistory is fetched
-  // ascending, so a later forEach write for the same order_id overwrites an
-  // earlier one). This is the same attribution get_agent_rankings() uses in the
-  // DB — without it, an order agent A marks no_answer/postponed and agent B
-  // later confirms still shows confirmation_status="confirmed" against agent A
-  // too (if A still owns it via agent_id/original_agent_id), wrongly inflating
-  // A's confirmed count. Reported: a confirmation agent's own dashboard
-  // "Confirmed" count disagreed with "Your Ranking" for exactly this reason.
-  // hasConfirmHistory tracks orders with a confirm event but no changed_by on
-  // record — those should count for nobody rather than fall back to whoever
-  // currently owns the order (only orders with NO confirm history at all, e.g.
-  // legacy data predating order_history, fall back to agent_id/original_agent_id).
-  const confirmedByAgentMap = useMemo(() => {
-    const confirmedByAgent: Record<string, string> = {};
-    const hasConfirmHistory: Record<string, boolean> = {};
+  // Per-(agent, order) actions — the correct basis for ALL per-agent credit
+  // (agentScores below, and DailyConfirmationReport's agentRows). An order can
+  // be attempted by several agents over its life; this deliberately does NOT
+  // collapse to one row per order like filteredOrders/_actedBy does (that stays
+  // order-centric on purpose, for the page's overall non-per-agent totals) —
+  // here, the SAME order_id legitimately appears once per agent who acted on
+  // it, each entry carrying that agent's own latest status on it. So if agent
+  // A marked an order No Answer and agent B later confirmed it: A keeps her
+  // No Answer credit, B gets the Confirmed credit, independently of each
+  // other and of whoever currently/originally owns the order in agent_id /
+  // original_agent_id. Population (which orders are in scope) mirrors
+  // filteredOrders' seller/product/date-mode filtering above.
+  const agentActionsInPeriod = useMemo(() => {
+    const hasDateFilter  = !!(dateRange?.from || dateRange?.to);
+    const hasAgentFilter = agentFilter !== "all";
+    const useHistoryDate = hasDateFilter && dateField === "updated";
+
+    let scoped = orders;
+    if (dateRange?.from && dateField === "created") {
+      const from = startOfDay(dateRange.from);
+      const to   = endOfDay(dateRange.to ?? dateRange.from);
+      scoped = scoped.filter(o => {
+        const ts = new Date(o.created_at);
+        return ts >= from && ts <= to;
+      });
+    }
+    if (sellerFilter !== "all") scoped = scoped.filter(o => o.seller_id === sellerFilter);
+    if (productFilter !== "all") scoped = scoped.filter(o => o.product_name === productFilter);
+    const scopedIds = new Set(scoped.map(o => o.order_id));
+    const orderById = new Map(scoped.map(o => [o.order_id, o]));
+
+    // "Does ANY agent have confirmation_status history for this order" —
+    // reuses latestActionByOrder (built above, unscoped) rather than
+    // recomputing the same thing, so this and statusActionsInPeriod's own
+    // fallback can never drift apart on what counts as "untracked".
+    const map = new Map<string, { order_id: string; agent_id: string; status: string; at: string }>();
     orderHistory.forEach(h => {
-      if (h.field_changed === "confirmation_status" && h.new_value === "confirmed") {
-        hasConfirmHistory[h.order_id] = true;
-        if (h.changed_by) confirmedByAgent[h.order_id] = h.changed_by;
+      if (h.field_changed !== "confirmation_status" || !h.new_value || !h.changed_by) return;
+      if (!scopedIds.has(h.order_id)) return;
+      if (hasAgentFilter && h.changed_by !== agentFilter) return;
+      if (useHistoryDate) {
+        if (dateRange?.from && new Date(h.created_at) < dateRange.from) return;
+        if (dateRange?.to   && new Date(h.created_at) > dateRange.to)   return;
+      }
+      const key = `${h.changed_by}::${h.order_id}`;
+      const prev = map.get(key);
+      if (!prev || new Date(h.created_at) > new Date(prev.at)) {
+        map.set(key, { order_id: h.order_id, agent_id: h.changed_by, status: h.new_value, at: h.created_at });
       }
     });
-    return { confirmedByAgent, hasConfirmHistory };
-  }, [orderHistory]);
 
-  // Agent scores — use original_agent_id as fallback for attribution
+    scoped.forEach(o => {
+      if (latestActionByOrder.has(o.order_id)) return;
+      if (o.confirmation_status === "new") return;
+      const owner = o.agent_id || o.original_agent_id;
+      if (!owner) return;
+      if (hasAgentFilter && owner !== agentFilter) return;
+      if (useHistoryDate) {
+        const tsRaw = (o.confirmation_status === "confirmed" && o.confirmed_at)
+          ? o.confirmed_at
+          : (o.last_attempt_at || o.last_activity_at || o.updated_at || o.created_at);
+        if (!tsRaw) return;
+        const ts = new Date(tsRaw);
+        if (dateRange?.from && ts < dateRange.from) return;
+        if (dateRange?.to   && ts > dateRange.to)   return;
+      }
+      map.set(`${owner}::${o.order_id}`, { order_id: o.order_id, agent_id: owner, status: o.confirmation_status, at: o.updated_at });
+    });
+
+    return [...map.values()].map(a => {
+      const o = orderById.get(a.order_id);
+      return {
+        order_id: a.order_id,
+        agent_id: a.agent_id,
+        confirmation_status: a.status,
+        confirmation_channel: (o as any)?.confirmation_channel ?? null,
+        delivery_status: o?.delivery_status ?? null,
+      };
+    });
+  }, [orders, orderHistory, latestActionByOrder, agentFilter, sellerFilter, productFilter, dateRange, dateField]);
+
+  // Agent scores — built entirely from agentActionsInPeriod (see above), so
+  // "total"/"confirmed" both reflect each agent's own actions, not raw
+  // ownership. Delivery/shipped credit only applies to that agent's own
+  // confirmed actions (delivery only happens after a confirm).
   const agentScores = useMemo(() => {
-    const { confirmedByAgent, hasConfirmHistory } = confirmedByAgentMap;
-
     const map: Record<string, { total: number; answered: number; confirmed: number; shipped: number; delivered: number }> = {};
     const ensure = (id: string) => {
       if (!map[id]) map[id] = { total: 0, answered: 0, confirmed: 0, shipped: 0, delivered: 0 };
       return map[id];
     };
 
-    filteredOrders.forEach(o => {
-      // _actedBy (who actually made this period's last action, set by
-      // filteredOrders above) takes priority over ownership fallback — see
-      // the comment there for why.
-      const agentId = (o as any)._actedBy || o.agent_id || o.original_agent_id;
-      if (!agentId || o.confirmation_status === "new") return;
-      ensure(agentId).total++;
-      if (["confirmed", "cancelled", "wrong_number", "reported"].includes(o.confirmation_status)) ensure(agentId).answered++;
-    });
-
-    // Credit "confirmed" to whoever actually pressed confirm, not whoever
-    // currently/originally owns the order — see confirmedByAgentMap above.
-    filteredOrders.forEach(o => {
-      if (o.confirmation_status !== "confirmed") return;
-      const agentId = o.agent_id || o.original_agent_id;
-      if (!agentId) return;
-      const confirmingAgent = confirmedByAgent[o.order_id] || (hasConfirmHistory[o.order_id] ? null : agentId);
-      if (confirmingAgent) ensure(confirmingAgent).confirmed++;
-    });
-
-    // Count shipped-pool and delivered orders per confirming agent. Falls back
-    // to _actedBy (not raw ownership) so this stays keyed the same way as the
-    // total/answered loop above and DailyConfirmationReport's agentRows —
-    // otherwise a reassigned order's delivery credit could land on a row that
-    // no longer exists in either of those (e.g. the original owner, who has
-    // zero other activity this period and so isn't a row at all).
-    filteredOrders.forEach(o => {
-      const agentId = (o as any)._actedBy || o.agent_id || o.original_agent_id;
-      const confirmingAgent = confirmedByAgent[o.order_id] || agentId;
-      if (confirmingAgent && map[confirmingAgent]) {
-        if (isInShippedDeliveryPool(o.delivery_status)) map[confirmingAgent].shipped++;
-        if (isDeliveredStatus(o.delivery_status)) map[confirmingAgent].delivered++;
+    agentActionsInPeriod.forEach(a => {
+      if (a.confirmation_status === "new") return;
+      ensure(a.agent_id).total++;
+      if (["confirmed", "cancelled", "wrong_number", "reported"].includes(a.confirmation_status)) ensure(a.agent_id).answered++;
+      if (a.confirmation_status === "confirmed") {
+        map[a.agent_id].confirmed++;
+        if (isInShippedDeliveryPool(a.delivery_status)) map[a.agent_id].shipped++;
+        if (isDeliveredStatus(a.delivery_status)) map[a.agent_id].delivered++;
       }
     });
 
@@ -526,25 +621,17 @@ export default function ConfirmationAnalytics() {
         deliveryRate: deliveryRatePercent(d.delivered, d.shipped),
       }))
       .sort((a, b) => b.confirmationRate - a.confirmationRate);
-  }, [filteredOrders, confirmedByAgentMap, profileNameMap]);
+  }, [agentActionsInPeriod, profileNameMap]);
 
-  // No Answer attempts breakdown — respects the date filter like every other
-  // section (dateField="created": order's created_at; "updated": its last
-  // call attempt, falling back to updated_at), plus seller/product.
+  // No Answer attempts breakdown — built from filteredOrders (same population
+  // as every other section: agent/seller/product/date-mode filters and the
+  // action-attributed confirmation_status, including the untracked-order
+  // fallback), so this section can never drift out of sync with the rest of
+  // the page. Previously built its own separate population straight from
+  // `orders` with its own date logic and no agent-filter check at all — a
+  // filter to one agent still showed the WHOLE team's No Answer breakdown.
   const noAnswerAttempts = useMemo(() => {
-    const from = dateRange?.from ? startOfDay(dateRange.from) : null;
-    const to = dateRange?.from ? endOfDay(dateRange.to ?? dateRange.from) : null;
-    const inRange = (d: Date) => !from || !to || (d >= from && d <= to);
-    const relevantDate = (o: typeof orders[number]) =>
-      new Date(dateField === "created" ? o.created_at : (o.last_attempt_at || o.updated_at));
-
-    const noAnswerOrders = orders.filter(o => {
-      if (o.confirmation_status !== "no_answer") return false;
-      if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
-      if (productFilter !== "all" && o.product_name !== productFilter) return false;
-      if (!inRange(relevantDate(o))) return false;
-      return true;
-    });
+    const noAnswerOrders = filteredOrders.filter(o => o.confirmation_status === "no_answer");
     const buckets: Record<number, number> = {};
     noAnswerOrders.forEach(o => {
       const n = Math.max(1, o.attempt_count ?? 1);
@@ -552,13 +639,7 @@ export default function ConfirmationAnalytics() {
     });
     const total = noAnswerOrders.length;
     // Unreachable = orders that exhausted all call attempts (terminal state of no_answer).
-    const unreachable = orders.filter(o => {
-      if (o.confirmation_status !== "unreachable") return false;
-      if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
-      if (productFilter !== "all" && o.product_name !== productFilter) return false;
-      if (!inRange(relevantDate(o))) return false;
-      return true;
-    }).length;
+    const unreachable = filteredOrders.filter(o => o.confirmation_status === "unreachable").length;
     const maxAttempt = Object.keys(buckets).length > 0 ? Math.max(...Object.keys(buckets).map(Number)) : 0;
     const rows = [];
     for (let i = 1; i <= maxAttempt; i++) {
@@ -570,7 +651,7 @@ export default function ConfirmationAnalytics() {
       });
     }
     return { rows, total, unreachable };
-  }, [orders, sellerFilter, productFilter, dateRange, dateField]);
+  }, [filteredOrders]);
 
   // Cancel reasons
   const cancelData = useMemo(() => {
@@ -735,6 +816,7 @@ export default function ConfirmationAnalytics() {
             actedBy: (o as any)._actedBy ?? null,
           };
         })}
+        agentActions={agentActionsInPeriod}
         profileNameMap={profileNameMap}
         profilePhoneMap={profilePhoneMap}
         agentIds={agentIds}
@@ -745,7 +827,6 @@ export default function ConfirmationAnalytics() {
         claimedOrders={stats.claimed}
         firstCallAvg={timeStats.firstCallAvg}
         handlingTime={timeStats.handlingTime}
-        confirmedByAgentMap={confirmedByAgentMap}
         agentScores={agentScores.map(a => ({
           id: a.id,
           confirmed: a.confirmed,

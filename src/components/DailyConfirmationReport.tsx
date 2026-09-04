@@ -15,8 +15,10 @@ interface Order {
   confirmation_channel: string | null;
   postpone_date: string | null;
   /** Who actually made this period's last order_history action on this order
-   *  (from ConfirmationAnalytics' statusActionsInPeriod) — takes priority over
-   *  agent_id/original_agent_id for per-agent attribution below. */
+   *  (from ConfirmationAnalytics' statusActionsInPeriod / latestActionByOrder).
+   *  Only used here for the order-centric `handledOrders`/`s` totals below —
+   *  per-agent credit comes from `agentActions`, not this field, so an order
+   *  worked by multiple agents doesn't get silently collapsed to just one. */
   actedBy?: string | null;
 }
 
@@ -28,8 +30,24 @@ interface AgentScore {
   deliveryRate: number;
 }
 
+/** One agent's own latest confirmation_status action on one order, from
+ *  order_history — NOT the order's overall/current status. The same order_id
+ *  legitimately appears once per agent who acted on it: if agent A marked an
+ *  order No Answer and agent B later confirmed it, there are two entries here
+ *  — {agent: A, status: "no_answer"} and {agent: B, status: "confirmed"} —
+ *  and both agents keep credit for their own action regardless of what
+ *  happened to the order afterward. This is the basis for agentRows below;
+ *  it deliberately does NOT collapse to one row per order. */
+interface AgentAction {
+  order_id: string;
+  agent_id: string;
+  confirmation_status: string;
+  confirmation_channel: string | null;
+}
+
 interface DailyConfirmationReportProps {
   orders: Order[];
+  agentActions: AgentAction[];
   profileNameMap: Record<string, string>;
   profilePhoneMap?: Record<string, string>;
   agentIds: string[];
@@ -44,12 +62,6 @@ interface DailyConfirmationReportProps {
   totalByWhatsApp?: number;
   /** Override for the hero confirmation rate — aligned with the main dashboard KPI */
   confirmationRate?: number;
-  /** order_id -> agent who actually pressed confirm (from order_history), for
-   *  correct per-agent "Confirmed" attribution — see ConfirmationAnalytics.tsx */
-  confirmedByAgentMap?: {
-    confirmedByAgent: Record<string, string>;
-    hasConfirmHistory: Record<string, boolean>;
-  };
 }
 
 interface AgentRow {
@@ -168,8 +180,8 @@ function ConfRatePill({ rate }: { rate: number }) {
 /* ── Main component ── */
 
 export function DailyConfirmationReport({
-  orders, profileNameMap, profilePhoneMap = {}, agentIds, agentScores = [], treatedOrders, claimedOrders, firstCallAvg, handlingTime,
-  totalConfirmed, totalByWhatsApp, confirmationRate, confirmedByAgentMap,
+  orders, agentActions, profileNameMap, profilePhoneMap = {}, agentIds, agentScores = [], treatedOrders, claimedOrders, firstCallAvg, handlingTime,
+  totalConfirmed, totalByWhatsApp, confirmationRate,
 }: DailyConfirmationReportProps) {
 
   const handledOrders = useMemo(
@@ -222,41 +234,34 @@ export function DailyConfirmationReport({
   }, [handledOrders, orders]);
 
   const agentRows: AgentRow[] = useMemo(() => {
-    const { confirmedByAgent = {}, hasConfirmHistory = {} } = confirmedByAgentMap || {};
+    // Built from agentActions (one row per agent per order they personally
+    // acted on — see the AgentAction interface), NOT from orders/handledOrders.
+    // An order attempted by several agents over its life contributes one entry
+    // PER agent here, each carrying that agent's own status snapshot — so if
+    // agent A marked it No Answer and agent B later confirmed it, A keeps her
+    // No Answer credit and B gets the Confirmed credit, independently. Using
+    // orders (one row per order, whoever's action happened to be current)
+    // would silently drop A's action the moment B acted, which is the exact
+    // bug this was rebuilt to fix.
     const map: Record<string, { total: number; noAnswer: number; postponed: number; confirmed: number; cancelled: number; whatsappConfirmed: number }> = {};
     const ensure = (id: string) => {
       if (!map[id]) map[id] = { total: 0, noAnswer: 0, postponed: 0, confirmed: 0, cancelled: 0, whatsappConfirmed: 0 };
       return map[id];
     };
-    handledOrders.forEach(o => {
-      // actedBy (who actually made this period's last action — see the Order
-      // interface) takes priority over ownership. Without it, an order
-      // originally assigned to one agent but reattempted by a DIFFERENT agent
-      // today still counted toward the ORIGINAL agent's Handled/No Answer/
-      // Postponed/Cancelled totals (reported: HARRAM's row showed 9 handled
-      // orders despite zero order_history activity from him today — all 9
-      // were orders other agents reattempted today that he originally owned).
-      const aid = o.actedBy || o.agent_id || o.original_agent_id;
-      if (!aid) return;
-      ensure(aid).total++;
-      if (o.confirmation_status === "no_answer")  map[aid].noAnswer++;
-      // See the `postponed` comment in `s` above — stale postpone_date must not
-      // double-count an order whose current status is something else.
-      if (o.confirmation_status === "postponed") map[aid].postponed++;
-      if (o.confirmation_status === "cancelled") map[aid].cancelled++;
+    agentActions.forEach(a => {
+      if (a.confirmation_status === "new") return;
+      ensure(a.agent_id).total++;
+      if (a.confirmation_status === "no_answer") map[a.agent_id].noAnswer++;
+      if (a.confirmation_status === "postponed") map[a.agent_id].postponed++;
+      if (a.confirmation_status === "cancelled") map[a.agent_id].cancelled++;
+      if (a.confirmation_status === "confirmed") {
+        map[a.agent_id].confirmed++;
+        if (a.confirmation_channel === "whatsapp") map[a.agent_id].whatsappConfirmed++;
+      }
     });
-    // Credit "confirmed"/"whatsappConfirmed" to whoever actually pressed confirm
-    // (order_history), not whoever currently/originally owns the order — see
-    // confirmedByAgentMap in ConfirmationAnalytics.tsx for why.
-    handledOrders.forEach(o => {
-      if (o.confirmation_status !== "confirmed") return;
-      const owner = o.actedBy || o.agent_id || o.original_agent_id;
-      if (!owner) return;
-      const confirmingAgent = confirmedByAgent[o.order_id] || (hasConfirmHistory[o.order_id] ? null : owner);
-      if (!confirmingAgent) return;
-      ensure(confirmingAgent).confirmed++;
-      if (o.confirmation_channel === "whatsapp") map[confirmingAgent].whatsappConfirmed++;
-    });
+    // Workload % denominator: distinct orders touched by anyone this period
+    // (handledOrders, order-centric) — NOT total actions, so shared orders
+    // correctly let per-agent shares sum past 100% rather than being diluted.
     const totalAll = handledOrders.length || 1;
     const p = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
     return Object.entries(map).map(([id, d]) => ({
@@ -273,7 +278,7 @@ export function DailyConfirmationReport({
       postponedRate:    p(d.postponed, d.total),
       workloadPct:      Math.round((d.total / totalAll) * 100),
     })).sort((a, b) => b.total - a.total);
-  }, [handledOrders, profileNameMap, confirmedByAgentMap]);
+  }, [agentActions, handledOrders, profileNameMap]);
 
   const avgWorkload = agentRows.length > 0 ? 100 / agentRows.length : 100;
   const insights    = useMemo(() => getInsights(agentRows, avgWorkload), [agentRows, avgWorkload]);

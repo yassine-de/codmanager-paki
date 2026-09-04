@@ -170,29 +170,71 @@ const AgentDashboard = () => {
     return map;
   }, [orderHistory]);
 
+  // Which of my orders have a confirmation_status history row from a
+  // DIFFERENT agent — needed to tell apart the two reasons I might have no
+  // history evidence of my own on an order: (a) genuinely nobody logged it —
+  // e.g. an order created already-confirmed (WhatsApp/import/manual-confirmed
+  // flow), which never produces an order_history transition for anyone —
+  // confirmed: keep counting it as mine, since I'm the assigned agent and
+  // nobody else did this work either; vs (b) somebody ELSE logged it (I'm
+  // just listed as agent_id/original_agent_id from an earlier reassignment)
+  // — that order is that agent's work, not mine, and must be excluded from
+  // my stats entirely rather than crediting me with whatever they set it to
+  // (reported: my own "Confirmed" count included orders another agent
+  // actually confirmed, disagreeing with the admin's per-agent view for the
+  // same period).
+  const orderIdsSignature = useMemo(
+    () => Array.from(new Set(agentOrders.map((o: any) => o.order_id))).sort().join(","),
+    [agentOrders],
+  );
+  const { data: otherAgentHistory = [] } = useQuery({
+    queryKey: ["agent-dashboard-other-agent-history", userId, orderIdsSignature],
+    queryFn: async () => {
+      const orderIds = Array.from(new Set(agentOrders.map((o: any) => o.order_id)));
+      if (orderIds.length === 0) return [];
+      const all: Array<{ order_id: string }> = [];
+      const chunkSize = 200;
+      for (let i = 0; i < orderIds.length; i += chunkSize) {
+        const chunk = orderIds.slice(i, i + chunkSize);
+        const { data, error } = await supabase
+          .from("order_history")
+          .select("order_id")
+          .eq("field_changed", "confirmation_status")
+          .neq("changed_by", userId)
+          .not("changed_by", "is", null)
+          .in("order_id", chunk);
+        if (error) throw error;
+        all.push(...(data || []));
+      }
+      return all;
+    },
+    enabled: !!userId && agentOrders.length > 0,
+    staleTime: 0,
+  });
+  const otherAgentHistoryByOrder = useMemo(() => {
+    const set = new Set<string>();
+    otherAgentHistory.forEach((h) => set.add(h.order_id));
+    return set;
+  }, [otherAgentHistory]);
+
   // Filter the agent's orders by date, and override confirmation_status to MY
   // own latest action's outcome where I have order_history evidence — not the
   // order's raw CURRENT status, which a DIFFERENT agent's later action can
-  // change. Without this, an order I marked no_answer that a different agent
-  // later confirmed still showed confirmation_status="confirmed" against me
-  // (wrongly inflating my "Confirmed" count), and — the reverse — an order I
-  // originally touched but that a different agent is now actively working
-  // still bumped its own updated_at/last_activity_at today, wrongly inflating
-  // my "Claimed Orders" count with work I didn't do (reported: sidra's own
-  // dashboard showed 43 "claimed today" while the admin's action-attributed
-  // view correctly showed 23 — the extra 20 were orders another agent was
-  // actually calling today). Only fall back to the order's raw status/generic
-  // timestamp when I have NO order_history evidence at all for that order —
-  // preserves the original fix this replaced: status changes made outside
-  // AgentOrders (e.g. the WhatsApp inbox, imports) that never wrote history
-  // rows must not silently vanish from the dashboard.
+  // change. Only fall back to the order's raw status when there's NO history
+  // evidence at all (from anyone) for that order; if a DIFFERENT agent has
+  // the evidence instead, the order is excluded outright — see
+  // otherAgentHistoryByOrder above.
   const filteredOrders = useMemo(() => {
     const { from, to } = resolvedDateRange;
 
-    const withEffectiveStatus = agentOrders.map((o: any) => {
-      const mine = myLatestEventByOrder[o.order_id];
-      return mine ? { ...o, confirmation_status: mine.status, _effectiveAt: mine.at } : { ...o, _effectiveAt: null };
-    });
+    const withEffectiveStatus = agentOrders
+      .map((o: any) => {
+        const mine = myLatestEventByOrder[o.order_id];
+        if (mine) return { ...o, confirmation_status: mine.status, _effectiveAt: mine.at, _notMine: false };
+        if (otherAgentHistoryByOrder.has(o.order_id)) return { ...o, _notMine: true };
+        return { ...o, _effectiveAt: null, _notMine: false };
+      })
+      .filter((o: any) => !o._notMine);
 
     if (!from && !to) return withEffectiveStatus;
 
@@ -208,7 +250,7 @@ const AgentDashboard = () => {
       if (to && ts > to) return false;
       return true;
     });
-  }, [agentOrders, myLatestEventByOrder, dateRange]);
+  }, [agentOrders, myLatestEventByOrder, otherAgentHistoryByOrder, dateRange]);
 
   // Agent ranking (real data) — moved above `stats` because the "Confirmed"
   // stat card now reads its count from here too (see stats.confirmed below).
