@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, Wifi, WifiOff, Clock } from "lucide-react";
+import { Users, Wifi, WifiOff, Clock, History } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { formatPKT } from "@/lib/timezone";
 
 type PresenceStatus = "online" | "idle" | "offline";
 
@@ -158,6 +160,23 @@ export default function OnlineStatusPanel() {
   }, [rolesData, profiles, presenceData, onlineHoursData, isGeneralManager]);
 
   const [activeFilter, setActiveFilter] = useState<PresenceStatus | null>(null);
+  const [historyUser, setHistoryUser] = useState<UserPresence | null>(null);
+  const canViewHistory = isAdmin || isGeneralManager;
+
+  // Day-by-day online-time history for whichever card was clicked — reuses
+  // user_online_daily (already keyed by user_id + day) via get_user_online_history.
+  const { data: historyData = [], isLoading: historyLoading } = useQuery({
+    queryKey: ["online-hours-history", historyUser?.user_id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_user_online_history" as any, {
+        p_user_id: historyUser!.user_id,
+        p_days: 30,
+      });
+      if (error) throw error;
+      return (data || []) as { day: string; online_seconds: number }[];
+    },
+    enabled: !!historyUser && canViewHistory,
+  });
 
   const onlineCount = users.filter((u) => u.status === "online").length;
   const idleCount = users.filter((u) => u.status === "idle").length;
@@ -225,7 +244,8 @@ export default function OnlineStatusPanel() {
             return (
               <div
                 key={u.user_id}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors shrink-0 min-w-0"
+                onClick={canViewHistory ? () => setHistoryUser(u) : undefined}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors shrink-0 min-w-0 ${canViewHistory ? "cursor-pointer" : ""}`}
               >
                 {/* Avatar */}
                 <div className="relative shrink-0">
@@ -267,6 +287,45 @@ export default function OnlineStatusPanel() {
           })
         )}
       </div>
+
+      {/* Per-user online-time history (last 30 days) */}
+      <Dialog open={!!historyUser} onOpenChange={(open) => !open && setHistoryUser(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              {historyUser?.name} — Online History
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[420px] overflow-y-auto space-y-1.5 pr-1">
+            {historyLoading ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>
+            ) : historyData.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">No activity recorded yet.</p>
+            ) : (
+              (() => {
+                const maxSeconds = Math.max(...historyData.map((d) => d.online_seconds), 1);
+                return historyData.map((d) => (
+                  <div key={d.day} className="flex items-center gap-3 py-1.5">
+                    <span className="text-xs text-muted-foreground w-24 shrink-0">
+                      {formatPKT(`${d.day}T00:00:00Z`, "EEE, MMM d")}
+                    </span>
+                    <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-emerald-500/70"
+                        style={{ width: `${Math.max(3, Math.round((d.online_seconds / maxSeconds) * 100))}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-semibold tabular-nums w-16 text-right shrink-0">
+                      {d.online_seconds < 60 ? "<1m" : formatOnlineTime(d.online_seconds).replace(" today", "")}
+                    </span>
+                  </div>
+                ));
+              })()
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
