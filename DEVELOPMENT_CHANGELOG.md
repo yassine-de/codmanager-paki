@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-04 07:58 - Anwar Bounasser
+Last manual update: 2026-09-04 14:01 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-04 14:01 - Anwar Bounasser
+- Commit: `95a014e`
+- Area: Analytics / Agent Dashboard / Database
+- Change: Fixed per-agent confirmation attribution across Confirmation Analytics, an agent's own dashboard, and the "Your Ranking" leaderboard. An order attempted by several agents over its life (very common in this workflow — released back to the pool and reattempted) was only ever credited to one agent (ownership fields or a single collapsed "latest action") instead of each agent keeping credit for their own distinct action — e.g. agent A's No Answer stayed credited to A even after agent B later confirmed the same order, or vice versa. Rebuilt on a one-row-per-(agent, order) model throughout: `ConfirmationAnalytics.tsx`'s new `agentActionsInPeriod` (feeding the Agent Performance Breakdown), `statusActionsInPeriod` (the page's own KPIs/Cancel Reasons/Confirmation & Delivery by Product — previously disagreed with the breakdown once agent-filtered), `DailyConfirmationReport.tsx`'s `agentRows` (now built from a dedicated `agentActions` prop), `AgentDashboard.tsx` (an agent's own numbers), and DB function `get_agent_rankings()`. Added a consistent fallback across all of these: an order with zero confirmation_status history from anyone (created already-confirmed via WhatsApp/import/manual flows) still counts, credited to whoever owns it. Also fixed "No Answer — Attempts Breakdown" silently ignoring the Agent filter entirely.
+- Reason: User-reported and then user-specified exact desired semantics through several rounds of live verification — agent A marks No Answer, agent B later confirms the same order, both must keep their own correct credit simultaneously, and every section on the page must show consistent numbers for whichever agent is selected.
+- Notes: Migrations `20260904090000_fix_agent_rankings_multi_agent_attribution.sql` and `20260904100000_agent_rankings_untracked_fallback.sql` applied live. Verified end-to-end against live data throughout — admin's per-agent Confirmation Analytics view, an agent's own AgentDashboard, and `get_agent_rankings()` now return byte-for-byte identical total/confirmed counts for every agent checked (sidra hanif, esha) — previously off by up to 22%. Surfaced "Echa wts manager", an agent whose WhatsApp-driven confirmations never wrote order_history and was therefore entirely invisible in the ranking before this fix. Clean `tsc --noEmit` and `eslint` (no new issues) across all touched files, clean dev server/browser console.
 
 ### 2026-09-04 07:58 - Anwar Bounasser
 - Commit: `cc83778`
