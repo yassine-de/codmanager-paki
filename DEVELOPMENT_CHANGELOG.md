@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-03 14:43 - Anwar Bounasser
+Last manual update: 2026-09-04 07:58 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-04 07:58 - Anwar Bounasser
+- Commit: `cc83778`
+- Area: Dashboard / Database
+- Change: Clicking a person's card in the Team Status panel (admin / general_manager only) now opens a dialog showing their last 30 days of online time — one row per day, relative bar + duration. New RPC `get_user_online_history(user_id, days)` just reads `user_online_daily` over a wider date range than the existing `get_online_hours_today`; no new tracking, the trigger added earlier today already populates day-level rows.
+- Reason: Follow-up request — wanted to see an individual's online-time history, not just today's total, from the Team Status panel.
+- Notes: Migration `20260903160000_online_time_history_rpc.sql` applied live. Verified the RPC's auth gate (throws "Not authorized" without a real admin/general_manager session), clean `tsc --noEmit`, clean dev server/browser console.
 
 ### 2026-09-03 14:43 - Anwar Bounasser
 - Commit: `764b303`
