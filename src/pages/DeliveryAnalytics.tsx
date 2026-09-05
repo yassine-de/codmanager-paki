@@ -65,6 +65,13 @@ type DeliveryStatusEvent = {
   created_at: string;
 };
 
+type FollowUpStatusEvent = {
+  order_id: string;
+  changed_by: string | null;
+  new_value: string | null;
+  created_at: string;
+};
+
 type SortDir = "asc" | "desc";
 type DateField = "created" | "updated";
 
@@ -264,6 +271,25 @@ async function fetchAllDeliveryStatusEvents(): Promise<DeliveryStatusEvent[]> {
   return rows;
 }
 
+async function fetchAllFollowUpHistory(): Promise<FollowUpStatusEvent[]> {
+  const rows: FollowUpStatusEvent[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("order_history")
+      .select("order_id, changed_by, new_value, created_at")
+      .eq("field_changed", "follow_up_status")
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as FollowUpStatusEvent[];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return rows;
+}
+
 async function fetchAllFollowUps(): Promise<FollowUpRow[]> {
   const rows: FollowUpRow[] = [];
   let from = 0;
@@ -443,6 +469,11 @@ export default function DeliveryAnalytics() {
   const { data: followUps = [] } = useQuery({
     queryKey: ["delivery-analytics-follow-ups-v1"],
     queryFn: fetchAllFollowUps,
+  });
+
+  const { data: followUpHistory = [] } = useQuery({
+    queryKey: ["delivery-analytics-follow-up-history-v1"],
+    queryFn: fetchAllFollowUpHistory,
   });
 
   const { data: profiles = [] } = useQuery({
@@ -751,17 +782,59 @@ export default function DeliveryAnalytics() {
       .sort((a, b) => b.total - a.total);
   }, [filteredOrders, followUpByOrderId]);
 
+  // order_follow_ups is a single mutable row per order (updated_by = whoever
+  // touched it LAST) — fine for "what's the current state", wrong for "who
+  // gets credit for the work", the same pitfall order_history-based fixes
+  // elsewhere in this app (Confirmation Analytics) were built to avoid. An
+  // order followed up by agent A (e.g. marked re_attempted) and later
+  // reassigned to agent B, who does something else, would silently drop A's
+  // real work from this breakdown — order_follow_ups only remembers B.
+  // Rebuilt from order_history instead: one entry per (agent, order), that
+  // agent's own latest follow_up_status action on it, independent of who
+  // currently owns the order or what anyone else did to it afterward.
+  const followUpActionsByOrder = useMemo(() => {
+    const byOrder = new Map<string, Map<string, { status: string; at: string }>>();
+    followUpHistory.forEach((h) => {
+      if (!h.new_value || !h.changed_by) return;
+      let byAgent = byOrder.get(h.order_id);
+      if (!byAgent) { byAgent = new Map(); byOrder.set(h.order_id, byAgent); }
+      const prev = byAgent.get(h.changed_by);
+      if (!prev || new Date(h.created_at) > new Date(prev.at)) {
+        byAgent.set(h.changed_by, { status: h.new_value, at: h.created_at });
+      }
+    });
+    return byOrder;
+  }, [followUpHistory]);
+
   const followUpAgentRows = useMemo(() => {
     const map: Record<string, { handled: number; delivered: number; stale: number }> = {};
+    const ensure = (id: string) => (map[id] ||= { handled: 0, delivered: 0, stale: 0 });
+
     filteredOrders.forEach((o) => {
+      const byAgent = followUpActionsByOrder.get(o.order_id);
+      if (byAgent) {
+        byAgent.forEach((action, agentId) => {
+          if (action.status === "pending") return;
+          ensure(agentId).handled++;
+          if (o.delivery_status === "delivered") map[agentId].delivered++;
+          const stale = action.status === "re_attempted"
+            && o.delivery_status !== "delivered"
+            && !RETURN_LIKE_STATUSES.includes(o.delivery_status || "")
+            && (Date.now() - new Date(action.at).getTime() > STALE_REATTEMPT_MS);
+          if (stale) map[agentId].stale++;
+        });
+        return;
+      }
+      // Fallback: a current order_follow_ups row with zero order_history
+      // evidence from anyone (legacy data predating per-attempt tracking) —
+      // credit whoever last touched the row, same as before this fix.
       const fu = followUpByOrderId[o.order_id];
       if (!fu || fu.follow_up_status === "pending" || !fu.updated_by) return;
-      const agentId = fu.updated_by;
-      if (!map[agentId]) map[agentId] = { handled: 0, delivered: 0, stale: 0 };
-      map[agentId].handled++;
-      if (o.delivery_status === "delivered") map[agentId].delivered++;
-      if (isStale(o, fu)) map[agentId].stale++;
+      ensure(fu.updated_by).handled++;
+      if (o.delivery_status === "delivered") map[fu.updated_by].delivered++;
+      if (isStale(o, fu)) map[fu.updated_by].stale++;
     });
+
     return Object.entries(map)
       .map(([id, d]) => ({
         id,
@@ -772,7 +845,7 @@ export default function DeliveryAnalytics() {
         rate: pct(d.delivered, d.handled),
       }))
       .sort((a, b) => b.handled - a.handled);
-  }, [filteredOrders, followUpByOrderId, profileMap]);
+  }, [filteredOrders, followUpActionsByOrder, followUpByOrderId, profileMap]);
 
   // ── By Courier ───────────────────────────────────────────────────────────────
 

@@ -95,9 +95,23 @@ export default function FollowUpControl() {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["follow-up-control"],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_follow_ups_data");
-      if (error) throw error;
-      return (data ?? []) as FollowUpRow[];
+      // PostgREST caps any response (including RPC calls) at ~1000 rows by
+      // default — get_follow_ups_data()'s qualifying universe is ~1800+
+      // orders app-wide, so a single unpaginated call here could silently
+      // drop real orders needing follow-up. FollowUps.tsx already paginates
+      // this same RPC correctly — matching that here.
+      const pageSize = 1000;
+      let from = 0;
+      const all: FollowUpRow[] = [];
+      while (true) {
+        const { data, error } = await supabase.rpc("get_follow_ups_data").range(from, from + pageSize - 1);
+        if (error) throw error;
+        const page = (data ?? []) as FollowUpRow[];
+        all.push(...page);
+        if (page.length < pageSize) break;
+        from += pageSize;
+      }
+      return all;
     },
     enabled: !!authUser && authUser.role === "follow_up",
     refetchInterval: 30000,
