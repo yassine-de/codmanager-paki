@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-04 14:01 - Anwar Bounasser
+Last manual update: 2026-09-05 06:30 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-05 06:30 - Anwar Bounasser
+- Commit: `f2e938f`
+- Area: Follow Up / Analytics / Database
+- Change: Rebuilt every KPI on the Follow-Up agent's own dashboard (`FollowUpDashboard.tsx`). Fixed an unpaginated `get_follow_ups_data()` call that silently capped the agent's own data at 1000 of ~1800+ qualifying orders (PostgREST's default response limit). Replaced history-based multi-agent ownership detection with the permanent `orders.follow_up_assigned_to` field (follow-up orders are never reassigned — confirmed live, 1589/1591 touched orders have exactly one agent ever) via a new RPC `get_my_follow_up_portfolio()`, fully decoupled from the live work-queue RPC. Total Assigned / Treated / Delivered / Saved Orders / Last 7 Days now read from that permanent portfolio plus real `order_history` events, so they can never shrink just because an order resolves and drops out of today's queue (304 of one agent's real orders were invisible to her own dashboard before this). Pending / Status Breakdown now read from the live queue instead, so an order delivered on the first attempt with zero follow-up work no longer shows as "Pending" or distorts the chart. "Delivered" is now a true performance KPI — only counts orders with a meaningful action from her AND a real delivery transition that happened after it, no credit for orders delivered without her involvement. Added a one-time backfill (204 orders) recovering `follow_up_assigned_to` for legacy rows that predate the auto-assignment feature. Added period-reactive percentages to each KPI card. Also fixed the matching pagination gap in `FollowUpControl.tsx` and rebuilt `DeliveryAnalytics.tsx`'s Follow-Up Effectiveness table on the same one-row-per-(agent, order) `order_history` model so admin and the agent's own dashboard can no longer disagree.
+- Reason: User reported the agent's own dashboard totals contradicting admin's Follow-Up Effectiveness numbers for the same agent, then requested a full architectural review of what population/date column backs each KPI, followed by an explicit business rule (assignment is permanent, ownership must never come from history) and a stricter definition of "Delivered" as an agent performance metric rather than raw portfolio delivery.
+- Notes: Migration `20260905063000_follow_up_permanent_portfolio_rpc.sql` applied live, plus a one-time data backfill (204 rows, verified zero ambiguous multi-agent cases before running). Verified end-to-end via live SQL across multiple date presets (Today/This Month/Last Month/Maximum) — Total Assigned/Active Follow-Ups/Pending/Treated/Delivered/Saved all-time figures stay constant across presets as expected, and each period's Treated/Delivered/Saved exactly equal their all-time counterparts under the "Maximum" preset. Clean `tsc --noEmit` and `eslint` across all touched files, clean dev server console.
 
 ### 2026-09-04 14:01 - Anwar Bounasser
 - Commit: `95a014e`
