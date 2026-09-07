@@ -809,7 +809,10 @@ export default function Orders() {
     return count;
   }, [appliedFilters]);
 
-  // Count of orders actually delivered within the selected "Delivered At" range (admin filter).
+  // Count of orders actually delivered within the selected "Delivered At" range.
+  // For sellers this query has no explicit seller_id filter — RLS ("Sellers
+  // view own orders": seller_id = auth.uid()) already restricts it to their
+  // own orders, same as the main list above.
   const [deliveredInRangeCount, setDeliveredInRangeCount] = useState<number | null>(null);
   useEffect(() => {
     const r = appliedFilters.deliveredRange;
@@ -911,8 +914,11 @@ export default function Orders() {
                 onPresetChange={setDatePreset}
               />
             </div>
-            {/* Delivered At - admin only */}
-            {isAdmin && (
+            {/* Delivered At - admin/general_manager and sellers (own orders only,
+                enforced by RLS: "Sellers view own orders" restricts SELECT to
+                seller_id = auth.uid(), so the badge count below never needs a
+                client-side seller filter to stay scoped to just their orders) */}
+            {(isAdmin || authUser?.role === 'seller') && (
             <div className="space-y-1">
               <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <PackageCheck className="h-3.5 w-3.5 text-[hsl(155,50%,42%)]" />
