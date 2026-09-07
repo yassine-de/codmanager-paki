@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-05 06:30 - Anwar Bounasser
+Last manual update: 2026-09-05 07:10 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-05 07:10 - Anwar Bounasser
+- Commit: `33798f4`
+- Area: WhatsApp Manager
+- Change: Added a pencil-edit control next to the customer name in the order info dialog header. Saves to both `whatsapp_conversations.customer_name` and `orders.customer_name` together.
+- Reason: Requested the ability to correct a customer's name directly from the WhatsApp Manager.
+- Notes: Updating only one of the two columns would leave the customer showing under different names on the WhatsApp Inbox vs Orders/Analytics, so both are written in the same save. Clean `tsc --noEmit`; `eslint` on this file shows one new `catch (error: any)` matching the same pattern already used by every other save handler in this file (43 pre-existing `any` errors before this change). Not visually tested in-browser (no login credentials available in this session) — verified via type-check and code review only.
 
 ### 2026-09-05 06:30 - Anwar Bounasser
 - Commit: `f2e938f`
