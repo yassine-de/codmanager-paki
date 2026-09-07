@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-05 07:10 - Anwar Bounasser
+Last manual update: 2026-09-07 09:45 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-07 09:45 - Anwar Bounasser
+- Commit: `5e592ae`
+- Area: Analytics / Seller
+- Change: Fixed three issues found during a full correctness audit of the seller-facing "My Analytics" page. (1) The "Confirmed" KPI card's badge and the "Confirmation Rate" pill's sub-label both showed a plain confirmed/total percentage, while the big rate number next to them used the shared `confirmationRatePercent` formula (excludes untouched "new" leads from the denominator) — same card showed two different numbers for "the rate" (e.g. 66.7% vs 68.0%). Unified both to the same adjusted rate. (2) The Cancellation Rate pill reused the "green = high = good" color/label scale from Confirmation/Delivery Rate, so a seller with a 75%+ cancellation rate would have seen it badged green "Excellent" — added an inverted scale for this one pill. (3) The "shipped" pool (denominator of Delivery Rate) was date-filtered by generic `orders.updated_at` instead of the dedicated `shipped_at` event column, so any unrelated edit to an already-shipped order could count it as "shipped" in whatever period that edit fell in.
+- Reason: User asked for a full audit of the page ("dir full analytics, chof wach kayhsab mzyan"), following the confirmation/delivery attribution work done earlier this session on the admin-facing analytics pages.
+- Notes: Verified live via SQL against a real seller's data — the shipped-date bug was significant: for "This Month", the old logic counted 945 orders as shipped vs the real 277 via `shipped_at`. Clean `tsc --noEmit`; `eslint` on this file was already clean before and after. Also widened the existing "Delivered At" date filter on the Orders page (`Orders.tsx`, commit `7c44e47`) from admin/general_manager-only to also include sellers — the underlying query needs no explicit seller_id filter since RLS ("Sellers view own orders": seller_id = auth.uid()) already scopes it to the caller's own rows.
 
 ### 2026-09-05 07:10 - Anwar Bounasser
 - Commit: `33798f4`
