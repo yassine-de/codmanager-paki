@@ -30,6 +30,7 @@ type Order = {
   cancel_reason: string | null;
   created_at: string;
   confirmed_at: string | null;
+  shipped_at: string | null;
   delivered_at: string | null;
   updated_at: string;
 };
@@ -37,7 +38,10 @@ type Order = {
 // Date basis (same logic as the seller Dashboard & admin Seller Analytics):
 //   created → cohort view, every metric filtered by created_at.
 //   updated → event view, each metric filtered by its own event date
-//             (confirmed_at for confirmed, delivered_at for delivered, else updated_at).
+//             (confirmed_at for confirmed, shipped_at for shipped, delivered_at
+//             for delivered, else updated_at — a generic fallback, only ever
+//             used for cancelled/wrong_number/unreachable, which have no
+//             dedicated event-timestamp column of their own).
 type DateBasis = "created" | "updated";
 
 type SortDir = "asc" | "desc";
@@ -47,7 +51,7 @@ type ProductSortField = "name" | "total" | "confirmed" | "confRate" | "delivered
 
 // Only safe fields: no agent, no channel, no carrier internals, no seller_id leaks
 const ORDER_SELECT =
-  "id, confirmation_status, delivery_status, product_name, cancel_reason, created_at, confirmed_at, delivered_at, updated_at";
+  "id, confirmation_status, delivery_status, product_name, cancel_reason, created_at, confirmed_at, shipped_at, delivered_at, updated_at";
 
 const PAGE_SIZE = 1000;
 
@@ -81,6 +85,33 @@ function rateGradient(rate: number): string {
   if (rate >= 50) return "from-emerald-500 to-green-400";
   if (rate >= 20) return "from-orange-700 to-amber-600";  // marron gradient
   return "from-red-500 to-rose-400";
+}
+
+// Cancellation Rate is the one "lower is better" metric on this page — a high
+// value is bad, unlike confirmation/delivery rate where high is good. Reusing
+// rateColor/rateBadgeClass/rateGradient directly (as this used to) would show
+// a catastrophic 75%+ cancellation rate as GREEN "Excellent". These mirror
+// the same thresholds, inverted.
+function inverseRateColor(rate: number): string {
+  if (rate <= 20) return "hsl(155, 50%, 42%)";           // green — low cancellation
+  if (rate <= 50) return "hsl(25, 65%, 42%)";            // marron
+  return "hsl(0, 65%, 52%)";                             // red — high cancellation
+}
+
+function inverseRateBadgeClass(rate: number): string {
+  if (rate <= 20) return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+  if (rate <= 50) return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300";
+  return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
+}
+
+function inverseRateGradient(rate: number): string {
+  if (rate <= 20) return "from-emerald-500 to-green-400";
+  if (rate <= 50) return "from-orange-700 to-amber-600";
+  return "from-red-500 to-rose-400";
+}
+
+function inverseRateLabel(rate: number): string {
+  return rate <= 20 ? "Excellent" : rate <= 50 ? "Average" : "High";
 }
 
 // Global Delivery Rate (delivered / total leads) is on a structurally lower
@@ -152,11 +183,17 @@ interface KPICardProps {
   gradient: string;
   delay?: number;
   pool?: number;
+  /** Use this rate for the badge/progress bar instead of value/pool — for
+   * Confirmed, the true confirmation rate excludes untouched "new" leads from
+   * the denominator (see confirmationRatePercent), which a naive value/pool
+   * percentage does not; without this override the badge and the subtitle
+   * below it show two different numbers for the same "rate" concept. */
+  ratePctOverride?: number;
 }
 
-function KPICard({ title, value, subtitle, icon: Icon, colorBg, colorIcon, gradient, delay = 0, pool }: KPICardProps) {
+function KPICard({ title, value, subtitle, icon: Icon, colorBg, colorIcon, gradient, delay = 0, pool, ratePctOverride }: KPICardProps) {
   const numVal = typeof value === "number" ? value : 0;
-  const poolPct = pool && pool > 0 ? pct(numVal, pool) : null;
+  const poolPct = ratePctOverride !== undefined ? ratePctOverride : (pool && pool > 0 ? pct(numVal, pool) : null);
   return (
     <div
       className="relative overflow-hidden rounded-2xl bg-card border border-border/60 shadow-sm hover:shadow-md transition-all duration-300"
@@ -267,7 +304,7 @@ export default function SellerProductAnalytics() {
     ).length;
     const cancelled = base.filter((o) => CANCELLED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.updated_at)).length;
     const delivered = base.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
-    const shipped = base.filter((o) => isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)).length;
+    const shipped = base.filter((o) => isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.shipped_at)).length;
     const wrongNumber = base.filter((o) => o.confirmation_status === "wrong_number" && inRangeByEvent(o, o.updated_at)).length;
     const unreachable = base.filter((o) => o.confirmation_status === "unreachable" && inRangeByEvent(o, o.updated_at)).length;
     const newOrders = base.filter((o) => o.confirmation_status === "new" && inRangeByEvent(o, o.created_at)).length;
@@ -279,6 +316,7 @@ export default function SellerProductAnalytics() {
       delivered,
       wrongNumber,
       unreachable,
+      newOrders,
       confRate: confirmationRatePercent(confirmed, total, newOrders),
       delRate: pct(delivered, shipped),
       // Global Delivery Rate: delivered as a fraction of ALL leads, not just
@@ -305,7 +343,7 @@ export default function SellerProductAnalytics() {
       if (inRangeByEvent(o, o.updated_at)) map[name].total++;
       if (o.confirmation_status === "new" && inRangeByEvent(o, o.updated_at)) map[name].newOrders++;
       if (CONFIRMED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.confirmed_at)) map[name].confirmed++;
-      if (isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)) map[name].shipped++;
+      if (isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.shipped_at)) map[name].shipped++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) map[name].delivered++;
       if (CANCELLED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.updated_at)) {
         map[name].cancelled++;
@@ -480,6 +518,7 @@ export default function SellerProductAnalytics() {
               gradient="from-emerald-500 to-green-400"
               delay={50}
               pool={kpis.total}
+              ratePctOverride={kpis.confRate}
             />
             <KPICard
               title="Delivered"
@@ -530,10 +569,12 @@ export default function SellerProductAnalytics() {
           {/* ── Section 2: Rate summary pills ────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "Confirmation Rate", value: kpis.confRate, sub: `${kpis.confirmed} / ${kpis.total} orders`, icon: TrendingUp, colorFn: rateColor, gradientFn: rateGradient, badgeFn: rateBadgeClass, labelFn: (v: number) => (v >= 70 ? "Excellent" : v >= 40 ? "Average" : "Low") },
+              { label: "Confirmation Rate", value: kpis.confRate, sub: `${kpis.confirmed} / ${kpis.total - kpis.newOrders} treated (${kpis.newOrders} new excluded)`, icon: TrendingUp, colorFn: rateColor, gradientFn: rateGradient, badgeFn: rateBadgeClass, labelFn: (v: number) => (v >= 70 ? "Excellent" : v >= 40 ? "Average" : "Low") },
               { label: "Delivery Rate", value: kpis.delRate, sub: `${kpis.delivered} / ${kpis.shipped} shipped`, icon: Truck, colorFn: rateColor, gradientFn: rateGradient, badgeFn: rateBadgeClass, labelFn: (v: number) => (v >= 70 ? "Excellent" : v >= 40 ? "Average" : "Low") },
               { label: "Global Delivery Rate", value: kpis.globalDelRate, sub: `${kpis.delivered} / ${kpis.total} leads`, icon: Globe, colorFn: globalRateColor, gradientFn: globalRateGradient, badgeFn: globalRateBadgeClass, labelFn: globalRateLabel },
-              { label: "Cancellation Rate", value: kpis.cancelRate, sub: `${kpis.cancelled} / ${kpis.total} orders`, icon: TrendingDown, colorFn: rateColor, gradientFn: rateGradient, badgeFn: rateBadgeClass, labelFn: (v: number) => (v >= 70 ? "Excellent" : v >= 40 ? "Average" : "Low") },
+              // Cancellation Rate: inverted color/label scale — a HIGH cancellation
+              // rate is bad, unlike the other three "higher is better" pills above.
+              { label: "Cancellation Rate", value: kpis.cancelRate, sub: `${kpis.cancelled} / ${kpis.total} orders`, icon: TrendingDown, colorFn: inverseRateColor, gradientFn: inverseRateGradient, badgeFn: inverseRateBadgeClass, labelFn: inverseRateLabel },
             ].map(({ label, value, sub, icon: Icon, colorFn, gradientFn, badgeFn, labelFn }) => (
               <div
                 key={label}
