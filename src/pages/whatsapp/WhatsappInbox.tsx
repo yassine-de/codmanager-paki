@@ -699,6 +699,9 @@ export default function WhatsappInbox() {
   const [editingCity, setEditingCity] = useState(false);
   const [cityDraft, setCityDraft] = useState("");
   const [savingCity, setSavingCity] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const [editingPricing, setEditingPricing] = useState(false);
   const [itemDrafts, setItemDrafts] = useState<OrderItemDraft[]>([]);
   const [savingPricing, setSavingPricing] = useState(false);
@@ -1101,6 +1104,44 @@ export default function WhatsappInbox() {
       toast.error(error.message || "Failed to update products");
     } finally {
       setSavingPricing(false);
+    }
+  };
+
+  // The name shown here is whatsapp_conversations.customer_name, but the
+  // linked order (elsewhere in the app — Orders list, analytics, dashboards)
+  // reads orders.customer_name independently. Update both together so a
+  // typo fix here doesn't leave the customer showing under two different
+  // names depending on which screen you look at.
+  const saveCustomerName = async () => {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || !conv?.id) return;
+    setSavingName(true);
+    try {
+      const { error: convError } = await supabase
+        .from("whatsapp_conversations")
+        .update({ customer_name: trimmed })
+        .eq("id", conv.id);
+      if (convError) throw convError;
+
+      if (order?.order_id) {
+        const { error: orderError } = await supabase
+          .from("orders")
+          .update({ customer_name: trimmed, updated_at: new Date().toISOString() })
+          .eq("order_id", order.order_id);
+        if (orderError) throw orderError;
+      }
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["wts-order", conv.order_id] }),
+        qc.invalidateQueries({ queryKey: ["wts-convos"] }),
+        qc.invalidateQueries({ queryKey: ["orders"] }),
+      ]);
+      toast.success("Customer name updated");
+      setEditingName(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update customer name");
+    } finally {
+      setSavingName(false);
     }
   };
 
@@ -2983,6 +3024,7 @@ export default function WhatsappInbox() {
         if (!o) {
           setEditingCity(false);
           setEditingAddress(false);
+          setEditingName(false);
           setEditingPricing(false);
           setEditCancelReason("");
           setEditCancelNote("");
@@ -3001,10 +3043,60 @@ export default function WhatsappInbox() {
                   {initials(conv.customer_name, conv.customer_phone)}
                 </div>
               )}
-              <div className="min-w-0">
-                <div className="truncate text-base">
-                  {conv?.customer_name || conv?.customer_phone}
-                </div>
+              <div className="min-w-0 flex-1">
+                {editingName ? (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      className="h-7 text-sm font-normal"
+                      placeholder="Customer name"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.currentTarget.blur();
+                          saveCustomerName();
+                        }
+                        if (e.key === "Escape") setEditingName(false);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="shrink-0 text-muted-foreground hover:text-emerald-500 transition-colors disabled:opacity-50"
+                      title="Save"
+                      disabled={savingName || !nameDraft.trim()}
+                      onClick={saveCustomerName}
+                    >
+                      {savingName ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    </button>
+                    <button
+                      type="button"
+                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                      title="Cancel"
+                      disabled={savingName}
+                      onClick={() => setEditingName(false)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <div className="truncate text-base">
+                      {conv?.customer_name || conv?.customer_phone}
+                    </div>
+                    <button
+                      type="button"
+                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Edit customer name"
+                      onClick={() => {
+                        setNameDraft(conv?.customer_name || "");
+                        setEditingName(true);
+                      }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
                 <div className="text-xs text-muted-foreground font-normal font-mono">
                   {conv?.customer_phone}
                 </div>
