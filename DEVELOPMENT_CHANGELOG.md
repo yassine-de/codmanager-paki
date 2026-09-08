@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-07 09:45 - Anwar Bounasser
+Last manual update: 2026-09-07 10:20 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-07 10:20 - Anwar Bounasser
+- Commit: `eacca79`
+- Area: Analytics
+- Change: Added a UTM Source filter (`orders.source_ref`) to Confirmation Analytics and Delivery Analytics, next to the existing Product filter.
+- Reason: Requested for admin's Confirmation and Delivery Analytics pages.
+- Notes: Both pages compute several independent populations (main KPIs, agent attribution/breakdown, daily trend pool, Failed Attempt popup, No Answer breakdown) that each apply their own seller/product/date filtering separately rather than sharing one filtered list — the same structural pattern behind the Agent-filter bug fixed earlier this session (one section silently ignoring a filter the rest of the page respected). Added the UTM filter to every one of those populations in both files (4 in Confirmation Analytics, 6 in Delivery Analytics), not just the main list. Verified real `source_ref` data exists (`tiktok`: 253, `facebook`: 236, `Agent Created`: 20, `google`: 1). Clean `tsc --noEmit`; `eslint` shows the same pre-existing 9 problems on these two files as before this change (0 new).
 
 ### 2026-09-07 09:45 - Anwar Bounasser
 - Commit: `5e592ae`
