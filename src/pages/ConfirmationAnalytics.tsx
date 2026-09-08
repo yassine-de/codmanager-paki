@@ -24,6 +24,7 @@ export default function ConfirmationAnalytics() {
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [sellerFilter, setSellerFilter] = useState<string>("all");
   const [productFilter, setProductFilter] = useState<string>("all");
+  const [utmFilter, setUtmFilter] = useState<string>("all");
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [dateField, setDateField] = useState<DateField>("updated");
@@ -42,11 +43,12 @@ export default function ConfirmationAnalytics() {
         confirmed_at: string | null; delivered_at: string | null; assigned_at: string | null;
         last_attempt_at: string | null; last_activity_at: string | null; updated_at: string;
         price: number | null; quantity: number | null; postpone_date: string | null; attempt_count: number | null;
+        source_ref: string | null;
       }> = [];
       while (true) {
         const { data, error } = await supabase
           .from("orders")
-          .select("id, order_id, confirmation_status, confirmation_channel, delivery_status, cancel_reason, product_name, seller_id, agent_id, original_agent_id, created_at, confirmed_at, delivered_at, assigned_at, last_attempt_at, last_activity_at, updated_at, price, quantity, postpone_date, attempt_count")
+          .select("id, order_id, confirmation_status, confirmation_channel, delivery_status, cancel_reason, product_name, seller_id, agent_id, original_agent_id, created_at, confirmed_at, delivered_at, assigned_at, last_attempt_at, last_activity_at, updated_at, price, quantity, postpone_date, attempt_count, source_ref")
           .order("created_at", { ascending: false })
           .range(from, from + pageSize - 1);
         if (error) throw error;
@@ -159,6 +161,11 @@ export default function ConfirmationAnalytics() {
     const names = new Set(source.map(o => o.product_name).filter(Boolean));
     return [...names].map(n => ({ value: n, label: n })).sort((a, b) => a.label.localeCompare(b.label));
   }, [orders, sellerFilter]);
+
+  const utmOptions = useMemo(() => {
+    const refs = new Set(orders.map(o => o.source_ref).filter(Boolean) as string[]);
+    return [...refs].map(u => ({ value: u, label: u })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [orders]);
 
   // Always-on ground truth: for EVERY order, who made the LATEST
   // confirmation_status action on it and what they set it to — independent of
@@ -303,8 +310,9 @@ export default function ConfirmationAnalytics() {
 
     if (sellerFilter !== "all") filtered = filtered.filter(o => o.seller_id === sellerFilter);
     if (productFilter !== "all") filtered = filtered.filter(o => o.product_name === productFilter);
+    if (utmFilter !== "all") filtered = filtered.filter(o => o.source_ref === utmFilter);
     return filtered;
-  }, [orders, statusActionsInPeriod, latestActionByOrder, sellerFilter, productFilter, dateRange, dateField]);
+  }, [orders, statusActionsInPeriod, latestActionByOrder, sellerFilter, productFilter, utmFilter, dateRange, dateField]);
 
   // Stats — Claimed/Treated/Confirmed/Cancelled/Postponed/Unreachable must use
   // the SAME population as the Status Distribution breakdown and Agent Scores
@@ -326,6 +334,7 @@ export default function ConfirmationAnalytics() {
       if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
       if (productFilter !== "all" && o.product_name !== productFilter) return false;
       if (agentFilter !== "all" && o.agent_id !== agentFilter && o.original_agent_id !== agentFilter) return false;
+      if (utmFilter !== "all" && o.source_ref !== utmFilter) return false;
       return true;
     });
 
@@ -398,7 +407,7 @@ export default function ConfirmationAnalytics() {
       delivered,
       deliveredRate: deliveryRate,
     };
-  }, [orders, filteredOrders, statusActionsInPeriod, orderHistory, agentFilter, sellerFilter, productFilter, dateRange, dateField]);
+  }, [orders, filteredOrders, statusActionsInPeriod, orderHistory, agentFilter, sellerFilter, productFilter, utmFilter, dateRange, dateField]);
 
   // Confirmed count for display — now just the confirmed subset of filteredOrders,
   // the same population Status Distribution and `stats` above use, so all three
@@ -535,6 +544,7 @@ export default function ConfirmationAnalytics() {
     }
     if (sellerFilter !== "all") scoped = scoped.filter(o => o.seller_id === sellerFilter);
     if (productFilter !== "all") scoped = scoped.filter(o => o.product_name === productFilter);
+    if (utmFilter !== "all") scoped = scoped.filter(o => o.source_ref === utmFilter);
     const scopedIds = new Set(scoped.map(o => o.order_id));
     const orderById = new Map(scoped.map(o => [o.order_id, o]));
 
@@ -586,7 +596,7 @@ export default function ConfirmationAnalytics() {
         delivery_status: o?.delivery_status ?? null,
       };
     });
-  }, [orders, orderHistory, latestActionByOrder, agentFilter, sellerFilter, productFilter, dateRange, dateField]);
+  }, [orders, orderHistory, latestActionByOrder, agentFilter, sellerFilter, productFilter, utmFilter, dateRange, dateField]);
 
   // Agent scores — built entirely from agentActionsInPeriod (see above), so
   // "total"/"confirmed" both reflect each agent's own actions, not raw
@@ -770,6 +780,14 @@ export default function ConfirmationAnalytics() {
           allLabel="All Products"
           className="w-[160px]"
         />
+        <SearchableSelect
+          value={utmFilter}
+          onValueChange={setUtmFilter}
+          options={utmOptions}
+          placeholder="UTM Source"
+          allLabel="All UTM Sources"
+          className="w-[160px]"
+        />
         {/* Date field toggle: Created / Updated */}
         <div className="flex items-center gap-0 rounded-lg border overflow-hidden h-9">
           {(["created", "updated"] as const).map((f) => (
@@ -794,8 +812,8 @@ export default function ConfirmationAnalytics() {
           preset={datePreset}
           onPresetChange={setDatePreset}
         />
-        {(agentFilter !== "all" || sellerFilter !== "all" || productFilter !== "all" || dateRange) && (
-          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setAgentFilter("all"); setSellerFilter("all"); setProductFilter("all"); setDatePreset("maximum"); setDateRange(undefined); }}>
+        {(agentFilter !== "all" || sellerFilter !== "all" || productFilter !== "all" || utmFilter !== "all" || dateRange) && (
+          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setAgentFilter("all"); setSellerFilter("all"); setProductFilter("all"); setUtmFilter("all"); setDatePreset("maximum"); setDateRange(undefined); }}>
             Clear
           </Button>
         )}

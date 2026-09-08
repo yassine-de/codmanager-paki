@@ -45,6 +45,7 @@ type Order = {
   delivered_at: string | null;
   updated_at: string;
   shipping_status: string | null;
+  source_ref: string | null;
   shipments?: Array<{
     tracking_number: string | null;
     carriers?: { name: string | null } | null;
@@ -82,7 +83,7 @@ type AgentSortField = "name" | "shipped" | "delivered" | "failed" | "rate";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ORDER_SELECT =
-  "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, updated_at, shipping_status, shipments(tracking_number, carriers(name))";
+  "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, updated_at, shipping_status, source_ref, shipments(tracking_number, carriers(name))";
 const PAGE_SIZE = 1000;
 
 const CONFIRMED_DELIVERY_STATUSES = [
@@ -434,6 +435,7 @@ export default function DeliveryAnalytics() {
   const isGeneralManager = authUser?.role === "general_manager";
   const [sellerFilter, setSellerFilter] = useState("all");
   const [productFilter, setProductFilter] = useState("all");
+  const [utmFilter, setUtmFilter] = useState("all");
   const [courierFilter, setCourierFilter] = useState("all");
   const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all");
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
@@ -525,19 +527,25 @@ export default function DeliveryAnalytics() {
     return names.sort().map((n) => ({ value: n, label: n }));
   }, [orders]);
 
+  const utmOptions = useMemo(() => {
+    const refs = [...new Set(orders.map((o) => o.source_ref).filter(Boolean))] as string[];
+    return refs.sort().map((u) => ({ value: u, label: u }));
+  }, [orders]);
+
   // ── Filtered orders ──────────────────────────────────────────────────────────
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
       if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
       if (productFilter !== "all" && o.product_name !== productFilter) return false;
+      if (utmFilter !== "all" && o.source_ref !== utmFilter) return false;
       if (courierFilter !== "all" && detectCourier(o) !== courierFilter) return false;
       if (deliveryStatusFilter !== "all" && o.delivery_status !== deliveryStatusFilter) return false;
       const dt = dateField === "created" ? o.created_at : o.updated_at;
       if (!isWithinRange(new Date(dt), dateRange)) return false;
       return true;
     });
-  }, [orders, sellerFilter, productFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
+  }, [orders, sellerFilter, productFilter, utmFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
 
   // ── KPI Calculations ─────────────────────────────────────────────────────────
 
@@ -548,11 +556,12 @@ export default function DeliveryAnalytics() {
     return orders.filter((o) => {
       if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
       if (productFilter !== "all" && o.product_name !== productFilter) return false;
+      if (utmFilter !== "all" && o.source_ref !== utmFilter) return false;
       if (courierFilter !== "all" && detectCourier(o) !== courierFilter) return false;
       if (deliveryStatusFilter !== "all" && o.delivery_status !== deliveryStatusFilter) return false;
       return true;
     });
-  }, [orders, sellerFilter, productFilter, courierFilter, deliveryStatusFilter]);
+  }, [orders, sellerFilter, productFilter, utmFilter, courierFilter, deliveryStatusFilter]);
 
   // Same basis-aware event rule used by SellerAnalytics.tsx (the page this was
   // reconciled against): in "created" mode every metric is scoped by
@@ -585,6 +594,7 @@ export default function DeliveryAnalytics() {
     const matchesNonStatusFilters = (o: Order) =>
       (sellerFilter === "all" || o.seller_id === sellerFilter) &&
       (productFilter === "all" || o.product_name === productFilter) &&
+      (utmFilter === "all" || o.source_ref === utmFilter) &&
       (courierFilter === "all" || detectCourier(o) === courierFilter);
     const matchesFilters = (o: Order) =>
       matchesNonStatusFilters(o) &&
@@ -653,7 +663,7 @@ export default function DeliveryAnalytics() {
       returnRate: pct(returned, poolCount),
       failedAttemptRate: pct(failedAttempt, poolCount),
     };
-  }, [orders, deliveryStatusEvents, orderByOrderId, sellerFilter, productFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
+  }, [orders, deliveryStatusEvents, orderByOrderId, sellerFilter, productFilter, utmFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
 
   // The actual order rows behind the "Failed Attempt" KPI number — mirrors
   // countDeliveryStatusEvents(["failed_attempt"])'s exact logic (event-scoped
@@ -664,6 +674,7 @@ export default function DeliveryAnalytics() {
     const matchesNonStatusFilters = (o: Order) =>
       (sellerFilter === "all" || o.seller_id === sellerFilter) &&
       (productFilter === "all" || o.product_name === productFilter) &&
+      (utmFilter === "all" || o.source_ref === utmFilter) &&
       (courierFilter === "all" || detectCourier(o) === courierFilter);
 
     if (dateField === "created") {
@@ -680,7 +691,7 @@ export default function DeliveryAnalytics() {
       ids.add(event.order_id);
     });
     return [...ids].map((id) => orderByOrderId[id]).filter(Boolean) as Order[];
-  }, [orders, deliveryStatusEvents, orderByOrderId, sellerFilter, productFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
+  }, [orders, deliveryStatusEvents, orderByOrderId, sellerFilter, productFilter, utmFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
 
   const failedAttemptReasonRows = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1098,7 +1109,7 @@ export default function DeliveryAnalytics() {
     else { setAgentSort(field); setAgentSortDir("desc"); }
   }
 
-  const hasFilters = sellerFilter !== "all" || productFilter !== "all" || courierFilter !== "all" || deliveryStatusFilter !== "all" || !!dateRange;
+  const hasFilters = sellerFilter !== "all" || productFilter !== "all" || utmFilter !== "all" || courierFilter !== "all" || deliveryStatusFilter !== "all" || !!dateRange;
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -1148,6 +1159,14 @@ export default function DeliveryAnalytics() {
             className="w-[150px]"
           />
           <SearchableSelect
+            value={utmFilter}
+            onValueChange={setUtmFilter}
+            options={utmOptions}
+            placeholder="UTM Source"
+            allLabel="All UTM Sources"
+            className="w-[150px]"
+          />
+          <SearchableSelect
             value={courierFilter}
             onValueChange={setCourierFilter}
             options={courierOptions}
@@ -1190,6 +1209,7 @@ export default function DeliveryAnalytics() {
               onClick={() => {
                 setSellerFilter("all");
                 setProductFilter("all");
+                setUtmFilter("all");
                 setCourierFilter("all");
                 setDeliveryStatusFilter("all");
                 setDatePreset("maximum");
