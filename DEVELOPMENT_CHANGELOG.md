@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-09 - Anwar Bounasser
+- Commit: `6290a68`
+- Area: Confirmation Agent
+- Change: The "Hold this order" button (added in `d353d69` just before this) was hidden for retry orders (no_answer/postponed) — reported not showing on a postponed order. Removed the status exclusion; it now shows on every claimed order.
+- Reason: User-reported — the button wasn't appearing on a postponed order screen.
+- Notes: Holding a retry order is a harmless no-op (they already never force-release), so this simplifies the UI without changing behavior for those orders. Clean `tsc --noEmit`, clean dev server console.
+
+### 2026-09-09 - Anwar Bounasser
 - Commit: `d353d69`
 - Area: Confirmation Agent
 - Change: Added a "Hold this order" button on the confirmation agent's claimed-order screen. A NEW order is normally auto-released (and the agent bumped to the next one) after 15 minutes with no status change; holding it downgrades that to the same "warn, don't force-release" behavior retry orders (no_answer/postponed) already get, so it stays claimed until the agent actually submits a status.
