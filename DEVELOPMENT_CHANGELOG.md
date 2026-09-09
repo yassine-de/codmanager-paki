@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-09 - Anwar Bounasser
+- Commit: `174c22a`
+- Area: Confirmation Agent
+- Change: The product name in an order's line items is now a searchable dropdown in edit mode, letting the agent swap it for a different product from the seller's catalog directly (previously required removing the item and adding a new one). Picking a different product carries over that product's own price; qty stays as-is. Added an opt-out `showAllOption` prop to the shared `SearchableSelect` component for this plain-picker use case (defaults to true, every existing filter-dropdown usage unaffected).
+- Reason: Requested for the products edit view on the confirmation agent's claimed-order screen.
+- Notes: Clean `tsc --noEmit`; `eslint` shows the same pre-existing problem count on both touched files as before this change (0 new). Not visually tested in-browser (no agent login credentials available in this session) — verified via type-check and code trace only.
+
+### 2026-09-09 - Anwar Bounasser
 - Commit: `6290a68`
 - Area: Confirmation Agent
 - Change: The "Hold this order" button (added in `d353d69` just before this) was hidden for retry orders (no_answer/postponed) — reported not showing on a postponed order. Removed the status exclusion; it now shows on every claimed order.
