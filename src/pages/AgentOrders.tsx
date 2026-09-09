@@ -997,28 +997,29 @@ const AgentOrders = () => {
         />
       </div>
 
-      {/* Hold order — for NEW orders only (retries already never force-release).
-          Bypasses the strict auto-release timeout for a customer who needs a
-          genuinely long call. */}
-      {!["no_answer", "postponed"].includes(currentOrder.confirmation_status) && (
-        orderHeld ? (
-          <Badge variant="outline" className="w-fit text-xs gap-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-            <Lock className="h-3 w-3" /> Order held — won't auto-move to the next one
-          </Badge>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-fit h-8 text-xs gap-1.5"
-            onClick={() => {
-              setOrderHeld(true);
-              toast.success("Order held — it'll stay with you until you submit a status");
-            }}
-          >
-            <Lock className="h-3.5 w-3.5" /> Hold this order
-          </Button>
-        )
+      {/* Hold order — visible on every claimed order (retry orders like
+          no_answer/postponed already never force-release, so holding one is
+          a harmless no-op there; showing the button everywhere means the
+          agent never has to think about which orders have it). Bypasses the
+          strict auto-release timeout for a customer who needs a genuinely
+          long call. */}
+      {orderHeld ? (
+        <Badge variant="outline" className="w-fit text-xs gap-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+          <Lock className="h-3 w-3" /> Order held — won't auto-move to the next one
+        </Badge>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit h-8 text-xs gap-1.5"
+          onClick={() => {
+            setOrderHeld(true);
+            toast.success("Order held — it'll stay with you until you submit a status");
+          }}
+        >
+          <Lock className="h-3.5 w-3.5" /> Hold this order
+        </Button>
       )}
 
       {/* ⚠️ Taking too long warning */}
