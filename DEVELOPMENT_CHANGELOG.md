@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-07 10:20 - Anwar Bounasser
+Last manual update: 2026-09-09 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-09 - Anwar Bounasser
+- Commit: `d353d69`
+- Area: Confirmation Agent
+- Change: Added a "Hold this order" button on the confirmation agent's claimed-order screen. A NEW order is normally auto-released (and the agent bumped to the next one) after 15 minutes with no status change; holding it downgrades that to the same "warn, don't force-release" behavior retry orders (no_answer/postponed) already get, so it stays claimed until the agent actually submits a status.
+- Reason: Requested — some customers need a genuinely long call and the order was being pulled away mid-conversation.
+- Notes: Button is available from the moment the order is claimed (not just once the 12-minute warning appears), and resets to unheld on every newly claimed order via the existing `clearActiveOrderState()`. Clean `tsc --noEmit`; `eslint` shows the same pre-existing problem count as before this change (0 new). Not visually tested in-browser (no agent login credentials available in this session) — verified via type-check and code trace only.
 
 ### 2026-09-07 10:20 - Anwar Bounasser
 - Commit: `eacca79`
