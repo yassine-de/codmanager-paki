@@ -12,6 +12,10 @@ interface SearchableSelectProps {
   placeholder?: string;
   allLabel?: string;
   className?: string;
+  /** Set false for a plain item picker (e.g. choosing one specific product
+   * for an order line) where an "all" wildcard makes no sense. Defaults to
+   * true to preserve every existing filter-dropdown usage of this component. */
+  showAllOption?: boolean;
 }
 
 export function SearchableSelect({
@@ -21,10 +25,11 @@ export function SearchableSelect({
   placeholder = "Select...",
   allLabel = "All",
   className,
+  showAllOption = true,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
 
-  const allOptions = [{ value: "all", label: allLabel }, ...options];
+  const allOptions = showAllOption ? [{ value: "all", label: allLabel }, ...options] : options;
   const selected = allOptions.find((o) => o.value === value);
 
   return (

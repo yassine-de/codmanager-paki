@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -924,6 +925,16 @@ const AgentOrders = () => {
     setEditItems((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
   };
 
+  // Swap a line item's product for a different one from the seller's catalog
+  // — carries over that product's own price (same as picking it fresh via
+  // "Add Product from Seller's Catalog"), qty stays as-is.
+  const updateItemProduct = (index: number, productName: string) => {
+    const matched = sellerProducts.find((sp) => sp.name === productName);
+    setEditItems((items) => items.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, name: productName, price: matched?.price ?? item.price } : item
+    ));
+  };
+
   const removeItem = (index: number) => {
     setEditItems((items) => items.filter((_, itemIndex) => itemIndex !== index));
     toast.info("Item removed");
@@ -1298,7 +1309,20 @@ const AgentOrders = () => {
                   <div key={i} className="p-3 rounded-lg bg-muted/40 border border-border/50 space-y-2">
                     <div className="flex items-start gap-3">
                       <div className="flex-1 min-w-0 space-y-1.5">
-                        <p className="text-sm font-semibold truncate">{op.name}</p>
+                        {editMode && sellerProducts.length > 0 ? (
+                          <SearchableSelect
+                            value={op.name}
+                            onValueChange={(name) => updateItemProduct(i, name)}
+                            options={sellerProducts
+                              .filter((sp) => sp.name === op.name || !activeItems.some((ai) => ai.name === sp.name))
+                              .map((sp) => ({ value: sp.name, label: sp.name }))}
+                            placeholder="Product"
+                            showAllOption={false}
+                            className="w-full h-8 text-sm font-semibold"
+                          />
+                        ) : (
+                          <p className="text-sm font-semibold truncate">{op.name}</p>
+                        )}
 
                         {editMode ? (
                           <div className="flex items-center gap-2">
