@@ -550,14 +550,6 @@ export default function Orders() {
       try {
         const f = appliedFilters;
 
-        // The "Upsell" filter is a legacy field the app never actually populates
-        // (every order maps `upsell: false` below), so "Yes" has always matched
-        // zero rows. Preserve that exact behavior without hitting the database.
-        if (f.upsell === 'yes') {
-          if (!cancelled) { setOrders([]); setTotalCount(0); }
-          return;
-        }
-
         // Product / carrier-substatus filters need a join the REST client can't
         // express as a plain column filter without also truncating the embedded
         // order_items/shipments arrays used for display. Resolve matching order
@@ -600,6 +592,83 @@ export default function Orders() {
           }
         }
 
+        // ── "Updated At" range, made event-aware ──────────────────────────────
+        // Plain `updated_at` means "any column on this row changed in the
+        // window" — so "Confirmation = Confirmed + Updated = Today" also
+        // returned orders confirmed weeks ago whose delivery_status flipped
+        // today, and "Agent = X + Updated = Today" returned every order X owns
+        // that anyone touched today. When a specific status or an agent is
+        // also selected, "updated in this window" must mean "that thing
+        // actually happened in this window":
+        //   Agent = X                → order_history where changed_by = X
+        //                              (confirmation_status action), ownership
+        //                              is ignored (reassignment is common)
+        //   Confirmation = confirmed → orders.confirmed_at   (dedicated column)
+        //   Delivery = delivered/paid→ orders.delivered_at
+        //   Delivery = shipped       → orders.shipped_at
+        //   any other status         → order_history (field_changed + new_value)
+        // With nothing status/agent-specific it stays the plain "row changed" filter.
+        const updatedRangeColumns: string[] = [];
+        let updatedRangeTextIds: string[] | null = null;
+        let updatedRangeAgentViaHistory = false;
+        if (f.updatedRange?.from) {
+          const uFrom = startOfDay(f.updatedRange.from).toISOString();
+          const uTo = endOfDayPKT(f.updatedRange.to ?? f.updatedRange.from).toISOString();
+          const confSpecific = f.confirmation !== 'all' && f.confirmation !== 'new';
+          const delivSpecific = f.delivery !== 'all' && f.delivery !== 'pending';
+          const agentSpecific = f.agent !== 'all';
+
+          const historyProbes: { field: string; value: string | null; changedBy: string | null }[] = [];
+
+          if (agentSpecific) {
+            historyProbes.push({
+              field: 'confirmation_status',
+              value: confSpecific ? f.confirmation : null,
+              changedBy: f.agent,
+            });
+            updatedRangeAgentViaHistory = true;
+          } else if (confSpecific) {
+            if (f.confirmation === 'confirmed') updatedRangeColumns.push('confirmed_at');
+            else historyProbes.push({ field: 'confirmation_status', value: f.confirmation, changedBy: null });
+          }
+
+          if (delivSpecific) {
+            if (f.delivery === 'delivered' || f.delivery === 'paid') updatedRangeColumns.push('delivered_at');
+            else if (f.delivery === 'shipped') updatedRangeColumns.push('shipped_at');
+            else historyProbes.push({ field: 'delivery_status', value: f.delivery, changedBy: null });
+          }
+
+          if (!agentSpecific && !confSpecific && !delivSpecific) updatedRangeColumns.push('updated_at');
+
+          for (const probe of historyProbes) {
+            const ids = new Set<string>();
+            const HP = 1000;
+            let hFrom = 0;
+            while (true) {
+              let hq = supabase
+                .from("order_history")
+                .select("order_id")
+                .eq("field_changed", probe.field)
+                .gte("created_at", uFrom)
+                .lte("created_at", uTo);
+              if (probe.value) hq = hq.eq("new_value", probe.value);
+              if (probe.changedBy) hq = hq.eq("changed_by", probe.changedBy);
+              const { data, error } = await hq.range(hFrom, hFrom + HP - 1);
+              if (error) break;
+              (data || []).forEach((r: { order_id: string | null }) => { if (r.order_id) ids.add(r.order_id); });
+              if (!data || data.length < HP) break;
+              hFrom += HP;
+            }
+            updatedRangeTextIds = updatedRangeTextIds === null
+              ? [...ids]
+              : updatedRangeTextIds.filter((id) => ids.has(id));
+          }
+          if (updatedRangeTextIds !== null && updatedRangeTextIds.length === 0) {
+            if (!cancelled) { setOrders([]); setTotalCount(0); }
+            return;
+          }
+        }
+
         const term = debouncedSearch.trim();
         const isIdSearch = term ? isOrderIdSearch(term) : false;
         // Strip characters that have structural meaning in a PostgREST `.or()`
@@ -618,12 +687,20 @@ export default function Orders() {
                  .lte('delivered_at', endOfDayPKT(f.deliveredRange.to ?? f.deliveredRange.from).toISOString());
           }
           if (f.updatedRange?.from) {
-            q = q.gte('updated_at', startOfDay(f.updatedRange.from).toISOString())
-                 .lte('updated_at', endOfDayPKT(f.updatedRange.to ?? f.updatedRange.from).toISOString());
+            const uFrom = startOfDay(f.updatedRange.from).toISOString();
+            const uTo = endOfDayPKT(f.updatedRange.to ?? f.updatedRange.from).toISOString();
+            for (const col of updatedRangeColumns) {
+              q = q.gte(col, uFrom).lte(col, uTo);
+            }
+            if (updatedRangeTextIds !== null) {
+              q = q.in('order_id', updatedRangeTextIds);
+            }
           }
           if (f.seller !== 'all') q = q.eq('seller_id', f.seller);
           if (isAdmin && f.utm !== 'all') q = q.eq('source_ref', f.utm);
-          if (f.agent !== 'all') {
+          if (f.upsell === 'yes') q = q.eq('is_upsell', true);
+          else if (f.upsell === 'no') q = q.eq('is_upsell', false);
+          if (f.agent !== 'all' && !updatedRangeAgentViaHistory) {
             q = q.or(`agent_id.eq.${f.agent},and(agent_id.is.null,original_agent_id.eq.${f.agent})`);
           }
           if (f.confirmation !== 'all') {
@@ -732,7 +809,7 @@ export default function Orders() {
             sellerId: o.seller_id || undefined,
             sourceRef: o.source_ref || null,
             agentName: o.agent_id ? (profileMap.get(o.agent_id) || undefined) : (o.original_agent_id ? (profileMap.get(o.original_agent_id) || undefined) : undefined),
-            upsell: false,
+            upsell: !!o.is_upsell,
             warehouseState: "in_stock" as const,
             history: [],
             attemptCount: o.attempt_count || 0,
