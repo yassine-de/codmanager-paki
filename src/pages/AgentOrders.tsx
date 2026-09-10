@@ -106,6 +106,7 @@ interface DbOrder {
   product_url: string | null;
   offers: string | null;
   last_price: number | null;
+  is_upsell: boolean | null;
   created_at: string;
   updated_at: string;
   // local flags
@@ -666,6 +667,12 @@ const AgentOrders = () => {
         await loadNextOrder();
         return;
       }
+      const newTotalQty = activeItems.reduce((sum, item) => sum + item.qty, 0);
+      // Upsell = the agent bumped the total quantity up during confirmation
+      // (1 → 2, 2 → 3, …). Sticky server-side (agent_submit_order ORs it in),
+      // so a later retry editing qty back down doesn't erase the credit.
+      const didUpsell = newTotalQty > (currentOrder.quantity ?? 0);
+
       const updateData: Record<string, any> = {
         confirmation_status: selectedStatus,
         confirmation_channel: "agent",
@@ -676,7 +683,7 @@ const AgentOrders = () => {
         customer_city: editCustomer.city,
         customer_address: editCustomer.address,
         product_name: activeItems[0]?.name || currentOrder.product_name,
-        quantity: activeItems.reduce((sum, item) => sum + item.qty, 0),
+        quantity: newTotalQty,
         price: activeItems[0]?.price || currentOrder.price,
         total_amount: orderTotal,
         is_manual_price: isManualPrice,
@@ -779,6 +786,7 @@ const AgentOrders = () => {
           p_confirmed_at:        updateData.confirmed_at ?? null,
           p_delivery_status:     updateData.delivery_status ?? null,
           p_cancel_reason:       updateData.cancel_reason ?? null,
+          p_is_upsell:           didUpsell,
       };
 
       let { data: updatedRows, error: updateError } = await supabase.rpc("agent_submit_order" as any, rpcParams);
@@ -839,7 +847,20 @@ const AgentOrders = () => {
       trackChange("customer_city", currentOrder.customer_city, editCustomer.city);
       trackChange("customer_address", currentOrder.customer_address, editCustomer.address);
       trackChange("product_name", currentOrder.product_name, activeItems[0]?.name);
-      trackChange("quantity", currentOrder.quantity, activeItems.reduce((sum, item) => sum + item.qty, 0));
+      trackChange("quantity", currentOrder.quantity, newTotalQty);
+      if (didUpsell && !currentOrder.is_upsell) {
+        historyEntries.push({
+          order_id: currentOrder.order_id,
+          changed_by: authUser.id,
+          changed_by_role: "agent",
+          field_changed: "is_upsell",
+          old_value: "false",
+          new_value: "true",
+          action_type: "upsell",
+          attempt_number: null,
+          group_id: groupId,
+        });
+      }
       trackChange("price", currentOrder.price, activeItems[0]?.price);
       trackChange("total_amount", currentOrder.total_amount, orderTotal);
       if (selectedStatus === "confirmed" && updateData.delivery_status) trackChange("delivery_status", currentOrder.delivery_status, updateData.delivery_status);

@@ -581,6 +581,7 @@ export type Database = {
           id: string
           invoice_id: string | null
           is_manual_price: boolean
+          is_upsell: boolean
           last_activity_at: string | null
           last_attempt_at: string | null
           last_attempt_date: string | null
@@ -644,6 +645,7 @@ export type Database = {
           id?: string
           invoice_id?: string | null
           is_manual_price?: boolean
+          is_upsell?: boolean
           last_activity_at?: string | null
           last_attempt_at?: string | null
           last_attempt_date?: string | null
@@ -707,6 +709,7 @@ export type Database = {
           id?: string
           invoice_id?: string | null
           is_manual_price?: boolean
+          is_upsell?: boolean
           last_activity_at?: string | null
           last_attempt_at?: string | null
           last_attempt_date?: string | null
@@ -2176,6 +2179,7 @@ export type Database = {
           p_customer_phone: string
           p_delivery_status?: string
           p_is_manual_price: boolean
+          p_is_upsell?: boolean
           p_last_activity_at: string
           p_last_attempt_at?: string
           p_last_attempt_date?: string
@@ -2214,6 +2218,7 @@ export type Database = {
           id: string
           invoice_id: string | null
           is_manual_price: boolean
+          is_upsell: boolean
           last_activity_at: string | null
           last_attempt_at: string | null
           last_attempt_date: string | null
@@ -2294,6 +2299,7 @@ export type Database = {
           id: string
           invoice_id: string | null
           is_manual_price: boolean
+          is_upsell: boolean
           last_activity_at: string | null
           last_attempt_at: string | null
           last_attempt_date: string | null
@@ -2440,6 +2446,7 @@ export type Database = {
           id: string
           invoice_id: string | null
           is_manual_price: boolean
+          is_upsell: boolean
           last_activity_at: string | null
           last_attempt_at: string | null
           last_attempt_date: string | null
