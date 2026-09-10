@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-09 - Anwar Bounasser
+Last manual update: 2026-09-10 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,20 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-10 - Anwar Bounasser
+- Commit: `4a12aa7`
+- Area: Confirmation Agent / Orders / Database
+- Change: Orders are now auto-flagged as an "upsell" when a confirmation agent increases the total quantity during confirmation (1→2, 2→3, adding a second line, …). New `orders.is_upsell` boolean column + partial index; `agent_submit_order` RPC gains a `p_is_upsell` param applied stickily (`p_is_upsell OR is_upsell`) so a later retry lowering the quantity doesn't erase it. The confirmation flow also writes an `is_upsell` row to `order_history` (action_type `upsell`, `changed_by` = the agent) the first time it flips. The "Upsell" filter on the Orders page — previously dead (every order hard-coded to `upsell=false`, "Yes" always returned zero) — now queries the real column.
+- Reason: Requested — the team wanted quantity upgrades made during confirmation tracked and filterable.
+- Notes: Migration `20260910120000_order_upsell_flag.sql` applied live (DROP + CREATE of `agent_submit_order` because adding a parameter changes the signature). No historical backfill — only 8 quantity increases exist app-wide and none this month (recent quantity edits are agents correcting 2→1 downward, not upsells), so it's going-forward only. Clean `tsc --noEmit`; `eslint` unchanged problem count on all touched files.
+
+### 2026-09-10 - Anwar Bounasser
+- Commit: `9b866da`
+- Area: Orders / Analytics
+- Change: The admin Orders page "Updated At" date filter is now event-aware. It used the generic `orders.updated_at` column, so "Confirmation = Confirmed + Updated = Today" also returned orders confirmed weeks ago whose delivery status merely changed today, and "Agent = X + Updated = Today" returned every order X owns that anyone touched today. Now, when a specific Confirmation/Delivery status or an Agent is also selected, "updated in the window" means that thing actually happened in the window: Agent → `order_history` where `changed_by` = X (ownership ignored, since reassignment is common); Confirmation=confirmed → `confirmed_at`; Delivery=delivered/paid → `delivered_at`; Delivery=shipped → `shipped_at`; any other status → `order_history` (field_changed + new_value). With nothing status/agent-specific it stays the plain "row changed" filter. Also wired the previously-dead "Upsell" filter to the new `orders.is_upsell` column.
+- Reason: User-reported — filtering a confirmation agent + "Updated = Today" surfaced stale confirmations whose only change today was on the delivery side; wanted "only the actions that came from her today".
+- Notes: Verified live — "sidra hanif + Today" went from 40 rows to 20 (her actual confirmation actions today); "Confirmed + Today" from 52 to 9; "Cancelled + Today" from 5 to 4. Filters without an "Updated At" range are completely unaffected. Clean `tsc --noEmit`; `eslint` unchanged problem count.
 
 ### 2026-09-09 - Anwar Bounasser
 - Commit: `174c22a`
