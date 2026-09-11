@@ -62,6 +62,11 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const isInternalCall = jwt === serviceRoleKey || jwt === anonKey;
 
+    // The staff user who sent this (for "Replies by Agent" reporting). Stays
+    // null for internal/service-role calls (campaigns, automations) — those
+    // aren't a human agent's reply.
+    let sentByUserId: string | null = null;
+
     if (!isInternalCall) {
       // Regular user call — validate JWT using getClaims (compatible with new signing-keys system).
       // Fall back to getUser if getClaims is unavailable.
@@ -70,11 +75,17 @@ Deno.serve(async (req) => {
         const anyAuth = admin.auth as any;
         if (typeof anyAuth.getClaims === "function") {
           const { data: claimsData, error: claimsErr } = await anyAuth.getClaims(jwt);
-          if (!claimsErr && claimsData?.claims?.sub) validUser = true;
+          if (!claimsErr && claimsData?.claims?.sub) {
+            validUser = true;
+            sentByUserId = claimsData.claims.sub as string;
+          }
         }
         if (!validUser) {
           const { data: userData } = await admin.auth.getUser(jwt);
-          if (userData?.user) validUser = true;
+          if (userData?.user) {
+            validUser = true;
+            sentByUserId = userData.user.id;
+          }
         }
       } catch (authErr) {
         console.error("[whatsapp-send] auth validation error:", (authErr as Error).message);
@@ -551,6 +562,7 @@ Deno.serve(async (req) => {
       meta_message_id: metaMsgId,
       status: ok ? "sent" : "failed",
       error_message: ok ? null : JSON.stringify(respJson),
+      sent_by: sentByUserId,
     });
 
     if (ok) {

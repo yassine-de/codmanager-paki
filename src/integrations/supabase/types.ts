@@ -1981,6 +1981,7 @@ export type Database = {
           meta_message_id: string | null
           order_id: string | null
           payload: Json
+          sent_by: string | null
           status: string | null
         }
         Insert: {
@@ -1994,6 +1995,7 @@ export type Database = {
           meta_message_id?: string | null
           order_id?: string | null
           payload?: Json
+          sent_by?: string | null
           status?: string | null
         }
         Update: {
@@ -2007,6 +2009,7 @@ export type Database = {
           meta_message_id?: string | null
           order_id?: string | null
           payload?: Json
+          sent_by?: string | null
           status?: string | null
         }
         Relationships: [
