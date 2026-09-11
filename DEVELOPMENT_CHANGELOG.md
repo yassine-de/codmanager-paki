@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-10 - Anwar Bounasser
+Last manual update: 2026-09-11 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-11 - Anwar Bounasser
+- Commit: `d665b2b`
+- Area: WhatsApp / Database
+- Change: Redesigned the WhatsApp Overview page. New cards: Templates sent today (name, send count, success rate — only templates actually sent, computed from `whatsapp_messages.payload._template_name`/`payload.template.name`), Replies sent by agent today, Confirmed via WhatsApp today + Booked since + booked rate (`confirmation_channel='whatsapp'` + `confirmation_status='confirmed'`, booked = reached the same courier-pipeline status set Delivery Analytics uses), New orders into WhatsApp today (`whatsapp_conversations` created today), Reply rate + Avg first response time (per-conversation: first inbound today → first outbound after it), and a Confirmation-phase/Delivery-phase filter (based on the linked order's current `confirmation_status`) that scopes the message-level cards. Kept Unanswered Now, but switched it from a single `.limit(2000)` query ordered by `last_inbound_at` to full pagination — with 2627 conversations carrying an inbound message, the old cap was silently excluding ~627 of the oldest ones from the count (561 → 815 once counted completely). Added a 7-day trend line chart (New WA orders / Replies / Confirmed), reusing the real-UTC day-bucketing approach from `useDashboardData.ts` to stay correct across the PKT boundary. New `whatsapp_messages.sent_by` column (nullable, FK to `auth.users`) so manual replies can be attributed to the agent who sent them; `whatsapp-send` edge function now captures the caller's `user.id` from the JWT it was already validating and writes it on the real-send insert (stays NULL for `isInternalCall` automation/campaign sends, which aren't a human reply).
+- Reason: Requested — the old page's 8 cards (In WhatsApp, Escalated, Canceled, Follow Up, etc.) didn't answer the questions the team actually has day to day: which templates are landing, who's replying, how WhatsApp confirmations are converting, and whether the team is keeping up.
+- Notes: Migration `20260911090000_whatsapp_messages_sent_by.sql` applied live; `whatsapp-send` redeployed. Every number verified against live production SQL before and after implementation (templates: out_for_delivery 17/18, new_order_confirmation_us 8/9, failed_attempt 3/3; confirmed-via-WA today 6, booked 6; new orders 9; reply rate 4/10; avg first response 0.7 min; phase split 2 confirmation / 38 delivery). Replies-by-agent will read 0 until agents send a reply after this deploy (no historical `sent_by` data, by design — not backfilled). Clean `tsc --noEmit`; `eslint` clean on all touched files. Could not click-test the rendered page in-browser (no `whatsapp_manager` login credentials in this session) — dev server verified to boot with a clean console up to the login screen; Anwar confirmed the live data server-side via direct SQL cross-check instead.
 
 ### 2026-09-10 - Anwar Bounasser
 - Commit: `df96fbf`
