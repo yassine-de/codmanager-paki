@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -67,6 +67,26 @@ async function fetchAllOrders(): Promise<Order[]> {
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     const page = (data || []) as Order[];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return rows;
+}
+
+type ConfirmationStatusEvent = { order_id: string; new_value: string; created_at: string };
+
+async function fetchAllConfirmationStatusEvents(): Promise<ConfirmationStatusEvent[]> {
+  const rows: ConfirmationStatusEvent[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("order_history")
+      .select("order_id, new_value, created_at")
+      .eq("field_changed", "confirmation_status")
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as ConfirmationStatusEvent[];
     rows.push(...page);
     if (page.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
@@ -252,6 +272,35 @@ export default function SellerAnalytics() {
     },
   });
 
+  const { data: confirmationStatusEvents = [] } = useQuery({
+    queryKey: ["seller-analytics-confirmation-status-events"],
+    queryFn: fetchAllConfirmationStatusEvents,
+  });
+
+  // order_id -> confirmation_status -> latest time that status was set. Used so
+  // "Updated" mode can tell WHEN an order actually reached its current
+  // confirmation status, instead of relying on the generic `updated_at`
+  // column (which also moves on unrelated delivery-side edits).
+  const latestStatusEventAt = useMemo(() => {
+    const map = new Map<string, Map<string, string>>();
+    confirmationStatusEvents.forEach((e) => {
+      let byStatus = map.get(e.order_id);
+      if (!byStatus) { byStatus = new Map(); map.set(e.order_id, byStatus); }
+      const cur = byStatus.get(e.new_value);
+      if (!cur || e.created_at > cur) byStatus.set(e.new_value, e.created_at);
+    });
+    return map;
+  }, [confirmationStatusEvents]);
+
+  // The event date for an order's CURRENT confirmation_status: `confirmed_at`
+  // for confirmed orders (the trusted column used everywhere else in the app),
+  // otherwise the latest order_history row that set that exact status, falling
+  // back to updated_at only for legacy orders with no tracked history.
+  const confirmationEventDate = useCallback((o: Order): string => {
+    if (o.confirmation_status === "confirmed") return o.confirmed_at ?? o.updated_at;
+    return latestStatusEventAt.get(o.order_id)?.get(o.confirmation_status) ?? o.updated_at;
+  }, [latestStatusEventAt]);
+
   const profileMap = useMemo(() => {
     const m: Record<string, string> = {};
     profiles.forEach((p) => { m[p.user_id] = p.name; });
@@ -288,24 +337,36 @@ export default function SellerAnalytics() {
   // ── Confirmation KPIs ────────────────────────────────────────────────────────
 
   const confirmationKPIs = useMemo(() => {
-    const total = filteredOrders.length;
     // Basis semantics (must match the seller Dashboard):
-    //   created → cohort view: of the orders CREATED in this range, how many are confirmed
-    //             (count confirmed orders by created_at — same date field as `total`).
-    //   updated → event view: how many orders were CONFIRMED in this range, regardless of
-    //             when created (count by confirmed_at, fallback updated_at).
-    const confirmed = (dateRange?.from
-      ? orders.filter((o) => {
-          if (!reachedConfirmedStage(o)) return false;
-          if (sellerFilter !== "all" && o.seller_id !== sellerFilter) return false;
-          if (productFilter !== "all" && o.product_name !== productFilter) return false;
-          const dateToCheck = dateFieldMode === "created"
-            ? o.created_at
-            : (o.confirmed_at ?? o.updated_at);
-          return isWithinRange(new Date(dateToCheck), dateRange);
-        })
-      : filteredOrders.filter(reachedConfirmedStage)
-    );
+    //   created → cohort view: of the orders CREATED in this range, how many landed in each status
+    //             (filteredOrders is already created_at-gated).
+    //   updated → event view: an order counts under whichever status-transition actually happened
+    //             in this range, using each order's OWN event date (confirmationEventDate) — not
+    //             the generic `updated_at`, which also moves on unrelated delivery-side touches
+    //             (e.g. a courier sync bumping updated_at made "Total Orders" include orders whose
+    //             confirmation side wasn't touched at all today).
+    if (dateFieldMode === "updated" && dateRange?.from) {
+      const matchesFilters = (o: Order) =>
+        (sellerFilter === "all" || o.seller_id === sellerFilter) &&
+        (productFilter === "all" || o.product_name === productFilter);
+      const scoped = orders.filter(
+        (o) => matchesFilters(o) && isWithinRange(new Date(confirmationEventDate(o)), dateRange),
+      );
+      const total = scoped.length;
+      const confirmed = scoped.filter(reachedConfirmedStage);
+      const confirmedCount = confirmed.length;
+      const whatsapp = confirmed.filter((o) => o.confirmation_channel === "whatsapp").length;
+      const agent = confirmed.filter((o) => o.confirmation_channel !== "whatsapp").length;
+      const newOrders = scoped.filter((o) => o.confirmation_status === "new").length;
+      const noAnswer = scoped.filter((o) => o.confirmation_status === "no_answer").length;
+      const postponed = scoped.filter((o) => o.confirmation_status === "postponed").length;
+      const cancelled = scoped.filter((o) => o.confirmation_status === "cancelled").length;
+      const confRate = confirmationRatePercent(confirmedCount, total, newOrders);
+      return { total, confirmedCount, whatsapp, agent, newOrders, noAnswer, postponed, cancelled, confRate };
+    }
+
+    const total = filteredOrders.length;
+    const confirmed = filteredOrders.filter(reachedConfirmedStage);
     const confirmedCount = confirmed.length;
     const whatsapp = confirmed.filter((o) => o.confirmation_channel === "whatsapp").length;
     const agent = confirmed.filter((o) => o.confirmation_channel !== "whatsapp").length;
@@ -315,7 +376,7 @@ export default function SellerAnalytics() {
     const cancelled = filteredOrders.filter((o) => o.confirmation_status === "cancelled").length;
     const confRate = confirmationRatePercent(confirmedCount, total, newOrders);
     return { total, confirmedCount, whatsapp, agent, newOrders, noAnswer, postponed, cancelled, confRate };
-  }, [filteredOrders, orders, dateRange, sellerFilter, productFilter, dateFieldMode]);
+  }, [filteredOrders, orders, dateRange, sellerFilter, productFilter, dateFieldMode, confirmationEventDate]);
 
   // ── Delivery KPIs ────────────────────────────────────────────────────────────
 
@@ -358,6 +419,14 @@ export default function SellerAnalytics() {
       const d = dateFieldMode === "created" ? o.created_at : (eventIso ?? o.updated_at);
       return isWithinRange(new Date(d), dateRange);
     };
+    // "Orders" (and its "New" component) are the confirmation-side denominator for
+    // Conf. Rate — same event-aware rule as the Total Orders KPI, so a product's rate
+    // here can't be thrown off by an unrelated delivery-side touch bumping updated_at.
+    const inConfirmationWindow = (o: Order) => {
+      if (!dateRange?.from) return true;
+      const d = dateFieldMode === "created" ? o.created_at : confirmationEventDate(o);
+      return isWithinRange(new Date(d), dateRange);
+    };
     const map: Record<string, {
       orders: number; newOrders: number; confirmed: number; shipped: number; delivered: number;
     }> = {};
@@ -365,8 +434,8 @@ export default function SellerAnalytics() {
     orders.filter(matchesFilters).forEach((o) => {
       const name = o.product_name || "Unknown";
       if (!map[name]) map[name] = { orders: 0, newOrders: 0, confirmed: 0, shipped: 0, delivered: 0 };
-      if (inRangeByEvent(o, o.updated_at)) map[name].orders++;
-      if (o.confirmation_status === "new" && inRangeByEvent(o, o.updated_at)) map[name].newOrders++;
+      if (inConfirmationWindow(o)) map[name].orders++;
+      if (o.confirmation_status === "new" && inConfirmationWindow(o)) map[name].newOrders++;
       if (reachedConfirmedStage(o) && inRangeByEvent(o, o.confirmed_at)) map[name].confirmed++;
       if (isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)) map[name].shipped++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) map[name].delivered++;
@@ -381,7 +450,7 @@ export default function SellerAnalytics() {
       delivered: d.delivered,
       delRate: pct(d.delivered, d.shipped),
     }));
-  }, [orders, sellerFilter, productFilter, dateFieldMode, dateRange]);
+  }, [orders, sellerFilter, productFilter, dateFieldMode, dateRange, confirmationEventDate]);
 
   const sortedProductRows = useMemo(() => {
     return [...productRows].sort((a, b) => {
@@ -402,6 +471,12 @@ export default function SellerAnalytics() {
       const d = dateFieldMode === "created" ? o.created_at : (eventIso ?? o.updated_at);
       return isWithinRange(new Date(d), dateRange);
     };
+    // Same event-aware rule as the Total Orders KPI for the "Orders" column.
+    const inConfirmationWindow = (o: Order) => {
+      if (!dateRange?.from) return true;
+      const d = dateFieldMode === "created" ? o.created_at : confirmationEventDate(o);
+      return isWithinRange(new Date(d), dateRange);
+    };
     const map: Record<string, {
       orders: number; confirmed: number; shipped: number; delivered: number; revenue: number;
     }> = {};
@@ -409,7 +484,7 @@ export default function SellerAnalytics() {
     orders.filter(matchesProduct).forEach((o) => {
       const id = o.seller_id;
       if (!map[id]) map[id] = { orders: 0, confirmed: 0, shipped: 0, delivered: 0, revenue: 0 };
-      if (inRangeByEvent(o, o.updated_at)) map[id].orders++;
+      if (inConfirmationWindow(o)) map[id].orders++;
       if (reachedConfirmedStage(o) && inRangeByEvent(o, o.confirmed_at)) map[id].confirmed++;
       if (isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.updated_at)) map[id].shipped++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) {
@@ -429,7 +504,7 @@ export default function SellerAnalytics() {
       delPct: pct(d.delivered, d.shipped),
       revenue: d.revenue,
     }));
-  }, [orders, productFilter, dateFieldMode, dateRange, profileMap]);
+  }, [orders, productFilter, dateFieldMode, dateRange, profileMap, confirmationEventDate]);
 
   const sortedSellerRows = useMemo(() => {
     return [...sellerRows].sort((a, b) => {
