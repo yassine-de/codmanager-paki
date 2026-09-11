@@ -61,6 +61,54 @@ export interface DashboardKPIs {
 const DASHBOARD_ORDER_SELECT = "id, order_id, confirmation_status, delivery_status, total_amount, price, quantity, product_name, seller_id, created_at, confirmed_at, delivered_at, last_attempt_at, last_activity_at, updated_at";
 const DASHBOARD_PAGE_SIZE = 1000;
 
+type ConfirmationStatusEvent = { order_id: string; new_value: string; created_at: string };
+
+// order_history is the only source that knows WHEN an order reached a
+// confirmation status other than "confirmed" — orders.updated_at also moves
+// on unrelated delivery-side touches (see confirmationEventDate below).
+// This dashboard is shared by admin AND seller accounts, and order_history
+// itself is staff-only (RLS), so this goes through a SECURITY DEFINER RPC
+// that returns just this narrow shape — full access for staff, only a
+// seller's own orders' events for a seller — instead of querying the table
+// directly (which would silently come back empty for a seller).
+async function fetchAllConfirmationStatusEvents(): Promise<ConfirmationStatusEvent[]> {
+  const rows: ConfirmationStatusEvent[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .rpc("get_confirmation_status_events")
+      .range(from, from + DASHBOARD_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as ConfirmationStatusEvent[];
+    rows.push(...page);
+    if (page.length < DASHBOARD_PAGE_SIZE) break;
+    from += DASHBOARD_PAGE_SIZE;
+  }
+  return rows;
+}
+
+// order_id -> confirmation_status -> latest time that status was set.
+function buildLatestStatusEventMap(events: ConfirmationStatusEvent[]): Map<string, Map<string, string>> {
+  const map = new Map<string, Map<string, string>>();
+  events.forEach((e) => {
+    let byStatus = map.get(e.order_id);
+    if (!byStatus) { byStatus = new Map(); map.set(e.order_id, byStatus); }
+    const cur = byStatus.get(e.new_value);
+    if (!cur || e.created_at > cur) byStatus.set(e.new_value, e.created_at);
+  });
+  return map;
+}
+
+// The event date for an order's CURRENT confirmation_status: confirmed_at for
+// confirmed orders (the trusted column used everywhere else), otherwise the
+// latest order_history row that set that exact status, falling back to
+// updated_at only for legacy orders with no tracked history.
+function confirmationEventDate(o: DashboardOrder, statusEventMap: Map<string, Map<string, string>>): Date {
+  if (o.confirmation_status === "confirmed") return new Date(o.confirmed_at ?? o.updated_at);
+  const at = statusEventMap.get(o.order_id)?.get(o.confirmation_status);
+  return new Date(at ?? o.updated_at);
+}
+
 // The date basis the user chose to filter the dashboard by.
 //   "created" → cohort view: every metric is filtered by orders.created_at
 //               (of the orders CREATED in this range, how many confirmed / delivered…)
@@ -73,12 +121,20 @@ type MetricKind = "generic" | "confirmed" | "delivered";
 
 // Returns the date used to decide whether order `o` falls in the selected range,
 // given the chosen basis and which metric is being counted.
-function eventDate(o: DashboardOrder, basis: DateBasis, kind: MetricKind = "generic"): Date {
+function eventDate(
+  o: DashboardOrder,
+  basis: DateBasis,
+  kind: MetricKind = "generic",
+  statusEventMap: Map<string, Map<string, string>> = new Map(),
+): Date {
   if (basis === "created") return new Date(o.created_at);
   // "updated" basis → use the real event timestamp for that metric.
   if (kind === "confirmed") return new Date(o.confirmed_at ?? o.updated_at);
   if (kind === "delivered") return new Date(o.delivered_at ?? o.updated_at);
-  return new Date(o.updated_at);
+  // "generic" = confirmation-status event date (order_history), not raw
+  // updated_at — matches Total Orders' own definition so the "Dropped Orders"
+  // trend line agrees with the KPI card instead of counting unrelated touches.
+  return confirmationEventDate(o, statusEventMap);
 }
 
 // Generic basis date for filtering the order LIST (status breakdown, top products/sellers).
@@ -123,7 +179,13 @@ function getConfirmationEventDate(o: DashboardOrder): Date | null {
   return o.confirmed_at ? new Date(o.confirmed_at) : null;
 }
 
-function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dateRange?: { from: Date; to: Date }, basis: DateBasis = "created"): DashboardKPIs {
+function computeKPIs(
+  orders: DashboardOrder[],
+  allOrders?: DashboardOrder[],
+  dateRange?: { from: Date; to: Date },
+  basis: DateBasis = "created",
+  statusEventMap: Map<string, Map<string, string>> = new Map(),
+): DashboardKPIs {
   // If a date range is provided, every metric is filtered by the SAME chosen date
   // basis (created_at or updated_at) so the numbers are internally consistent and
   // match what the user selected. Otherwise fall back to the pre-filtered orders list.
@@ -134,24 +196,32 @@ function computeKPIs(orders: DashboardOrder[], allOrders?: DashboardOrder[], dat
   // (confirmed_at for confirmed, delivered_at for delivered, updated_at otherwise).
   const inRangeFor = (o: DashboardOrder, kind: MetricKind) => inRange(eventDate(o, basis, kind));
 
-  // Total Orders = orders whose chosen date falls in this period
-  const total = dateRange
-    ? source.filter(o => inRangeFor(o, "generic")).length
-    : orders.length;
+  // Total Orders + the confirmation-status breakdown under it: in "updated" mode
+  // this must reflect the confirmation_status TRANSITION that happened in the
+  // window (via confirmationEventDate/order_history), not the generic `orders`
+  // list (pre-filtered by updated_at), which also moves on unrelated
+  // delivery-side touches — a courier sync bumping updated_at was making Total
+  // Orders include orders whose confirmation side wasn't touched at all.
+  const confirmationPool = dateRange && basis === "updated"
+    ? source.filter(o => inRange(confirmationEventDate(o, statusEventMap)))
+    : orders;
 
-  // Confirmation status counts — use treatment-filtered orders for status breakdown
-  const newOrders = orders.filter(o => o.confirmation_status === 'new').length;
+  // Total Orders = orders whose chosen date falls in this period
+  const total = dateRange ? confirmationPool.length : orders.length;
+
+  // Confirmation status counts — use the confirmation-scoped population for status breakdown
+  const newOrders = confirmationPool.filter(o => o.confirmation_status === 'new').length;
   // Confirmed = orders currently confirmed whose chosen date falls in this period.
   //   created → confirmed orders CREATED in range; updated → confirmed in range (confirmed_at)
   const confirmed = dateRange
     ? source.filter(o => reachedConfirmedStage(o) && inRangeFor(o, "confirmed")).length
     : orders.filter(reachedConfirmedStage).length;
-  const noAnswer = orders.filter(o => o.confirmation_status === 'no_answer').length;
-  const unreachable = orders.filter(o => o.confirmation_status === 'unreachable').length;
-  const postponed = orders.filter(o => o.confirmation_status === 'postponed').length;
-  const cancelled = orders.filter(o => o.confirmation_status === 'cancelled').length;
-  const doubleOrders = orders.filter(o => o.confirmation_status === 'double').length;
-  const wrongNumber = orders.filter(o => o.confirmation_status === 'wrong_number').length;
+  const noAnswer = confirmationPool.filter(o => o.confirmation_status === 'no_answer').length;
+  const unreachable = confirmationPool.filter(o => o.confirmation_status === 'unreachable').length;
+  const postponed = confirmationPool.filter(o => o.confirmation_status === 'postponed').length;
+  const cancelled = confirmationPool.filter(o => o.confirmation_status === 'cancelled').length;
+  const doubleOrders = confirmationPool.filter(o => o.confirmation_status === 'double').length;
+  const wrongNumber = confirmationPool.filter(o => o.confirmation_status === 'wrong_number').length;
 
   // Delivery status counts (matching real DB values)
   // Pending = explicit 'pending' OR legacy in-flight statuses
@@ -307,6 +377,15 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
     refetchOnWindowFocus: true,
   });
 
+  const { data: confirmationStatusEvents = [] } = useQuery({
+    queryKey: ["dashboard-confirmation-status-events"],
+    queryFn: fetchAllConfirmationStatusEvents,
+  });
+  const statusEventMap = useMemo(
+    () => buildLatestStatusEventMap(confirmationStatusEvents),
+    [confirmationStatusEvents],
+  );
+
   // Filter by date range on the chosen basis date (created_at or updated_at)
   const orders = useMemo(() => {
     if (!dateRange?.from) return allOrders;
@@ -321,8 +400,8 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
     if (!dateRange?.from) return computeKPIs(orders);
     const from = startOfDayPKT(dateRange.from);
     const to = dateRange.to ? endOfDayPKT(dateRange.to) : endOfDayPKT(dateRange.from);
-    return computeKPIs(orders, allOrders, { from, to }, dateBasis);
-  }, [orders, allOrders, dateRange, dateBasis]);
+    return computeKPIs(orders, allOrders, { from, to }, dateBasis, statusEventMap);
+  }, [orders, allOrders, dateRange, dateBasis, statusEventMap]);
   // Daily charts: when a date range is active, bucket each day in the range by event date.
   // Otherwise fall back to last-7-days view.
   const last7 = useMemo(() => {
@@ -339,9 +418,9 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
         const nextDay = new Date(start.getTime() + MS_PER_DAY);
         // Bucket each line by its own event date (per chosen basis) so the trend
         // matches the KPI cards: created → created_at; updated → confirmed_at / delivered_at.
-        const dropped   = allOrders.filter(o => isInDay(eventDate(o, dateBasis, "generic"), start, nextDay)).length;
+        const dropped   = allOrders.filter(o => isInDay(eventDate(o, dateBasis, "generic", statusEventMap), start, nextDay)).length;
         const newOrders = allOrders.filter(o =>
-          o.confirmation_status === "new" && isInDay(eventDate(o, dateBasis, "generic"), start, nextDay)
+          o.confirmation_status === "new" && isInDay(eventDate(o, dateBasis, "generic", statusEventMap), start, nextDay)
         ).length;
         const confirmed = allOrders.filter(o => {
           if (!reachedConfirmedStage(o)) return false;
@@ -364,7 +443,7 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
       });
     }
     return computeDailyData(allOrders, 7);
-  }, [allOrders, dateRange, dateBasis]);
+  }, [allOrders, dateRange, dateBasis, statusEventMap]);
 
   const totals7 = useMemo(() => ({
     orders: last7.reduce((s, d) => s + d.orders, 0),

@@ -2368,6 +2368,14 @@ export type Database = {
           confirmed_count: number
         }[]
       }
+      get_confirmation_status_events: {
+        Args: never
+        Returns: {
+          order_id: string
+          new_value: string
+          created_at: string
+        }[]
+      }
       get_follow_ups_count: { Args: never; Returns: number }
       get_follow_ups_data: {
         Args: never

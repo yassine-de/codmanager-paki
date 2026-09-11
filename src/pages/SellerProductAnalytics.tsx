@@ -24,6 +24,7 @@ import { isInShippedDeliveryPool } from "@/lib/delivery-rate";
 
 type Order = {
   id: string;
+  order_id: string;
   confirmation_status: string;
   delivery_status: string | null;
   product_name: string;
@@ -51,7 +52,7 @@ type ProductSortField = "name" | "total" | "confirmed" | "confRate" | "delivered
 
 // Only safe fields: no agent, no channel, no carrier internals, no seller_id leaks
 const ORDER_SELECT =
-  "id, confirmation_status, delivery_status, product_name, cancel_reason, created_at, confirmed_at, shipped_at, delivered_at, updated_at";
+  "id, order_id, confirmation_status, delivery_status, product_name, cancel_reason, created_at, confirmed_at, shipped_at, delivered_at, updated_at";
 
 const PAGE_SIZE = 1000;
 
@@ -171,6 +172,48 @@ async function fetchSellerOrders(sellerId: string): Promise<Order[]> {
   return rows;
 }
 
+type ConfirmationStatusEvent = { order_id: string; new_value: string; created_at: string };
+
+// order_history is staff-only (RLS), so this goes through a SECURITY DEFINER
+// RPC that returns only this narrow shape (no old_value/changed_by/other
+// field types) — a seller only gets events for their own orders.
+async function fetchAllConfirmationStatusEvents(): Promise<ConfirmationStatusEvent[]> {
+  const rows: ConfirmationStatusEvent[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .rpc("get_confirmation_status_events")
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as ConfirmationStatusEvent[];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return rows;
+}
+
+// order_id -> confirmation_status -> latest time that status was set.
+function buildLatestStatusEventMap(events: ConfirmationStatusEvent[]): Map<string, Map<string, string>> {
+  const map = new Map<string, Map<string, string>>();
+  events.forEach((e) => {
+    let byStatus = map.get(e.order_id);
+    if (!byStatus) { byStatus = new Map(); map.set(e.order_id, byStatus); }
+    const cur = byStatus.get(e.new_value);
+    if (!cur || e.created_at > cur) byStatus.set(e.new_value, e.created_at);
+  });
+  return map;
+}
+
+// The event date for an order's CURRENT confirmation_status: confirmed_at for
+// confirmed orders (the trusted column used elsewhere on this page), otherwise
+// the latest order_history row that set that exact status, falling back to
+// updated_at only for legacy orders with no tracked history.
+function confirmationEventDate(o: Order, statusEventMap: Map<string, Map<string, string>>): string {
+  if (CONFIRMED_STATUSES.includes(o.confirmation_status)) return o.confirmed_at ?? o.updated_at;
+  return statusEventMap.get(o.order_id)?.get(o.confirmation_status) ?? o.updated_at;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 interface KPICardProps {
@@ -268,6 +311,16 @@ export default function SellerProductAnalytics() {
     enabled: !!sellerId,
   });
 
+  const { data: confirmationStatusEvents = [] } = useQuery({
+    queryKey: ["seller-product-analytics-confirmation-status-events"],
+    queryFn: fetchAllConfirmationStatusEvents,
+    enabled: !!sellerId,
+  });
+  const statusEventMap = useMemo(
+    () => buildLatestStatusEventMap(confirmationStatusEvents),
+    [confirmationStatusEvents],
+  );
+
   // ── Derived Options ───────────────────────────────────────────────────────
 
   const productOptions = useMemo(() => {
@@ -283,6 +336,17 @@ export default function SellerProductAnalytics() {
     return isWithinRange(new Date(d), dateRange);
   }, [dateBasis, dateRange]);
 
+  // Confirmation-side predicate for Total Orders and the status breakdown under
+  // it (cancelled/wrong_number/unreachable): in "updated" basis this must
+  // reflect the confirmation_status TRANSITION that happened in the window
+  // (order_history via confirmationEventDate), not the generic updated_at,
+  // which also moves on unrelated delivery-side touches (shipped_at bump etc).
+  const inConfirmationWindow = useCallback((o: Order) => {
+    if (!dateRange?.from) return true;
+    const d = dateBasis === "created" ? o.created_at : confirmationEventDate(o, statusEventMap);
+    return isWithinRange(new Date(d), dateRange);
+  }, [dateBasis, dateRange, statusEventMap]);
+
   // Product-filtered base (NOT date-filtered — each metric applies its own event date).
   const base = useMemo(
     () => orders.filter((o) => productFilter === "all" || o.product_name === productFilter),
@@ -291,22 +355,22 @@ export default function SellerProductAnalytics() {
 
   // ── Filtered Orders (generic basis — used for total / empty-state) ─────────
   const filteredOrders = useMemo(
-    () => base.filter((o) => inRangeByEvent(o, o.updated_at)),
-    [base, inRangeByEvent],
+    () => base.filter((o) => inConfirmationWindow(o)),
+    [base, inConfirmationWindow],
   );
 
   // ── Global KPIs ──────────────────────────────────────────────────────────
 
   const kpis = useMemo(() => {
-    const total = base.filter((o) => inRangeByEvent(o, o.updated_at)).length;
+    const total = base.filter((o) => inConfirmationWindow(o)).length;
     const confirmed = base.filter(
       (o) => CONFIRMED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.confirmed_at)
     ).length;
-    const cancelled = base.filter((o) => CANCELLED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.updated_at)).length;
+    const cancelled = base.filter((o) => CANCELLED_STATUSES.includes(o.confirmation_status) && inConfirmationWindow(o)).length;
     const delivered = base.filter((o) => DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)).length;
     const shipped = base.filter((o) => isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.shipped_at)).length;
-    const wrongNumber = base.filter((o) => o.confirmation_status === "wrong_number" && inRangeByEvent(o, o.updated_at)).length;
-    const unreachable = base.filter((o) => o.confirmation_status === "unreachable" && inRangeByEvent(o, o.updated_at)).length;
+    const wrongNumber = base.filter((o) => o.confirmation_status === "wrong_number" && inConfirmationWindow(o)).length;
+    const unreachable = base.filter((o) => o.confirmation_status === "unreachable" && inConfirmationWindow(o)).length;
     const newOrders = base.filter((o) => o.confirmation_status === "new" && inRangeByEvent(o, o.created_at)).length;
     return {
       total,
@@ -328,7 +392,7 @@ export default function SellerProductAnalytics() {
       wrongNumberRate: pct(wrongNumber, total),
       unreachableRate: pct(unreachable, total),
     };
-  }, [base, inRangeByEvent]);
+  }, [base, inRangeByEvent, inConfirmationWindow]);
 
   // ── Per-Product Rows ──────────────────────────────────────────────────────
 
@@ -340,17 +404,17 @@ export default function SellerProductAnalytics() {
     base.forEach((o) => {
       const name = o.product_name || "Unknown";
       if (!map[name]) map[name] = { total: 0, newOrders: 0, confirmed: 0, shipped: 0, delivered: 0, cancelled: 0, wrongNumber: 0, reasons: {} };
-      if (inRangeByEvent(o, o.updated_at)) map[name].total++;
-      if (o.confirmation_status === "new" && inRangeByEvent(o, o.updated_at)) map[name].newOrders++;
+      if (inConfirmationWindow(o)) map[name].total++;
+      if (o.confirmation_status === "new" && inRangeByEvent(o, o.created_at)) map[name].newOrders++;
       if (CONFIRMED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.confirmed_at)) map[name].confirmed++;
       if (isInShippedDeliveryPool(o.delivery_status) && inRangeByEvent(o, o.shipped_at)) map[name].shipped++;
       if (DELIVERED_STATUSES.includes(o.delivery_status || "") && inRangeByEvent(o, o.delivered_at)) map[name].delivered++;
-      if (CANCELLED_STATUSES.includes(o.confirmation_status) && inRangeByEvent(o, o.updated_at)) {
+      if (CANCELLED_STATUSES.includes(o.confirmation_status) && inConfirmationWindow(o)) {
         map[name].cancelled++;
         const reason = o.cancel_reason?.trim() || "Not specified";
         map[name].reasons[reason] = (map[name].reasons[reason] || 0) + 1;
       }
-      if (o.confirmation_status === "wrong_number" && inRangeByEvent(o, o.updated_at)) map[name].wrongNumber++;
+      if (o.confirmation_status === "wrong_number" && inConfirmationWindow(o)) map[name].wrongNumber++;
     });
     return Object.entries(map).map(([name, d]) => ({
       name,
@@ -367,7 +431,7 @@ export default function SellerProductAnalytics() {
         .map(([reason, count]) => ({ reason, count, pct: pct(count, d.cancelled) }))
         .sort((a, b) => b.count - a.count),
     }));
-  }, [base, inRangeByEvent]);
+  }, [base, inRangeByEvent, inConfirmationWindow]);
 
   const sortedProductRows = useMemo(() => {
     return [...productRows].sort((a, b) => {
@@ -388,7 +452,7 @@ export default function SellerProductAnalytics() {
     const map: Record<string, number> = {};
     base.forEach((o) => {
       if (!CANCELLED_STATUSES.includes(o.confirmation_status)) return;
-      if (!inRangeByEvent(o, o.updated_at)) return;
+      if (!inConfirmationWindow(o)) return;
       const reason = o.cancel_reason?.trim() || "Not specified";
       map[reason] = (map[reason] || 0) + 1;
     });
@@ -396,7 +460,7 @@ export default function SellerProductAnalytics() {
     return Object.entries(map)
       .map(([reason, count]) => ({ reason, count, pct: pct(count, total) }))
       .sort((a, b) => b.count - a.count);
-  }, [base, inRangeByEvent]);
+  }, [base, inConfirmationWindow]);
 
   // ── Sort toggle ───────────────────────────────────────────────────────────
 
