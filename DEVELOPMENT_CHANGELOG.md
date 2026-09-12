@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-12 - Anwar Bounasser
+- Commit: `0570758`
+- Area: Orders / Database
+- Change: New admin-only "Lock delivery status" toggle in Edit Order (next to the Delivery field). New `orders.delivery_status_locked` column (default false); `carrier-status-sync` (PostEx) and `mnp-carrier-status-sync` (M&P) now skip updating an order's `delivery_status`/`order_history` when locked, though the shipment's own tracking fields (`carrier_status`, `raw_tracking_response`, etc.) still sync for reference. Toggle persists through the same `order_history` audit trail as every other Edit Order field.
+- Reason: AB-2734's manual correction to "delivered" (see 2026-09-12 entry below) got silently reverted 4 minutes later by the automated M&P sync — the courier's own raw tracking feed carries two contradictory events 1.5 minutes apart ("Delivered" immediately followed by "Re-Attempt Advice"), and the sync always trusts whichever the courier's current status field says on its next poll, with no way to say "the courier's own data on this one is wrong, stop touching it."
+- Notes: Migration `20260912090000_delivery_status_lock.sql` applied live; both edge functions redeployed. Clean `tsc --noEmit`; `eslint` unchanged (same 49 pre-existing issues across all touched files — Orders.tsx already had 48 `any`-type errors before this change — 0 new).
+
+### 2026-09-12 - Anwar Bounasser
 - Commit: `e112b85`
 - Area: Follow Ups / Analytics
 - Change: (1) New "Claims Delivered" follow-up status — requires a proof note, does NOT touch `orders.delivery_status` (flags the order for admin to verify with the courier and correct manually, same as the AB-2734 fix below). (2) "Refused" now picks from a preset reason list (Changed Mind, Price Too High, Wrong/Damaged Product, Quality Problem, Bought Elsewhere, No Money at Delivery, Family Member Refused, Other) instead of free text. (3) New "Substatus" column on Follow Ups showing that reason/proof note inline (reuses `follow_up_note`). (4) "Refused" in Delivery Analytics' Outcome by Follow-Up Status is now clickable too, opening a reason breakdown popup (top 5 + Load More, dialog scrolls) — mirrors the No Answer attempt-count popup from the previous entry. Added `follow_up_note` to Delivery Analytics' orders fetch to support it.
