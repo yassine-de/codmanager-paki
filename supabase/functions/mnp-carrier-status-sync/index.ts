@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
 
     const { data: shipments, error } = await supabase
       .from("shipments")
-      .select("*, orders(id, order_id, delivery_status, shipped_at)")
+      .select("*, orders(id, order_id, delivery_status, shipped_at, delivery_status_locked)")
       .eq("carrier_id", carrier.id)
       .not("tracking_number", "is", null)
       .not("normalized_status", "in", `(${terminal.join(",")})`)
@@ -152,6 +152,13 @@ Deno.serve(async (req) => {
             raw_event: event,
             occurred_at: parseMnpTime(event.TransactionTime) || now,
           });
+        }
+
+        // A manual correction (see AB-2734) locks the order's delivery_status
+        // against this sync — the shipment's own tracking fields above still
+        // stay current for reference, but orders/order_history are untouched.
+        if (shipment.orders?.delivery_status_locked) {
+          return { shipment_id: shipment.id, order_id: shipment.order_id, tracking_number: consignment, carrier_status: statusText, mapped_status: deliveryStatus, updated: false, locked: true };
         }
 
         if (deliveryStatus !== shipment.orders?.delivery_status) {

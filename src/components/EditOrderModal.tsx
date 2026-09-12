@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -86,6 +87,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
   const [notes, setNotes] = useState('');
   const [products, setProducts] = useState<Order["products"]>([]);
   const [upsell, setUpsell] = useState(false);
+  const [deliveryStatusLocked, setDeliveryStatusLocked] = useState(false);
 
   useEffect(() => {
     if (open && order) {
@@ -98,6 +100,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
       setNotes(order.notes || '');
       setProducts(order.products.map(p => ({ ...p })));
       setUpsell(order.upsell);
+      setDeliveryStatusLocked(!!order.deliveryStatusLocked);
     }
   }, [open, order]);
 
@@ -160,6 +163,7 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
       products,
       total,
       upsell,
+      deliveryStatusLocked,
       updatedAt: now,
       history: historyEvents,
     };
@@ -310,6 +314,18 @@ export default function EditOrderModal({ open, onOpenChange, order, onSave }: Pr
                   )}
                 </div>
               </div>
+
+              {isAdmin && (
+                <div className="flex items-center justify-between gap-3 mt-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium">Lock delivery status</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Blocks the automated courier sync from overwriting this order's delivery status. Use after verifying the real status directly with the courier.
+                    </p>
+                  </div>
+                  <Switch checked={deliveryStatusLocked} onCheckedChange={setDeliveryStatusLocked} />
+                </div>
+              )}
             </div>
             )}
 

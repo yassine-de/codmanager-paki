@@ -574,6 +574,7 @@ export type Database = {
           customer_phone: string
           delivered_at: string | null
           delivery_status: string | null
+          delivery_status_locked: boolean
           follow_up_assigned_at: string | null
           follow_up_assigned_to: string | null
           follow_up_note: string | null
@@ -638,6 +639,7 @@ export type Database = {
           customer_phone?: string
           delivered_at?: string | null
           delivery_status?: string | null
+          delivery_status_locked?: boolean
           follow_up_assigned_at?: string | null
           follow_up_assigned_to?: string | null
           follow_up_note?: string | null
@@ -702,6 +704,7 @@ export type Database = {
           customer_phone?: string
           delivered_at?: string | null
           delivery_status?: string | null
+          delivery_status_locked?: boolean
           follow_up_assigned_at?: string | null
           follow_up_assigned_to?: string | null
           follow_up_note?: string | null

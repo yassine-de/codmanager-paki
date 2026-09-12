@@ -57,6 +57,7 @@ export interface Order {
   invoiceFinalizedAt?: string | null;
   carrierOrderId?: string | number | null;
   carrierShippingStatus?: string | null;
+  deliveryStatusLocked?: boolean;
   trackingNumber?: string | null;
   carrierName?: string | null;
   confirmationChannel?: string | null;

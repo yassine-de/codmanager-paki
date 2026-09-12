@@ -815,6 +815,7 @@ export default function Orders() {
             attemptCount: o.attempt_count || 0,
             carrierOrderId: latestShipment?.carrier_order_id || null,
             carrierShippingStatus: latestShipment?.carrier_status || latestShipment?.normalized_status || null,
+            deliveryStatusLocked: !!o.delivery_status_locked,
             trackingNumber: latestShipment?.tracking_number || null,
             carrierName: latestShipment?.carriers?.name || null,
             confirmationChannel: o.confirmation_channel || 'agent',
@@ -1605,6 +1606,7 @@ export default function Orders() {
               customer_address: updated.address,
               confirmation_status: updated.confirmationStatus,
               delivery_status: updated.deliveryStatus,
+              delivery_status_locked: !!updated.deliveryStatusLocked,
               note: updated.notes || '',
               quantity: normalizedProducts.reduce((s, p) => s + p.qty, 0),
               price: normalizedProducts[0]?.price || 0,
@@ -1693,6 +1695,7 @@ export default function Orders() {
             };
             trackChange('confirmation_status', editOrder.confirmationStatus, updated.confirmationStatus);
             trackChange('delivery_status', editOrder.deliveryStatus, updated.deliveryStatus);
+            trackChange('delivery_status_locked', !!editOrder.deliveryStatusLocked, !!updated.deliveryStatusLocked);
             trackChange('customer_name', editOrder.customer, updated.customer);
             trackChange('customer_phone', editOrder.phone, updated.phone);
             trackChange('customer_city', editOrder.city, updated.city);
