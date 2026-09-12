@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-12 - Anwar Bounasser
+- Commit: `9e607fd`
+- Area: Database / Integrations
+- Change: `import-sheets` edge function now rescales each resolved item's unit/total price to match the sheet's own "Total Amount" column when it disagrees with the naive `quantity * Price` computation, instead of storing the sheet's raw per-unit Price as `orders.price` unchanged. `orders.total_amount` was already Total-Amount-driven; `orders.price`/`order_items.unit_price`/`order_items.total_price` were not, so a bundle-priced row (e.g. qty 2 at "Price" 7800 but sheet Total 12480 — a 2-for-12480 deal) stored a per-unit price that implied 15600 wherever anything downstream did `price * quantity`.
+- Reason: User-reported from a seller's Google Sheet screenshot — "bghit price li kaytla3 3ndna f system... ithaz mn Total Amount machi mn Price" (wants the system's price derived from the sheet's Total Amount, not its Price column).
+- Notes: Deployed live. Verified against the screenshot's real rows: 200 pcs Pin Wire Connector (qty 2, sheet Price 7800, Total 12480) → new unit price 6240; In 1 Woodworking Edge Trimmer (qty 3, Price 6500, Total 13650) → 4550; Diamond-Studded Watch (qty 2, Price 8000, Total 12800) → 6400. Rows where Price already matched Total (qty 1, or already-consistent bundles) are untouched (rescale only applies when `parsedTotal !== computedTotal`). Going forward only — existing already-imported orders not retroactively corrected. Clean `tsc --noEmit` (edge functions aren't in the main tsconfig, expected no output).
+
+### 2026-09-12 - Anwar Bounasser
 - Commit: `0570758`
 - Area: Orders / Database
 - Change: New admin-only "Lock delivery status" toggle in Edit Order (next to the Delivery field). New `orders.delivery_status_locked` column (default false); `carrier-status-sync` (PostEx) and `mnp-carrier-status-sync` (M&P) now skip updating an order's `delivery_status`/`order_history` when locked, though the shipment's own tracking fields (`carrier_status`, `raw_tracking_response`, etc.) still sync for reference. Toggle persists through the same `order_history` audit trail as every other Edit Order field.
