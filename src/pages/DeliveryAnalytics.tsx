@@ -46,6 +46,7 @@ type Order = {
   updated_at: string;
   shipping_status: string | null;
   source_ref: string | null;
+  follow_up_note: string | null;
   shipments?: Array<{
     tracking_number: string | null;
     carriers?: { name: string | null } | null;
@@ -84,7 +85,7 @@ type AgentSortField = "name" | "shipped" | "delivered" | "failed" | "rate";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ORDER_SELECT =
-  "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, updated_at, shipping_status, source_ref, shipments(tracking_number, carriers(name))";
+  "id, order_id, confirmation_status, confirmation_channel, delivery_status, product_name, seller_id, agent_id, original_agent_id, customer_city, created_at, confirmed_at, delivered_at, updated_at, shipping_status, source_ref, follow_up_note, shipments(tracking_number, carriers(name))";
 const PAGE_SIZE = 1000;
 
 const CONFIRMED_DELIVERY_STATUSES = [
@@ -477,6 +478,8 @@ export default function DeliveryAnalytics() {
 
   const [showFailedAttemptDetail, setShowFailedAttemptDetail] = useState(false);
   const [showNoAnswerDetail, setShowNoAnswerDetail] = useState(false);
+  const [showRefusedDetail, setShowRefusedDetail] = useState(false);
+  const [showAllRefusedReasons, setShowAllRefusedReasons] = useState(false);
 
   // ── Data Queries ─────────────────────────────────────────────────────────────
 
@@ -929,6 +932,23 @@ export default function DeliveryAnalytics() {
       .map(([attempt, count]) => ({ attempt: Number(attempt), count, pct: pct(count, total) }))
       .sort((a, b) => a.attempt - b.attempt);
   }, [followUpOutcomeByStatus, followUpHistory]);
+
+  // "Refused" reason breakdown: follow_up_note holds the reason picked from the
+  // preset list (or free text for orders refused before that list existed) —
+  // the current snapshot, same source the Substatus column on Follow Ups shows.
+  const refusedReasonRows = useMemo(() => {
+    const refusedRow = followUpOutcomeByStatus.find((r) => r.status === "refused");
+    if (!refusedRow) return [];
+    const byReason: Record<string, number> = {};
+    refusedRow.orderIds.forEach((id) => {
+      const reason = orderByOrderId[id]?.follow_up_note?.trim() || "No reason recorded";
+      byReason[reason] = (byReason[reason] || 0) + 1;
+    });
+    const total = refusedRow.orderIds.length;
+    return Object.entries(byReason)
+      .map(([reason, count]) => ({ reason, count, pct: pct(count, total) }))
+      .sort((a, b) => b.count - a.count);
+  }, [followUpOutcomeByStatus, orderByOrderId]);
 
   // order_follow_ups is a single mutable row per order (updated_by = whoever
   // touched it LAST) — fine for "what's the current state", wrong for "who
@@ -1674,12 +1694,17 @@ export default function DeliveryAnalytics() {
                 </p>
                 <div className="space-y-1.5">
                   {followUpOutcomeByStatus.map((row) => {
-                    const clickable = row.status === "no_answer";
+                    const clickable = row.status === "no_answer" || row.status === "refused";
+                    const onClick = row.status === "no_answer"
+                      ? () => setShowNoAnswerDetail(true)
+                      : row.status === "refused"
+                      ? () => setShowRefusedDetail(true)
+                      : undefined;
                     return (
                       <div
                         key={row.status}
                         className={cn("flex items-center gap-3", clickable && "cursor-pointer hover:bg-muted/40 rounded-md -mx-1 px-1")}
-                        onClick={clickable ? () => setShowNoAnswerDetail(true) : undefined}
+                        onClick={onClick}
                       >
                         <span className="text-xs font-medium w-32 shrink-0 capitalize">
                           {row.status.replace(/_/g, " ")}
@@ -2380,6 +2405,65 @@ export default function DeliveryAnalytics() {
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Refused reason detail popup ──────────────────────────────────────── */}
+      <Dialog
+        open={showRefusedDetail}
+        onOpenChange={(v) => { setShowRefusedDetail(v); if (!v) setShowAllRefusedReasons(false); }}
+      >
+        <DialogContent className="max-w-md max-h-[70vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-rose-500" />
+              Refused — {refusedReasonRows.reduce((s, r) => s + r.count, 0).toLocaleString()} order
+              {refusedReasonRows.reduce((s, r) => s + r.count, 0) === 1 ? "" : "s"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Why these orders were refused, from the reason picked on Follow Ups (or "No reason recorded" for orders refused before that list existed).
+            </p>
+            {refusedReasonRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No data for the selected filters.</p>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  {(showAllRefusedReasons ? refusedReasonRows : refusedReasonRows.slice(0, 5)).map((row) => (
+                    <div key={row.reason} className="flex items-center gap-3">
+                      <span className="text-xs font-medium w-32 shrink-0 truncate" title={row.reason}>
+                        {row.reason}
+                      </span>
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-rose-500" style={{ width: `${Math.min(row.pct, 100)}%` }} />
+                      </div>
+                      <span className="text-xs font-semibold tabular-nums text-foreground w-24 text-right shrink-0">
+                        {row.count.toLocaleString()} ({fmtPct(row.pct)})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {refusedReasonRows.length > 5 && (
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs gap-1.5"
+                      onClick={() => setShowAllRefusedReasons(!showAllRefusedReasons)}
+                    >
+                      {showAllRefusedReasons ? (
+                        <><ChevronUp className="h-3.5 w-3.5" /> Show Less</>
+                      ) : (
+                        <><ArrowRight className="h-3.5 w-3.5" /> Load More ({refusedReasonRows.length - 5} more)</>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </DialogContent>

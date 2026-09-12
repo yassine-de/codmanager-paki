@@ -51,6 +51,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  PackageCheck,
 } from "lucide-react";
 import {
   Dialog,
@@ -91,6 +92,20 @@ import { CSS } from "@dnd-kit/utilities";
 type Segment = "all" | "failed_attempt" | "delayed" | "on_going" | "returned" | "re_attempted" | "no_answer" | "none";
 type DateField = "created" | "updated" | "fu_updated";
 
+/* Preset reasons for "Refused" — picking one of these keeps the note clean and
+   reportable, instead of free text (cancel_reason on the confirmation side has
+   turned into an unusable mess of typos/duplicates — this avoids repeating that). */
+const REFUSED_REASONS = [
+  "Changed Mind",
+  "Price Too High",
+  "Wrong/Damaged Product",
+  "Quality Problem",
+  "Bought Elsewhere",
+  "No Money at Delivery",
+  "Family Member Refused",
+  "Other",
+];
+
 /* Top-level tracking statuses */
 const FU_TOP_STATUSES = [
   { value: "ongoing",         label: "Ongoing"         },
@@ -99,10 +114,11 @@ const FU_TOP_STATUSES = [
 ];
 /* Action statuses (agent picks one of these) */
 const FU_ACTION_STATUSES = [
-  { value: "re_attempted",    label: "Re-attempted"    },
-  { value: "pushed_delivery", label: "Pushed Delivery" },
-  { value: "area_restricted", label: "Area Restricted" },
-  { value: "refused",         label: "Refused"         },
+  { value: "re_attempted",      label: "Re-attempted"      },
+  { value: "pushed_delivery",   label: "Pushed Delivery"   },
+  { value: "area_restricted",   label: "Area Restricted"   },
+  { value: "refused",           label: "Refused"           },
+  { value: "claims_delivered",  label: "Claims Delivered"  },
 ];
 const FOLLOW_UP_STATUSES = [
   { value: "pending",  label: "Pending"  },
@@ -124,6 +140,10 @@ const followUpStatusStyle: Record<string, string> = {
   no_answer:       "bg-[hsl(220,60%,52%)]/12  text-[hsl(220,60%,52%)]  border-[hsl(220,60%,52%)]/25",
   postponed:       "bg-[hsl(25,85%,55%)]/12   text-[hsl(25,85%,55%)]   border-[hsl(25,85%,55%)]/25",
   refused:         "bg-[hsl(340,65%,45%)]/12  text-[hsl(340,65%,45%)]  border-[hsl(340,65%,45%)]/25",
+  // Amber, not the "delivered" green — this is an unverified CLAIM, not a
+  // confirmed delivery. delivery_status only flips once someone checks with
+  // the courier and corrects it manually (see the AB-2734 pattern).
+  claims_delivered: "bg-[hsl(45,90%,50%)]/12   text-[hsl(45,90%,42%)]   border-[hsl(45,90%,50%)]/25",
   /* legacy */
   contacted_courier: "bg-[hsl(210,60%,52%)]/12 text-[hsl(210,60%,52%)]  border-[hsl(210,60%,52%)]/25",
   contacted_client:  "bg-[hsl(200,65%,50%)]/12 text-[hsl(200,65%,50%)]  border-[hsl(200,65%,50%)]/25",
@@ -256,7 +276,7 @@ function StatusPill({ value, styleMap }: { value: string | null; styleMap: Recor
 type ColumnKey =
   | "order_id" | "tracking" | "customer" | "phone" | "city"
   | "product"  | "price"   | "delivery" | "segment" | "days"
-  | "follow_up"| "note"    | "created"  | "updated" | "actions";
+  | "follow_up"| "substatus"| "note"    | "created"  | "updated" | "actions";
 
 const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "order_id",  label: "Order ID"   },
@@ -270,6 +290,7 @@ const ALL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "segment",   label: "PostEx Sub-status" },
   { key: "days",      label: "Days"       },
   { key: "follow_up", label: "Follow Up"  },
+  { key: "substatus", label: "Substatus"  },
   { key: "note",      label: "FU Note"    },
   { key: "created",   label: "Created"    },
   { key: "updated",   label: "Updated"    },
@@ -645,7 +666,7 @@ export default function FollowUps() {
   }
 
   const isSeller = authUser?.role === "seller";
-  const visibleColumns = columns.filter((c) => c.visible && !(isSeller && c.key === "note"));
+  const visibleColumns = columns.filter((c) => c.visible && !(isSeller && (c.key === "note" || c.key === "substatus")));
   const scopedTotalCount = authUser?.role === "follow_up" ? enriched.length : (totalCount ?? enriched.length);
 
   return (
@@ -1104,6 +1125,7 @@ const columnWidths: Record<ColumnKey, string> = {
   segment:   "160px",
   days:      "72px",
   follow_up: "148px",
+  substatus: "150px",
   note:      "52px",
   created:   "88px",
   updated:   "88px",
@@ -1321,7 +1343,7 @@ function DateRangePicker({
 
 const FU_MAX_ATTEMPTS = 5;
 
-type FuView = "status" | "attempts" | "refused_note" | "postpone_date";
+type FuView = "status" | "attempts" | "refused_note" | "postpone_date" | "claims_delivered_note";
 
 function FollowUpStatusCell({
   row,
@@ -1334,7 +1356,9 @@ function FollowUpStatusCell({
 }) {
   const [open, setOpen]       = useState(false);
   const [view, setView]       = useState<FuView>("status");
+  const [refusedReason, setRefusedReason] = useState<string | null>(null);
   const [refusedNote, setRefusedNote] = useState("");
+  const [claimsDeliveredNote, setClaimsDeliveredNote] = useState("");
   const [postponeDate, setPostponeDate] = useState<Date | undefined>();
   const [postponeTime, setPostponeTime] = useState("10:00");
 
@@ -1355,13 +1379,15 @@ function FollowUpStatusCell({
 
   function handleOpenChange(v: boolean) {
     setOpen(v);
-    if (!v) { setView("status"); setRefusedNote(""); setPostponeDate(undefined); setPostponeTime("10:00"); }
+    if (!v) { setView("status"); setRefusedReason(null); setRefusedNote(""); setClaimsDeliveredNote(""); setPostponeDate(undefined); setPostponeTime("10:00"); }
   }
 
   function pick(status: string, attempt?: number, note?: string, postponeUntil?: string) {
     setOpen(false);
     setView("status");
+    setRefusedReason(null);
     setRefusedNote("");
+    setClaimsDeliveredNote("");
     setPostponeDate(undefined);
     setPostponeTime("10:00");
     onStatusChange(row.order_id, status, attempt, note, postponeUntil);
@@ -1500,6 +1526,22 @@ function FollowUpStatusCell({
                       <ChevronDown className="h-3.5 w-3.5 text-[hsl(340,65%,45%)]/70 -rotate-90 flex-shrink-0" />
                     </div>
                   </button>
+
+                  {/* Claims Delivered — opens note input (obligatory). Does NOT
+                      change delivery_status; flags it for admin to verify with
+                      the courier and correct manually once confirmed. */}
+                  <button
+                    onClick={() => setView("claims_delivered_note")}
+                    className={`w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-[hsl(45,90%,50%)]/8 ${row.follow_up_status === "claims_delivered" ? "bg-[hsl(45,90%,50%)]/8" : ""}`}
+                  >
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none ${followUpStatusStyle["claims_delivered"]}`}>
+                      Claims Delivered
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] font-semibold text-muted-foreground/60 uppercase tracking-wide">Note req.</span>
+                      <ChevronDown className="h-3.5 w-3.5 text-[hsl(45,90%,50%)]/70 -rotate-90 flex-shrink-0" />
+                    </div>
+                  </button>
                 </div>
               </div>
             </>
@@ -1581,12 +1623,12 @@ function FollowUpStatusCell({
             </div>
           )}
 
-          {/* ── VIEW 3: Refused — obligatory note ── */}
+          {/* ── VIEW 3: Refused — obligatory reason ── */}
           {view === "refused_note" && (
             <div className="bg-[hsl(340,65%,45%)]/[0.03]">
               <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/50">
                 <button
-                  onClick={() => { setView("status"); setRefusedNote(""); }}
+                  onClick={() => { setView("status"); setRefusedReason(null); setRefusedNote(""); }}
                   className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ChevronDown className="h-3.5 w-3.5 rotate-90" />
@@ -1595,7 +1637,7 @@ function FollowUpStatusCell({
                   <div className="p-1 rounded-md bg-[hsl(340,65%,45%)]/15">
                     <X className="h-3 w-3 text-[hsl(340,65%,45%)]" />
                   </div>
-                  <span className="text-xs font-bold text-[hsl(340,65%,45%)]">Refused — Add Note</span>
+                  <span className="text-xs font-bold text-[hsl(340,65%,45%)]">Refused — Pick a Reason</span>
                 </div>
                 <span className="text-[9px] font-bold uppercase tracking-wide text-[hsl(340,65%,45%)]/70 bg-[hsl(340,65%,45%)]/10 px-1.5 py-0.5 rounded-full border border-[hsl(340,65%,45%)]/20">
                   Required
@@ -1603,21 +1645,89 @@ function FollowUpStatusCell({
               </div>
 
               <div className="p-3 space-y-3">
-                <Textarea
-                  value={refusedNote}
-                  onChange={(e) => setRefusedNote(e.target.value)}
-                  placeholder="Why did the client refuse? (required)"
-                  className="text-xs resize-none min-h-[80px] focus:ring-[hsl(340,65%,45%)]/30 focus:border-[hsl(340,65%,45%)]/50"
-                  autoFocus
-                />
+                <div className="space-y-1">
+                  {REFUSED_REASONS.map((reason) => {
+                    const active = refusedReason === reason;
+                    return (
+                      <button
+                        key={reason}
+                        onClick={() => setRefusedReason(reason)}
+                        className={`w-full flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                          active
+                            ? "border-[hsl(340,65%,45%)]/50 bg-[hsl(340,65%,45%)]/10 text-[hsl(340,65%,45%)]"
+                            : "border-border/60 hover:bg-muted/60 text-foreground"
+                        }`}
+                      >
+                        {reason}
+                        {active && <Check className="h-3.5 w-3.5 flex-shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {refusedReason === "Other" && (
+                  <Textarea
+                    value={refusedNote}
+                    onChange={(e) => setRefusedNote(e.target.value)}
+                    placeholder="Specify the reason (required)"
+                    className="text-xs resize-none min-h-[70px] focus:ring-[hsl(340,65%,45%)]/30 focus:border-[hsl(340,65%,45%)]/50"
+                    autoFocus
+                  />
+                )}
+
                 <button
-                  disabled={!refusedNote.trim()}
-                  onClick={() => pick("refused", undefined, refusedNote)}
+                  disabled={!refusedReason || (refusedReason === "Other" && !refusedNote.trim())}
+                  onClick={() => pick("refused", undefined, refusedReason === "Other" ? refusedNote.trim() : refusedReason!)}
                   className="w-full py-2 rounded-lg text-xs font-semibold transition-all
                     disabled:opacity-40 disabled:cursor-not-allowed
                     bg-[hsl(340,65%,45%)] text-white hover:bg-[hsl(340,65%,40%)] active:scale-95"
                 >
                   Confirm Refused
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── VIEW 3b: Claims Delivered — obligatory proof note ── */}
+          {view === "claims_delivered_note" && (
+            <div className="bg-[hsl(45,90%,50%)]/[0.03]">
+              <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/50">
+                <button
+                  onClick={() => { setView("status"); setClaimsDeliveredNote(""); }}
+                  className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                </button>
+                <div className="flex items-center gap-1.5 flex-1">
+                  <div className="p-1 rounded-md bg-[hsl(45,90%,50%)]/15">
+                    <PackageCheck className="h-3 w-3 text-[hsl(45,90%,42%)]" />
+                  </div>
+                  <span className="text-xs font-bold text-[hsl(45,90%,42%)]">Claims Delivered — Add Proof</span>
+                </div>
+                <span className="text-[9px] font-bold uppercase tracking-wide text-[hsl(45,90%,42%)]/70 bg-[hsl(45,90%,50%)]/10 px-1.5 py-0.5 rounded-full border border-[hsl(45,90%,50%)]/20">
+                  Required
+                </span>
+              </div>
+
+              <div className="p-3 space-y-3">
+                <p className="text-[11px] text-muted-foreground">
+                  This does not mark the order as delivered — it flags it so admin can verify with the courier and correct the delivery status once confirmed.
+                </p>
+                <Textarea
+                  value={claimsDeliveredNote}
+                  onChange={(e) => setClaimsDeliveredNote(e.target.value)}
+                  placeholder="What proof do you have? (customer confirmation, tracking screenshot, etc. — required)"
+                  className="text-xs resize-none min-h-[80px] focus:ring-[hsl(45,90%,50%)]/30 focus:border-[hsl(45,90%,50%)]/50"
+                  autoFocus
+                />
+                <button
+                  disabled={!claimsDeliveredNote.trim()}
+                  onClick={() => pick("claims_delivered", undefined, claimsDeliveredNote)}
+                  className="w-full py-2 rounded-lg text-xs font-semibold transition-all
+                    disabled:opacity-40 disabled:cursor-not-allowed
+                    bg-[hsl(45,90%,50%)] text-white hover:bg-[hsl(45,90%,45%)] active:scale-95"
+                >
+                  Confirm Claims Delivered
                 </button>
               </div>
             </div>
@@ -1879,6 +1989,26 @@ function renderCell(
           onStatusChange={handleStatusChange}
         />
       );
+
+    // The reason picked when the follow-up status needs one (Refused's preset
+    // reason list, Claims Delivered's proof note) — reuses follow_up_note,
+    // the same field those flows write to, so this is always in sync.
+    case "substatus": {
+      const text = row.follow_up_note?.trim();
+      if (!text) return <span className="text-xs text-muted-foreground/40">—</span>;
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-xs text-foreground truncate max-w-[140px] inline-block align-bottom">
+              {text}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[220px]">
+            <p className="text-xs">{text}</p>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
 
     case "note": {
       const hasNote = !!row.follow_up_note?.trim();
