@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Truck, Package, CheckCircle2, XCircle, AlertTriangle, RotateCcw,
   MapPin, Users, Award, TrendingUp, BarChart2, ChevronUp, ChevronDown,
-  ChevronsUpDown, Loader2, ArrowRight, PackageX, PackageCheck, Navigation,
+  ChevronsUpDown, ChevronRight, Loader2, ArrowRight, PackageX, PackageCheck, Navigation,
   Printer, Send, Layers, Activity,
 } from "lucide-react";
 import {
@@ -476,6 +476,7 @@ export default function DeliveryAnalytics() {
   const [agentSortDir, setAgentSortDir] = useState<SortDir>("desc");
 
   const [showFailedAttemptDetail, setShowFailedAttemptDetail] = useState(false);
+  const [showNoAnswerDetail, setShowNoAnswerDetail] = useState(false);
 
   // ── Data Queries ─────────────────────────────────────────────────────────────
 
@@ -856,11 +857,12 @@ export default function DeliveryAnalytics() {
   }, [orders, deliveryStatusEvents, followUpHistory, followUpByOrderId, orderByOrderId, sellerFilter, productFilter, utmFilter, courierFilter, deliveryStatusFilter, dateField, dateRange]);
 
   const followUpOutcomeByStatus = useMemo(() => {
-    const map: Record<string, { total: number; delivered: number }> = {};
+    const map: Record<string, { total: number; delivered: number; orderIds: string[] }> = {};
     const add = (status: string, o: Order) => {
       if (!status || status === "pending") return;
-      if (!map[status]) map[status] = { total: 0, delivered: 0 };
+      if (!map[status]) map[status] = { total: 0, delivered: 0, orderIds: [] };
       map[status].total++;
+      map[status].orderIds.push(o.order_id);
       if (o.delivery_status === "delivered") map[status].delivered++;
     };
 
@@ -899,9 +901,34 @@ export default function DeliveryAnalytics() {
         delivered: d.delivered,
         deliveredRate: pct(d.delivered, d.total),
         share: pct(d.total, grandTotal),
+        orderIds: d.orderIds,
       }))
       .sort((a, b) => b.total - a.total);
   }, [filteredOrders, followUpHistory, followUpByOrderId, orderByOrderId, sellerFilter, productFilter, utmFilter, courierFilter, dateField, dateRange]);
+
+  // "No Answer" attempt-count breakdown: for the orders currently bucketed as
+  // No Answer above, how many times has EACH of them actually hit no_answer
+  // (all-time, not just in the selected window — attempt number is a property
+  // of the order's whole history, not of the period being viewed).
+  const noAnswerAttemptRows = useMemo(() => {
+    const noAnswerRow = followUpOutcomeByStatus.find((r) => r.status === "no_answer");
+    if (!noAnswerRow) return [];
+    const orderIds = new Set(noAnswerRow.orderIds);
+    const countByOrder = new Map<string, number>();
+    followUpHistory.forEach((h) => {
+      if (h.new_value !== "no_answer" || !orderIds.has(h.order_id)) return;
+      countByOrder.set(h.order_id, (countByOrder.get(h.order_id) || 0) + 1);
+    });
+    const byAttempt: Record<number, number> = {};
+    orderIds.forEach((id) => {
+      const n = countByOrder.get(id) || 1; // untracked fallback: at least this one time
+      byAttempt[n] = (byAttempt[n] || 0) + 1;
+    });
+    const total = orderIds.size;
+    return Object.entries(byAttempt)
+      .map(([attempt, count]) => ({ attempt: Number(attempt), count, pct: pct(count, total) }))
+      .sort((a, b) => a.attempt - b.attempt);
+  }, [followUpOutcomeByStatus, followUpHistory]);
 
   // order_follow_ups is a single mutable row per order (updated_by = whoever
   // touched it LAST) — fine for "what's the current state", wrong for "who
@@ -1646,20 +1673,30 @@ export default function DeliveryAnalytics() {
                   Bar = each status's share of all follow-up outcomes in the period. "Refused"/"Area Restricted" are correct triage calls — their low delivered % is expected.
                 </p>
                 <div className="space-y-1.5">
-                  {followUpOutcomeByStatus.map((row) => (
-                    <div key={row.status} className="flex items-center gap-3">
-                      <span className="text-xs font-medium w-32 shrink-0 capitalize">{row.status.replace(/_/g, " ")}</span>
-                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(row.share, 100)}%` }} />
+                  {followUpOutcomeByStatus.map((row) => {
+                    const clickable = row.status === "no_answer";
+                    return (
+                      <div
+                        key={row.status}
+                        className={cn("flex items-center gap-3", clickable && "cursor-pointer hover:bg-muted/40 rounded-md -mx-1 px-1")}
+                        onClick={clickable ? () => setShowNoAnswerDetail(true) : undefined}
+                      >
+                        <span className="text-xs font-medium w-32 shrink-0 capitalize">
+                          {row.status.replace(/_/g, " ")}
+                          {clickable && <ChevronRight className="h-3 w-3 inline ml-0.5 text-muted-foreground" />}
+                        </span>
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(row.share, 100)}%` }} />
+                        </div>
+                        <span className="text-xs font-semibold tabular-nums text-foreground w-14 text-right shrink-0">
+                          {fmtPct(row.share)}
+                        </span>
+                        <span className="text-[11px] tabular-nums text-muted-foreground w-32 text-right shrink-0">
+                          {row.total.toLocaleString()} · {row.delivered.toLocaleString()} delivered
+                        </span>
                       </div>
-                      <span className="text-xs font-semibold tabular-nums text-foreground w-14 text-right shrink-0">
-                        {fmtPct(row.share)}
-                      </span>
-                      <span className="text-[11px] tabular-nums text-muted-foreground w-32 text-right shrink-0">
-                        {row.total.toLocaleString()} · {row.delivered.toLocaleString()} delivered
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -2306,6 +2343,44 @@ export default function DeliveryAnalytics() {
                 </div>
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── No Answer attempt-count detail popup ────────────────────────────── */}
+      <Dialog open={showNoAnswerDetail} onOpenChange={setShowNoAnswerDetail}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              No Answer — {noAnswerAttemptRows.reduce((s, r) => s + r.count, 0).toLocaleString()} order
+              {noAnswerAttemptRows.reduce((s, r) => s + r.count, 0) === 1 ? "" : "s"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              How many times each of these orders has actually hit No Answer, across its whole history (not just this period).
+            </p>
+            {noAnswerAttemptRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No data for the selected filters.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {noAnswerAttemptRows.map((row) => (
+                  <div key={row.attempt} className="flex items-center gap-3">
+                    <span className="text-xs font-medium w-24 shrink-0">
+                      No Answer {row.attempt}{row.attempt >= 5 ? "+" : ""}
+                    </span>
+                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.min(row.pct, 100)}%` }} />
+                    </div>
+                    <span className="text-xs font-semibold tabular-nums text-foreground w-24 text-right shrink-0">
+                      {row.count.toLocaleString()} ({fmtPct(row.pct)})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
