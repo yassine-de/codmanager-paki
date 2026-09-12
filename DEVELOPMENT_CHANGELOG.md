@@ -22,6 +22,20 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-12 - Anwar Bounasser
+- Commit: `e112b85`
+- Area: Follow Ups / Analytics
+- Change: (1) New "Claims Delivered" follow-up status — requires a proof note, does NOT touch `orders.delivery_status` (flags the order for admin to verify with the courier and correct manually, same as the AB-2734 fix below). (2) "Refused" now picks from a preset reason list (Changed Mind, Price Too High, Wrong/Damaged Product, Quality Problem, Bought Elsewhere, No Money at Delivery, Family Member Refused, Other) instead of free text. (3) New "Substatus" column on Follow Ups showing that reason/proof note inline (reuses `follow_up_note`). (4) "Refused" in Delivery Analytics' Outcome by Follow-Up Status is now clickable too, opening a reason breakdown popup (top 5 + Load More, dialog scrolls) — mirrors the No Answer attempt-count popup from the previous entry. Added `follow_up_note` to Delivery Analytics' orders fetch to support it.
+- Reason: Requested live while auditing a PostEx delivery report against the portal — confirmation-side `cancel_reason` has degenerated into a mess of typo'd/duplicate free-text values over time (see live sample: "he didnt want" / "low quality" / "quality issue" / "not convienced" / "not convinced" all meaning roughly the same thing), so the delivery-refusal reason gets a structured picker from the start instead of repeating that.
+- Notes: No migration — none of `order_follow_ups.follow_up_status`/`orders.follow_up_note` have CHECK constraints, both are free text already read generically by `get_follow_ups_data()`. Clean `tsc --noEmit`; `eslint` unchanged on both files (same pre-existing issues, 0 new).
+
+### 2026-09-12 - Anwar Bounasser
+- Commit: (manual data correction, no code change)
+- Area: Orders / Database
+- Change: Order AB-2734 manually corrected from `delivery_status='failed_attempt'` to `delivered` (`shipping_status='Delivered to Customer'`, `delivered_at=now()`), with an `order_history` row logging it as `action_type='manual_status_correction'`, `changed_by_role='admin'`.
+- Reason: User-verified with PostEx that the order had actually been delivered; our courier sync had stopped updating it after 2026-09-01 (order_history shows its last `carrier_status_sync` event set it to `failed_attempt` that day) while a follow-up agent kept retrying a no_answer that had already resolved (3 attempts, 2026-09-02 through 2026-09-08).
+- Notes: A broader live audit found 54 more orders at `failed_attempt` with no courier sync in 7+ days (up to 32 days stale), and 153 total across all non-terminal delivery statuses (pending/booked/shipped/dispatched/with_courier too) — flagged to Anwar as orders likely needing the same manual verification, not yet acted on individually.
+
+### 2026-09-12 - Anwar Bounasser
 - Commit: `c150253`
 - Area: Analytics
 - Change: The "No Answer" row in Delivery Analytics' "Outcome by Follow-Up Status" is now clickable, opening a popup that breaks down how many of those orders are on their 1st, 2nd, 3rd… No Answer (counted from `order_history` across the order's whole lifetime, not just the selected period). Reuses the existing Failed Attempt popup's Dialog pattern.
