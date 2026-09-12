@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-11 - Anwar Bounasser
+Last manual update: 2026-09-12 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-12 - Anwar Bounasser
+- Commit: `c150253`
+- Area: Analytics
+- Change: The "No Answer" row in Delivery Analytics' "Outcome by Follow-Up Status" is now clickable, opening a popup that breaks down how many of those orders are on their 1st, 2nd, 3rd… No Answer (counted from `order_history` across the order's whole lifetime, not just the selected period). Reuses the existing Failed Attempt popup's Dialog pattern.
+- Reason: Requested — "no answer khasha tkon clickable fach nclicker 3liha i3tiwni kola no answer chhal no anwer 1 o 2" (wanted to see the attempt-number breakdown behind the aggregate No Answer count).
+- Notes: Verified live against the ~1033 orders currently at follow_up_status='no_answer': 335 on attempt 1, 229 on 2, 208 on 3, 136 on 4, 125 on 5 (sums to the total exactly; 5 is the current max, code caps display at "5+" for future growth). Clean `tsc --noEmit`; `eslint` unchanged (same 4 pre-existing issues, 0 new). Not visually tested in-browser (no login credentials in this session) — dev server verified to boot with a clean console.
 
 ### 2026-09-11 - Anwar Bounasser
 - Commit: `670133c`
