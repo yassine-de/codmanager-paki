@@ -430,11 +430,27 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const mainItem = resolvedItems[0];
         const totalQuantity = resolvedItems.reduce((sum, item) => sum + item.quantity, 0);
         const computedTotal = resolvedItems.reduce((sum, item) => sum + item.totalPrice, 0);
         const totalAmount = isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : computedTotal;
         const totalWeight = resolvedItems.reduce((sum, item) => sum + (item.weightKg * item.quantity), 0);
+
+        // The sheet's own Total Amount column is the authoritative order value —
+        // it often reflects bundle/quantity-discount pricing (e.g. "2 for 12480")
+        // that the sheet's per-unit Price column doesn't capture on its own
+        // (naive quantity * price there would give 15600). Rescale each item's
+        // unit/total price to match the sheet's real total instead of storing a
+        // per-unit price that silently overstates it wherever anything
+        // downstream (invoices, analytics) does price * quantity.
+        if (isFinite(parsedTotal) && parsedTotal > 0 && computedTotal > 0 && parsedTotal !== computedTotal) {
+          const scale = parsedTotal / computedTotal;
+          resolvedItems.forEach((item) => {
+            item.totalPrice = Math.round(item.totalPrice * scale);
+            item.unitPrice = item.quantity > 0 ? item.totalPrice / item.quantity : item.unitPrice;
+          });
+        }
+
+        const mainItem = resolvedItems[0];
 
         // Duplicate check
         const today = new Date();
