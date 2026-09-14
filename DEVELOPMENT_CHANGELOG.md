@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-14 - Anwar Bounasser
+- Commit: `5708f48`
+- Area: WhatsApp / UI
+- Change: Restyled the Inbox to look closer to real WhatsApp Web/Desktop. (1) Conversation list rows: bigger avatar (40px→48px), bigger name/preview/timestamp text, more row padding, taller pill-shaped search bar. (2) Chat area: added a subtle dotted wallpaper texture (was flat/blank black before), a fully-rounded "Today" date pill, slightly roomier message bubbles. (3) Stage/Refine filter bar: dropped the bordered "settings panel" card and the "STAGE"/"REFINE" section labels in favor of one flowing row of rounded-full pill tabs (a thin divider keeps Stage vs Refine distinct without a boxed section), matching WhatsApp's own Chats/Unread/Groups tab bar style.
+- Reason: User compared the Inbox directly against real WhatsApp screenshots multiple times and asked for it to look "100% like WhatsApp" — the flat chat background, boxed/labeled filter panel, and smaller list sizing were the concrete gaps identified each round.
+- Notes: Pure styling changes, no behavior/data changes. Clean `tsc --noEmit`; `eslint` on `WhatsappInbox.tsx` unchanged at 46 problems (44 errors, 2 warnings) — same pre-existing baseline, 0 new. Could not visually verify via login (no credentials); checked via `tsc`/`eslint`/dev-server console (no errors).
+
+### 2026-09-14 - Anwar Bounasser
 - Commit: `c5a6af7`
 - Area: WhatsApp / Database / UI
 - Change: (1) WhatsApp Inbox conversation list now renders only 50 conversations at a time with a "Load More" button (+50 per click), instead of rendering the full list up front. (2) Increased padding/gaps across the Stage/Refine filter bar (outer container, pill groups, individual buttons, count badges) for a less cramped, more professional look. (3) Fixed `is_legacy` classification: it was only set once at the WhatsApp reconnect cutover and never re-evaluated, so a conversation whose first message was on the old (disabled) number but whose latest message came in on the new number stayed stuck under "Old Conversations" instead of showing as active.
