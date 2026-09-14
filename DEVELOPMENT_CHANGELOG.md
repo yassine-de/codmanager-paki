@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-14 - Anwar Bounasser
+- Commit: (live action via Meta Graph API, no code change)
+- Area: WhatsApp / Meta
+- Change: Subscribed our own Meta app ("Wts app", id `2177621296111590` — the same app that received webhooks for the pre-disable number) to the reconnected WhatsApp Business Account (`1557929905757846`, currently named "Iraq Offers" in Meta) via `POST /{waba_id}/subscribed_apps`. That WABA had only ever been subscribed to an unrelated app called "bader app" (id `1518186273053951`) — so Meta was sending every inbound message and delivery/read status event for the new number to that other app instead of to our `whatsapp-webhook` edge function.
+- Reason: User reported outbound template sends looked fine in the DB (`status='sent'`, valid `meta_message_id`) but never reached recipients, and no customer replies were arriving at all since the reconnect. Investigated via the Graph API directly: `GET /{waba_id}/subscribed_apps` showed only "bader app" subscribed; `GET /{phone_number_id}` also surfaced `code_verification_status: EXPIRED` and `verified_name: "Iraq Offers"` (flagged separately to Anwar — those need fixing in Meta Business Suite directly, not via this codebase).
+- Notes: Verified live — before the fix, 0 inbound messages had been recorded since the 08:08:13 reconnect despite 15+ outbound sends; a real test message sent right after subscribing landed in `whatsapp_messages` (`direction='in'`, `status='received'`) within ~2 minutes, confirming the webhook now reaches our system. "bader app" was not removed from the subscription (Meta allows multiple), so this only added our app — no risk to whatever that app was doing. Outbound messages sent before the fix stayed at `status='sent'` (their delivered/read events already fired to "bader app" and won't replay) — only applies retroactively going forward.
+
+### 2026-09-14 - Anwar Bounasser
 - Commit: `5708f48`
 - Area: WhatsApp / UI
 - Change: Restyled the Inbox to look closer to real WhatsApp Web/Desktop. (1) Conversation list rows: bigger avatar (40px→48px), bigger name/preview/timestamp text, more row padding, taller pill-shaped search bar. (2) Chat area: added a subtle dotted wallpaper texture (was flat/blank black before), a fully-rounded "Today" date pill, slightly roomier message bubbles. (3) Stage/Refine filter bar: dropped the bordered "settings panel" card and the "STAGE"/"REFINE" section labels in favor of one flowing row of rounded-full pill tabs (a thin divider keeps Stage vs Refine distinct without a boxed section), matching WhatsApp's own Chats/Unread/Groups tab bar style.
