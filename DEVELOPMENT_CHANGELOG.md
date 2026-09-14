@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-14 - Anwar Bounasser
+- Commit: `b2b7f11`
+- Area: WhatsApp / Database / Storage
+- Change: Created the "whatsapp-media" Supabase Storage bucket (public, 50MB file size limit — the project's global storage cap) and added its RLS policies (staff upload/delete, public read), mirroring the existing "sourcing-images" bucket's policy shape but scoped to `is_staff()`.
+- Reason: User-reported — sending an image from the WhatsApp Inbox failed with "Bucket not found". `WhatsappInbox.tsx`'s `uploadAndSend()` has always uploaded to a bucket named `whatsapp-media`, but that bucket was never actually created in this project, so every image/document/audio attachment send was broken from the start (not a regression).
+- Notes: Bucket created live via the Storage API (Management API doesn't expose bucket creation — used the project's own `/storage/v1/bucket` endpoint with the service_role key). Verified live: bucket + all 3 policies exist. Public read is required so Meta's servers can fetch the media URL when relaying it to WhatsApp.
+
+### 2026-09-14 - Anwar Bounasser
 - Commit: (live action via Meta Graph API, no code change)
 - Area: WhatsApp / Meta
 - Change: Subscribed our own Meta app ("Wts app", id `2177621296111590` — the same app that received webhooks for the pre-disable number) to the reconnected WhatsApp Business Account (`1557929905757846`, currently named "Iraq Offers" in Meta) via `POST /{waba_id}/subscribed_apps`. That WABA had only ever been subscribed to an unrelated app called "bader app" (id `1518186273053951`) — so Meta was sending every inbound message and delivery/read status event for the new number to that other app instead of to our `whatsapp-webhook` edge function.
