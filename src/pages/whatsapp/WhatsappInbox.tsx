@@ -1446,6 +1446,15 @@ export default function WhatsappInbox() {
 
   const displayedConvos = search.trim() && filteredConvos.length === 0 ? dbSearchResults : filteredConvos;
 
+  // Render the list 50 at a time — a fully-rendered 1000-row list (avatars,
+  // badges, hover states) is genuinely heavy on the DOM. "Load More" adds
+  // another 50 instead of paying that cost up front.
+  const [visibleCount, setVisibleCount] = useState(50);
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [search, stageFilter, refineFilter, showLegacy, sortDesc]);
+  const visibleConvos = displayedConvos.slice(0, visibleCount);
+
   // Count CONVERSATIONS (contacts) with unread — not total unread messages.
   const totalUnread = useMemo(
     () => Object.values(unreadMap).filter((n) => (n ?? 0) > 0).length,
@@ -1939,14 +1948,14 @@ export default function WhatsappInbox() {
           Two independent rows that combine (AND): stage (Confirmation/Follow Up)
           and refine (Unread/AI On/etc). Picking both narrows to their intersection. */}
       <div className={cn(
-        "mb-1.5 flex-col gap-2 rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm",
+        "mb-2 flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm",
         selected ? "hidden md:flex" : "flex"
       )}>
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold shrink-0">
             Stage
           </span>
-          <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted/60 p-0.5">
+          <div className="inline-flex items-center gap-1 rounded-lg bg-muted/60 p-1">
             {([
               { key: "all", label: "All", icon: Inbox },
               { key: "confirmation", label: "Confirmation", count: confirmationCount, icon: CheckCircle2 },
@@ -1959,7 +1968,7 @@ export default function WhatsappInbox() {
                   key={f.key}
                   onClick={() => setStageFilter(f.key)}
                   className={cn(
-                    "px-3 py-1.5 rounded-md font-medium text-[12px] inline-flex items-center gap-1.5 transition-all",
+                    "px-3.5 py-2 rounded-md font-medium text-[12px] inline-flex items-center gap-1.5 transition-all",
                     active
                       ? f.key === "follow_up"
                         ? "bg-amber-500 text-white shadow-sm"
@@ -1973,7 +1982,7 @@ export default function WhatsappInbox() {
                   {f.label}
                   {"count" in f && f.count > 0 && (
                     <span className={cn(
-                      "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
+                      "inline-flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full text-[9px] font-semibold",
                       active ? "bg-white/25 text-white" : "bg-foreground/10 text-muted-foreground",
                     )}>
                       {f.count > 99 ? "99+" : f.count}
@@ -1987,7 +1996,7 @@ export default function WhatsappInbox() {
 
         <div className="h-px bg-border" />
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold shrink-0 inline-flex items-center gap-1">
             <FilterIcon className="h-3 w-3" />
             Refine
@@ -2008,7 +2017,7 @@ export default function WhatsappInbox() {
                 key={f.key}
                 onClick={() => setRefineFilter((prev) => (prev === f.key ? "none" : f.key))}
                 className={cn(
-                  "px-2.5 py-1 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
+                  "px-3 py-1.5 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
                   active
                     ? f.key === "needs_review"
                       ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
@@ -2036,7 +2045,7 @@ export default function WhatsappInbox() {
               onClick={() => setShowLegacy((prev) => !prev)}
               title="Conversations from the WhatsApp number active before it was reconnected"
               className={cn(
-                "ml-auto px-2.5 py-1 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
+                "ml-auto px-3 py-1.5 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
                 showLegacy
                   ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
                   : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -2127,7 +2136,7 @@ export default function WhatsappInbox() {
                 No conversations.
               </div>
             )}
-            {displayedConvos.map((c) => {
+            {visibleConvos.map((c) => {
               const unreadCount = unreadMap[c.id] ?? 0;
               const unread = unreadCount > 0;
               const needsReview = c.status === "manual_review_needed";
@@ -2250,6 +2259,19 @@ export default function WhatsappInbox() {
                 </button>
               );
             })}
+            {displayedConvos.length > visibleCount && (
+              <div className="p-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs gap-1.5"
+                  onClick={() => setVisibleCount((n) => n + 50)}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Load More ({displayedConvos.length - visibleCount} more)
+                </Button>
+              </div>
+            )}
           </div>
         </aside>
 
