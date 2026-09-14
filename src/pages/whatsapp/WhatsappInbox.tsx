@@ -44,6 +44,9 @@ import {
   Trash2,
   Inbox,
   Clock,
+  Archive,
+  Play,
+  Pause,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -79,6 +82,7 @@ type Conv = {
   last_reply_at: string | null;
   last_read_at: string | null;
   updated_at: string;
+  is_legacy?: boolean;
   ai_enabled?: boolean;
   labels?: string[] | null;
   review_note?: string | null;
@@ -102,6 +106,30 @@ type Msg = {
   created_at: string;
   payload?: any;
 };
+
+type LastMessage = { conversation_id: string; direction: string; message_type: string; body: string | null };
+
+// A real WhatsApp-style preview line for the conversation list — what actually
+// happened last, not the order id. Mirrors WhatsApp's own conventions
+// (media type icons, "You:" prefix on outbound, reactions worded like WhatsApp).
+function previewText(last: LastMessage | undefined, fallback: string): string {
+  if (!last) return fallback;
+  const you = last.direction === "out" ? "You: " : "";
+  const clean = (s: string | null) => (s || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  switch (last.message_type) {
+    case "image": return `${you}📷 Photo`;
+    case "video": return `${you}🎥 Video`;
+    case "audio": return `${you}🎤 Voice message`;
+    case "audio_transcribed": return `${you}🎤 ${clean(last.body) || "Voice message"}`;
+    case "sticker": return `${you}Sticker`;
+    case "location": return `${you}📍 Location`;
+    case "document": return `${you}📄 Document`;
+    case "order": return `${you}🛒 Order`;
+    case "unsupported": return `${you}Unsupported message`;
+    case "reaction": return last.direction === "out" ? "You reacted" : "Reacted";
+    default: return `${you}${clean(last.body)}` || fallback;
+  }
+}
 
 type ProductOption = {
   key: string;
@@ -208,10 +236,14 @@ function getAudioPayload(msg: Msg) {
   return { rawUrl, mediaId, mimeType, isTemporaryMetaUrl };
 }
 
-function AudioMessagePlayer({ message }: { message: Msg }) {
+function AudioMessagePlayer({ message, isOut }: { message: Msg; isOut: boolean }) {
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const { rawUrl, mediaId } = getAudioPayload(message);
 
   useEffect(() => {
@@ -319,7 +351,70 @@ function AudioMessagePlayer({ message }: { message: Msg }) {
 
   if (!src) return null;
 
-  return <audio controls preload="metadata" src={src} className="max-w-full" />;
+  // Decorative waveform — WhatsApp's own bars aren't real amplitude analysis
+  // either. Seeded by message id so the pattern is stable across re-renders
+  // instead of reshuffling every time state updates.
+  let seed = 0;
+  for (let i = 0; i < message.id.length; i++) seed = (seed * 31 + message.id.charCodeAt(i)) >>> 0;
+  const bars = Array.from({ length: 28 }, () => {
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    return 25 + (seed % 1000) / 1000 * 75; // 25–100% height
+  });
+  const progress = duration > 0 ? currentTime / duration : 0;
+  const playedBars = Math.round(progress * bars.length);
+  const formatTime = (s: number) => {
+    if (!isFinite(s) || s < 0) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-[210px] py-0.5">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        className="hidden"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          if (audio.paused) void audio.play(); else audio.pause();
+        }}
+        className={cn(
+          "shrink-0 h-9 w-9 rounded-full grid place-items-center transition-colors",
+          isOut ? "bg-white/20 hover:bg-white/30 text-white" : "bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-600",
+        )}
+      >
+        {isPlaying ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current" />}
+      </button>
+      <div className="flex-1 flex items-center gap-[2px] h-8">
+        {bars.map((h, i) => (
+          <div
+            key={i}
+            className={cn(
+              "flex-1 rounded-full min-w-[2px]",
+              i < playedBars
+                ? (isOut ? "bg-white" : "bg-emerald-600")
+                : (isOut ? "bg-white/30" : "bg-muted-foreground/30"),
+            )}
+            style={{ height: `${h}%` }}
+          />
+        ))}
+      </div>
+      <span className={cn("text-[10px] tabular-nums shrink-0 w-8", isOut ? "text-white/80" : "text-muted-foreground")}>
+        {formatTime(isPlaying || currentTime > 0 ? currentTime : duration)}
+      </span>
+    </div>
+  );
 }
 
 /**
@@ -666,6 +761,11 @@ export default function WhatsappInbox() {
   const [refineFilter, setRefineFilter] = useState<
     "none" | "unread" | "needs_review" | "ai_on" | "ai_off" | "with_order" | "no_order" | "window_open"
   >("none");
+  // Separate from stage/refine (which only narrow within the current set):
+  // legacy conversations are from the WhatsApp number active before Meta
+  // disabled the account — hidden from the main inbox by default so it stays
+  // focused on the new number, one button away when the old history is needed.
+  const [showLegacy, setShowLegacy] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [tab, setTab] = useState<"reply" | "note">("reply");
   const [draft, setDraft] = useState("");
@@ -731,6 +831,29 @@ export default function WhatsappInbox() {
       return (data ?? []) as Conv[];
     },
   });
+
+  const { data: lastMessages = [] } = useQuery<LastMessage[]>({
+    queryKey: ["wts-last-messages"],
+    queryFn: async () => {
+      const PAGE = 1000;
+      const rows: LastMessage[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase.rpc("get_conversation_last_messages").range(from, from + PAGE - 1);
+        if (error) throw error;
+        const page = (data ?? []) as LastMessage[];
+        rows.push(...page);
+        if (page.length < PAGE) break;
+        from += PAGE;
+      }
+      return rows;
+    },
+    refetchInterval: 30_000,
+  });
+  const lastMessageByConv = useMemo(
+    () => new Map(lastMessages.map((m) => [m.conversation_id, m])),
+    [lastMessages],
+  );
 
   const { data: messages = [] } = useQuery<Msg[]>({
     queryKey: ["wts-messages", selected],
@@ -1240,7 +1363,7 @@ export default function WhatsappInbox() {
   }, [selected, qc]);
 
   const filteredConvos = useMemo(() => {
-    let list = convos.slice();
+    let list = convos.filter((c) => !!c.is_legacy === showLegacy);
     if (search.trim()) {
       if (isOrderIdSearch(search)) {
         list = list.filter((c) => exactOrderIdMatch(c.order_id, search));
@@ -1290,7 +1413,7 @@ export default function WhatsappInbox() {
       return sortDesc ? tb - ta : ta - tb;
     });
     return list;
-  }, [convos, search, stageFilter, refineFilter, sortDesc, unreadMap]);
+  }, [convos, search, stageFilter, refineFilter, sortDesc, unreadMap, showLegacy]);
 
   // DB search: fires when search has text but local filteredConvos is empty
   useEffect(() => {
@@ -1343,6 +1466,8 @@ export default function WhatsappInbox() {
     () => convos.filter((c) => !isFollowUpConv(c)).length,
     [convos],
   );
+
+  const legacyCount = useMemo(() => convos.filter((c) => !!c.is_legacy).length, [convos]);
 
   const markAllAsRead = async () => {
     const unreadIds = Object.keys(unreadMap).filter((id) => (unreadMap[id] ?? 0) > 0);
@@ -1906,6 +2031,29 @@ export default function WhatsappInbox() {
               </button>
             );
           })}
+          {legacyCount > 0 && (
+            <button
+              onClick={() => setShowLegacy((prev) => !prev)}
+              title="Conversations from the WhatsApp number active before it was reconnected"
+              className={cn(
+                "ml-auto px-2.5 py-1 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
+                showLegacy
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+              )}
+            >
+              <Archive className="h-3 w-3" />
+              Old Conversations
+              <span className={cn(
+                "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
+                showLegacy
+                  ? "bg-amber-500 text-white"
+                  : "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+              )}>
+                {legacyCount > 999 ? "999+" : legacyCount}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -2060,7 +2208,7 @@ export default function WhatsappInbox() {
                           unread ? "text-foreground/80 font-medium" : "text-muted-foreground",
                         )}
                       >
-                        {c.order_id ? `#${c.order_id}` : c.customer_phone}
+                        {previewText(lastMessageByConv.get(c.id), c.order_id ? `#${c.order_id}` : c.customer_phone)}
                       </div>
                       {needsReview && (
                         urgentRedelivery ? (
@@ -2497,7 +2645,7 @@ export default function WhatsappInbox() {
                                 );
                               }
                               if (m.message_type === "audio") {
-                                return <AudioMessagePlayer message={m} />;
+                                return <AudioMessagePlayer message={m} isOut={isOut} />;
                               }
                               if (m.message_type === "video") {
                                 return (

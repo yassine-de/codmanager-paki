@@ -1916,6 +1916,7 @@ export type Database = {
           customer_name: string | null
           customer_phone: string
           id: string
+          is_legacy: boolean
           labels: string[]
           last_inbound_at: string | null
           last_message_at: string | null
@@ -1936,6 +1937,7 @@ export type Database = {
           customer_name?: string | null
           customer_phone: string
           id?: string
+          is_legacy?: boolean
           labels?: string[]
           last_inbound_at?: string | null
           last_message_at?: string | null
@@ -1956,6 +1958,7 @@ export type Database = {
           customer_name?: string | null
           customer_phone?: string
           id?: string
+          is_legacy?: boolean
           labels?: string[]
           last_inbound_at?: string | null
           last_message_at?: string | null
@@ -2372,6 +2375,24 @@ export type Database = {
         }[]
       }
       get_confirmation_status_events: {
+        Args: never
+        Returns: {
+          order_id: string
+          new_value: string
+          created_at: string
+        }[]
+      }
+      get_conversation_last_messages: {
+        Args: never
+        Returns: {
+          conversation_id: string
+          direction: string
+          message_type: string
+          body: string
+          created_at: string
+        }[]
+      }
+      get_delivery_status_events: {
         Args: never
         Returns: {
           order_id: string

@@ -87,7 +87,26 @@ async function fetchAllConfirmationStatusEvents(): Promise<ConfirmationStatusEve
   return rows;
 }
 
-// order_id -> confirmation_status -> latest time that status was set.
+// Same RPC shape, sourced from get_delivery_status_events() instead — see
+// deliveryEventDate below for why deliveryPool needs this too.
+async function fetchAllDeliveryStatusEvents(): Promise<ConfirmationStatusEvent[]> {
+  const rows: ConfirmationStatusEvent[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .rpc("get_delivery_status_events")
+      .range(from, from + DASHBOARD_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as ConfirmationStatusEvent[];
+    rows.push(...page);
+    if (page.length < DASHBOARD_PAGE_SIZE) break;
+    from += DASHBOARD_PAGE_SIZE;
+  }
+  return rows;
+}
+
+// order_id -> status -> latest time that status was set (reused for both
+// confirmation_status and delivery_status events — same shape either way).
 function buildLatestStatusEventMap(events: ConfirmationStatusEvent[]): Map<string, Map<string, string>> {
   const map = new Map<string, Map<string, string>>();
   events.forEach((e) => {
@@ -106,6 +125,17 @@ function buildLatestStatusEventMap(events: ConfirmationStatusEvent[]): Map<strin
 function confirmationEventDate(o: DashboardOrder, statusEventMap: Map<string, Map<string, string>>): Date {
   if (o.confirmation_status === "confirmed") return new Date(o.confirmed_at ?? o.updated_at);
   const at = statusEventMap.get(o.order_id)?.get(o.confirmation_status);
+  return new Date(at ?? o.updated_at);
+}
+
+// Same idea for delivery_status: delivered_at for delivered/paid orders (the
+// trusted column), otherwise the latest order_history row that set that
+// exact status — so an order sitting at "shipped"/"failed_attempt" only
+// counts as touched when IT actually moved, not when an unrelated field on
+// the row got saved.
+function deliveryEventDate(o: DashboardOrder, deliveryEventMap: Map<string, Map<string, string>>): Date {
+  if (o.delivery_status === "delivered" || o.delivery_status === "paid") return new Date(o.delivered_at ?? o.updated_at);
+  const at = deliveryEventMap.get(o.order_id)?.get(o.delivery_status ?? "");
   return new Date(at ?? o.updated_at);
 }
 
@@ -185,6 +215,7 @@ function computeKPIs(
   dateRange?: { from: Date; to: Date },
   basis: DateBasis = "created",
   statusEventMap: Map<string, Map<string, string>> = new Map(),
+  deliveryEventMap: Map<string, Map<string, string>> = new Map(),
 ): DashboardKPIs {
   // If a date range is provided, every metric is filtered by the SAME chosen date
   // basis (created_at or updated_at) so the numbers are internally consistent and
@@ -235,8 +266,13 @@ function computeKPIs(
   const delivered = dateRange
     ? source.filter(o => reachedDeliveredStage(o) && inRangeFor(o, "delivered")).length
     : orders.filter(o => o.delivery_status === 'delivered' || o.delivery_status === 'paid').length;
+  // deliveryPool: in "updated" mode, an order in the shipped pool counts only
+  // when its delivery_status actually changed in the window (order_history),
+  // not on the generic updated_at fallback inRangeFor("delivered") would use
+  // for every non-delivered member of the pool (shipped/failed_attempt/etc
+  // have no delivered_at, so that fallback is just updated_at).
   const deliveryPool = dateRange
-    ? source.filter(o => isInShippedDeliveryPool(o.delivery_status) && inRangeFor(o, "delivered")).length
+    ? source.filter(o => isInShippedDeliveryPool(o.delivery_status) && inRange(basis === "updated" ? deliveryEventDate(o, deliveryEventMap) : eventDate(o, basis, "delivered"))).length
     : orders.filter(o => isInShippedDeliveryPool(o.delivery_status)).length;
   const paid = orders.filter(o => o.delivery_status === 'paid').length;
   // Returned = courier return flow plus warehouse-received returns
@@ -386,6 +422,15 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
     [confirmationStatusEvents],
   );
 
+  const { data: deliveryStatusEvents = [] } = useQuery({
+    queryKey: ["dashboard-delivery-status-events"],
+    queryFn: fetchAllDeliveryStatusEvents,
+  });
+  const deliveryEventMap = useMemo(
+    () => buildLatestStatusEventMap(deliveryStatusEvents),
+    [deliveryStatusEvents],
+  );
+
   // Filter by date range on the chosen basis date (created_at or updated_at)
   const orders = useMemo(() => {
     if (!dateRange?.from) return allOrders;
@@ -400,8 +445,8 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
     if (!dateRange?.from) return computeKPIs(orders);
     const from = startOfDayPKT(dateRange.from);
     const to = dateRange.to ? endOfDayPKT(dateRange.to) : endOfDayPKT(dateRange.from);
-    return computeKPIs(orders, allOrders, { from, to }, dateBasis, statusEventMap);
-  }, [orders, allOrders, dateRange, dateBasis, statusEventMap]);
+    return computeKPIs(orders, allOrders, { from, to }, dateBasis, statusEventMap, deliveryEventMap);
+  }, [orders, allOrders, dateRange, dateBasis, statusEventMap, deliveryEventMap]);
   // Daily charts: when a date range is active, bucket each day in the range by event date.
   // Otherwise fall back to last-7-days view.
   const last7 = useMemo(() => {
@@ -432,7 +477,8 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
         }).length;
         const shipped = allOrders.filter(o => {
           if (!isInShippedDeliveryPool(o.delivery_status)) return false;
-          return isInDay(eventDate(o, dateBasis, "delivered"), start, nextDay);
+          const d = dateBasis === "updated" ? deliveryEventDate(o, deliveryEventMap) : eventDate(o, dateBasis, "delivered");
+          return isInDay(d, start, nextDay);
         }).length;
         return {
           day: `${formatPKT(start, "EEE")}\n${formatPKT(start, "dd/MM")}`,
@@ -443,7 +489,7 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
       });
     }
     return computeDailyData(allOrders, 7);
-  }, [allOrders, dateRange, dateBasis, statusEventMap]);
+  }, [allOrders, dateRange, dateBasis, statusEventMap, deliveryEventMap]);
 
   const totals7 = useMemo(() => ({
     orders: last7.reduce((s, d) => s + d.orders, 0),
