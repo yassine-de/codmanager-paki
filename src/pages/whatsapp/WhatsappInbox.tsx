@@ -1945,125 +1945,114 @@ export default function WhatsappInbox() {
   return (
     <>
       {/* Horizontal filters bar above inbox — hidden on mobile when a conversation is open.
-          Two independent rows that combine (AND): stage (Confirmation/Follow Up)
-          and refine (Unread/AI On/etc). Picking both narrows to their intersection. */}
+          Styled as one flowing row of pill tabs (WhatsApp's own Chats/Unread/Groups tab
+          bar) instead of a bordered "settings panel" card. Stage (Confirmation/Follow Up)
+          and Refine (Unread/AI On/etc) are still two independent filters that combine
+          (AND) — a thin divider keeps that distinction without a boxed section label. */}
       <div className={cn(
-        "mb-2 flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm",
+        "mb-3 items-center gap-2 flex-wrap",
         selected ? "hidden md:flex" : "flex"
       )}>
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold shrink-0">
-            Stage
-          </span>
-          <div className="inline-flex items-center gap-1 rounded-lg bg-muted/60 p-1">
-            {([
-              { key: "all", label: "All", icon: Inbox },
-              { key: "confirmation", label: "Confirmation", count: confirmationCount, icon: CheckCircle2 },
-              { key: "follow_up", label: "Follow Up", count: followUpCount, icon: RotateCcw },
-            ] as const).map((f) => {
-              const Icon = f.icon;
-              const active = stageFilter === f.key;
-              return (
-                <button
-                  key={f.key}
-                  onClick={() => setStageFilter(f.key)}
-                  className={cn(
-                    "px-3.5 py-2 rounded-md font-medium text-[12px] inline-flex items-center gap-1.5 transition-all",
-                    active
-                      ? f.key === "follow_up"
-                        ? "bg-amber-500 text-white shadow-sm"
-                        : f.key === "confirmation"
-                        ? "bg-violet-500 text-white shadow-sm"
-                        : "bg-card text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {f.label}
-                  {"count" in f && f.count > 0 && (
-                    <span className={cn(
-                      "inline-flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full text-[9px] font-semibold",
-                      active ? "bg-white/25 text-white" : "bg-foreground/10 text-muted-foreground",
-                    )}>
-                      {f.count > 99 ? "99+" : f.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="h-px bg-border" />
-
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold shrink-0 inline-flex items-center gap-1">
-            <FilterIcon className="h-3 w-3" />
-            Refine
-          </span>
-          {([
-            { key: "unread", label: "Unread", icon: MessageSquare },
-            { key: "needs_review", label: "Needs Review", count: needsReviewCount, icon: AlertCircle },
-            { key: "ai_on", label: "AI On", icon: Bot },
-            { key: "ai_off", label: "AI Off", icon: BotOff },
-            { key: "with_order", label: "With Order", icon: FileText },
-            { key: "no_order", label: "No Order", icon: X },
-            { key: "window_open", label: "24h Window", icon: Clock },
-          ] as const).map((f) => {
-            const Icon = f.icon;
-            const active = refineFilter === f.key;
-            return (
-              <button
-                key={f.key}
-                onClick={() => setRefineFilter((prev) => (prev === f.key ? "none" : f.key))}
-                className={cn(
-                  "px-3 py-1.5 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
-                  active
-                    ? f.key === "needs_review"
-                      ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                    : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                )}
-              >
-                <Icon className="h-3 w-3" />
-                {f.label}
-                {"count" in f && f.count > 0 && (
-                  <span className={cn(
-                    "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
-                    active
-                      ? "bg-sky-500 text-white"
-                      : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
-                  )}>
-                    {f.count > 99 ? "99+" : f.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          {legacyCount > 0 && (
+        {([
+          { key: "all", label: "All", icon: Inbox },
+          { key: "confirmation", label: "Confirmation", count: confirmationCount, icon: CheckCircle2 },
+          { key: "follow_up", label: "Follow Up", count: followUpCount, icon: RotateCcw },
+        ] as const).map((f) => {
+          const Icon = f.icon;
+          const active = stageFilter === f.key;
+          return (
             <button
-              onClick={() => setShowLegacy((prev) => !prev)}
-              title="Conversations from the WhatsApp number active before it was reconnected"
+              key={f.key}
+              onClick={() => setStageFilter(f.key)}
               className={cn(
-                "ml-auto px-3 py-1.5 rounded-full font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
-                showLegacy
-                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                "px-3.5 py-1.5 rounded-full font-medium text-xs border inline-flex items-center gap-1.5 transition-colors",
+                active
+                  ? f.key === "follow_up"
+                    ? "bg-amber-500 text-white border-amber-500 shadow-sm"
+                    : f.key === "confirmation"
+                    ? "bg-violet-500 text-white border-violet-500 shadow-sm"
+                    : "bg-foreground text-background border-foreground shadow-sm"
                   : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
               )}
             >
-              <Archive className="h-3 w-3" />
-              Old Conversations
-              <span className={cn(
-                "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
-                showLegacy
-                  ? "bg-amber-500 text-white"
-                  : "bg-amber-500/20 text-amber-600 dark:text-amber-400",
-              )}>
-                {legacyCount > 999 ? "999+" : legacyCount}
-              </span>
+              <Icon className="h-3.5 w-3.5" />
+              {f.label}
+              {"count" in f && f.count > 0 && (
+                <span className={cn(
+                  "inline-flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full text-[9px] font-semibold",
+                  active ? "bg-white/25 text-white" : "bg-foreground/10 text-muted-foreground",
+                )}>
+                  {f.count > 99 ? "99+" : f.count}
+                </span>
+              )}
             </button>
-          )}
-        </div>
+          );
+        })}
+
+        <span className="w-px h-5 bg-border shrink-0" />
+
+        {([
+          { key: "unread", label: "Unread", icon: MessageSquare },
+          { key: "needs_review", label: "Needs Review", count: needsReviewCount, icon: AlertCircle },
+          { key: "ai_on", label: "AI On", icon: Bot },
+          { key: "ai_off", label: "AI Off", icon: BotOff },
+          { key: "with_order", label: "With Order", icon: FileText },
+          { key: "no_order", label: "No Order", icon: X },
+          { key: "window_open", label: "24h Window", icon: Clock },
+        ] as const).map((f) => {
+          const Icon = f.icon;
+          const active = refineFilter === f.key;
+          return (
+            <button
+              key={f.key}
+              onClick={() => setRefineFilter((prev) => (prev === f.key ? "none" : f.key))}
+              className={cn(
+                "px-3.5 py-1.5 rounded-full font-medium border transition-colors text-xs inline-flex items-center gap-1.5",
+                active
+                  ? f.key === "needs_review"
+                    ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                    : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+              )}
+            >
+              <Icon className="h-3 w-3" />
+              {f.label}
+              {"count" in f && f.count > 0 && (
+                <span className={cn(
+                  "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
+                  active
+                    ? "bg-sky-500 text-white"
+                    : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
+                )}>
+                  {f.count > 99 ? "99+" : f.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+        {legacyCount > 0 && (
+          <button
+            onClick={() => setShowLegacy((prev) => !prev)}
+            title="Conversations from the WhatsApp number active before it was reconnected"
+            className={cn(
+              "ml-auto px-3.5 py-1.5 rounded-full font-medium border transition-colors text-xs inline-flex items-center gap-1.5",
+              showLegacy
+                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            )}
+          >
+            <Archive className="h-3 w-3" />
+            Old Conversations
+            <span className={cn(
+              "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
+              showLegacy
+                ? "bg-amber-500 text-white"
+                : "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+            )}>
+              {legacyCount > 999 ? "999+" : legacyCount}
+            </span>
+          </button>
+        )}
       </div>
 
       <div className={cn(
@@ -2078,7 +2067,7 @@ export default function WhatsappInbox() {
           "col-span-12 md:col-span-4 lg:col-span-3 border-r border-border flex-col bg-background/40 min-h-0 overflow-hidden",
           selected ? "hidden md:flex" : "flex"
         )}>
-          <div className="px-4 h-12 border-b border-border flex items-center justify-between gap-2">
+          <div className="px-4 h-14 border-b border-border flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <FilterIcon className="h-4 w-4 text-muted-foreground" />
               <div className="text-sm font-semibold">Inbox</div>
@@ -2116,14 +2105,14 @@ export default function WhatsappInbox() {
             </div>
           </div>
 
-          <div className="p-3 border-b border-border">
+          <div className="p-3.5 border-b border-border">
             <div className="relative">
-              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by name, phone, or message"
-                className="pl-9 h-9"
+                className="pl-10 h-10 rounded-full"
               />
             </div>
           </div>
@@ -2166,7 +2155,7 @@ export default function WhatsappInbox() {
                     setTab("reply");
                   }}
                   className={cn(
-                    "w-full text-left px-3 py-3 border-b border-border/60 hover:bg-muted/40 transition-colors flex gap-3 relative",
+                    "w-full text-left px-4 py-3.5 border-b border-border/60 hover:bg-muted/40 transition-colors flex gap-3.5 relative",
                     selected === c.id && "bg-muted/60",
                     unread && !needsReview && "bg-emerald-500/5 hover:bg-emerald-500/10 border-l-4 border-l-emerald-500",
                     needsReview && !urgentRedelivery && "bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-l-sky-500",
@@ -2176,17 +2165,17 @@ export default function WhatsappInbox() {
                   <div className="relative shrink-0">
                     <div
                       className={cn(
-                        "h-10 w-10 rounded-full grid place-items-center text-sm font-semibold",
+                        "h-12 w-12 rounded-full grid place-items-center text-base font-semibold",
                         colorFor(c.customer_phone),
                       )}
                     >
                       {initials(c.customer_name, c.customer_phone)}
                     </div>
                     {needsReview && (
-                      <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5">
+                      <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4">
                         <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", urgentRedelivery ? "bg-red-400" : "bg-sky-400")}></span>
-                        <span className={cn("relative inline-flex rounded-full h-3.5 w-3.5 border-2 border-background items-center justify-center", urgentRedelivery ? "bg-red-500" : "bg-sky-500")}>
-                          <AlertCircle className="h-2 w-2 text-white" />
+                        <span className={cn("relative inline-flex rounded-full h-4 w-4 border-2 border-background items-center justify-center", urgentRedelivery ? "bg-red-500" : "bg-sky-500")}>
+                          <AlertCircle className="h-2.5 w-2.5 text-white" />
                         </span>
                       </span>
                     )}
@@ -2195,7 +2184,7 @@ export default function WhatsappInbox() {
                     <div className="flex items-center justify-between gap-2">
                       <div
                         className={cn(
-                          "text-sm truncate",
+                          "text-[15px] truncate",
                           unread || needsReview ? "font-bold text-foreground" : "font-semibold",
                         )}
                       >
@@ -2203,17 +2192,17 @@ export default function WhatsappInbox() {
                       </div>
                       <div
                         className={cn(
-                          "text-[10px] shrink-0",
+                          "text-xs shrink-0",
                           unread ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-muted-foreground",
                         )}
                       >
                         {ts ? format(new Date(ts), "HH:mm") : ""}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="flex items-center gap-1.5 mt-1">
                       <div
                         className={cn(
-                          "text-[11px] truncate flex-1",
+                          "text-[13px] truncate flex-1",
                           unread ? "text-foreground/80 font-medium" : "text-muted-foreground",
                         )}
                       >
@@ -2287,7 +2276,7 @@ export default function WhatsappInbox() {
           ) : (
             <>
               {/* Chat header */}
-              <div className="border-b border-border px-2.5 sm:px-4 py-2 flex flex-wrap md:flex-nowrap items-start gap-x-2.5 gap-y-1.5 shrink-0 bg-card">
+              <div className="border-b border-border px-2.5 sm:px-4 py-2.5 flex flex-wrap md:flex-nowrap items-start gap-x-2.5 gap-y-1.5 shrink-0 bg-card">
                 {/* Mobile back button */}
                 <Button
                   size="icon"
@@ -2313,7 +2302,7 @@ export default function WhatsappInbox() {
                 >
                   <div
                     className={cn(
-                      "h-8 w-8 sm:h-9 sm:w-9 rounded-full grid place-items-center text-sm font-semibold shrink-0",
+                      "h-9 w-9 sm:h-10 sm:w-10 rounded-full grid place-items-center text-sm font-semibold shrink-0",
                       colorFor(conv.customer_phone),
                     )}
                   >
@@ -2558,12 +2547,12 @@ export default function WhatsappInbox() {
               {/* Messages */}
               <div
                 ref={scrollerRef}
-                className="min-h-0 flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth bg-[radial-gradient(circle_at_1px_1px,_hsl(var(--muted-foreground)/0.06)_1px,_transparent_0)] [background-size:16px_16px]"
+                className="min-h-0 flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth bg-[radial-gradient(circle_at_1px_1px,_hsl(var(--muted-foreground)/0.14)_1.4px,_transparent_0),radial-gradient(circle_at_9px_9px,_hsl(var(--muted-foreground)/0.08)_1px,_transparent_0)] [background-size:18px_18px]"
               >
                 {grouped.map((g) => (
                   <div key={g.key} className="space-y-3">
                     <div className="flex justify-center">
-                      <span className="text-[10px] px-2 py-1 rounded-md bg-muted/60 text-muted-foreground">
+                      <span className="text-[11px] px-3 py-1 rounded-full bg-muted/70 text-muted-foreground shadow-sm">
                         {g.label}
                       </span>
                     </div>
@@ -2619,7 +2608,7 @@ export default function WhatsappInbox() {
                         >
                           <div
                             className={cn(
-                              "max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm",
+                              "max-w-[75%] rounded-2xl px-3.5 py-2.5 text-sm shadow-sm",
                               isOut
                                 ? "bg-emerald-600 text-white rounded-br-sm"
                                 : "bg-card border border-border rounded-bl-sm",
