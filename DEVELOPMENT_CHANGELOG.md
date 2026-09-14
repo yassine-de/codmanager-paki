@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-12 - Anwar Bounasser
+Last manual update: 2026-09-14 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,20 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-14 - Anwar Bounasser
+- Commit: `82552f1`
+- Area: Follow Ups / Database
+- Change: `get_follow_ups_data()` staleness threshold raised from 2 to 3 days for orders still in transit (shipped/in_transit/out_for_delivery/with_courier) with no follow-up action taken yet. Failed attempts/returns, and any order someone has already worked (a real `follow_up_status`), still show immediately regardless of days — only the "just sitting there, untouched, 2 days in normal transit" case is delayed.
+- Reason: User-reported — the queue was surfacing orders that were still normally in transit, not actually stuck, too early.
+- Notes: Verified live: orders matching "shipped/in-transit, still Pending, past the threshold" went from 47 (2-day rule) to 11 (3-day rule). `get_follow_ups_count()` (badge/tab count elsewhere) uses a broader, pre-existing definition unrelated to this threshold — flagged to Anwar as a separate possible inconsistency, not touched here.
+
+### 2026-09-14 - Anwar Bounasser
+- Commit: (manual data correction, no code change)
+- Area: Orders / WhatsApp / Database
+- Change: 41 orders stuck at `confirmation_status='new_wts'` (WhatsApp-routed, never worked — `agent_submit_order` only accepts `new`/`no_answer`/`postponed`, so these were unclaimable by any agent) bulk-corrected to `confirmation_status='new'`, `confirmation_channel='agent'`, each with an `order_history` entry (`action_type='manual_status_correction'`).
+- Reason: Tezly Pakistan's WhatsApp Business Account was disabled by Meta on 2026-09-12 ("breach of Terms of Acceptable Use" — live DB confirms all 115+ template sends since then failed with "Business account has been locked."). With WhatsApp fully down, these orders needed to move to manual agent confirmation instead of sitting unreachable.
+- Notes: Helped draft the Meta "Request review" appeal and support-chat message (external, not in this repo). WhatsApp routing at order-intake time (`product.whatsapp_confirmation_enabled` in `import-sheets` and other creation paths) was NOT disabled — new eligible orders keep landing in `new_wts` every few minutes as long as the account stays locked; Anwar was asked whether to temporarily route new orders straight to agents too, no decision yet as of this entry.
 
 ### 2026-09-12 - Anwar Bounasser
 - Commit: `9e607fd`
