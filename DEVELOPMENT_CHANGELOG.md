@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-15 - Anwar Bounasser
+- Commit: `532b7aa`
+- Area: Orders / Shipping
+- Change: `AgentConfirmedOrders.tsx`'s edit-order save handler had the same bug just fixed in `agent_submit_order()` — it only updated `orders.product_name/price/quantity`, never `order_items`, so courier label generation and other `order_items`-preferring screens kept showing the customer's OLD product after an agent edited an already-confirmed order here. Now syncs `order_items` too (same single-item guard as the `agent_submit_order` fix).
+- Reason: User asked to make sure the AB-4264 product-mismatch class of bug couldn't happen again — audited every place in the codebase that writes `orders.product_name` and found this second, separate write path with the identical gap (`Orders.tsx`'s `EditOrderModal` and `WhatsappInbox.tsx`'s pricing editor were already checked and found to correctly sync both tables).
+- Notes: Clean `tsc --noEmit`. `eslint` on this file went from 12 to 15 problems (+3) — all three are `order_items as any` casts, the same unavoidable pattern already used at every other `order_items` write site in this codebase (that table isn't in the generated Supabase types).
+
+### 2026-09-15 - Anwar Bounasser
 - Commit: `3b8785a`
 - Area: Orders / Shipping / Database
 - Change: `agent_submit_order()` only ever updated `orders.product_name/price/quantity/total_amount`, never `order_items` — so any consumer that prefers `order_items` over the flat columns (`shipping-sync`/`mnp-shipping-sync`'s `buildOrderDetail()`, which feeds the courier's printed shipping label; `WhatsappInbox.tsx`'s `getOrderItems()`; `Orders.tsx`'s `mapOrderProducts()`) kept showing the customer's ORIGINAL product after an agent changed it during confirmation. Now syncs `order_items` right after a successful `orders` update, but only when the order has exactly one item row (the common case; a genuine multi-product order's items don't map cleanly onto this RPC's single product/price params, so those are left untouched).
