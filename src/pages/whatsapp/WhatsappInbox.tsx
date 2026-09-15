@@ -11,15 +11,12 @@ import {
   XCircle,
   RotateCcw,
   Search,
-  Filter as FilterIcon,
   Lock,
   Send,
   StickyNote,
-  ArrowDownUp,
   FileText,
   Loader2,
   Smile,
-  Camera,
   Paperclip,
   Mic,
   Sparkles,
@@ -47,9 +44,23 @@ import {
   Archive,
   Play,
   Pause,
+  MoreVertical,
+  ChevronRight,
+  Package,
+  SlidersHorizontal,
+  Info,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
 import { toast } from "sonner";
@@ -104,6 +115,7 @@ type Msg = {
   message_type: string;
   status: string | null;
   created_at: string;
+  meta_message_id?: string | null;
   payload?: any;
 };
 
@@ -150,6 +162,19 @@ type OrderItemDraft = {
   variant_name?: string | null;
   quantity: string;
   unit_price: string;
+};
+
+type RecentOrderRow = {
+  id: string;
+  order_id: string;
+  product_name: string | null;
+  quantity: number | null;
+  price: number | null;
+  total_amount: number | null;
+  confirmation_status: string | null;
+  delivery_status: string | null;
+  created_at: string;
+  order_items?: { product_name: string | null; product_id: string | null }[] | null;
 };
 
 type DuplicateOrderWarning = {
@@ -644,6 +669,38 @@ const deliveryStatusCls = (s: string) => {
   return map[s] ?? "bg-muted text-muted-foreground border-border";
 };
 
+// Primary stage-pill metadata — shared by the top filter row and each
+// conversation card's status badge, so colors/labels can't drift apart.
+const STAGE_META: Record<
+  "confirmation" | "shipped" | "out_for_delivery" | "failed_attempt",
+  { label: string; icon: typeof CheckCircle2; activeCls: string; badgeCls: string }
+> = {
+  confirmation: {
+    label: "Confirmation",
+    icon: CheckCircle2,
+    activeCls: "bg-blue-500 text-white border-blue-500 shadow-sm",
+    badgeCls: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/25",
+  },
+  shipped: {
+    label: "Order Shipped",
+    icon: Truck,
+    activeCls: "bg-purple-500 text-white border-purple-500 shadow-sm",
+    badgeCls: "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/25",
+  },
+  out_for_delivery: {
+    label: "Out for Delivery",
+    icon: Truck,
+    activeCls: "bg-orange-500 text-white border-orange-500 shadow-sm",
+    badgeCls: "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-orange-500/25",
+  },
+  failed_attempt: {
+    label: "Failed Attempt",
+    icon: AlertCircle,
+    activeCls: "bg-red-500 text-white border-red-500 shadow-sm",
+    badgeCls: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/25",
+  },
+};
+
 const shouldShowShippingStatus = (deliveryStatus?: string | null, shippingStatus?: string | null) => {
   if (!shippingStatus) return false;
 
@@ -706,6 +763,17 @@ function isFollowUpConv(c: { labels?: string[] | null }) {
   );
 }
 
+// The Tags card reuses whatsapp_conversations.labels (already there for the
+// automation builder's add_tag/remove_tag nodes and the followup_*/
+// urgent_redelivery system markers) rather than adding a new column. A
+// "tag" is any label that isn't one of those reserved, code-driven markers.
+function isSystemLabel(label: string) {
+  return label.startsWith("followup_") || label === "urgent_redelivery";
+}
+function visibleTags(labels?: string[] | null): string[] {
+  return (Array.isArray(labels) ? labels : []).filter((l) => !isSystemLabel(l));
+}
+
 function dayLabel(d: Date) {
   if (isToday(d)) return "Today";
   if (isYesterday(d)) return "Yesterday";
@@ -754,18 +822,25 @@ export default function WhatsappInbox() {
   const [dbSearchResults, setDbSearchResults] = useState<Conv[]>([]);
   const [dbSearching, setDbSearching] = useState(false);
   // Two independent, combinable filter dimensions: `stageFilter` narrows by
-  // order stage (Confirmation vs Follow Up), `refineFilter` narrows further
-  // within that (e.g. AI On). Both apply together (AND), so picking
-  // Confirmation + AI On shows only confirmation-stage conversations with AI on.
-  const [stageFilter, setStageFilter] = useState<"all" | "confirmation" | "follow_up">("all");
+  // the order's operational stage (linked order's confirmation/delivery
+  // status), `refineFilter` narrows further within that (e.g. AI On). Both
+  // apply together (AND). `refineFilter` (plus Old Conversations) lives
+  // behind the "advanced filter" popover, not the top-level pill row.
+  const [stageFilter, setStageFilter] = useState<
+    "all" | "confirmation" | "shipped" | "out_for_delivery" | "failed_attempt"
+  >("all");
   const [refineFilter, setRefineFilter] = useState<
-    "none" | "unread" | "needs_review" | "ai_on" | "ai_off" | "with_order" | "no_order" | "window_open"
+    "none" | "unread" | "needs_review" | "follow_up" | "ai_on" | "ai_off" | "with_order" | "no_order" | "window_open"
   >("none");
+  const [advancedFilterOpen, setAdvancedFilterOpen] = useState(false);
   // Separate from stage/refine (which only narrow within the current set):
   // legacy conversations are from the WhatsApp number active before Meta
   // disabled the account — hidden from the main inbox by default so it stays
   // focused on the new number, one button away when the old history is needed.
   const [showLegacy, setShowLegacy] = useState(false);
+  // Right-hand Customer/Order panel: persistent column on desktop, a Sheet
+  // (drawer) on medium screens and mobile, opened via a header button.
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [tab, setTab] = useState<"reply" | "note">("reply");
   const [draft, setDraft] = useState("");
@@ -774,8 +849,6 @@ export default function WhatsappInbox() {
   const [sending, setSending] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [recording, setRecording] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [orderInfoOpen, setOrderInfoOpen] = useState(false);
@@ -815,7 +888,6 @@ export default function WhatsappInbox() {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
@@ -854,6 +926,53 @@ export default function WhatsappInbox() {
     () => new Map(lastMessages.map((m) => [m.conversation_id, m])),
     [lastMessages],
   );
+
+  // Operational stage for the primary filter pills (Confirmation/Order
+  // Shipped/Out for Delivery/Failed Attempt) lives on the linked ORDER, not
+  // on the conversation — so every visible row needs its order's status,
+  // not just the one currently open. One broad, narrow-column fetch (same
+  // shape/pattern as lastMessages above), refreshed periodically.
+  const { data: orderStatuses = [] } = useQuery<
+    { order_id: string; confirmation_status: string | null; delivery_status: string | null }[]
+  >({
+    queryKey: ["wts-order-statuses"],
+    queryFn: async () => {
+      const PAGE = 1000;
+      const rows: { order_id: string; confirmation_status: string | null; delivery_status: string | null }[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select("order_id, confirmation_status, delivery_status")
+          .not("order_id", "is", null)
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        const page = (data ?? []) as typeof rows;
+        rows.push(...page);
+        if (page.length < PAGE) break;
+        from += PAGE;
+      }
+      return rows;
+    },
+    refetchInterval: 30_000,
+  });
+  const orderStatusByOrderId = useMemo(
+    () => new Map(orderStatuses.map((o) => [o.order_id, o])),
+    [orderStatuses],
+  );
+  // "Confirmation" = still undecided; the other three are delivery-pipeline
+  // stages further along. A conversation with no linked order never matches
+  // any of these — it only shows under "All".
+  function orderStage(orderId: string | null): "confirmation" | "shipped" | "out_for_delivery" | "failed_attempt" | null {
+    if (!orderId) return null;
+    const o = orderStatusByOrderId.get(orderId);
+    if (!o) return null;
+    if (o.delivery_status === "failed_attempt") return "failed_attempt";
+    if (o.delivery_status === "out_for_delivery") return "out_for_delivery";
+    if (o.delivery_status === "shipped") return "shipped";
+    if (!["confirmed", "cancelled"].includes(o.confirmation_status || "")) return "confirmation";
+    return null;
+  }
 
   const { data: messages = [] } = useQuery<Msg[]>({
     queryKey: ["wts-messages", selected],
@@ -913,6 +1032,37 @@ export default function WhatsappInbox() {
     }
     return m;
   }, [templates]);
+
+  // For rendering a WhatsApp-style quoted-reply preview: when a customer
+  // swipes-to-reply on their phone, Meta includes `context.id` (the replied-
+  // to message's meta_message_id) in the raw payload we already store
+  // verbatim on insert (whatsapp-webhook stores `payload: m`). Purely a
+  // lookup against what's already loaded — no new data/backend needed.
+  const messageByMetaId = useMemo(() => {
+    const map = new Map<string, Msg>();
+    for (const m of messages) {
+      if (m.meta_message_id) map.set(m.meta_message_id, m);
+    }
+    return map;
+  }, [messages]);
+  function quotedMessageFor(m: Msg): Msg | null {
+    const quotedId = m.payload?.context?.id as string | undefined;
+    if (!quotedId) return null;
+    return messageByMetaId.get(quotedId) || null;
+  }
+  function quotedPreviewText(m: Msg): string {
+    if (m.message_type === "template") return "Template message";
+    const body = (m.body || "").trim();
+    if (body && !body.startsWith("{")) return body.slice(0, 80);
+    return `[${m.message_type}]`;
+  }
+
+  // Right-panel Notes card — reuses the already-loaded message stream
+  // (notes are message_type='note' rows) instead of a separate query.
+  const conversationNotes = useMemo(
+    () => messages.filter((m) => m.message_type === "note").slice(-3).reverse(),
+    [messages],
+  );
 
   const conv = useMemo(() => convos.find((c) => c.id === selected) || null, [convos, selected]);
 
@@ -988,6 +1138,79 @@ export default function WhatsappInbox() {
     },
     enabled: !!order?.id && !!order?.customer_phone,
   });
+
+  // Right-panel "Customer Info" stats (customer since / total / delivered).
+  // No aggregate RPC exists for this — a plain client-side query on `orders`
+  // by phone, same access pattern this file already uses for the duplicate-
+  // order check above, fired only for the open conversation (not per row).
+  const { data: customerStats } = useQuery({
+    queryKey: ["wts-customer-stats", conv?.customer_phone],
+    queryFn: async () => {
+      if (!conv?.customer_phone) return null;
+      const { data, error } = await supabase
+        .from("orders")
+        .select("delivery_status, created_at")
+        .in("customer_phone", phoneVariants(conv.customer_phone));
+      if (error) throw error;
+      const rows = data ?? [];
+      const total = rows.length;
+      const delivered = rows.filter((r) => r.delivery_status === "delivered").length;
+      const firstOrderAt = rows.reduce<string | null>(
+        (min, r) => (!min || r.created_at < min ? r.created_at : min),
+        null,
+      );
+      return { total, delivered, firstOrderAt };
+    },
+    enabled: !!conv?.customer_phone,
+  });
+
+  // Right-panel "Recent Orders" card — this customer's most recent orders
+  // (the linked one plus a couple more), reusing the same phone-matching as
+  // the duplicate check above rather than the product-name-scoped query.
+  const { data: recentOrders = [] } = useQuery<RecentOrderRow[]>({
+    queryKey: ["wts-recent-orders", conv?.customer_phone],
+    queryFn: async () => {
+      if (!conv?.customer_phone) return [];
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_id, product_name, quantity, price, total_amount, confirmation_status, delivery_status, created_at, order_items(product_name, product_id)")
+        .in("customer_phone", phoneVariants(conv.customer_phone))
+        .order("created_at", { ascending: false })
+        .limit(5);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!conv?.customer_phone,
+  });
+
+  // Best-effort product thumbnail for the Recent Orders card — only orders
+  // whose order_items carry a product_id can resolve one; others fall back
+  // to a generic package icon (product_id isn't guaranteed set on every order).
+  const recentOrderProductIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const o of recentOrders) {
+      for (const item of getOrderItems(o)) {
+        if (item.product_id) ids.add(item.product_id);
+      }
+    }
+    return Array.from(ids);
+  }, [recentOrders]);
+  const { data: recentOrderProductImages = [] } = useQuery<{ id: string; image_url: string | null }[]>({
+    queryKey: ["wts-recent-order-product-images", recentOrderProductIds.join(",")],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, image_url")
+        .in("id", recentOrderProductIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: recentOrderProductIds.length > 0,
+  });
+  const productImageById = useMemo(
+    () => new Map(recentOrderProductImages.map((p) => [p.id, p.image_url])),
+    [recentOrderProductImages],
+  );
 
   const selectedConfirmationStatus = editConfStatus || order?.confirmation_status || "new";
   const selectedDeliveryStatus = editDelStatus || order?.delivery_status || "pending";
@@ -1377,15 +1600,15 @@ export default function WhatsappInbox() {
         );
       }
     }
-    if (stageFilter === "follow_up") {
-      list = list.filter((c) => isFollowUpConv(c));
-    } else if (stageFilter === "confirmation") {
-      list = list.filter((c) => !isFollowUpConv(c));
+    if (stageFilter !== "all") {
+      list = list.filter((c) => orderStage(c.order_id) === stageFilter);
     }
     if (refineFilter === "unread") {
       list = list.filter((c) => (unreadMap[c.id] ?? 0) > 0);
     } else if (refineFilter === "needs_review") {
       list = list.filter((c) => c.status === "manual_review_needed");
+    } else if (refineFilter === "follow_up") {
+      list = list.filter((c) => isFollowUpConv(c));
     } else if (refineFilter === "ai_on") {
       list = list.filter((c) => c.ai_enabled !== false);
     } else if (refineFilter === "ai_off") {
@@ -1413,7 +1636,9 @@ export default function WhatsappInbox() {
       return sortDesc ? tb - ta : ta - tb;
     });
     return list;
-  }, [convos, search, stageFilter, refineFilter, sortDesc, unreadMap, showLegacy]);
+    // orderStage() closes over orderStatusByOrderId, which is already listed below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convos, search, stageFilter, refineFilter, sortDesc, unreadMap, showLegacy, orderStatusByOrderId]);
 
   // DB search: fires when search has text but local filteredConvos is empty
   useEffect(() => {
@@ -1471,10 +1696,22 @@ export default function WhatsappInbox() {
     [convos],
   );
 
-  const confirmationCount = useMemo(
-    () => convos.filter((c) => !isFollowUpConv(c)).length,
-    [convos],
-  );
+  // Stage pill counts — computed off the same orderStage() used to filter,
+  // so the badge numbers and the filtered list can never disagree.
+  const stageCounts = useMemo(() => {
+    const counts = { confirmation: 0, shipped: 0, out_for_delivery: 0, failed_attempt: 0 };
+    for (const c of convos) {
+      const stage = orderStage(c.order_id);
+      if (stage) counts[stage]++;
+    }
+    return counts;
+    // orderStage() closes over orderStatusByOrderId, which is already listed below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [convos, orderStatusByOrderId]);
+  const confirmationCount = stageCounts.confirmation;
+  const shippedCount = stageCounts.shipped;
+  const outForDeliveryCount = stageCounts.out_for_delivery;
+  const failedAttemptCount = stageCounts.failed_attempt;
 
   const legacyCount = useMemo(() => convos.filter((c) => !!c.is_legacy).length, [convos]);
 
@@ -1596,6 +1833,20 @@ export default function WhatsappInbox() {
     }
     qc.invalidateQueries({ queryKey: ["wts-convos"] });
     toast.success(next ? "AI auto-reply enabled" : "AI stopped for this conversation");
+  };
+
+  const removeTag = async (tag: string) => {
+    if (!selected || !conv) return;
+    const current = Array.isArray(conv.labels) ? conv.labels : [];
+    const { error } = await supabase
+      .from("whatsapp_conversations")
+      .update({ labels: current.filter((l) => l !== tag) })
+      .eq("id", selected);
+    if (error) {
+      toast.error(error.message || "Failed to remove tag");
+      return;
+    }
+    qc.invalidateQueries({ queryKey: ["wts-convos"] });
   };
 
   const [forcingAi, setForcingAi] = useState(false);
@@ -1807,15 +2058,6 @@ export default function WhatsappInbox() {
     toast.success("Note saved");
   };
 
-  // Quick reply snippets
-  const quickReplies = [
-    "Salam, comment puis-je vous aider ?",
-    "Merci pour votre commande ! 🙏",
-    "Pouvez-vous confirmer votre adresse ?",
-    "Votre commande sera livrée bientôt.",
-    "Je vous remercie pour votre patience.",
-  ];
-
   const insertAtCursor = (text: string) => {
     setDraft((d) => (d ? d + text : text));
   };
@@ -1905,28 +2147,6 @@ export default function WhatsappInbox() {
     setRecording(false);
   };
 
-  const fetchAiSuggestions = async () => {
-    if (!selected) return;
-    setAiLoading(true);
-    setAiSuggestions([]);
-    try {
-      const { data, error } = await supabase.functions.invoke("whatsapp-ai", {
-        body: { mode: "suggest", conversation_id: selected },
-      });
-      if (error) throw error;
-      const sugg = (data?.suggestions as string[]) || [];
-      if (sugg.length === 0) {
-        toast.error("No AI suggestions available");
-        return;
-      }
-      setAiSuggestions(sugg);
-    } catch (e: any) {
-      toast.error(e?.message || "AI suggestion failed");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
   if (!hasWhatsappAccess) return <Navigate to="/" replace />;
 
   // Group messages by day
@@ -1942,117 +2162,379 @@ export default function WhatsappInbox() {
     g.items.push(m);
   }
 
+  // Drives the Quick Actions "Force to Agent" button's label/disabled state —
+  // same eligibility rule the header button used to enforce.
+  const forceToAgentState: "available" | "already_agent" | "sent_to_agent" | "no_order" =
+    !conv?.order_id
+      ? "no_order"
+      : order?.agent_id || (order?.confirmation_status && !["new_wts", "new"].includes(order.confirmation_status))
+      ? "already_agent"
+      : order?.whatsapp_status === "handed_to_agent"
+      ? "sent_to_agent"
+      : "available";
+
+  const quickActionBtnCls = "flex items-center gap-2 rounded-lg border border-border px-3 py-2.5 text-xs font-medium text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+
+  // Right-hand Customer/Order panel content — rendered both as a persistent
+  // column (lg+) and inside a Sheet (below lg), so it's built once here.
+  const rightPanelBody = !conv ? (
+    <div className="p-6 text-sm text-muted-foreground">Select a conversation to see customer & order details.</div>
+  ) : (
+    <div className="p-4 space-y-4">
+      {/* Customer Info */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer Info</div>
+          <button
+            type="button"
+            onClick={() => setOrderInfoOpen(true)}
+            className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
+          >
+            <Pencil className="h-3 w-3" /> Edit
+          </button>
+        </div>
+        <div className="flex items-center gap-3 mb-3">
+          <div
+            className={cn(
+              "h-11 w-11 rounded-full grid place-items-center text-sm font-semibold shrink-0",
+              colorFor(conv.customer_phone),
+            )}
+          >
+            {initials(conv.customer_name, conv.customer_phone)}
+          </div>
+          <div className="min-w-0">
+            <div className="font-semibold text-sm truncate">{conv.customer_name || conv.customer_phone}</div>
+            <div className="text-xs text-muted-foreground">{conv.customer_phone}</div>
+          </div>
+        </div>
+        {order?.customer_city && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+            <MapPin className="h-3 w-3 shrink-0" />
+            {order.customer_city}
+          </div>
+        )}
+        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border/60">
+          <div>
+            <div className="text-[10px] text-muted-foreground">Customer since</div>
+            <div className="text-xs font-semibold mt-0.5">
+              {customerStats?.firstOrderAt ? format(new Date(customerStats.firstOrderAt), "MMM yyyy") : "—"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-muted-foreground">Total Orders</div>
+            <div className="text-xs font-semibold mt-0.5">{customerStats ? customerStats.total : "—"}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-muted-foreground">Delivered</div>
+            <div className="text-xs font-semibold mt-0.5">{customerStats ? customerStats.delivered : "—"}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Orders */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent Orders</div>
+          <button
+            type="button"
+            onClick={() => navigate(`/orders?search=${encodeURIComponent(conv.customer_phone)}`)}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            View All
+          </button>
+        </div>
+        {recentOrders.length === 0 ? (
+          <div className="text-xs text-muted-foreground py-1">No orders yet.</div>
+        ) : (
+          <div className="space-y-2">
+            {recentOrders.slice(0, 3).map((o) => {
+              const items = getOrderItems(o);
+              const firstItem = items[0];
+              const img = firstItem?.product_id ? productImageById.get(firstItem.product_id) : null;
+              const total = o.total_amount ?? (Number(o.price || 0) * Number(o.quantity || 1));
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => window.open(`/orders/${o.order_id}`, "_blank")}
+                  className="w-full flex items-center gap-2.5 rounded-lg border border-border/70 bg-background/60 p-2 text-left hover:bg-muted/50 transition-colors"
+                >
+                  {img ? (
+                    <img src={img} alt="" className="h-10 w-10 rounded-md object-cover shrink-0 border border-border" />
+                  ) : (
+                    <div className="h-10 w-10 rounded-md bg-muted grid place-items-center shrink-0">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs font-semibold">#{o.order_id}</span>
+                      {o.confirmation_status && (
+                        <span className={cn("text-[9px] px-1.5 py-px rounded-full border capitalize", confirmationStatusCls(o.confirmation_status))}>
+                          {o.confirmation_status.replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+                      {firstItem?.product_name || o.product_name}
+                    </div>
+                    <div className="text-[11px] font-medium mt-0.5">
+                      Rs {Number(total).toLocaleString()} · {format(new Date(o.created_at), "d MMM yyyy")}
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Quick Actions</div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setResolveOpen(true)}
+            disabled={conv.status !== "manual_review_needed"}
+            className={quickActionBtnCls}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Mark as Resolved
+          </button>
+          <button type="button" onClick={() => setTab("note")} className={quickActionBtnCls}>
+            <StickyNote className="h-4 w-4" />
+            Add Note
+          </button>
+          <button
+            type="button"
+            onClick={forceToAgent}
+            disabled={forcingAgent || forceToAgentState !== "available"}
+            title={
+              forceToAgentState === "already_agent" ? "Already with an agent"
+                : forceToAgentState === "sent_to_agent" ? "Already sent to the agent queue"
+                : forceToAgentState === "no_order" ? "No order linked to this conversation"
+                : "Stop AI and send this order to the agent queue"
+            }
+            className={quickActionBtnCls}
+          >
+            {forcingAgent ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+            {forceToAgentState === "already_agent" ? "Already with Agent"
+              : forceToAgentState === "sent_to_agent" ? "Sent to Agent"
+              : "Force to Agent"}
+          </button>
+          <button type="button" onClick={() => setTplOpen(true)} className={quickActionBtnCls}>
+            <FileText className="h-4 w-4" />
+            Send Template
+          </button>
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</div>
+          <button
+            type="button"
+            onClick={() => setTab("note")}
+            className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
+          >
+            <Plus className="h-3 w-3" /> Add Note
+          </button>
+        </div>
+        {conversationNotes.length === 0 ? (
+          <div className="text-xs text-muted-foreground py-1">No notes yet.</div>
+        ) : (
+          <div className="space-y-2.5">
+            {conversationNotes.map((n) => (
+              <div key={n.id} className="text-xs">
+                <div className="whitespace-pre-wrap text-foreground/90">{n.body}</div>
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  {format(new Date(n.created_at), "d MMM yyyy, HH:mm")}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tags */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Tags</div>
+        <div className="flex flex-wrap gap-1.5 mb-2.5">
+          {visibleTags(conv.labels).length === 0 && (
+            <div className="text-xs text-muted-foreground">No tags yet.</div>
+          )}
+          {visibleTags(conv.labels).map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/25 px-2 py-1 text-[11px] font-medium"
+            >
+              {tag}
+              <button type="button" onClick={() => removeTag(tag)} className="hover:text-rose-500" title="Remove tag">
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <>
-      {/* Horizontal filters bar above inbox — hidden on mobile when a conversation is open.
-          Styled as one flowing row of pill tabs (WhatsApp's own Chats/Unread/Groups tab
-          bar) instead of a bordered "settings panel" card. Stage (Confirmation/Follow Up)
-          and Refine (Unread/AI On/etc) are still two independent filters that combine
-          (AND) — a thin divider keeps that distinction without a boxed section label. */}
+      {/* Primary operational filter pills — hidden on mobile when a conversation is
+          open. Order-status-based (Confirmation/Order Shipped/Out for Delivery/
+          Failed Attempt), each with its own color, an icon, and a count badge.
+          Everything else that used to live here (Unread/Needs Review/Follow Up/
+          AI On-Off/With-No Order/24h Window/Old Conversations) moved into the
+          "advanced filters" popover so this row stays a clean, scannable tab bar. */}
       <div className={cn(
         "mb-3 items-center gap-2 flex-wrap",
         selected ? "hidden md:flex" : "flex"
       )}>
-        {([
-          { key: "all", label: "All", icon: Inbox },
-          { key: "confirmation", label: "Confirmation", count: confirmationCount, icon: CheckCircle2 },
-          { key: "follow_up", label: "Follow Up", count: followUpCount, icon: RotateCcw },
-        ] as const).map((f) => {
-          const Icon = f.icon;
-          const active = stageFilter === f.key;
+        <button
+          onClick={() => setStageFilter("all")}
+          className={cn(
+            "px-3.5 py-1.5 rounded-full font-medium text-xs border inline-flex items-center gap-1.5 transition-colors",
+            stageFilter === "all"
+              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+              : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          )}
+        >
+          <Inbox className="h-3.5 w-3.5" />
+          All
+          {convos.length > 0 && (
+            <span className={cn(
+              "inline-flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full text-[9px] font-semibold",
+              stageFilter === "all" ? "bg-white/25 text-white" : "bg-foreground/10 text-muted-foreground",
+            )}>
+              {convos.length > 99 ? "99+" : convos.length}
+            </span>
+          )}
+        </button>
+        {(Object.keys(STAGE_META) as Array<keyof typeof STAGE_META>).map((key) => {
+          const meta = STAGE_META[key];
+          const Icon = meta.icon;
+          const active = stageFilter === key;
+          const count = key === "confirmation" ? confirmationCount
+            : key === "shipped" ? shippedCount
+            : key === "out_for_delivery" ? outForDeliveryCount
+            : failedAttemptCount;
           return (
             <button
-              key={f.key}
-              onClick={() => setStageFilter(f.key)}
+              key={key}
+              onClick={() => setStageFilter(key)}
               className={cn(
                 "px-3.5 py-1.5 rounded-full font-medium text-xs border inline-flex items-center gap-1.5 transition-colors",
-                active
-                  ? f.key === "follow_up"
-                    ? "bg-amber-500 text-white border-amber-500 shadow-sm"
-                    : f.key === "confirmation"
-                    ? "bg-violet-500 text-white border-violet-500 shadow-sm"
-                    : "bg-foreground text-background border-foreground shadow-sm"
-                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                active ? meta.activeCls : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
               )}
             >
               <Icon className="h-3.5 w-3.5" />
-              {f.label}
-              {"count" in f && f.count > 0 && (
+              {meta.label}
+              {count > 0 && (
                 <span className={cn(
                   "inline-flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full text-[9px] font-semibold",
                   active ? "bg-white/25 text-white" : "bg-foreground/10 text-muted-foreground",
                 )}>
-                  {f.count > 99 ? "99+" : f.count}
+                  {count > 99 ? "99+" : count}
                 </span>
               )}
             </button>
           );
         })}
 
-        <span className="w-px h-5 bg-border shrink-0" />
-
-        {([
-          { key: "unread", label: "Unread", icon: MessageSquare },
-          { key: "needs_review", label: "Needs Review", count: needsReviewCount, icon: AlertCircle },
-          { key: "ai_on", label: "AI On", icon: Bot },
-          { key: "ai_off", label: "AI Off", icon: BotOff },
-          { key: "with_order", label: "With Order", icon: FileText },
-          { key: "no_order", label: "No Order", icon: X },
-          { key: "window_open", label: "24h Window", icon: Clock },
-        ] as const).map((f) => {
-          const Icon = f.icon;
-          const active = refineFilter === f.key;
-          return (
-            <button
-              key={f.key}
-              onClick={() => setRefineFilter((prev) => (prev === f.key ? "none" : f.key))}
-              className={cn(
-                "px-3.5 py-1.5 rounded-full font-medium border transition-colors text-xs inline-flex items-center gap-1.5",
-                active
-                  ? f.key === "needs_review"
-                    ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                    : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+        <div className="ml-auto flex items-center gap-2">
+          {/* Advanced filters — everything that isn't a top-level stage pill.
+              (Sort lives in the conversation list's own header, next to search,
+              per the spec's left-column layout — not duplicated here.) */}
+          <Popover open={advancedFilterOpen} onOpenChange={setAdvancedFilterOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-8 w-8 relative shrink-0 rounded-full"
+                title="Advanced filters"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                {(refineFilter !== "none" || showLegacy) && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 border-2 border-background" />
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-3" align="end">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
+                Refine
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([
+                  { key: "unread", label: "Unread", icon: MessageSquare },
+                  { key: "needs_review", label: "Needs Review", count: needsReviewCount, icon: AlertCircle },
+                  { key: "follow_up", label: "Follow Up", count: followUpCount, icon: RotateCcw },
+                  { key: "ai_on", label: "AI On", icon: Bot },
+                  { key: "ai_off", label: "AI Off", icon: BotOff },
+                  { key: "with_order", label: "With Order", icon: FileText },
+                  { key: "no_order", label: "No Order", icon: X },
+                  { key: "window_open", label: "24h Window", icon: Clock },
+                ] as const).map((f) => {
+                  const Icon = f.icon;
+                  const active = refineFilter === f.key;
+                  return (
+                    <button
+                      key={f.key}
+                      onClick={() => setRefineFilter((prev) => (prev === f.key ? "none" : f.key))}
+                      className={cn(
+                        "px-2.5 py-1.5 rounded-lg font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
+                        active
+                          ? f.key === "needs_review"
+                            ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                            : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                          : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                      )}
+                    >
+                      <Icon className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{f.label}</span>
+                      {"count" in f && f.count > 0 && (
+                        <span className={cn(
+                          "ml-auto shrink-0 inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full text-[8px] font-semibold",
+                          active ? "bg-sky-500 text-white" : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
+                        )}>
+                          {f.count > 99 ? "99+" : f.count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {legacyCount > 0 && (
+                <>
+                  <div className="h-px bg-border my-2.5" />
+                  <button
+                    onClick={() => setShowLegacy((prev) => !prev)}
+                    title="Conversations from the WhatsApp number active before it was reconnected"
+                    className={cn(
+                      "w-full px-2.5 py-1.5 rounded-lg font-medium border transition-colors text-[11px] inline-flex items-center gap-1.5",
+                      showLegacy
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                        : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    <Archive className="h-3 w-3 shrink-0" />
+                    Old Conversations
+                    <span className={cn(
+                      "ml-auto inline-flex items-center justify-center min-w-[15px] h-[15px] px-1 rounded-full text-[8px] font-semibold",
+                      showLegacy ? "bg-amber-500 text-white" : "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+                    )}>
+                      {legacyCount > 999 ? "999+" : legacyCount}
+                    </span>
+                  </button>
+                </>
               )}
-            >
-              <Icon className="h-3 w-3" />
-              {f.label}
-              {"count" in f && f.count > 0 && (
-                <span className={cn(
-                  "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
-                  active
-                    ? "bg-sky-500 text-white"
-                    : "bg-sky-500/20 text-sky-600 dark:text-sky-400",
-                )}>
-                  {f.count > 99 ? "99+" : f.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-        {legacyCount > 0 && (
-          <button
-            onClick={() => setShowLegacy((prev) => !prev)}
-            title="Conversations from the WhatsApp number active before it was reconnected"
-            className={cn(
-              "ml-auto px-3.5 py-1.5 rounded-full font-medium border transition-colors text-xs inline-flex items-center gap-1.5",
-              showLegacy
-                ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
-            )}
-          >
-            <Archive className="h-3 w-3" />
-            Old Conversations
-            <span className={cn(
-              "inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-semibold",
-              showLegacy
-                ? "bg-amber-500 text-white"
-                : "bg-amber-500/20 text-amber-600 dark:text-amber-400",
-            )}>
-              {legacyCount > 999 ? "999+" : legacyCount}
-            </span>
-          </button>
-        )}
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       <div className={cn(
@@ -2069,19 +2551,27 @@ export default function WhatsappInbox() {
         )}>
           <div className="px-4 h-14 border-b border-border flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <FilterIcon className="h-4 w-4 text-muted-foreground" />
-              <div className="text-sm font-semibold">Inbox</div>
+              <div className="text-sm font-semibold">Chats</div>
               {totalUnread > 0 && (
                 <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-emerald-500 text-white text-[10px] font-semibold">
                   {totalUnread > 99 ? "99+" : totalUnread}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+              <Select value={sortDesc ? "latest" : "oldest"} onValueChange={(v) => setSortDesc(v === "latest")}>
+                <SelectTrigger className="h-7 w-[92px] text-xs rounded-full border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest">Latest</SelectItem>
+                  <SelectItem value="oldest">Oldest</SelectItem>
+                </SelectContent>
+              </Select>
               <Button
-                size="sm"
+                size="icon"
                 variant="ghost"
-                className="h-7 px-2 text-xs gap-1"
+                className="h-7 w-7"
                 onClick={markAllAsRead}
                 disabled={markingAllRead || totalUnread === 0}
                 title="Mark all conversations as read"
@@ -2091,16 +2581,6 @@ export default function WhatsappInbox() {
                 ) : (
                   <CheckCheck className="h-3.5 w-3.5" />
                 )}
-                <span className="hidden sm:inline">Mark all read</span>
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                onClick={() => setSortDesc((v) => !v)}
-                title={sortDesc ? "Newest first" : "Oldest first"}
-              >
-                <ArrowDownUp className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -2130,7 +2610,8 @@ export default function WhatsappInbox() {
               const unread = unreadCount > 0;
               const needsReview = c.status === "manual_review_needed";
               const urgentRedelivery = needsReview && !!c.labels?.includes("urgent_redelivery");
-              const followUp = isFollowUpConv(c);
+              const stage = orderStage(c.order_id);
+              const stageMeta = stage ? STAGE_META[stage] : null;
               const ts = c.last_reply_at || c.last_message_at || c.updated_at;
               const tooltip = urgentRedelivery
                 ? "🚨 Urgent — customer wants a redelivery attempt"
@@ -2155,11 +2636,15 @@ export default function WhatsappInbox() {
                     setTab("reply");
                   }}
                   className={cn(
-                    "w-full text-left px-4 py-3.5 border-b border-border/60 hover:bg-muted/40 transition-colors flex gap-3.5 relative",
-                    selected === c.id && "bg-muted/60",
-                    unread && !needsReview && "bg-emerald-500/5 hover:bg-emerald-500/10 border-l-4 border-l-emerald-500",
-                    needsReview && !urgentRedelivery && "bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-l-sky-500",
-                    urgentRedelivery && "bg-red-500/5 hover:bg-red-500/10 border-l-4 border-l-red-500",
+                    "w-full text-left px-4 py-3.5 border-b border-border/60 transition-colors flex gap-3.5 relative",
+                    selected === c.id
+                      ? "bg-emerald-500/10 border-l-4 border-l-emerald-500"
+                      : cn(
+                          "hover:bg-muted/40",
+                          unread && !needsReview && "bg-emerald-500/5 hover:bg-emerald-500/10 border-l-4 border-l-emerald-500",
+                          needsReview && !urgentRedelivery && "bg-sky-500/5 hover:bg-sky-500/10 border-l-4 border-l-sky-500",
+                          urgentRedelivery && "bg-red-500/5 hover:bg-red-500/10 border-l-4 border-l-red-500",
+                        ),
                   )}
                 >
                   <div className="relative shrink-0">
@@ -2227,14 +2712,15 @@ export default function WhatsappInbox() {
                           </span>
                         )
                       )}
-                      {followUp && (
+                      {stageMeta && (
                         <span
-                          className="inline-flex items-center gap-0.5 h-5 px-1.5 rounded-full bg-amber-500 text-white text-[9px] font-bold shrink-0 uppercase tracking-wide"
-                          aria-label="Delivery follow-up sent"
-                          title="An automated delivery-status follow-up message was sent for this order"
+                          className={cn(
+                            "inline-flex items-center gap-1 h-5 px-1.5 rounded-full border text-[9px] font-semibold shrink-0",
+                            stageMeta.badgeCls,
+                          )}
                         >
-                          <Truck className="h-2.5 w-2.5" />
-                          Follow Up
+                          <stageMeta.icon className="h-2.5 w-2.5" />
+                          {stageMeta.label}
                         </span>
                       )}
                       {unread && (
@@ -2264,9 +2750,9 @@ export default function WhatsappInbox() {
           </div>
         </aside>
 
-        {/* RIGHT PANEL — hidden on mobile when no conversation selected */}
+        {/* CENTER PANEL (chat) — hidden on mobile when no conversation selected */}
         <section className={cn(
-          "col-span-12 md:col-span-8 lg:col-span-9 min-h-0 flex-col bg-background/20",
+          "col-span-12 md:col-span-8 lg:col-span-6 min-h-0 flex-col bg-background/20",
           selected ? "flex" : "hidden md:flex"
         )}>
           {!conv ? (
@@ -2412,133 +2898,68 @@ export default function WhatsappInbox() {
                 </div>
 
                 <div className="flex w-full md:w-auto items-center justify-end gap-1 pl-10 md:pl-0">
-                {/* Mark as resolved (only when conversation needs review).
-                    "Arrange Delivery — Done" for the urgent redelivery case
-                    (customer confirmed they still want it after a failed
-                    attempt) — same resolve flow, clearer call to action. */}
-                {conv?.status === "manual_review_needed" && (
-                  conv.labels?.includes("urgent_redelivery") ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setResolveOpen(true)}
-                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-red-500/30 bg-red-500/10 text-red-600 hover:bg-red-500/20 hover:text-red-700 dark:text-red-400"
-                      title="Mark redelivery as arranged"
-                    >
-                      <Truck className="h-3.5 w-3.5" />
-                      <span className="hidden md:inline">Arrange Delivery — Done</span>
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setResolveOpen(true)}
-                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-sky-500/30 bg-sky-500/10 text-sky-600 hover:bg-sky-500/20 hover:text-sky-700 dark:text-sky-400"
-                      title="Mark this conversation as resolved"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span className="hidden md:inline">Mark Resolved</span>
-                    </Button>
-                  )
-                )}
+                {/* Call customer */}
+                <Button
+                  asChild
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                  title="Call customer"
+                >
+                  <a href={`tel:${conv.customer_phone}`}>
+                    <Phone className="h-4 w-4" />
+                  </a>
+                </Button>
 
-                {/* Force to Agent — hand the order off to the call-center queue.
-                    Locked whenever the order is no longer in the fresh,
-                    undecided WhatsApp state (new_wts/new): either a
-                    confirmation agent currently owns it (order.agent_id set —
-                    covers "actively claimed right now" and "postponed but
-                    still owned by them"), or a real decision was already
-                    recorded on it (confirmed/cancelled/no_answer/etc) even if
-                    that happened through a path that never set agent_id
-                    (e.g. a direct status edit that skipped the claim/lock
-                    step). Either way, Force to Agent must never be able to
-                    yank a decided/owned order back to "new". Falls back to
-                    the whatsapp_status flag only for the remaining case: it
-                    was force-sent before, then released, but never actually
-                    re-claimed or decided. */}
-                {conv?.order_id && (
-                  order?.agent_id || (order?.confirmation_status && !["new_wts", "new"].includes(order.confirmation_status)) ? (
+                {/* Customer & order details — a persistent column at lg+, a
+                    Sheet below that (the panel content itself isn't duplicated,
+                    see rightPanelBody below). */}
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground lg:hidden"
+                  title="Customer & order details"
+                  onClick={() => setRightPanelOpen(true)}
+                >
+                  <Info className="h-4 w-4" />
+                </Button>
+
+                {/* AI controls — functional (real ai_enabled toggle + a one-shot
+                    "reply now" trigger), just tucked into an overflow menu
+                    instead of being large top-level header buttons. Force to
+                    Agent lives only in the Quick Actions card now. */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <Button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled
-                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 opacity-90 disabled:opacity-90"
-                      title="This order already went to a confirmation agent"
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                      title="More options"
                     >
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span className="hidden md:inline">Already with Agent</span>
+                      <MoreVertical className="h-4 w-4" />
                     </Button>
-                  ) : order?.whatsapp_status === "handed_to_agent" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled
-                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 opacity-90 disabled:opacity-90"
-                      title="Already sent to the agent queue"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      <span className="hidden md:inline">Sent to Agent</span>
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={forceToAgent}
-                      disabled={forcingAgent}
-                      className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-orange-500/30 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 hover:text-orange-700 dark:text-orange-400"
-                      title="Stop AI and send this order to the agent queue"
-                    >
-                      {forcingAgent ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      AI Assistant
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onClick={toggleAi}>
+                      {aiEnabled ? <BotOff className="h-4 w-4 mr-2" /> : <Bot className="h-4 w-4 mr-2" />}
+                      {aiEnabled ? "Turn AI off" : "Turn AI on"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={forceAiReply} disabled={forcingAi}>
+                      {forcingAi ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
-                        <UserPlus className="h-3.5 w-3.5" />
+                        <Sparkles className="h-4 w-4 mr-2" />
                       )}
-                      <span className="hidden md:inline">Force to Agent</span>
-                    </Button>
-                  )
-                )}
-
-                {/* AI auto-reply toggle */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleAi}
-                  className={cn(
-                    "h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium",
-                    aiEnabled
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:text-emerald-700 dark:text-emerald-400"
-                      : "border-rose-500/30 bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 hover:text-rose-700 dark:text-rose-400",
-                  )}
-                  title={aiEnabled ? "AI is replying — click to stop" : "AI is stopped — click to enable"}
-                >
-                  {aiEnabled ? <Bot className="h-3.5 w-3.5" /> : <BotOff className="h-3.5 w-3.5" />}
-                  <span className="hidden md:inline">{aiEnabled ? "AI On" : "AI Off"}</span>
-                </Button>
-
-                {/* Force AI — manually trigger an immediate AI reply */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={forceAiReply}
-                  disabled={forcingAi}
-                  className="h-8 w-8 sm:w-auto shrink-0 gap-1.5 rounded-full p-0 sm:px-3 text-xs font-medium border-violet-500/30 bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 hover:text-violet-700 dark:text-violet-400"
-                  title="Force AI to read the conversation and reply now"
-                >
-                  {forcingAi ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-3.5 w-3.5" />
-                  )}
-                  <span className="hidden md:inline">Force AI</span>
-                </Button>
-
+                      Force AI reply now
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 </div>
 
                 {/* Status indicators removed per request */}
@@ -2614,6 +3035,25 @@ export default function WhatsappInbox() {
                                 : "bg-card border border-border rounded-bl-sm",
                             )}
                           >
+                            {/* Quoted reply preview — shown when the customer swiped-to-reply
+                                on a specific earlier message (Meta's context.id, already stored
+                                verbatim in payload on insert; resolved against loaded messages). */}
+                            {(() => {
+                              const quoted = quotedMessageFor(m);
+                              if (!quoted) return null;
+                              return (
+                                <div
+                                  className={cn(
+                                    "mb-1.5 rounded-md border-l-2 px-2 py-1 text-xs truncate",
+                                    isOut
+                                      ? "border-white/40 bg-white/10 text-white/80"
+                                      : "border-emerald-500/50 bg-muted/60 text-muted-foreground",
+                                  )}
+                                >
+                                  {quotedPreviewText(quoted)}
+                                </div>
+                              );
+                            })()}
                             {isTemplate && (
                               <div
                                 className={cn(
@@ -2903,33 +3343,6 @@ export default function WhatsappInbox() {
 
                 {tab === "reply" ? (
                   <div className="space-y-1.5">
-                    {/* AI suggestions chips */}
-                    {aiSuggestions.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 p-1.5 rounded-md bg-violet-500/5 border border-violet-500/20">
-                        <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-violet-500 w-full">
-                          <Sparkles className="h-3 w-3" /> AI suggestions
-                          <button
-                            onClick={() => setAiSuggestions([])}
-                            className="ml-auto opacity-70 hover:opacity-100"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </div>
-                        {aiSuggestions.map((s, i) => (
-                          <button
-                            key={i}
-                            onClick={() => {
-                              setDraft(s);
-                              setAiSuggestions([]);
-                            }}
-                            className="text-xs px-2.5 py-1 rounded-md bg-card border border-border hover:bg-muted transition-colors text-left max-w-full"
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
                     {/* Single-row composer: icons | textarea | send (WhatsApp-style) */}
                     <div className="flex items-end gap-2">
                       {/* Inline icon toolbar */}
@@ -2965,39 +3378,16 @@ export default function WhatsappInbox() {
                           </PopoverContent>
                         </Popover>
 
-                        {/* Image */}
-                        <input
-                          ref={imageInputRef}
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="hidden"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) uploadAndSend(f, "image");
-                            e.target.value = "";
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          disabled={windowExpired || uploadingMedia}
-                          title="Send image"
-                          onClick={() => imageInputRef.current?.click()}
-                        >
-                          <Camera className="h-4 w-4" />
-                        </Button>
-
-                        {/* Document */}
+                        {/* Attach — a single WhatsApp-style paperclip for both
+                            images and documents, auto-detected from the
+                            picked file's type instead of two separate icons. */}
                         <input
                           ref={fileInputRef}
                           type="file"
                           className="hidden"
                           onChange={(e) => {
                             const f = e.target.files?.[0];
-                            if (f) uploadAndSend(f, "document");
+                            if (f) uploadAndSend(f, f.type.startsWith("image/") ? "image" : "document");
                             e.target.value = "";
                           }}
                         />
@@ -3007,7 +3397,7 @@ export default function WhatsappInbox() {
                           variant="ghost"
                           className="h-8 w-8 text-muted-foreground hover:text-foreground"
                           disabled={windowExpired || uploadingMedia}
-                          title="Attach file"
+                          title="Attach photo or file"
                           onClick={() => fileInputRef.current?.click()}
                         >
                           <Paperclip className="h-4 w-4" />
@@ -3029,63 +3419,6 @@ export default function WhatsappInbox() {
                         >
                           {recording ? <Square className="h-3.5 w-3.5 fill-current" /> : <Mic className="h-4 w-4" />}
                         </Button>
-
-                        {/* AI suggest */}
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-violet-500 hover:text-violet-600 hover:bg-violet-500/10"
-                          disabled={aiLoading || messages.length === 0}
-                          title="AI suggestions"
-                          onClick={fetchAiSuggestions}
-                        >
-                          {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                        </Button>
-
-                        {/* Template */}
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                          title="Send template"
-                          onClick={() => setTplOpen(true)}
-                        >
-                          <FileText className="h-4 w-4" />
-                        </Button>
-
-                        {/* Quick replies */}
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                              disabled={windowExpired}
-                              title="Quick replies"
-                            >
-                              <MessageSquare className="h-4 w-4" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-72 p-2" side="top" align="start">
-                            <div className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground px-2 py-1">
-                              Quick Replies
-                            </div>
-                            <div className="space-y-0.5">
-                              {quickReplies.map((q, i) => (
-                                <button
-                                  key={i}
-                                  onClick={() => setDraft(q)}
-                                  className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted transition-colors"
-                                >
-                                  {q}
-                                </button>
-                              ))}
-                            </div>
-                          </PopoverContent>
-                        </Popover>
                       </div>
 
                       {/* Textarea */}
@@ -3118,16 +3451,17 @@ export default function WhatsappInbox() {
                         </Button>
                       ) : (
                         <Button
+                          size="icon"
                           onClick={sendReply}
                           disabled={sending || uploadingMedia || !draft.trim()}
-                          className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          className="shrink-0 h-10 w-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                          title="Send"
                         >
                           {sending || uploadingMedia ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            <Send className="h-4 w-4 mr-1" />
+                            <Send className="h-4 w-4" />
                           )}
-                          Send
                         </Button>
                       )}
                     </div>
@@ -3161,7 +3495,19 @@ export default function WhatsappInbox() {
             </>
           )}
         </section>
+
+        {/* RIGHT PANEL (customer/order) — persistent column at lg+ only;
+            below that it's reached via the header's "details" button (Sheet). */}
+        <aside className="hidden lg:flex lg:col-span-3 border-l border-border flex-col bg-background/40 min-h-0 overflow-y-auto">
+          {rightPanelBody}
+        </aside>
       </div>
+
+      <Sheet open={rightPanelOpen} onOpenChange={setRightPanelOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-sm p-0 overflow-y-auto">
+          {rightPanelBody}
+        </SheetContent>
+      </Sheet>
 
       <SendTemplateModal
         open={tplOpen}
