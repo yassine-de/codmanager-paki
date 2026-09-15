@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-14 - Anwar Bounasser
+Last manual update: 2026-09-15 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-15 - Anwar Bounasser
+- Commit: `178c929`
+- Area: WhatsApp / UI
+- Change: Full redesign of the WhatsApp Inbox into a persistent 3-column workspace (conversation list / chat / customer & order panel), replacing the old 2-column layout with an info dialog. New order-status-based primary filter pills (All/Confirmation/Order Shipped/Out for Delivery/Failed Attempt), with everything previously in the filter bar (Unread/Needs Review/Follow Up/AI On-Off/With-No Order/24h Window/Old Conversations) moved into an "advanced filters" popover rather than removed. AI On/Off and "Force AI reply now" moved from large header buttons into a small overflow menu (still fully functional); "Force to Agent" now lives only in a new Quick Actions card. New right panel: Customer Info (with total/delivered/customer-since, computed via a lightweight frontend-only query), Recent Orders, Quick Actions (Mark Resolved/Add Note/Force to Agent/Send Template), Notes, and Tags (reusing the existing `whatsapp_conversations.labels` column). Message bubbles now show a quoted-reply preview when a customer swipes-to-reply on WhatsApp. Composer simplified to match WhatsApp Web (merged camera+paperclip into one attach control, round send button, dropped the AI-suggest/quick-reply/inline-template icons).
+- Reason: User supplied a detailed spec asking for a premium WhatsApp-Web-style redesign of the Inbox, then iterated with direct feedback removing several elements (Create Order and Call Customer from Quick Actions, the amber "Follow Up" list badge, the Tags card's add-tag input, and the extra composer icons) to keep the UI tight.
+- Notes: No backend changes — no new tables/columns/RPCs. Two new client-side read queries against the existing `orders` table (bulk order-status lookup for the filter pills, per-customer history for the Customer Info card) plus reuse of the existing `labels` column for Tags and the existing `payload.context.id` (already stored verbatim by the webhook) for quoted replies. Clean `tsc --noEmit`; `eslint` on `WhatsappInbox.tsx` at 45 problems (43 errors, 2 warnings) — one fewer than this file's established 46-problem baseline (removed more dead code than was added). Could not visually verify via login (no credentials this session) — verified via tsc/eslint/dev-server console only.
 
 ### 2026-09-14 - Anwar Bounasser
 - Commit: `b2b7f11`
