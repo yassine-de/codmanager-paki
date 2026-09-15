@@ -211,6 +211,34 @@ const AgentConfirmedOrders = () => {
         .eq("id", editOrder.id);
       if (error) throw error;
 
+      // Keep order_items in sync — courier label generation (buildOrderDetail
+      // in shipping-sync/mnp-shipping-sync) and other screens prefer
+      // order_items over the flat orders columns whenever items exist, so an
+      // edit here must reach both or the courier ends up printing the
+      // customer's OLD product. Only for the common single-item order —
+      // a genuine multi-product order's items don't map onto this single
+      // product_name/price/quantity edit.
+      if (
+        editForm.product_name.trim() !== editOrder.product_name ||
+        editForm.price !== editOrder.price ||
+        editForm.quantity !== editOrder.quantity
+      ) {
+        const { data: items } = await supabase
+          .from("order_items" as any)
+          .select("id")
+          .eq("order_id", editOrder.id);
+        if (items && items.length === 1) {
+          await supabase
+            .from("order_items" as any)
+            .update({
+              product_name: editForm.product_name.trim(),
+              unit_price: editForm.price,
+              quantity: editForm.quantity,
+            })
+            .eq("id", (items[0] as any).id);
+        }
+      }
+
       // Log changed fields
       if (userId) {
         const changes: { field: string; old_val: string; new_val: string }[] = [];
