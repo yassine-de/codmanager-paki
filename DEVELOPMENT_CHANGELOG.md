@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-15 - Anwar Bounasser
+- Commit: `3b8785a`
+- Area: Orders / Shipping / Database
+- Change: `agent_submit_order()` only ever updated `orders.product_name/price/quantity/total_amount`, never `order_items` — so any consumer that prefers `order_items` over the flat columns (`shipping-sync`/`mnp-shipping-sync`'s `buildOrderDetail()`, which feeds the courier's printed shipping label; `WhatsappInbox.tsx`'s `getOrderItems()`; `Orders.tsx`'s `mapOrderProducts()`) kept showing the customer's ORIGINAL product after an agent changed it during confirmation. Now syncs `order_items` right after a successful `orders` update, but only when the order has exactly one item row (the common case; a genuine multi-product order's items don't map cleanly onto this RPC's single product/price params, so those are left untouched).
+- Reason: User spotted a real printed PostEx shipping label for order AB-4264 showing "Cable type C x 1" even though the order's confirmation history clearly showed the agent had changed the product to "GEDI Luxury" (with a price change from 3600 to 8000) during confirmation.
+- Notes: Verified live — `orders.product_name` was correctly "GEDI Luxury" but `order_items` still had "Cable type C"/3600, confirming the label-generation code was reading the stale table. Manually corrected AB-4264's `order_items` row to match (logged as a `manual_status_correction` in `order_history`) — the already-printed physical label itself still needs a manual reprint, this only fixes the data going forward. `total_price` on `order_items` is a generated column; the fix updates `product_name`/`quantity`/`unit_price` only.
+
+### 2026-09-15 - Anwar Bounasser
 - Commit: `6db32f2`
 - Area: WhatsApp / Shipping / Database
 - Change: (1) The Inbox's "Out for Delivery" filter pill was matching `delivery_status === "out_for_delivery"`, a value that never actually occurs in this dataset — the real value is `with_courier`. Fixed to match reality. (2) `carrier-status-sync` (PostEx)'s `normalizeStatus()` only recognized the exact text "out for delivery", but PostEx's real raw status for that stage is "Enroute for Delivery" — a different phrase entirely, so it silently fell through to generic in_transit/"shipped" instead of "with_courier". Broadened the match (substring, same style `mnp-carrier-status-sync` already uses).
