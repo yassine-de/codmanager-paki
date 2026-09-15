@@ -54,7 +54,11 @@ function normalizeStatus(status?: string | null, code?: string | null) {
   if (["0002", "0006", "0007"].includes(messageCode) || value === "returned") return "returned";
   if (messageCode === "0013" || value === "attempted") return "failed_attempt";
   if (value === "out for return") return "ready_for_return";
-  if (value === "out for delivery") return "out_for_delivery";
+  // PostEx's real raw text for this stage is "Enroute for Delivery" (confirmed
+  // live — 102 shipments), not "Out For Delivery" as the old exact match
+  // assumed; that mismatch silently left these riders'-out-with-the-parcel
+  // orders bucketed as generic in_transit/"shipped" instead of with_courier.
+  if (value.includes("out for delivery") || value.includes("enroute for delivery")) return "out_for_delivery";
   if (["0003", "0004", "0015", "0018", "15", "18"].includes(messageCode)) return "in_transit";
   if (messageCode === "0001") return "booked";
   if (

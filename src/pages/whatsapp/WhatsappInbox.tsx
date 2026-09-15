@@ -962,13 +962,15 @@ export default function WhatsappInbox() {
   );
   // "Confirmation" = still undecided; the other three are delivery-pipeline
   // stages further along. A conversation with no linked order never matches
-  // any of these — it only shows under "All".
+  // any of these — it only shows under "All". Verified live against real
+  // delivery_status values: this app has no literal "out_for_delivery"
+  // value — "with_courier" is what it actually uses for that stage.
   function orderStage(orderId: string | null): "confirmation" | "shipped" | "out_for_delivery" | "failed_attempt" | null {
     if (!orderId) return null;
     const o = orderStatusByOrderId.get(orderId);
     if (!o) return null;
     if (o.delivery_status === "failed_attempt") return "failed_attempt";
-    if (o.delivery_status === "out_for_delivery") return "out_for_delivery";
+    if (o.delivery_status === "with_courier") return "out_for_delivery";
     if (o.delivery_status === "shipped") return "shipped";
     if (!["confirmed", "cancelled"].includes(o.confirmation_status || "")) return "confirmation";
     return null;
