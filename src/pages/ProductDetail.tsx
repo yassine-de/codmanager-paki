@@ -320,6 +320,7 @@ export default function ProductDetail() {
         <KPICard
           label="Delivered"
           value={stats?.delivered ?? 0}
+          suffix={`= ${realDelivered} pcs`}
           percentage={stats?.deliveryRate ?? "0.0"}
         />
         <KPICard
