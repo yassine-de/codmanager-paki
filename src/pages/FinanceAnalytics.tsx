@@ -14,6 +14,102 @@ import { Badge } from "@/components/ui/badge";
 
 type RevenueTab = "shipping" | "call_center" | "cod" | "sourcing";
 
+// Supabase/PostgREST caps a single select at 1000 rows — these queries had
+// no .range() at all, so every revenue number on this page was silently
+// computed from only the most recent ~1000 orders/invoices/sourcing
+// requests once any of those tables passed that cap (confirmed live: orders
+// alone is well past 5,000). Paginate through the full table, same pattern
+// already used on every other analytics page (e.g. SellerAnalytics.tsx).
+const FINANCE_PAGE_SIZE = 1000;
+
+type FinanceOrderRow = {
+  id: string;
+  order_id: string;
+  confirmation_status: string | null;
+  delivery_status: string | null;
+  product_name: string | null;
+  seller_id: string | null;
+  price: number | null;
+  last_price: number | null;
+  quantity: number | null;
+  total_amount: number | null;
+  shipping_cost: number | null;
+  weight: number | null;
+  invoice_id: string | null;
+  created_at: string;
+};
+
+type FinanceInvoiceRow = { id: string; status: string; invoice_number: string; paid_at: string | null };
+
+type FinanceSourcingRow = {
+  id: string;
+  display_id: string | null;
+  seller_id: string | null;
+  product_name: string | null;
+  quantity: number | null;
+  unit_price: number | null;
+  shipping_cost: number | null;
+  total_price: number | null;
+  landed_price: number | null;
+  seller_price: number | null;
+  payment_status: string | null;
+  seller_validated: boolean | null;
+  status: string | null;
+  created_at: string;
+};
+
+async function fetchAllFinanceOrders(): Promise<FinanceOrderRow[]> {
+  const rows: FinanceOrderRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, price, last_price, quantity, total_amount, shipping_cost, weight, invoice_id, created_at")
+      .order("created_at", { ascending: false })
+      .range(from, from + FINANCE_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as FinanceOrderRow[];
+    rows.push(...page);
+    if (page.length < FINANCE_PAGE_SIZE) break;
+    from += FINANCE_PAGE_SIZE;
+  }
+  return rows;
+}
+
+async function fetchAllFinanceInvoices(): Promise<FinanceInvoiceRow[]> {
+  const rows: FinanceInvoiceRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("id, status, invoice_number, paid_at")
+      .range(from, from + FINANCE_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as FinanceInvoiceRow[];
+    rows.push(...page);
+    if (page.length < FINANCE_PAGE_SIZE) break;
+    from += FINANCE_PAGE_SIZE;
+  }
+  return rows;
+}
+
+async function fetchAllFinanceSourcingRequests(): Promise<FinanceSourcingRow[]> {
+  const rows: FinanceSourcingRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("sourcing_requests")
+      .select("id, display_id, seller_id, product_name, quantity, unit_price, shipping_cost, total_price, landed_price, seller_price, payment_status, seller_validated, status, created_at")
+      .range(from, from + FINANCE_PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = (data || []) as FinanceSourcingRow[];
+    rows.push(...page);
+    if (page.length < FINANCE_PAGE_SIZE) break;
+    from += FINANCE_PAGE_SIZE;
+  }
+  return rows;
+}
+
 export default function FinanceAnalytics() {
   const [sellerFilter, setSellerFilter] = useState<string>("all");
   const [productFilter, setProductFilter] = useState<string>("all");
@@ -23,25 +119,12 @@ export default function FinanceAnalytics() {
 
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["finance-analytics-orders"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select("id, order_id, confirmation_status, delivery_status, product_name, seller_id, price, last_price, quantity, total_amount, shipping_cost, weight, invoice_id, created_at")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
+    queryFn: fetchAllFinanceOrders,
   });
 
   const { data: invoices = [] } = useQuery({
     queryKey: ["finance-invoices"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("id, status, invoice_number, paid_at");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: fetchAllFinanceInvoices,
   });
 
   const { data: profiles = [] } = useQuery({
@@ -64,13 +147,7 @@ export default function FinanceAnalytics() {
 
   const { data: sourcingRequests = [] } = useQuery({
     queryKey: ["finance-sourcing"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sourcing_requests")
-        .select("id, display_id, seller_id, product_name, quantity, unit_price, shipping_cost, total_price, landed_price, seller_price, payment_status, seller_validated, status, created_at");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: fetchAllFinanceSourcingRequests,
   });
 
   const { data: rateSettingsFinance = [] } = useQuery({
