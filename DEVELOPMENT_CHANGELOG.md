@@ -22,6 +22,27 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-17 - Anwar Bounasser
+- Commit: (live data correction, no code change)
+- Area: Orders / Database
+- Change: Bulk-corrected `order_items` on 71 orders where it had drifted from the authoritative `orders` row (product name, quantity, and/or price) — the exact same class of staleness as the AB-4264 fix earlier this session, just orders confirmed before that fix (`agent_submit_order`'s order_items sync) existed.
+- Reason: User spotted order YH-243 showing inconsistent quantity/total across different views (Edit Order modal showed qty 1 / 6500 PKR; Order History clearly showed an agent upsold it to qty 2 / 13000 PKR on 2026-09-14, before the sync fix shipped). Checked how widespread this was and found 70 other affected orders.
+- Notes: Each correction logged to `order_history` (`action_type='manual_status_correction'`, `field_changed='order_items_sync'`) with the old vs new `product x qty @ price` string, for traceability. Verified live: 0 remaining mismatches across the table afterward.
+
+### 2026-09-17 - Anwar Bounasser
+- Commit: `63fe492`
+- Area: Products / UI
+- Change: The product page's "Delivered" KPI card now also shows `= X pcs` (delivered units, summed by quantity) alongside the delivered order count.
+- Reason: User pointed out the "Delivered 32" figure only counts orders, not pieces — an order with quantity 2 or 3 should count for more than one unit. The piece count (`realDelivered`) was already computed a few lines above (it already drives the Inventory bar's "Delivered" figure) — just not shown on this card.
+- Notes: No new `tsc`/`eslint` issues.
+
+### 2026-09-17 - Anwar Bounasser
+- Commit: `caa9fba`
+- Area: Orders / Agent
+- Change: `create_manual_order_with_items()` (used when an agent creates a brand-new order via the "Create Order" modal, not confirming an existing one) never set `orders.is_upsell`. Now sets it when the order's total quantity is more than 1.
+- Reason: User asked for agent-created orders with quantity > 1 to count as upsell too, matching `agent_submit_order()`'s confirm-flow behavior (which flags `is_upsell` when the confirmed quantity exceeds the order's original quantity — there's no "original quantity" for a brand-new order, so total qty > 1 is the equivalent signal).
+- Notes: Migration `20260917100000_manual_order_is_upsell.sql` applied live. No new `tsc`/`eslint` issues.
+
+### 2026-09-17 - Anwar Bounasser
 - Commit: `19bc247`
 - Area: Orders / Shipping
 - Change: The Orders page's "Sub Status" filter dropdown builds its option list from shipments, but was picking `normalized_status` OR `carrier_status` per row (preferring `normalized_status`) even though the filter itself matches on either column. Now collects both from every shipment row.
