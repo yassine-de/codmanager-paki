@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-17 - Anwar Bounasser
+- Commit: `19bc247`
+- Area: Orders / Shipping
+- Change: The Orders page's "Sub Status" filter dropdown builds its option list from shipments, but was picking `normalized_status` OR `carrier_status` per row (preferring `normalized_status`) even though the filter itself matches on either column. Now collects both from every shipment row.
+- Reason: User reported the dropdown should show all of PostEx's real sub-statuses. Verified live: 76 distinct raw `carrier_status` values exist (PostEx's city-specific transit/departure/return messages, attempt reasons, etc.) vs only 8 `normalized_status` values — since most rows have `normalized_status` set, the dropdown was showing almost none of the real ones.
+- Notes: Also dropped the old "most recent 3000" sampling limit — the `shipments` table is only a few thousand rows, so a plain unrestricted select reliably covers every value going forward too. No new `tsc`/`eslint` issues.
+
+### 2026-09-17 - Anwar Bounasser
 - Commit: `26fa9e0`
 - Area: Orders / Confirmation
 - Change: The "Confirmed Orders" portal's order list and search box only ever covered orders where the currently logged-in agent is `agent_id`/`original_agent_id`, or has an `order_history` entry — i.e. "orders I personally handled," not a global search. Added a DB-backed fallback (same pattern as the WhatsApp Inbox search): when the personal list has no local match for the typed query, it now searches every agent's orders by order ID / customer name / phone.
