@@ -69,9 +69,12 @@ const AgentDashboard = () => {
       return all;
     },
     enabled: !!userId,
-    staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    // staleTime: 0 + refetchOnMount: "always" + refetchOnWindowFocus: true
+    // forced this to refetch in FULL on every single mount and every tab
+    // focus, even seconds after the last identical fetch — on a page agents
+    // load constantly through their shift. Falls back to the app-wide
+    // default staleTime (30s, see App.tsx) instead: still refreshes on
+    // focus/remount, just not when the data is already fresh.
   });
 
   // Build a stable signature of treated order IDs so the orders query refetches
@@ -123,15 +126,23 @@ const AgentDashboard = () => {
 
       let extra: any[] = [];
       if (remainingIds.length > 0) {
-        // Chunk to avoid URL length limits
+        // Chunk to avoid URL length limits — independent chunks, so fire
+        // them together instead of awaiting one at a time.
         const chunkSize = 200;
+        const chunks: string[][] = [];
         for (let i = 0; i < remainingIds.length; i += chunkSize) {
-          const chunk = remainingIds.slice(i, i + chunkSize);
-          const { data, error } = await supabase
-            .from("orders")
-            .select("id, order_id, confirmation_status, delivery_status, product_name, price, quantity, total_amount, confirmed_at, created_at, updated_at, last_attempt_at, last_activity_at")
-            .in("order_id", chunk)
-            .neq("confirmation_status", "new");
+          chunks.push(remainingIds.slice(i, i + chunkSize));
+        }
+        const chunkResults = await Promise.all(
+          chunks.map((chunk) =>
+            supabase
+              .from("orders")
+              .select("id, order_id, confirmation_status, delivery_status, product_name, price, quantity, total_amount, confirmed_at, created_at, updated_at, last_attempt_at, last_activity_at")
+              .in("order_id", chunk)
+              .neq("confirmation_status", "new"),
+          ),
+        );
+        for (const { data, error } of chunkResults) {
           if (error) throw error;
           extra.push(...(data || []));
         }
@@ -140,9 +151,7 @@ const AgentDashboard = () => {
       return [...assigned, ...extra];
     },
     enabled: !!userId,
-    staleTime: 0,
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    // See orderHistory above — same rationale, falls back to the app-wide default staleTime.
   });
 
   // Shared with the ranking query below so "Your Ranking" always agrees with
@@ -192,24 +201,31 @@ const AgentDashboard = () => {
     queryFn: async () => {
       const orderIds = Array.from(new Set(agentOrders.map((o: any) => o.order_id)));
       if (orderIds.length === 0) return [];
-      const all: Array<{ order_id: string }> = [];
       const chunkSize = 200;
+      const chunks: string[][] = [];
       for (let i = 0; i < orderIds.length; i += chunkSize) {
-        const chunk = orderIds.slice(i, i + chunkSize);
-        const { data, error } = await supabase
-          .from("order_history")
-          .select("order_id")
-          .eq("field_changed", "confirmation_status")
-          .neq("changed_by", userId)
-          .not("changed_by", "is", null)
-          .in("order_id", chunk);
+        chunks.push(orderIds.slice(i, i + chunkSize));
+      }
+      const chunkResults = await Promise.all(
+        chunks.map((chunk) =>
+          supabase
+            .from("order_history")
+            .select("order_id")
+            .eq("field_changed", "confirmation_status")
+            .neq("changed_by", userId)
+            .not("changed_by", "is", null)
+            .in("order_id", chunk),
+        ),
+      );
+      const all: Array<{ order_id: string }> = [];
+      for (const { data, error } of chunkResults) {
         if (error) throw error;
         all.push(...(data || []));
       }
       return all;
     },
     enabled: !!userId && agentOrders.length > 0,
-    staleTime: 0,
+    // See orderHistory above — falls back to the app-wide default staleTime.
   });
   const otherAgentHistoryByOrder = useMemo(() => {
     const set = new Set<string>();
