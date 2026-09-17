@@ -71,15 +71,32 @@ export default function AgentMonitoring() {
   // Fetch activity log — same PKT-aware date range logic as the rest of the
   // app (DatePresetFilter), instead of a naive "last N×24h from right now"
   // window that didn't line up with real calendar-day/PKT boundaries.
+  // Paginated: the default "today" preset usually stays under the
+  // PostgREST 1000-row cap, but "All time"/a wide custom range doesn't —
+  // agent_activity_log is already at 15,000+ rows — and this had no
+  // .range() at all, so it silently truncated to the most recent ~1000.
   const { data: activities = [], isLoading } = useQuery({
     queryKey: ["agent-activity-log", dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
     queryFn: async () => {
-      let query = supabase.from("agent_activity_log").select("*").order("created_at", { ascending: true });
-      if (dateRange?.from) query = query.gte("created_at", dateRange.from.toISOString());
-      if (dateRange?.to) query = query.lte("created_at", dateRange.to.toISOString());
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []) as Activity[];
+      const PAGE_SIZE = 1000;
+      const rows: Activity[] = [];
+      let from = 0;
+      while (true) {
+        let query = supabase
+          .from("agent_activity_log")
+          .select("id, agent_id, activity_type, order_id, metadata, created_at")
+          .order("created_at", { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+        if (dateRange?.from) query = query.gte("created_at", dateRange.from.toISOString());
+        if (dateRange?.to) query = query.lte("created_at", dateRange.to.toISOString());
+        const { data, error } = await query;
+        if (error) throw error;
+        const page = (data || []) as Activity[];
+        rows.push(...page);
+        if (page.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+      }
+      return rows;
     },
     refetchInterval: 30000,
   });
