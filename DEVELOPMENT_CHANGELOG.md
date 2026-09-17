@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-15 - Anwar Bounasser
+Last manual update: 2026-09-17 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-17 - Anwar Bounasser
+- Commit: `26fa9e0`
+- Area: Orders / Confirmation
+- Change: The "Confirmed Orders" portal's order list and search box only ever covered orders where the currently logged-in agent is `agent_id`/`original_agent_id`, or has an `order_history` entry — i.e. "orders I personally handled," not a global search. Added a DB-backed fallback (same pattern as the WhatsApp Inbox search): when the personal list has no local match for the typed query, it now searches every agent's orders by order ID / customer name / phone.
+- Reason: Confirmation team reported that searching a customer's phone number after a callback sometimes shows no order, even though it exists. Root-caused: with 6 active confirmation agents (3,319 decided orders total, verified live), a callback landing with a different agent than the one who originally confirmed the order is routine — and that agent's search was scoped to their own orders only.
+- Notes: Clean `tsc --noEmit`. `eslint` +1 (`any` on the new search-results state, matching this file's existing convention for order objects). No RLS/ownership change — editing an order found this way already worked at the DB level before this fix (this repo's `orders` table has no RLS), only *finding* it was the gap.
 
 ### 2026-09-15 - Anwar Bounasser
 - Commit: `532b7aa`
