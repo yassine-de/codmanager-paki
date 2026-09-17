@@ -456,18 +456,22 @@ export default function Orders() {
         setAgentOptions(agentIds.map((id: string) => ({ id, name: nameOf(id) })).sort((a, b) => a.name.localeCompare(b.name)));
       }
 
-      // Bounded sample of the most recent shipments — the carrier-status vocabulary
-      // is small and fixed, so this reliably covers every value without scanning
-      // the whole shipments table.
-      const { data: recentShipments } = await supabase
+      // The filter itself matches on EITHER column (normalized_status.eq OR
+      // carrier_status.eq, see applyFilters below), so both vocabularies need
+      // to be offered — collapsing each row to just one (picking normalized_status
+      // when present) was hiding the real courier sub-statuses: verified live,
+      // there are 76 distinct raw carrier_status values (PostEx's city-specific
+      // transit/departure/return messages, attempt reasons, etc.) vs only 8
+      // normalized_status values, and most rows have normalized_status set —
+      // so the dropdown was showing almost none of PostEx's actual sub-statuses.
+      // Table is small (a few thousand rows) — no need to sample/limit.
+      const { data: allShipments } = await supabase
         .from("shipments" as any)
-        .select("carrier_status, normalized_status")
-        .order("created_at", { ascending: false })
-        .limit(3000);
+        .select("carrier_status, normalized_status");
       const set = new Set<string>();
-      (recentShipments || []).forEach((s: any) => {
-        const v = s.normalized_status || s.carrier_status;
-        if (v) set.add(v);
+      (allShipments || []).forEach((s: any) => {
+        if (s.normalized_status) set.add(s.normalized_status);
+        if (s.carrier_status) set.add(s.carrier_status);
       });
       if (!cancelled) setSubStatusOptions([...set].sort());
 
