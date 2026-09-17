@@ -77,6 +77,8 @@ const AgentConfirmedOrders = () => {
   const userId = authUser?.id;
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [dbSearchResults, setDbSearchResults] = useState<any[]>([]);
+  const [dbSearching, setDbSearching] = useState(false);
   const [filterConfirmation, setFilterConfirmation] = useState<string>("all");
   const [filterDelivery, setFilterDelivery] = useState<string>("all");
   const [pageSize, setPageSize] = useState(25);
@@ -290,13 +292,45 @@ const AgentConfirmedOrders = () => {
     });
   }, [orders, search, filterConfirmation, filterDelivery]);
 
+  // This page's own order list only covers what THIS agent has personally
+  // handled — but a customer calling back very often reaches a different
+  // agent than whoever confirmed them originally, and that search would
+  // otherwise come up empty even though the order exists. Same fallback
+  // pattern as WhatsApp Inbox's search: only hit the DB, across every
+  // agent's orders, when the personal list has nothing for this query.
+  useEffect(() => {
+    const q = search.trim();
+    if (!q || filteredOrders.length > 0) {
+      setDbSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setDbSearching(true);
+      try {
+        const { data } = await supabase
+          .from("orders")
+          .select("*")
+          .neq("confirmation_status", "new")
+          .or(`order_id.ilike.%${q}%,customer_name.ilike.%${q}%,customer_phone.ilike.%${q}%`)
+          .order("updated_at", { ascending: false })
+          .limit(50);
+        setDbSearchResults(data || []);
+      } finally {
+        setDbSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search, filteredOrders.length]);
+
+  const displayedOrders = search.trim() && filteredOrders.length === 0 ? dbSearchResults : filteredOrders;
+
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [search, filterConfirmation, filterDelivery, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
-  const paginatedOrders = filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.max(1, Math.ceil(displayedOrders.length / pageSize));
+  const paginatedOrders = displayedOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const canEdit = (order: any) => !SHIPPED_STATUSES.includes(order.delivery_status || "");
 
@@ -367,7 +401,9 @@ const AgentConfirmedOrders = () => {
             Treated Orders
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            All orders you've processed — {filteredOrders.length} total
+            {search.trim() && filteredOrders.length === 0
+              ? `Searching all agents' orders — ${displayedOrders.length} match${displayedOrders.length === 1 ? "" : "es"}`
+              : `All orders you've processed — ${displayedOrders.length} total`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -409,7 +445,7 @@ const AgentConfirmedOrders = () => {
       {/* Pagination Controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>Showing {Math.min((currentPage - 1) * pageSize + 1, filteredOrders.length)}–{Math.min(currentPage * pageSize, filteredOrders.length)} of {filteredOrders.length} orders</span>
+          <span>Showing {Math.min((currentPage - 1) * pageSize + 1, displayedOrders.length)}–{Math.min(currentPage * pageSize, displayedOrders.length)} of {displayedOrders.length} orders</span>
           <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
             <SelectTrigger className="h-8 w-[80px] text-xs">
               <SelectValue />
@@ -461,7 +497,13 @@ const AgentConfirmedOrders = () => {
                       Loading...
                     </TableCell>
                   </TableRow>
-                ) : filteredOrders.length === 0 ? (
+                ) : dbSearching ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-12">
+                      Searching all agents' orders…
+                    </TableCell>
+                  </TableRow>
+                ) : displayedOrders.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-12">
                       No orders found
