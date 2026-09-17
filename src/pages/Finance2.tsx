@@ -270,6 +270,16 @@ export default function Finance2() {
 
   const invoiceIds = useMemo(() => invoices.map((invoice) => invoice.id), [invoices]);
 
+  // This fires one get_invoice_summary RPC PER invoice (a real N+1 — each
+  // call does heavy server-side aggregation over that seller's orders). The
+  // proper fix is a batch RPC, but that means faithfully re-deriving this
+  // function's ~28KB of rate/fee/cross-invoice logic in SQL — too much risk
+  // of a subtle financial-calculation bug for right now, especially at the
+  // current invoice count (13, verified live) where the N+1 itself isn't
+  // the bottleneck. What WAS clearly wasteful: with no staleTime, the global
+  // QueryClient default (staleTime: 0) re-ran all N calls on every mount and
+  // every window-focus. Caching this for a few minutes removes that repeat
+  // cost without touching any of the financial computation.
   const { data: summaryMap = {}, isLoading: loadingSummaries } = useQuery({
     queryKey: ["finance2-invoice-summaries", invoiceIds],
     queryFn: async () => {
@@ -280,6 +290,8 @@ export default function Finance2() {
       return Object.fromEntries(entries) as Record<string, InvoiceSummaryResponse>;
     },
     enabled: invoiceIds.length > 0,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const rows = useMemo(() => {
