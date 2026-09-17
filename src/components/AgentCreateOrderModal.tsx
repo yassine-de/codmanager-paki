@@ -196,6 +196,11 @@ export default function AgentCreateOrderModal({ open, onOpenChange, assignedProd
           delivery_status: "booked",
           confirmed_at: nowIso,
           agent_id: authUser.id,
+          // A brand-new order with more than one unit is an upsell just like
+          // an agent raising the quantity during confirmation of an existing
+          // order (see agent_submit_order's didUpsell) — there's no "original
+          // quantity" to compare against here, so total qty > 1 is the signal.
+          is_upsell: totalQty > 1,
         },
         p_items: items.map((item) => {
           const product = products.find((entry) => entry.id === item.productId);
