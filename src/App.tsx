@@ -56,7 +56,23 @@ import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const queryClient = new QueryClient();
+// No defaultOptions meant every useQuery in the app defaulted to
+// staleTime: 0 — so any refetch trigger (mount, window focus, reconnect)
+// re-ran the query even for pages that had just loaded the same data
+// seconds earlier. Most of the app's heaviest queries (analytics/dashboard
+// pages) already paginate through thousands of rows; a 30s staleTime
+// (matching the explicit refetchInterval already used on Dashboard/Follow
+// Ups) means a focus-switch within that window is a no-op instead of a
+// full refetch, without changing what any individual page shows — pages
+// that need faster/slower freshness already set their own staleTime/
+// refetchInterval, which overrides this default.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+    },
+  },
+});
 
 /* Full-page skeleton that mimics sidebar + header + content */
 function AppSkeleton() {
