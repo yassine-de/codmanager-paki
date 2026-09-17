@@ -172,10 +172,6 @@ function getBasisDate(o: DashboardOrder, basis: DateBasis): Date {
   return new Date(basis === "updated" ? o.updated_at : o.created_at);
 }
 
-function isInDay(date: Date, start: Date, nextDay: Date): boolean {
-  return date >= start && date < nextDay;
-}
-
 async function fetchAllDashboardOrders(): Promise<DashboardOrder[]> {
   const rows: DashboardOrder[] = [];
   let from = 0;
@@ -355,52 +351,61 @@ function computeDailyData(orders: DashboardOrder[], numDays: number) {
   // would give wrong results.
   const todayStart = startOfDayPKT(new Date()); // real UTC ≡ midnight PKT today
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const rangeStart = new Date(todayStart.getTime() - (numDays - 1) * MS_PER_DAY);
 
-  const buckets = Array.from({ length: numDays }, (_, i) => {
-    const daysBack = numDays - 1 - i;
-    const start   = new Date(todayStart.getTime() - daysBack * MS_PER_DAY);
-    const nextDay = new Date(start.getTime() + MS_PER_DAY);
-    return { start, nextDay };
-  });
+  // One pass over `orders` bucketing every order into its day index directly,
+  // instead of numDays separate .filter() scans over the full array per
+  // metric (was O(numDays × 4 × orders.length); this is O(orders.length)).
+  const dropped = new Array<number>(numDays).fill(0);
+  const newOrders = new Array<number>(numDays).fill(0);
+  const confirmed = new Array<number>(numDays).fill(0);
+  const delivered = new Array<number>(numDays).fill(0);
+  const shipped = new Array<number>(numDays).fill(0);
 
-  return buckets.map(({ start, nextDay }) => {
+  const dayIndexFor = (d: Date | null): number | null => {
+    if (!d) return null;
+    const idx = Math.floor((d.getTime() - rangeStart.getTime()) / MS_PER_DAY);
+    return idx >= 0 && idx < numDays ? idx : null;
+  };
+
+  for (const o of orders) {
     // Dropped = orders CREATED on this day (created_at)
-    const dropped = orders.filter((o) =>
-      isInDay(new Date(o.created_at), start, nextDay)
-    ).length;
-    const newOrders = orders.filter((o) =>
-      o.confirmation_status === "new" && isInDay(new Date(o.created_at), start, nextDay)
-    ).length;
+    const createdIdx = dayIndexFor(new Date(o.created_at));
+    if (createdIdx !== null) {
+      dropped[createdIdx]++;
+      if (o.confirmation_status === "new") newOrders[createdIdx]++;
+    }
 
     // Confirmed = orders whose confirmation EVENT happened on this day (confirmed_at only — no updated_at fallback)
-    const confirmed = orders.filter((o) => {
-      if (!reachedConfirmedStage(o)) return false;
-      const d = getConfirmationEventDate(o);
-      return d != null && isInDay(d, start, nextDay);
-    }).length;
+    if (reachedConfirmedStage(o)) {
+      const ci = dayIndexFor(getConfirmationEventDate(o));
+      if (ci !== null) confirmed[ci]++;
+    }
 
     // Delivered = orders that were actually DELIVERED on this day (delivered_at only — no updated_at fallback)
-    const delivered = orders.filter((o) => {
-      if (!reachedDeliveredStage(o)) return false;
-      const d = getDeliveredEventDate(o);
-      return d != null && isInDay(d, start, nextDay);
-    }).length;
+    if (reachedDeliveredStage(o)) {
+      const di = dayIndexFor(getDeliveredEventDate(o));
+      if (di !== null) delivered[di]++;
+    }
 
     // Shipped = orders currently in/past shipping pipeline (uses treatment date for trend visualisation)
-    const shipped = orders.filter((o) => {
-      if (!isInShippedDeliveryPool(o.delivery_status)) return false;
-      return isInDay(getTreatmentDate(o), start, nextDay);
-    }).length;
+    if (isInShippedDeliveryPool(o.delivery_status)) {
+      const si = dayIndexFor(getTreatmentDate(o));
+      if (si !== null) shipped[si]++;
+    }
+  }
 
+  return Array.from({ length: numDays }, (_, i) => {
+    const start = new Date(rangeStart.getTime() + i * MS_PER_DAY);
     return {
       day: `${formatPKT(start, "EEE")}\n${formatPKT(start, "dd/MM")}`,
-      orders: dropped,
-      dropped,
-      confirmed,
-      shipped,
-      delivered,
-      confirmationRate: confirmationRatePercent(confirmed, dropped, newOrders),
-      deliveryRate: deliveryRatePercent(delivered, shipped),
+      orders: dropped[i],
+      dropped: dropped[i],
+      confirmed: confirmed[i],
+      shipped: shipped[i],
+      delivered: delivered[i],
+      confirmationRate: confirmationRatePercent(confirmed[i], dropped[i], newOrders[i]),
+      deliveryRate: deliveryRatePercent(delivered[i], shipped[i]),
     };
   });
 }
@@ -458,33 +463,52 @@ export function useDashboardData(dateRange?: DateRange, dateBasis: DateBasis = "
       // Cap at 60 days to avoid unreadable charts
       const cappedDays = Math.min(numDays, 60);
       const startOffset = numDays > 60 ? numDays - 60 : 0;
-      return Array.from({ length: cappedDays }, (_, i) => {
-        const start   = new Date(from.getTime() + (startOffset + i) * MS_PER_DAY);
-        const nextDay = new Date(start.getTime() + MS_PER_DAY);
+      const rangeStart = new Date(from.getTime() + startOffset * MS_PER_DAY);
+
+      // One pass over allOrders bucketing each into its day index, instead
+      // of cappedDays × 4 separate .filter() scans over the full array
+      // (up to 240 full scans for a 60-day range) — same semantics, O(N).
+      const dropped = new Array<number>(cappedDays).fill(0);
+      const newOrders = new Array<number>(cappedDays).fill(0);
+      const confirmed = new Array<number>(cappedDays).fill(0);
+      const delivered = new Array<number>(cappedDays).fill(0);
+      const shipped = new Array<number>(cappedDays).fill(0);
+
+      const dayIndexFor = (d: Date): number | null => {
+        const idx = Math.floor((d.getTime() - rangeStart.getTime()) / MS_PER_DAY);
+        return idx >= 0 && idx < cappedDays ? idx : null;
+      };
+
+      for (const o of allOrders) {
         // Bucket each line by its own event date (per chosen basis) so the trend
         // matches the KPI cards: created → created_at; updated → confirmed_at / delivered_at.
-        const dropped   = allOrders.filter(o => isInDay(eventDate(o, dateBasis, "generic", statusEventMap), start, nextDay)).length;
-        const newOrders = allOrders.filter(o =>
-          o.confirmation_status === "new" && isInDay(eventDate(o, dateBasis, "generic", statusEventMap), start, nextDay)
-        ).length;
-        const confirmed = allOrders.filter(o => {
-          if (!reachedConfirmedStage(o)) return false;
-          return isInDay(eventDate(o, dateBasis, "confirmed"), start, nextDay);
-        }).length;
-        const delivered = allOrders.filter(o => {
-          if (!reachedDeliveredStage(o)) return false;
-          return isInDay(eventDate(o, dateBasis, "delivered"), start, nextDay);
-        }).length;
-        const shipped = allOrders.filter(o => {
-          if (!isInShippedDeliveryPool(o.delivery_status)) return false;
+        const gi = dayIndexFor(eventDate(o, dateBasis, "generic", statusEventMap));
+        if (gi !== null) {
+          dropped[gi]++;
+          if (o.confirmation_status === "new") newOrders[gi]++;
+        }
+        if (reachedConfirmedStage(o)) {
+          const ci = dayIndexFor(eventDate(o, dateBasis, "confirmed"));
+          if (ci !== null) confirmed[ci]++;
+        }
+        if (reachedDeliveredStage(o)) {
+          const di = dayIndexFor(eventDate(o, dateBasis, "delivered"));
+          if (di !== null) delivered[di]++;
+        }
+        if (isInShippedDeliveryPool(o.delivery_status)) {
           const d = dateBasis === "updated" ? deliveryEventDate(o, deliveryEventMap) : eventDate(o, dateBasis, "delivered");
-          return isInDay(d, start, nextDay);
-        }).length;
+          const si = dayIndexFor(d);
+          if (si !== null) shipped[si]++;
+        }
+      }
+
+      return Array.from({ length: cappedDays }, (_, i) => {
+        const start = new Date(rangeStart.getTime() + i * MS_PER_DAY);
         return {
           day: `${formatPKT(start, "EEE")}\n${formatPKT(start, "dd/MM")}`,
-          orders: dropped, dropped, confirmed, shipped, delivered,
-          confirmationRate: confirmationRatePercent(confirmed, dropped, newOrders),
-          deliveryRate: deliveryRatePercent(delivered, shipped),
+          orders: dropped[i], dropped: dropped[i], confirmed: confirmed[i], shipped: shipped[i], delivered: delivered[i],
+          confirmationRate: confirmationRatePercent(confirmed[i], dropped[i], newOrders[i]),
+          deliveryRate: deliveryRatePercent(delivered[i], shipped[i]),
         };
       });
     }
