@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-17 - Anwar Bounasser
+Last manual update: 2026-09-18 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-18 - Anwar Bounasser
+- Commit: `e8396ee`
+- Area: Orders / Agent
+- Change: `CreateOrderModal.tsx` (used from the main Orders page) calls the same `create_manual_order_with_items` RPC as `AgentCreateOrderModal.tsx` but was missing the `is_upsell: totalQty > 1` fix applied there on 2026-09-17 — so an order created via this modal with more than one unit never counted as an upsell. Now sends it too.
+- Reason: User reported order AB-4451 (quantity 2, created by an agent) wasn't flagged as upsell despite the earlier fix. Investigated live: AB-4451 was created through the OTHER create-order modal (reachable by at least one agent, not just admins/sellers) — a second caller of the same RPC that the first fix never touched.
+- Notes: Bulk-corrected 13 orders (AB-4451 + 12 others) with the same live pattern — `quantity > 1`, `is_upsell = false`, created via `action_type='manual_create'` — each logged to `order_history` (`manual_status_correction`). Verified live: 0 remaining after the fix. No new `tsc`/`eslint` issues.
 
 ### 2026-09-17 - Anwar Bounasser
 - Commits: `d9747a9`, `132bb3a`, `e5f5ee3`, `4966e08`, `413f8f7`, `b6dabbd`
