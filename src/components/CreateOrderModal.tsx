@@ -233,6 +233,11 @@ export default function CreateOrderModal({ open, onOpenChange, onCreated }: Crea
           confirmation_status: routeToWhatsapp ? "new_wts" : "new",
           confirmation_channel: routeToWhatsapp ? "whatsapp" : "agent",
           whatsapp_status: routeToWhatsapp ? "pending" : null,
+          // Same rule as AgentCreateOrderModal.tsx: a brand-new order with
+          // more than one unit counts as an upsell. Both modals call the
+          // same create_manual_order_with_items RPC — this one (used from
+          // the main Orders page, reachable by agents too) was missing it.
+          is_upsell: totalQty > 1,
         },
         p_items: items.map((item) => {
           const product = products.find((entry) => entry.id === item.productId);
