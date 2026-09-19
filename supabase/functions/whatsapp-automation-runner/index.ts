@@ -934,6 +934,34 @@ async function startNewRuns(triggerType: string, orderId: string) {
       });
       continue;
     }
+
+    // ── Retry cap ────────────────────────────────────────────────────────────
+    // A "failed" run always clears the dedup guard above (by design, so a
+    // transient failure — network blip, rate limit — gets retried on the
+    // next poll). But some failures are permanent (malformed customer phone
+    // number, template rejected, etc.) and will NEVER succeed no matter how
+    // many times we retry — without a cap, this function re-triggers the
+    // same doomed send on every poll cycle forever (confirmed live: one
+    // order retried a template send ~every minute for hours, each attempt
+    // failing with the same Meta "phone number is malformed" error). Once an
+    // (automation, order) pair has failed this many times, stop retrying
+    // automatically — it needs a human to fix the underlying data first.
+    const MAX_FAILED_RETRIES = 3;
+    const { count: failedCount } = await admin
+      .from("whatsapp_automation_runs")
+      .select("id", { count: "exact", head: true })
+      .eq("automation_id", a.id)
+      .eq("order_id", order.order_id)
+      .eq("status", "failed");
+
+    if ((failedCount ?? 0) >= MAX_FAILED_RETRIES) {
+      log("retry cap reached, not retrying", {
+        automation: a.id,
+        order: order.order_id,
+        failedCount,
+      });
+      continue;
+    }
     // ─────────────────────────────────────────────────────────────────────────
 
     const { data: run, error } = await admin
