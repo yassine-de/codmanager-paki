@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-18 - Anwar Bounasser
+Last manual update: 2026-09-19 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-19 - Anwar Bounasser
+- Commit: `b16bcd2`
+- Area: WhatsApp / Automation
+- Change: `whatsapp-automation-runner`'s `startNewRuns()` dedup guard lets a new run start whenever the previous run for that (automation, order) pair ended in `failed` — intentional, so a transient failure gets retried. But `sweepDeliveryStatusChanges()` re-matches any `order_history` event within a rolling 2h lookback on every ~1-minute tick, so a *permanently*-failing send (bad data, not a transient issue) kept getting a brand new run started every single minute, forever. Added a cap: once an (automation, order) pair has failed 3 times, stop retrying automatically.
+- Reason: User spotted order AB-3923 with the same "Out for Delivery" template appearing to send repeatedly in the Inbox. Investigated live: the order's phone number is corrupted (`+923002123800.03074133019` — looks like two numbers concatenated), so Meta rejected every attempt with the same "phone number is malformed" error, and the automation had already retried it 12+ times in about 10 minutes.
+- Notes: Deployed live; verified the retry loop for AB-3923 stopped within ~2 minutes of deploy (previously ticking every ~1 minute). The order's phone number itself still needs a human to correct — no way to know the real number from the corrupted value, flagged to Anwar. Also spotted (not touched) a number of other orders with malformed-looking phone numbers (`+92/xxx`, embedded spaces) — likely handled fine by existing normalization, but worth a dedicated audit if Anwar wants one.
 
 ### 2026-09-18 - Anwar Bounasser
 - Commit: `e8396ee`
