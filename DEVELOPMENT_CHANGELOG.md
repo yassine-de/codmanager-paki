@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-19 - Anwar Bounasser
+Last manual update: 2026-09-23 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-23 - Anwar Bounasser
+- Commit: `19988e3`
+- Area: Products / UI
+- Change: The product page's "Delivered" KPI card now also shows the delivered revenue in $ (e.g. "= 80 pcs · 1234.5 $"), alongside the existing piece count.
+- Reason: User asked for the dollar value of what's been delivered, next to the pcs count added earlier.
+- Notes: Added `deliveredRevenue` to `stats` (sum of `total_amount` for delivered orders), converted via the same `pkrToUsd` helper already used on Total Sales / Avg. Order Value. No new `tsc`/`eslint` issues.
 
 ### 2026-09-19 - Anwar Bounasser
 - Commit: `b16bcd2`
