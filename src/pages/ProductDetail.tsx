@@ -188,6 +188,9 @@ export default function ProductDetail() {
     );
     const totalSales = activeSales.reduce((sum, o) => sum + Number(o.total_amount), 0);
     const avgOrderValue = activeSales.length > 0 ? Math.round(totalSales / activeSales.length) : 0;
+    const deliveredRevenue = productOrders
+      .filter(o => isDeliveredStatus(o.delivery_status))
+      .reduce((sum, o) => sum + Number(o.total_amount), 0);
 
     return {
       totalOrders,
@@ -199,6 +202,7 @@ export default function ProductDetail() {
       deliveryRate: shipped > 0 ? ((delivered / shipped) * 100).toFixed(1) : "0.0",
       totalSales,
       avgOrderValue,
+      deliveredRevenue,
     };
   }, [product, productOrders]);
 
@@ -320,7 +324,7 @@ export default function ProductDetail() {
         <KPICard
           label="Delivered"
           value={stats?.delivered ?? 0}
-          suffix={`= ${realDelivered} pcs`}
+          suffix={`= ${realDelivered} pcs · ${pkrToUsd(stats?.deliveredRevenue ?? 0).toFixed(1)} $`}
           percentage={stats?.deliveryRate ?? "0.0"}
         />
         <KPICard
