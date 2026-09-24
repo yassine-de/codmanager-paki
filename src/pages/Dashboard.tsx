@@ -72,7 +72,8 @@ function SectionKPI({
   title, value, percentage, percentLabel, icon: Icon, color, iconBg,
   highlight = false, prefix = "", suffix = "", change, delay = 0, onClick,
 }: SectionKPIProps) {
-  const { isDataVisible } = useDataVisibility();
+  // Order counts and rates, never money — always visible regardless of the
+  // "hide data" toggle, which only masks actual PKR/USD figures (FinancialKPI).
   const isPositive = change !== undefined && change >= 0;
   return (
     <Tooltip>
@@ -100,13 +101,13 @@ function SectionKPI({
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
                 <p className={`font-bold tabular-nums tracking-tight leading-none ${highlight ? 'text-3xl' : 'text-2xl'}`}>
-                  {isDataVisible ? <AnimatedNumber value={value} prefix={prefix} suffix={suffix} /> : <MaskedValue className="gap-1" />}
+                  <AnimatedNumber value={value} prefix={prefix} suffix={suffix} />
                 </p>
                 <span className={`text-sm font-semibold tabular-nums ${color} opacity-60`}>
-                  {isDataVisible ? `${percentage}%` : <MaskedValue />}
+                  {percentage}%
                 </span>
               </div>
-              {percentLabel && <p className="text-[11px] text-muted-foreground/50 mt-1.5">{isDataVisible ? percentLabel : <MaskedValue />}</p>}
+              {percentLabel && <p className="text-[11px] text-muted-foreground/50 mt-1.5">{percentLabel}</p>}
             </div>
           </div>
         </div>
@@ -158,9 +159,9 @@ function FinancialKPI({
             </p>
           </div>
           <span className={`text-sm font-semibold tabular-nums ${color} opacity-60 self-start mt-1`}>
-            {isDataVisible ? `${percentage}%` : <MaskedValue />}
+            {percentage}%
           </span>
-          {percentLabel && <p className="text-[10px] text-muted-foreground/40 mt-0.5">{isDataVisible ? percentLabel : <MaskedValue />}</p>}
+          {percentLabel && <p className="text-[10px] text-muted-foreground/40 mt-0.5">{percentLabel}</p>}
         </div>
       </div>
     </div>
@@ -184,14 +185,14 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
   data: { day: string; [k: string]: string | number }[];
   dataKey: string; color: string; gradientId: string; title: string; total: number; delay: number;
 }) {
-  const { isDataVisible } = useDataVisibility();
+  // Order-count trend, never money — always visible (see SectionKPI).
   return (
     <div className="bg-card rounded-xl border shadow-soft px-5 py-4 animate-slide-up hover:shadow-elevated transition-all duration-200"
       style={{ animationDelay: `${delay}ms` }}>
       <div className="flex items-center justify-between mb-2">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground/60">{title}</p>
-          <p className="text-2xl font-bold tabular-nums mt-1">{isDataVisible ? <AnimatedNumber value={total} /> : <MaskedValue className="gap-1" />}</p>
+          <p className="text-2xl font-bold tabular-nums mt-1"><AnimatedNumber value={total} /></p>
         </div>
         <span className="text-[10px] font-bold text-muted-foreground/50 bg-muted rounded-full px-2.5 py-1 uppercase tracking-widest">7d</span>
       </div>
@@ -221,17 +222,15 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
           <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2.5}
             fill={`url(#${gradientId})`} dot={{ r: 3, fill: color, strokeWidth: 2, stroke: "hsl(var(--card))" }}
             activeDot={{ r: 4.5, strokeWidth: 2, stroke: "#fff", fill: color }}>
-            {isDataVisible && (
-              <LabelList
-                dataKey={dataKey}
-                position="top"
-                offset={12}
-                fontSize={10}
-                fontWeight={700}
-                fill={color}
-                formatter={(v: number) => v.toLocaleString()}
-              />
-            )}
+            <LabelList
+              dataKey={dataKey}
+              position="top"
+              offset={12}
+              fontSize={10}
+              fontWeight={700}
+              fill={color}
+              formatter={(v: number) => v.toLocaleString()}
+            />
           </Area>
         </AreaChart>
       </ResponsiveContainer>
@@ -241,7 +240,7 @@ function SparkMiniChart({ data, dataKey, color, gradientId, title, total, delay 
 
 /* ── Radial Gauge (Semi-circle, compact) ── */
 function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; delay?: number }) {
-  const { isDataVisible } = useDataVisibility();
+  // A rate, never money — always visible (see SectionKPI).
   const [animatedRate, setAnimatedRate] = useState(0);
 
   useEffect(() => {
@@ -314,11 +313,11 @@ function RadialGauge({ rate, title, delay = 0 }: { rate: number; title: string; 
           ))}
           <text x={cx} y={cy - 16} textAnchor="middle" dominantBaseline="middle"
             className="text-[36px] font-bold tabular-nums" fill="hsl(var(--foreground))"
-            style={{ letterSpacing: "-0.03em" }}>{isDataVisible ? `${animatedRate}%` : '••••'}</text>
+            style={{ letterSpacing: "-0.03em" }}>{`${animatedRate}%`}</text>
           <text x={cx} y={cy + 6} textAnchor="middle" dominantBaseline="middle"
             className="text-[10px] font-semibold uppercase tracking-[0.06em]" fill="hsl(30,6%,55%)">{title}</text>
           <text x={cx} y={cy + 20} textAnchor="middle" dominantBaseline="middle"
-            className="text-[9px] font-bold" fill={statusColor}>{isDataVisible ? status : ''}</text>
+            className="text-[9px] font-bold" fill={statusColor}>{status}</text>
         </svg>
       </div>
     </div>
@@ -338,6 +337,7 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [dateBasis, setDateBasis] = useState<DateBasis>("created");
   const { kpis, last7, totals7, topProducts, topSellers, isLoading } = useDashboardData(dateRange, dateBasis);
+  const { isDataVisible } = useDataVisibility();
 
   // Resolve seller IDs to names
   const sellerIds = useMemo(() => topSellers.map(s => s.sellerId), [topSellers]);
@@ -448,11 +448,13 @@ export default function Dashboard() {
                 gradient: "from-violet-500 to-purple-600",
                 shadow: "shadow-[0_8px_24px_-8px_rgba(139,92,246,0.5)]",
                 onClick: () => navigate("/finance"),
+                sensitive: true, // money — mask when the hide-data toggle is on
               },
             ];
             const visibleHeroCards = isGeneralManager ? heroCards.filter((c) => c.title !== "Revenue (PKR)") : heroCards;
             return visibleHeroCards.map((c, i) => {
               const Icon = c.icon;
+              const masked = "sensitive" in c && c.sensitive && !isDataVisible;
               return (
                 <button
                   key={c.title}
@@ -466,9 +468,9 @@ export default function Dashboard() {
                   </div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/80">{c.title}</p>
                   <p className="text-4xl font-bold tabular-nums mt-1 leading-tight">
-                    <AnimatedNumber value={c.value} />
+                    {masked ? <MaskedValue className="gap-1.5" /> : <AnimatedNumber value={c.value} />}
                   </p>
-                  <p className="text-[11px] text-white/75 mt-3">{c.sub}</p>
+                  <p className="text-[11px] text-white/75 mt-3">{masked ? <MaskedValue /> : c.sub}</p>
                 </button>
               );
             });
