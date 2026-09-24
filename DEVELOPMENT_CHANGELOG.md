@@ -4,7 +4,7 @@ This document is for the development team. It records which changes were added t
 
 Source for existing entries: Git history (`git log`). Times are local times from the developer environment.
 
-Last manual update: 2026-09-23 - Anwar Bounasser
+Last manual update: 2026-09-24 - Anwar Bounasser
 
 ## Working Rule
 
@@ -20,6 +20,13 @@ For every relevant change, add an entry before pushing:
 ```
 
 ## Changes
+
+### 2026-09-24 - Anwar Bounasser
+- Commit: `f73012d`
+- Area: Dashboard / UI
+- Change: The "hide data" (eye icon) toggle previously masked everything on the Dashboard — including plain order counts and confirmation/delivery rates, not just money. Now only actual PKR/USD amounts mask; counts and rates always stay visible. The top "Hero KPIs" row (Total Orders/Confirmed/Delivered/Revenue) had no masking at all despite Revenue showing real figures — added a `sensitive` flag so only that card's amount masks. `SectionKPI`/`SparkMiniChart`/`RadialGauge` (used in the Confirmation/Delivery Performance breakdowns further down) never show money — masking removed from them entirely. `FinancialKPI` (Delivered/Paid/Pending Amount) still masks the PKR/USD figure but no longer masks its percentage/label text.
+- Reason: User asked for the hide toggle to only hide money figures, with numbers and rates staying visible. First pass touched `SectionKPI`/`FinancialKPI`/etc., but the 4 cards the user was actually looking at turned out to be a separate, unmasked "Hero KPIs" block — root-caused after the user reported the toggle still did nothing at all, even for Revenue.
+- Notes: Verified the dev server serves the new masking logic via a direct fetch of the transformed module (`sensitive`/`masked` present). No new `tsc`/`eslint` issues.
 
 ### 2026-09-23 - Anwar Bounasser
 - Commit: `19988e3`
