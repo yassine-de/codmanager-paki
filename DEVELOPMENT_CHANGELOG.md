@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-09-25 - Anwar Bounasser
+- Commit: `a656cc2`
+- Area: Access Control / Confirmation / Follow-Up
+- Change: `agent` (Confirmation) and `follow_up` accounts are now blocked from each other's pages. A `follow_up` account navigating to `/agent-dashboard`, `/agent-orders`, or `/agent-confirmed` gets redirected to `/follow-up/dashboard`; an `agent` account navigating to `/follow-ups`, `/follow-up/dashboard`, `/follow-up/queue`, or `/follow-up/control` gets redirected to `/agent-dashboard`.
+- Reason: Investigating a Delivery Analytics follow-up breakdown, found a "confirmation"-purpose agent account (`merab confiramtion`, role `agent`) with 17 real follow_up_status changes logged against it — genuine actions, not a display bug. Root cause: these routes had no role gate at all, only a hidden nav link (`agentOnly`/`followUpOnly`/`adminOnly` flags control nav visibility, not route access) — any authenticated account could reach any of these pages directly by URL. User explicitly asked for confirmation and follow-up accounts to be walled off from each other.
+- Notes: Same confinement pattern already used for `warehouse_manager`/`whatsapp_manager` in `AppRoutes`. No new `tsc`/`eslint` issues. Not click-through tested (no login credentials this session) — verified via type-check/lint only.
+
+### 2026-09-25 - Anwar Bounasser
 - Commit: `027e0d0`
 - Area: WhatsApp / Backend
 - Change: Voice notes sent by customers in WhatsApp Inbox showed "Audio unavailable" for almost the whole team. Root cause: `whatsapp-media-proxy` (the edge function that proxies audio downloads from Meta so the browser can play them) required the caller to have the literal `admin` role — but only 3 accounts in the whole system are admins, while WhatsApp Inbox itself (`/agent-whatsapp`, `/whatsapp/inbox`) has no such restriction. Now the proxy allows `admin` OR `whatsapp_manager` (the two roles that own WhatsApp Inbox operationally).
