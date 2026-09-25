@@ -44,8 +44,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: isAdmin } = await supabase.rpc("is_admin", { _user_id: userData.user.id });
-    if (!isAdmin) {
+    // Media playback is limited to admin + whatsapp_manager (the two roles that own
+    // WhatsApp Inbox operationally) — not every role that can merely open the page.
+    const [{ data: isAdmin }, { data: isWaManager }] = await Promise.all([
+      supabase.rpc("is_admin", { _user_id: userData.user.id }),
+      supabase.rpc("has_role", { _user_id: userData.user.id, _role: "whatsapp_manager" }),
+    ]);
+    if (!isAdmin && !isWaManager) {
       return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
