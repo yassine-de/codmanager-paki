@@ -21,6 +21,13 @@ For every relevant change, add an entry before pushing:
 
 ## Changes
 
+### 2026-09-25 - Anwar Bounasser
+- Commit: `027e0d0`
+- Area: WhatsApp / Backend
+- Change: Voice notes sent by customers in WhatsApp Inbox showed "Audio unavailable" for almost the whole team. Root cause: `whatsapp-media-proxy` (the edge function that proxies audio downloads from Meta so the browser can play them) required the caller to have the literal `admin` role — but only 3 accounts in the whole system are admins, while WhatsApp Inbox itself (`/agent-whatsapp`, `/whatsapp/inbox`) has no such restriction. Now the proxy allows `admin` OR `whatsapp_manager` (the two roles that own WhatsApp Inbox operationally).
+- Reason: User reported audio playback broken for customer voice messages; verified live that the Meta access token and media resolution work fine (direct test downloaded 3 real voice notes successfully) — the block was purely the role check. User explicitly asked to scope this to admin + whatsapp_manager only, not every role that can open the page (e.g. not seller).
+- Notes: Deployed the edge function live in two steps (first an over-broad "any authenticated user" version while narrowing down the fix, then tightened to admin + whatsapp_manager per user's explicit scope) — the version actually committed/pushed here is the final, tightened one (function version 6 in Supabase). No `tsc`/`eslint` changes (Deno edge function, `@ts-nocheck`).
+
 ### 2026-09-24 - Anwar Bounasser
 - Commit: `f73012d`
 - Area: Dashboard / UI
