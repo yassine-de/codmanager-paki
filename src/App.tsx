@@ -147,6 +147,9 @@ function ProtectedRoute({ children, permission, roles }: { children: React.React
   return <>{children}</>;
 }
 
+const CONFIRMATION_ONLY_PATHS = ["/agent-dashboard", "/agent-orders", "/agent-confirmed"];
+const FOLLOW_UP_ONLY_PATHS = ["/follow-ups", "/follow-up/dashboard", "/follow-up/queue", "/follow-up/control"];
+
 function AppRoutes() {
   const { user, authUser, loading } = useAuth();
   const location = useLocation();
@@ -174,6 +177,18 @@ function AppRoutes() {
     location.pathname !== "/whatsapp/inbox"
   ) {
     return <Navigate to="/whatsapp" replace />;
+  }
+
+  // Confirmation (agent) and Follow-Up accounts are separate job functions — an
+  // agent logged into the wrong screen was silently able to perform follow-up
+  // actions with nothing to stop them, since these routes had no role gate at
+  // all beyond hiding the nav link. Block cross-access outright, same pattern
+  // as the warehouse_manager/whatsapp_manager confinement above.
+  if (authUser?.role === "follow_up" && CONFIRMATION_ONLY_PATHS.includes(location.pathname)) {
+    return <Navigate to="/follow-up/dashboard" replace />;
+  }
+  if (authUser?.role === "agent" && FOLLOW_UP_ONLY_PATHS.includes(location.pathname)) {
+    return <Navigate to="/agent-dashboard" replace />;
   }
 
   return (
