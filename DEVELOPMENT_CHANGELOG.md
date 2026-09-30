@@ -21,6 +21,13 @@ For every relevant change, add an entry before pushing:
 
 ## Changes
 
+### 2026-09-30 - Anwar Bounasser
+- Commit: `b843cb5`
+- Area: WhatsApp / Backend
+- Change: `whatsapp-media-proxy` now also lets accounts that have the `access_to_whatsapp_inbox` permission play voice notes, alongside `admin` and `whatsapp_manager`.
+- Reason: The WhatsApp team reported voice notes still wouldn't play (e.g. AB-4820, AB-4510). Edge logs showed every proxy request returning 403. The person who actually works the inbox ("esha") has role `agent` plus the `access_to_whatsapp_inbox` permission, not the `whatsapp_manager` role, so the admin + whatsapp_manager check from `027e0d0` blocked her. The Meta side was fine: all affected voice notes resolved and downloaded normally with the app's token.
+- Notes: Deployed live (function version 7). Sellers and other agents without the inbox permission are still blocked. The permission is read from `user_permissions`, the same table `AuthContext` uses for the Inbox nav item. The only `whatsapp_manager` account ("Echa wts manager", testwst@gmail.com) looks like a test account.
+
 ### 2026-09-25 - Anwar Bounasser
 - Commit: `a656cc2`
 - Area: Access Control / Confirmation / Follow-Up
