@@ -44,13 +44,25 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Media playback is limited to admin + whatsapp_manager (the two roles that own
-    // WhatsApp Inbox operationally) — not every role that can merely open the page.
-    const [{ data: isAdmin }, { data: isWaManager }] = await Promise.all([
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Media playback is limited to the WhatsApp team: admin, whatsapp_manager, or any
+    // account explicitly granted the WhatsApp Inbox permission (the agent who actually
+    // works the inbox has role "agent" + this permission) — not every role that can open a page.
+    const [{ data: isAdmin }, { data: isWaManager }, { data: inboxPerm }] = await Promise.all([
       supabase.rpc("is_admin", { _user_id: userData.user.id }),
       supabase.rpc("has_role", { _user_id: userData.user.id, _role: "whatsapp_manager" }),
+      admin
+        .from("user_permissions")
+        .select("id")
+        .eq("user_id", userData.user.id)
+        .eq("permission_key", "access_to_whatsapp_inbox")
+        .maybeSingle(),
     ]);
-    if (!isAdmin && !isWaManager) {
+    if (!isAdmin && !isWaManager && !inboxPerm) {
       return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -64,11 +76,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
 
     const { data: message } = await admin
       .from("whatsapp_messages")
