@@ -34,6 +34,7 @@ type Order = {
   shipped_at: string | null;
   delivered_at: string | null;
   updated_at: string;
+  source_ref: string | null;
 };
 
 // Date basis (same logic as the seller Dashboard & admin Seller Analytics):
@@ -52,7 +53,7 @@ type ProductSortField = "name" | "total" | "confirmed" | "confRate" | "delivered
 
 // Only safe fields: no agent, no channel, no carrier internals, no seller_id leaks
 const ORDER_SELECT =
-  "id, order_id, confirmation_status, delivery_status, product_name, cancel_reason, created_at, confirmed_at, shipped_at, delivered_at, updated_at";
+  "id, order_id, confirmation_status, delivery_status, product_name, cancel_reason, created_at, confirmed_at, shipped_at, delivered_at, updated_at, source_ref";
 
 const PAGE_SIZE = 1000;
 
@@ -292,6 +293,7 @@ export default function SellerProductAnalytics() {
   const sellerId = authUser?.id ?? "";
 
   const [productFilter, setProductFilter] = useState("all");
+  const [utmFilter, setUtmFilter] = useState("all");
   const [datePreset, setDatePreset] = useState<DatePresetValue>("maximum");
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [dateBasis, setDateBasis] = useState<DateBasis>("created");
@@ -328,6 +330,11 @@ export default function SellerProductAnalytics() {
     return names.sort().map((n) => ({ value: n, label: n }));
   }, [orders]);
 
+  const utmOptions = useMemo(() => {
+    const refs = [...new Set(orders.map((o) => o.source_ref).filter(Boolean))] as string[];
+    return refs.sort().map((u) => ({ value: u, label: u }));
+  }, [orders]);
+
   // ── Basis-aware date predicate ────────────────────────────────────────────
   // created → check created_at; updated → check the given event date (fallback updated_at).
   const inRangeByEvent = useCallback((o: Order, eventIso: string | null) => {
@@ -347,10 +354,13 @@ export default function SellerProductAnalytics() {
     return isWithinRange(new Date(d), dateRange);
   }, [dateBasis, dateRange, statusEventMap]);
 
-  // Product-filtered base (NOT date-filtered — each metric applies its own event date).
+  // Product/UTM-filtered base (NOT date-filtered — each metric applies its own event date).
   const base = useMemo(
-    () => orders.filter((o) => productFilter === "all" || o.product_name === productFilter),
-    [orders, productFilter],
+    () => orders.filter((o) =>
+      (productFilter === "all" || o.product_name === productFilter) &&
+      (utmFilter === "all" || o.source_ref === utmFilter),
+    ),
+    [orders, productFilter, utmFilter],
   );
 
   // ── Filtered Orders (generic basis — used for total / empty-state) ─────────
@@ -504,6 +514,14 @@ export default function SellerProductAnalytics() {
             allLabel="All Products"
             className="w-48"
           />
+          <SearchableSelect
+            value={utmFilter}
+            onValueChange={setUtmFilter}
+            options={utmOptions}
+            placeholder="UTM Source"
+            allLabel="All UTM Sources"
+            className="w-44"
+          />
           {/* Date basis: filter every metric by created_at (cohort) or by each
               metric's own event date (confirmed_at / delivered_at) */}
           <div className="inline-flex items-center rounded-lg border bg-background p-0.5 text-xs">
@@ -526,12 +544,12 @@ export default function SellerProductAnalytics() {
               </button>
             ))}
           </div>
-          {(productFilter !== "all" || !!dateRange || dateBasis !== "created") && (
+          {(productFilter !== "all" || utmFilter !== "all" || !!dateRange || dateBasis !== "created") && (
             <Button
               variant="ghost"
               size="sm"
               className="h-8 text-xs text-muted-foreground"
-              onClick={() => { setProductFilter("all"); setDateRange(undefined); setDatePreset("maximum"); setDateBasis("created"); }}
+              onClick={() => { setProductFilter("all"); setUtmFilter("all"); setDateRange(undefined); setDatePreset("maximum"); setDateBasis("created"); }}
             >
               Clear filters
             </Button>
