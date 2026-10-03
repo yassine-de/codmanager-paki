@@ -21,6 +21,13 @@ For every relevant change, add an entry before pushing:
 
 ## Changes
 
+### 2026-10-03 - Anwar Bounasser
+- Commit: `ed1f321`
+- Area: Seller Analytics / UI
+- Change: The seller's "My Analytics" page (`/seller-analytics`, `SellerProductAnalytics.tsx`) now has a UTM Source filter next to the product filter. Options come from the seller's own orders (`orders.source_ref`). Every KPI card, rate and the Product Performance table follow it, together with the product filter and the Created/Updated basis. "Clear filters" resets it too.
+- Reason: User asked for the same UTM filter the admin Confirmation/Delivery Analytics pages already have.
+- Notes: Applied on the shared product-filtered `base` set, so all metrics stay consistent. `source_ref` added to the page's order select. Orders with no UTM only appear under "All UTM Sources" (no separate "No UTM" option, same as Delivery Analytics). No new `tsc`/`eslint` issues. Not click-through tested (no login this session).
+
 ### 2026-09-30 - Anwar Bounasser
 - Commit: `b843cb5`
 - Area: WhatsApp / Backend
