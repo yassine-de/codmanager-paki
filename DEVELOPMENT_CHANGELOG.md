@@ -21,6 +21,13 @@ For every relevant change, add an entry before pushing:
 
 ## Changes
 
+### 2026-10-07 - Anwar Bounasser
+- Commit: `1e0bed7`
+- Area: Products / UI
+- Change: The Products page toolbar now shows "Total available: X pcs" next to the product count. It is the sum of the Available column across every product matching the current filters/search, on all pages, not just the visible one.
+- Reason: User asked to see the total available quantity of all products at the top.
+- Notes: Uses the same per-product `available` value as the column, so products with a negative Total Qty count as 0. No new `tsc`/`eslint` issues (27 pre-existing `any` warnings unchanged). Not click-through tested (no login this session). Noticed but not fixed: the `filtered` memo doesn't list `appliedWhatsapp` in its deps, so the WhatsApp filter only takes effect once another filter changes.
+
 ### 2026-10-03 - Anwar Bounasser
 - Commit: `ed1f321`
 - Area: Seller Analytics / UI
