@@ -334,6 +334,11 @@ export default function Products() {
     });
   }, [products, appliedSeller, appliedStatus, search]);
 
+  const totalAvailable = useMemo(
+    () => filtered.reduce((sum, p) => sum + (p.available || 0), 0),
+    [filtered],
+  );
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -462,6 +467,11 @@ export default function Products() {
                   product{filtered.length !== 1 ? "s" : ""}
                 </span>
               </p>
+              <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium bg-[hsl(155,50%,42%)]/12 text-[hsl(155,50%,42%)] border-[hsl(155,50%,42%)]/20">
+                <span className="text-muted-foreground font-normal">Total available:</span>
+                <span className="tabular-nums font-semibold">{totalAvailable.toLocaleString()}</span>
+                <span className="font-normal">pcs</span>
+              </span>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">Show</span>
                 <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
