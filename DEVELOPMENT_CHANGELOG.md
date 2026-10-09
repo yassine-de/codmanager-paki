@@ -21,6 +21,17 @@ For every relevant change, add an entry before pushing:
 
 ## Changes
 
+### 2026-10-09 - Anwar Bounasser
+- Commit: `d4440bd`
+- Area: Orders / Confirmation / WhatsApp / Database
+- Change: New customer blacklist, global across all sellers and keyed by `normalize_phone_key(phone)`.
+  - Auto: a customer with >= 2 returned orders and 0 delivered is blacklisted automatically. It's computed live in `get_customer_blacklist_status()`, with no cron (68 customers matched at launch).
+  - Manual: "Add customer to blacklist" (optional reason) for admin, general_manager, agent, follow_up and whatsapp_manager. "Remove" is admin/general_manager only. Removing stores a `cleared` override so the auto rule doesn't re-add that customer.
+  - UI: red banner on Process Orders (agents), Order detail and the WhatsApp Inbox Customer Info card, plus a "Blacklist" badge next to the customer in the Orders list. Sellers see nothing; the RPC returns nothing for seller accounts.
+  - WhatsApp guard: new BEFORE INSERT/UPDATE trigger `orders_blacklist_whatsapp_guard` on `orders`. A blacklisted customer's order is sent to an agent (`new` / `agent`, `whatsapp_status = handed_to_agent`) instead of entering WhatsApp confirmation. A WhatsApp confirmation (button, AI or Inbox "Confirm") is turned back into the agent flow, and any auto-booking set in the same update is undone. Orders already with agents stay where they were. Each block writes an `order_history` row (`blacklist_whatsapp_block`).
+- Reason: Some customers order, get the parcel shipped and then refuse it. User asked for a blacklist with automatic + manual entries, a warning for agents (not auto-cancel), applied globally, and asked that WhatsApp never confirm these customers.
+- Notes: Migrations `20261009100000_customer_blacklist.sql` and `20261009110000_blacklist_whatsapp_guard.sql` are applied live. RPC permissions were tested per role with a fake phone, and the trigger was tested in a rolled-back transaction (blacklisted insert, blacklisted WhatsApp confirm with booking, AI confirm on an agent order, normal customer unaffected); no test rows left behind. 0 blacklisted orders were in the WhatsApp flow at launch, so no backfill. No new `tsc`/`eslint` issues. Not click-through tested (no login this session). Known gap: when a blacklisted customer confirms in chat, the AI may still reply as if confirmed and the conversation shows "confirmed", even though the order is back with agents.
+
 ### 2026-10-07 - Anwar Bounasser
 - Commit: `1e0bed7`
 - Area: Products / UI
