@@ -29,6 +29,8 @@ import CreateOrderModal from "@/components/CreateOrderModal";
 import { DatePresetFilter, type DatePresetValue } from "@/components/DatePresetFilter";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { BlacklistBadge } from "@/components/CustomerBlacklistBanner";
+import { useCustomerBlacklist } from "@/hooks/useCustomerBlacklist";
 import CarrierTrackingModal from "@/components/CarrierTrackingModal";
 import { FinancialIndicators } from "@/components/FinancialIndicators";
 
@@ -915,6 +917,7 @@ export default function Orders() {
   // effect above), so `orders` already IS the current page's final result set.
   const paginatedOrders = orders;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const { data: blacklistMap } = useCustomerBlacklist(paginatedOrders.map((o) => o.phone));
 
   // Reset to page 1 when filters/search/page size change
   useEffect(() => {
@@ -1376,7 +1379,14 @@ export default function Orders() {
                   {isCol('createdAt') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{format(new Date(order.createdAt), 'dd MMM yyyy HH:mm')}</td>}
                   {isCol('updatedAt') && <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums">{format(new Date(order.updatedAt), 'dd MMM yyyy HH:mm')}</td>}
                   {isCol('seller') && <td className="py-2.5 px-4 text-xs">{order.seller}</td>}
-                  {isCol('customer') && <td className="py-2.5 px-4 text-xs">{order.customer}</td>}
+                  {isCol('customer') && (
+                    <td className="py-2.5 px-4 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span>{order.customer}</span>
+                        <BlacklistBadge status={order.phone ? blacklistMap?.get(order.phone) : undefined} />
+                      </div>
+                    </td>
+                  )}
                   {isCol('city') && <td className="py-2.5 px-4 text-xs text-muted-foreground">{order.city}</td>}
                   {isCol('phone') && (
                     <td className="py-2.5 px-4 text-xs text-muted-foreground tabular-nums" onClick={(e) => e.stopPropagation()}>
@@ -1396,6 +1406,9 @@ export default function Orders() {
                         </button>
                       ) : (
                         <span className="text-muted-foreground/50">—</span>
+                      )}
+                      {!isCol('customer') && (
+                        <BlacklistBadge className="ml-1.5" status={order.phone ? blacklistMap?.get(order.phone) : undefined} />
                       )}
                     </td>
                   )}
@@ -1516,7 +1529,10 @@ export default function Orders() {
                 <span className="text-xs text-muted-foreground tabular-nums">{format(new Date(order.createdAt), 'dd MMM yyyy HH:mm')}</span>
               </div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm">{order.customer}</span>
+                <span className="text-sm flex items-center gap-1.5">
+                  {order.customer}
+                  <BlacklistBadge status={order.phone ? blacklistMap?.get(order.phone) : undefined} />
+                </span>
                 <span className="text-xs text-muted-foreground">{order.city}</span>
               </div>
               <div className="text-xs text-muted-foreground mb-2">{order.products.map(p => p.name).join(', ')}</div>

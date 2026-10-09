@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { CitySelect, useCarrierCityValidation } from "@/components/CitySelect";
 import { formatPKT as format } from "@/lib/timezone";
 import { toast } from "sonner";
+import { CustomerBlacklistBanner } from "@/components/CustomerBlacklistBanner";
 import AgentCreateOrderModal from "@/components/AgentCreateOrderModal";
 import {
   Play, ChevronRight, Phone, PhoneOff, MessageCircle, User, MapPin, Package, DollarSign,
@@ -1082,6 +1083,8 @@ const AgentOrders = () => {
       </div>
 
       {/* Already-confirmed duplicate warning */}
+      <CustomerBlacklistBanner phone={currentOrder.customer_phone} />
+
       {duplicateWarnings.length > 0 && (
         <div className="rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
           <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-semibold text-xs">

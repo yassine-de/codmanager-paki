@@ -81,6 +81,7 @@ import { exactOrderIdMatch, isOrderIdSearch, normalizeOrderIdSearch } from "@/li
 import { SendTemplateModal } from "@/components/whatsapp/SendTemplateModal";
 import { useCarrierCities } from "@/hooks/useCarrierCities";
 import { CitySelect } from "@/components/CitySelect";
+import { CustomerBlacklistBanner } from "@/components/CustomerBlacklistBanner";
 
 type Conv = {
   id: string;
@@ -2215,6 +2216,7 @@ export default function WhatsappInbox() {
             {order.customer_city}
           </div>
         )}
+        <CustomerBlacklistBanner phone={order?.customer_phone || conv.customer_phone} className="mb-3" />
         <div className="grid grid-cols-3 gap-2 pt-3 border-t border-border/60">
           <div>
             <div className="text-[10px] text-muted-foreground">Customer since</div>

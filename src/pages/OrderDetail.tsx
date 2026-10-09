@@ -6,6 +6,7 @@ import { formatPKT as format } from "@/lib/timezone";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { CustomerBlacklistBanner } from "@/components/CustomerBlacklistBanner";
 
 function mapOrderProducts(order: any) {
   const items = Array.isArray(order.order_items) ? order.order_items : [];
@@ -186,6 +187,7 @@ export default function OrderDetail() {
       {/* Customer Info */}
       <div className="bg-card rounded-lg border p-5 space-y-4 animate-slide-up" style={{ animationDelay: '80ms' }}>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Customer</h2>
+        <CustomerBlacklistBanner phone={phone} />
         <div className="space-y-2.5">
           <p className="font-medium text-lg">{customer}</p>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
