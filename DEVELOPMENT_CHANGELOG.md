@@ -22,6 +22,13 @@ For every relevant change, add an entry before pushing:
 ## Changes
 
 ### 2026-10-09 - Anwar Bounasser
+- Commit: `7b06bca`
+- Area: Blacklist / UI / Database
+- Change: New "Blacklist" page (`/blacklist`) in the sidebar for admin and general manager. It lists every blacklisted customer (auto + manual, minus admin-cleared ones) with name, phone, total/returned/delivered orders, source, reason, who added it and when, and last order date. The phone links to the Orders page filtered on that customer. It also has a search by name/phone (any format), an "Add by phone number" form with an optional reason, and a "Remove" button with a confirm step.
+- Reason: User asked where to find the blacklist. Until now it only showed per order (banners/badges), with no overview.
+- Notes: New RPC `list_customer_blacklist()` (migration `20261009120000_list_customer_blacklist.sql`, applied live) uses the same rule as the other blacklist functions and returns nothing for roles other than admin/general_manager. Tested live: admin gets 68 rows (all auto at launch), an agent gets 0. Route uses the same guard as `/adjustments`. No new `tsc`/`eslint` issues. Not click-through tested (no login this session).
+
+### 2026-10-09 - Anwar Bounasser
 - Commit: `d4440bd`
 - Area: Orders / Confirmation / WhatsApp / Database
 - Change: New customer blacklist, global across all sellers and keyed by `normalize_phone_key(phone)`.
