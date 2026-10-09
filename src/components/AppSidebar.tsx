@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Zap, Sparkles, Send, Warehouse, Truck, PackageCheck, Boxes, RotateCcw } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Package, BarChart3, Package2, BoxIcon, Settings, Users, ChevronDown, Link2, CheckSquare, Store, DollarSign, PhoneForwarded, FileText, FileSpreadsheet, Calculator, Play, ListChecks, BadgeDollarSign, MessageSquare, Megaphone, ArrowUpDown, Activity, ClipboardCheck, Inbox, CheckCircle2, Ban, Zap, Sparkles, Send, Warehouse, Truck, PackageCheck, Boxes, RotateCcw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NavLink } from "@/components/NavLink";
@@ -29,6 +29,7 @@ const getNavItems = (orderCount: number, sourcingUnseen: number, adminSourcingUn
   { title: "orders", url: "/orders", icon: ShoppingCart, badge: orderCount, permission: "access_to_orders", sellerVisible: true },
   { title: "analytics", url: "/seller-analytics", icon: BarChart3, sellerOnly: true, beta: true },
   { title: "Follow Ups", url: "/follow-ups", icon: ClipboardCheck, adminOnly: true },
+  { title: "Blacklist", url: "/blacklist", icon: Ban, adminOnly: true },
   { title: "products", url: "/products", icon: BoxIcon, permission: "access_to_products", sellerVisible: true, badge: productUnseen > 0 ? productUnseen : undefined },
   { title: "Warehouse", url: "/warehouse", icon: Warehouse, warehouseVisible: true },
   
@@ -99,7 +100,7 @@ const warehouseReceivingStatuses = ["ordered", "shipped", "arrived", "ready_to_r
 // role checks). Analytics gets its own narrower allowlist below since
 // access_to_analytics also covers Seller/Finance analytics, which surface
 // exactly the seller/money data this role shouldn't see.
-const GENERAL_MANAGER_NAV_URLS = new Set(["/", "/orders", "/warehouse", "/follow-ups", "/adjustments", "/agent-whatsapp"]);
+const GENERAL_MANAGER_NAV_URLS = new Set(["/", "/orders", "/warehouse", "/follow-ups", "/blacklist", "/adjustments", "/agent-whatsapp"]);
 const GENERAL_MANAGER_ANALYTICS_URLS = new Set(["/analytics/confirmation", "/analytics/delivery", "/analytics/agent-monitoring"]);
 
 const iconToneByUrl: Record<string, string> = {
@@ -114,6 +115,7 @@ const iconToneByUrl: Record<string, string> = {
   "/alerts": "from-rose-500/28 via-red-500/16 to-orange-400/10 text-rose-100 ring-rose-400/25",
   "/invoices": "from-lime-500/24 via-emerald-500/14 to-green-400/10 text-lime-100 ring-lime-400/25",
   "/adjustments": "from-purple-500/25 via-indigo-500/15 to-blue-400/10 text-purple-100 ring-purple-400/25",
+  "/blacklist": "from-red-500/25 via-rose-500/15 to-orange-400/10 text-red-100 ring-red-400/25",
   "/seller-sourcing": "from-orange-500/26 via-amber-500/16 to-yellow-400/10 text-orange-100 ring-orange-400/25",
   "/sheets": "from-green-500/25 via-emerald-500/15 to-teal-400/10 text-green-100 ring-green-400/25",
   "/simulation": "from-fuchsia-500/25 via-pink-500/15 to-rose-400/10 text-fuchsia-100 ring-fuchsia-400/25",

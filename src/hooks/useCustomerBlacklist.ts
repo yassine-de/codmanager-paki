@@ -55,6 +55,33 @@ export function useCustomerBlacklist(phones: Array<string | null | undefined>) {
   });
 }
 
+export type BlacklistEntry = {
+  phone_key: string;
+  phone: string;
+  customer_name: string | null;
+  total_orders: number;
+  returned_count: number;
+  delivered_count: number;
+  last_order_at: string | null;
+  source: "manual" | "auto";
+  reason: string | null;
+  updated_at: string | null;
+  updated_by_name: string | null;
+};
+
+// Admin/general manager only (the RPC returns nothing for other roles).
+export function useCustomerBlacklistList() {
+  return useQuery({
+    queryKey: ["customer-blacklist", "list"],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await untypedRpc("list_customer_blacklist", {});
+      if (error) throw error;
+      return (data ?? []) as BlacklistEntry[];
+    },
+  });
+}
+
 export function useSetCustomerBlacklist() {
   const queryClient = useQueryClient();
   return async (phone: string, blacklisted: boolean, reason?: string) => {

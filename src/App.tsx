@@ -36,6 +36,7 @@ import AgentConfirmedOrders from "./pages/AgentConfirmedOrders";
 import Support from "./pages/Support";
 import Alerts from "./pages/Alerts";
 import Adjustments from "./pages/Adjustments";
+import Blacklist from "./pages/Blacklist";
 import SystemHealth from "./pages/SystemHealth";
 import CarrierManagement from "./pages/CarrierManagement";
 import Warehouse from "./pages/Warehouse";
@@ -226,6 +227,7 @@ function AppRoutes() {
         <Route path="/support" element={<ProtectedRoute permission="access_to_settings"><Support /></ProtectedRoute>} />
         <Route path="/alerts" element={<ProtectedRoute permission="access_to_settings"><Alerts /></ProtectedRoute>} />
         <Route path="/adjustments" element={<ProtectedRoute permission="access_to_settings" roles={["general_manager"]}><Adjustments /></ProtectedRoute>} />
+        <Route path="/blacklist" element={<ProtectedRoute permission="access_to_settings" roles={["general_manager"]}><Blacklist /></ProtectedRoute>} />
         <Route path="/system-health" element={<ProtectedRoute permission="access_to_settings"><SystemHealth /></ProtectedRoute>} />
         <Route path="/carriers" element={<ProtectedRoute permission="access_to_settings"><CarrierManagement /></ProtectedRoute>} />
         <Route path="/warehouse" element={<ProtectedRoute><Navigate to="/warehouse/dashboard" replace /></ProtectedRoute>} />
