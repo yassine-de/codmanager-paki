@@ -38,7 +38,44 @@ function buildExample(vars: string[]) {
   return { body_text: [vars.map((v) => `sample_${v}`)] };
 }
 
-function buildComponents(t: any) {
+// Meta's header_handle must be an asset handle from the Resumable Upload API, not a
+// URL (a plain/blob URL is what got "offer55%" rejected). Download the public file and
+// upload it to Meta to get a real handle. The app id comes from debug_token (no extra
+// setting needed). Any failure throws; the caller falls back to the raw URL.
+async function uploadMediaHandle(base: string, token: string, fileUrl: string): Promise<string> {
+  const dbg = await fetch(
+    `${base}/debug_token?input_token=${encodeURIComponent(token)}&access_token=${encodeURIComponent(token)}`,
+  );
+  const appId = (await dbg.json().catch(() => ({})))?.data?.app_id;
+  if (!appId) throw new Error("Could not resolve the Meta app id");
+
+  const src = await fetch(fileUrl);
+  if (!src.ok) throw new Error(`Could not download the header media (${src.status})`);
+  const bytes = new Uint8Array(await src.arrayBuffer());
+  const fileType = (src.headers.get("content-type") || "application/octet-stream").split(";")[0].trim();
+
+  const sessionResp = await fetch(
+    `${base}/${appId}/uploads?file_length=${bytes.length}&file_type=${encodeURIComponent(fileType)}`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+  );
+  const session = await sessionResp.json().catch(() => ({}));
+  if (!sessionResp.ok || !session?.id) {
+    throw new Error(`Upload session failed: ${session?.error?.message || sessionResp.status}`);
+  }
+
+  const uploadResp = await fetch(`${base}/${session.id}`, {
+    method: "POST",
+    headers: { Authorization: `OAuth ${token}`, file_offset: "0" },
+    body: bytes,
+  });
+  const uploaded = await uploadResp.json().catch(() => ({}));
+  if (!uploadResp.ok || !uploaded?.h) {
+    throw new Error(`Media upload failed: ${uploaded?.error?.message || uploadResp.status}`);
+  }
+  return uploaded.h as string;
+}
+
+function buildComponents(t: any, headerHandle?: string) {
   const components: any[] = [];
   // Header
   if (t.header_type && t.header_type !== "NONE") {
@@ -51,8 +88,9 @@ function buildComponents(t: any) {
       components.push(header);
     } else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(t.header_type)) {
       const header: any = { type: "HEADER", format: t.header_type };
-      if (t.header_media_url) {
-        header.example = { header_handle: [t.header_media_url] };
+      const handle = headerHandle || t.header_media_url;
+      if (handle) {
+        header.example = { header_handle: [handle] };
       }
       components.push(header);
     }
@@ -119,11 +157,23 @@ Deno.serve(async (req) => {
         .replace(/[^a-z0-9_]/g, "_")
         .slice(0, 60);
 
+      let headerHandle: string | undefined;
+      if (["IMAGE", "VIDEO", "DOCUMENT"].includes(t.header_type)) {
+        if (!/^https?:\/\//i.test(t.header_media_url || "")) {
+          return json(400, { ok: false, error: "Header media must be a public https link (use Upload from PC)" });
+        }
+        try {
+          headerHandle = await uploadMediaHandle(base, s.access_token, t.header_media_url);
+        } catch (e) {
+          console.error("[wa-templates-sync] media handle upload failed, falling back to URL", e);
+        }
+      }
+
       const payload = {
         name: metaName,
         language: t.language || "en",
         category: t.category || "UTILITY",
-        components: buildComponents(t),
+        components: buildComponents(t, headerHandle),
       };
 
       const r = await fetch(`${base}/${s.waba_id}/message_templates`, {

@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Trash2, Plus, X, Type, Image as ImageIcon, Video as VideoIcon, FileText,
-  Send, RefreshCw, CheckCircle2, Clock, XCircle, Smartphone, Loader2,
+  Send, RefreshCw, CheckCircle2, Clock, XCircle, Smartphone, Loader2, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +35,13 @@ const HEADER_TYPES = [
   { value: "VIDEO", label: "Video", icon: VideoIcon },
   { value: "DOCUMENT", label: "Document", icon: FileText },
 ];
+
+// Meta's header-media limits (documents are also capped by the 50MB storage bucket).
+const HEADER_MEDIA_RULES: Record<string, { accept: string; maxBytes: number; label: string }> = {
+  IMAGE: { accept: "image/jpeg,image/png", maxBytes: 5 * 1024 * 1024, label: "JPG or PNG, max 5 MB" },
+  VIDEO: { accept: "video/mp4", maxBytes: 16 * 1024 * 1024, label: "MP4, max 16 MB" },
+  DOCUMENT: { accept: "application/pdf", maxBytes: 50 * 1024 * 1024, label: "PDF, max 50 MB" },
+};
 
 const emptyForm = {
   name: "",
@@ -101,6 +108,8 @@ export default function WhatsappTemplates() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [previewTpl, setPreviewTpl] = useState<any | null>(null);
+  const [uploadingHeader, setUploadingHeader] = useState(false);
+  const headerFileRef = useRef<HTMLInputElement | null>(null);
 
   // @ mention autocomplete state for body textarea
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
@@ -163,10 +172,46 @@ export default function WhatsappTemplates() {
     setOpen(true);
   };
 
+  const uploadHeaderMedia = async (file: File) => {
+    const rules = HEADER_MEDIA_RULES[form.header_type];
+    if (!rules) return;
+    if (!rules.accept.split(",").includes(file.type)) {
+      toast.error(`Wrong file type — ${rules.label}`);
+      return;
+    }
+    if (file.size > rules.maxBytes) {
+      toast.error(`File too large — ${rules.label}`);
+      return;
+    }
+    setUploadingHeader(true);
+    try {
+      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+      const path = `templates/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("whatsapp-media")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("whatsapp-media").getPublicUrl(path);
+      set("header_media_url", pub.publicUrl);
+      toast.success("File uploaded");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setUploadingHeader(false);
+    }
+  };
+
   const save = async () => {
     if (!form.name.trim() || !form.body.trim()) {
       toast.error("Name and body are required");
       return;
+    }
+    if (["IMAGE", "VIDEO", "DOCUMENT"].includes(form.header_type)) {
+      const url = (form.header_media_url || "").trim();
+      if (!/^https?:\/\//i.test(url)) {
+        toast.error("Header media must be uploaded from your PC or be a public https link");
+        return;
+      }
     }
     setBusy(true);
     let id = editingId;
@@ -352,12 +397,39 @@ export default function WhatsappTemplates() {
                         />
                       )}
                       {["IMAGE", "VIDEO", "DOCUMENT"].includes(form.header_type) && (
-                        <Input
-                          className="mt-2"
-                          value={form.header_media_url}
-                          onChange={(e) => set("header_media_url", e.target.value)}
-                          placeholder="Sample media URL (publicly accessible)"
-                        />
+                        <div className="mt-2 space-y-1.5">
+                          <div className="flex gap-2">
+                            <Input
+                              value={form.header_media_url}
+                              onChange={(e) => set("header_media_url", e.target.value)}
+                              placeholder="Sample media URL (publicly accessible)"
+                            />
+                            <input
+                              ref={headerFileRef}
+                              type="file"
+                              className="hidden"
+                              accept={HEADER_MEDIA_RULES[form.header_type]?.accept}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = "";
+                                if (file) void uploadHeaderMedia(file);
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="shrink-0 gap-1.5"
+                              disabled={uploadingHeader}
+                              onClick={() => headerFileRef.current?.click()}
+                            >
+                              {uploadingHeader ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                              Upload from PC
+                            </Button>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            {HEADER_MEDIA_RULES[form.header_type]?.label}. Paste a public https link or upload a file.
+                          </p>
+                        </div>
                       )}
                     </div>
 
@@ -593,8 +665,12 @@ export default function WhatsappTemplates() {
                         <div className="font-semibold">{renderPreview(form.header_text)}</div>
                       )}
                       {form.header_type === "IMAGE" && (
-                        <div className="bg-muted rounded h-24 flex items-center justify-center text-muted-foreground">
-                          <ImageIcon className="h-6 w-6" />
+                        <div className="bg-muted rounded h-24 flex items-center justify-center text-muted-foreground overflow-hidden">
+                          {/^https?:\/\//i.test(form.header_media_url || "") ? (
+                            <img src={form.header_media_url} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <ImageIcon className="h-6 w-6" />
+                          )}
                         </div>
                       )}
                       {form.header_type === "VIDEO" && (
