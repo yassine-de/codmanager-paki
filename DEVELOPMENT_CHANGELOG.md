@@ -21,6 +21,13 @@ For every relevant change, add an entry before pushing:
 
 ## Changes
 
+### 2026-11-10 - Anwar Bounasser
+- Commit: `ff1d48c`
+- Area: WhatsApp / Templates
+- Change: The Edit Template modal (Content tab) has an "Upload from PC" button for Image/Video/Document headers, next to the media URL field. The file goes to the public `whatsapp-media` bucket (`templates/` folder), the URL is filled in automatically, and the live preview shows the image. Limits follow Meta: Image JPG/PNG up to 5 MB, Video MP4 up to 16 MB, Document PDF up to 50 MB. "Save" now rejects a missing or non-https header media link (e.g. `blob:` URLs).
+- Reason: The only image-header template ("offer55%") was rejected by Meta because its media link was a `blob:` URL pasted from another site. Meta's `header_handle` is not a URL; it must be an asset handle from the Resumable Upload API.
+- Notes: `whatsapp-templates-sync` (submit mode) now downloads the header file, uploads it to Meta through the Resumable Upload API, and sends the resulting handle as `header_handle`. The app id comes from `debug_token`, so no new setting. If any step fails it falls back to the old behavior (sending the URL) and logs the error. The upload flow was tested live with a 1x1 PNG (Meta returned a valid handle, no template created); a full template submission with a media header was not tested. Deployed (function version 5). The Supabase CLI now resolves to 3.1.0, which has no Windows binary here, so deploys use `npx -y supabase@2.118.0`. No new `tsc`/`eslint` issues. Not click-through tested (no login this session).
+
 ### 2026-10-09 - Anwar Bounasser
 - Commit: `7b06bca`
 - Area: Blacklist / UI / Database
