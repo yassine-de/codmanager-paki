@@ -783,15 +783,7 @@ async function handleIncoming(value: any) {
             .from("whatsapp_campaign_recipients")
             .update({ status: "replied", replied_at: new Date().toISOString() })
             .eq("id", lastCampRecip.id);
-          // Bump campaign reply counter.
-          const { count } = await admin
-            .from("whatsapp_campaign_recipients")
-            .select("*", { count: "exact", head: true })
-            .eq("campaign_id", lastCampRecip.campaign_id)
-            .eq("status", "replied");
-          await admin.from("whatsapp_campaigns").update({
-            replied_count: count ?? 0,
-          }).eq("id", lastCampRecip.campaign_id);
+          await refreshCampaignCounters(lastCampRecip.campaign_id);
         }
       } catch (e) {
         errLog("campaign reply mirror failed", e);
@@ -1131,27 +1123,11 @@ async function handleIncoming(value: any) {
   }
 }
 
-// Recompute campaign counters from recipients table (cheap with indexes).
+// Recompute campaign counters from the recipients table. One SQL aggregate (and no write when
+// nothing changed): a 10k-recipient campaign produces ~30k status events, so the old
+// 5 counts + 1 update per event was too heavy for the webhook.
 async function refreshCampaignCounters(campaignId: string) {
-  const statuses = ["sent", "delivered", "read", "replied", "failed"] as const;
-  const counts: Record<string, number> = {};
-  for (const st of statuses) {
-    const { count } = await admin
-      .from("whatsapp_campaign_recipients")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", campaignId)
-      .eq("status", st);
-    counts[st] = count ?? 0;
-  }
-  // "sent" total = anything that left our side successfully.
-  const sentTotal = counts.sent + counts.delivered + counts.read + counts.replied;
-  await admin.from("whatsapp_campaigns").update({
-    sent_count: sentTotal,
-    delivered_count: counts.delivered + counts.read + counts.replied,
-    read_count: counts.read + counts.replied,
-    replied_count: counts.replied,
-    failed_count: counts.failed,
-  }).eq("id", campaignId);
+  await admin.rpc("refresh_campaign_counters", { p_campaign_id: campaignId });
 }
 
 // ---------------------------------------------------------------------------

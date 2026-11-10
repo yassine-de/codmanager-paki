@@ -31,6 +31,7 @@ const STATUS_STYLES: Record<string, string> = {
   draft: "bg-muted text-muted-foreground border-border",
   scheduled: "bg-blue-500/15 text-blue-500 border-blue-500/30",
   sending: "bg-amber-500/15 text-amber-500 border-amber-500/30",
+  paused: "bg-orange-500/15 text-orange-500 border-orange-500/30",
   completed: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
   failed: "bg-destructive/15 text-destructive border-destructive/30",
   cancelled: "bg-muted text-muted-foreground border-border",
@@ -40,18 +41,93 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   scheduled: "Scheduled",
   sending: "Sending",
+  paused: "Paused",
   completed: "Completed",
   failed: "Failed",
   cancelled: "Cancelled",
 };
 
+// Every value that exists in orders.confirmation_status / orders.delivery_status.
 const CONFIRMATION_STATUSES = [
-  "new", "confirmed", "postponed", "no_answer", "cancelled", "shipped",
-  "new_wts", "awaiting_reply",
+  { value: "new", label: "New" },
+  { value: "new_wts", label: "New (WhatsApp)" },
+  { value: "pending_address", label: "Pending address" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "postponed", label: "Postponed" },
+  { value: "no_answer", label: "No answer" },
+  { value: "unreachable", label: "Unreachable" },
+  { value: "wrong_number", label: "Wrong number" },
+  { value: "double", label: "Double" },
+  { value: "cancelled", label: "Cancelled" },
 ];
 const DELIVERY_STATUSES = [
-  "pending", "booked", "in_transit", "delivered", "returned", "cancelled",
+  { value: "none", label: "Not shipped yet (no status)" },
+  { value: "pending", label: "Pending" },
+  { value: "booked", label: "Booked" },
+  { value: "printed", label: "Printed" },
+  { value: "dispatched", label: "Dispatched" },
+  { value: "shipped", label: "Shipped" },
+  { value: "in_transit", label: "In transit" },
+  { value: "with_courier", label: "With courier" },
+  { value: "delivered", label: "Delivered" },
+  { value: "paid", label: "Paid" },
+  { value: "failed_attempt", label: "Failed attempt" },
+  { value: "ready_for_return", label: "Ready for return" },
+  { value: "return", label: "Return" },
+  { value: "return_received", label: "Return received" },
+  { value: "returned", label: "Returned" },
+  { value: "out_of_stock", label: "Out of stock" },
+  { value: "cancelled", label: "Cancelled" },
 ];
+
+// Messages per minute. WhatsApp's default cap per number is 80 msg/s = 4,800/min.
+const MAX_PER_MINUTE = 4800;
+const SPEED_PRESETS = [
+  { value: 30, label: "Safe", hint: "30 / min" },
+  { value: 600, label: "Fast", hint: "10 / sec" },
+  { value: 3000, label: "Turbo", hint: "50 / sec" },
+  { value: 4800, label: "Max", hint: "80 / sec" },
+];
+
+function formatDuration(seconds: number) {
+  if (!isFinite(seconds) || seconds <= 0) return "—";
+  if (seconds < 90) return `${Math.max(1, Math.round(seconds))} sec`;
+  const m = seconds / 60;
+  if (m < 90) return `${Math.round(m)} min`;
+  const h = m / 60;
+  return `${h.toFixed(h < 10 ? 1 : 0)} h`;
+}
+
+// supabase-js hides the JSON body of a non-2xx edge function response behind error.context.
+async function functionErrorMessage(error: unknown, fallback: string): Promise<string> {
+  const e = error as { context?: { json?: () => Promise<{ error?: string }> }; message?: string } | null;
+  try {
+    const body = await e?.context?.json?.();
+    if (body?.error) return String(body.error);
+  } catch (_) { /* fall through */ }
+  return e?.message || fallback;
+}
+
+type RecipientRow = {
+  id: string;
+  customer_name: string | null;
+  customer_phone: string;
+  order_id: string | null;
+  status: string;
+  error_message: string | null;
+};
+
+function toYmd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function fromYmd(v: string | null): Date | undefined {
+  if (!v) return undefined;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? undefined : d;
+}
 
 interface Campaign {
   id: string;
@@ -70,6 +146,7 @@ interface Campaign {
   read_count: number;
   replied_count: number;
   failed_count: number;
+  last_error: string | null;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
@@ -95,16 +172,32 @@ export default function WhatsappCampaigns() {
     refetchInterval: 5000,
   });
 
-  // Realtime updates.
+  // Realtime updates. A running campaign updates its row several times a second, so refetch
+  // at most once every 2s instead of once per change.
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const ch = supabase
       .channel("campaigns-rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "whatsapp_campaigns" }, () => {
-        qc.invalidateQueries({ queryKey: ["whatsapp-campaigns"] });
+        if (timer) return;
+        timer = setTimeout(() => {
+          timer = null;
+          qc.invalidateQueries({ queryKey: ["whatsapp-campaigns"] });
+        }, 2000);
       })
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(ch);
+    };
   }, [qc]);
+
+  // The details dialog must follow the live row (counters move while sending), not the
+  // snapshot taken when it was opened.
+  const liveDetails = useMemo(
+    () => (detailsCampaign ? campaigns.find((c) => c.id === detailsCampaign.id) ?? detailsCampaign : null),
+    [campaigns, detailsCampaign],
+  );
 
   const filtered = useMemo(() => {
     return campaigns.filter((c) => {
@@ -135,16 +228,22 @@ export default function WhatsappCampaigns() {
     }
   };
 
-  const handleCancel = async (id: string) => {
-    const { error } = await supabase.functions.invoke("campaign-runner", {
-      body: { action: "cancel", campaign_id: id },
+  const runAction = async (action: "cancel" | "pause" | "resume", id: string, done: string) => {
+    const { data, error } = await supabase.functions.invoke("campaign-runner", {
+      body: { action, campaign_id: id },
     });
-    if (error) toast.error(error.message);
+    if (error || data?.ok === false) toast.error(error ? await functionErrorMessage(error, "Action failed") : data?.error || "Action failed");
     else {
-      toast.success("Campaign cancelled");
+      toast.success(done);
       qc.invalidateQueries({ queryKey: ["whatsapp-campaigns"] });
     }
   };
+  const handleCancel = (id: string) => {
+    if (!confirm("Cancel this campaign? Recipients not yet sent will be skipped.")) return;
+    return runAction("cancel", id, "Campaign cancelled");
+  };
+  const handlePause = (id: string) => runAction("pause", id, "Campaign paused");
+  const handleResume = (id: string) => runAction("resume", id, "Campaign resumed");
 
   return (
     <div className="space-y-6">
@@ -191,6 +290,7 @@ export default function WhatsappCampaigns() {
             <SelectItem value="draft">Draft</SelectItem>
             <SelectItem value="scheduled">Scheduled</SelectItem>
             <SelectItem value="sending">Sending</SelectItem>
+            <SelectItem value="paused">Paused</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
@@ -225,6 +325,8 @@ export default function WhatsappCampaigns() {
               onOpen={() => setDetailsCampaign(c)}
               onDelete={() => handleDelete(c.id)}
               onCancel={() => handleCancel(c.id)}
+              onPause={() => handlePause(c.id)}
+              onResume={() => handleResume(c.id)}
             />
           ))}
         </div>
@@ -237,8 +339,10 @@ export default function WhatsappCampaigns() {
       />
 
       <CampaignDetailsDialog
-        campaign={detailsCampaign}
+        campaign={liveDetails}
         onClose={() => setDetailsCampaign(null)}
+        onPause={handlePause}
+        onResume={handleResume}
       />
     </div>
   );
@@ -265,15 +369,18 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
 }
 
 function CampaignRow({
-  campaign, onOpen, onDelete, onCancel,
+  campaign, onOpen, onDelete, onCancel, onPause, onResume,
 }: {
   campaign: Campaign;
   onOpen: () => void;
   onDelete: () => void;
   onCancel: () => void;
+  onPause: () => void;
+  onResume: () => void;
 }) {
   const total = campaign.total_recipients || 0;
-  const progress = total > 0 ? Math.round((campaign.sent_count / total) * 100) : 0;
+  // Failed recipients are done too: the bar reaches 100% when everything has been attempted.
+  const progress = total > 0 ? Math.round(((campaign.sent_count + campaign.failed_count) / total) * 100) : 0;
   const deliveryRate = campaign.sent_count > 0
     ? Math.round((campaign.delivered_count / campaign.sent_count) * 100) : 0;
   const replyRate = campaign.sent_count > 0
@@ -306,10 +413,23 @@ function CampaignRow({
               {campaign.template_name}
             </p>
           )}
+          {campaign.last_error && (campaign.status === "paused" || campaign.status === "failed") && (
+            <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 line-clamp-2">{campaign.last_error}</p>
+          )}
         </div>
 
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          {(campaign.status === "sending" || campaign.status === "scheduled") && (
+          {campaign.status === "sending" && (
+            <Button variant="ghost" size="sm" onClick={onPause} className="text-orange-500 hover:text-orange-600">
+              Pause
+            </Button>
+          )}
+          {campaign.status === "paused" && (
+            <Button variant="ghost" size="sm" onClick={onResume} className="text-emerald-500 hover:text-emerald-600">
+              Resume
+            </Button>
+          )}
+          {["sending", "scheduled", "paused"].includes(campaign.status) && (
             <Button variant="ghost" size="sm" onClick={onCancel} className="text-amber-500 hover:text-amber-600">
               Cancel
             </Button>
@@ -327,7 +447,8 @@ function CampaignRow({
         <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">
-              {campaign.sent_count} / {total} sent
+              {campaign.sent_count.toLocaleString()} / {total.toLocaleString()} sent
+              {campaign.failed_count > 0 && ` · ${campaign.failed_count.toLocaleString()} failed`}
             </span>
             <span className="text-muted-foreground">{progress}%</span>
           </div>
@@ -388,7 +509,7 @@ function CreateCampaignDialog({
   const [sendMode, setSendMode] = useState<"immediate" | "scheduled">("immediate");
   const [scheduledDate, setScheduledDate] = useState<Date | undefined>(undefined);
   const [scheduledTime, setScheduledTime] = useState("10:00");
-  const [throttle, setThrottle] = useState(30);
+  const [throttle, setThrottle] = useState(3000);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [previewBreakdown, setPreviewBreakdown] = useState<{
     total_orders: number; invalid_phones: number; duplicates: number;
@@ -410,10 +531,23 @@ function CreateCampaignDialog({
       setSendMode("immediate");
       setScheduledDate(undefined);
       setScheduledTime("10:00");
-      setThrottle(30);
+      setThrottle(3000);
       setPreviewCount(null);
     }
   }, [open]);
+
+  // The number's real limits (Meta throughput + daily messaging tier), so the speed and
+  // audience size can be sanity-checked before sending.
+  const { data: limits } = useQuery({
+    queryKey: ["campaign-limits"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("campaign-runner", { body: { action: "limits" } });
+      if (error || !data?.ok) return null;
+      return data as { tier: string | null; daily_limit: number | null; throughput_level: string | null };
+    },
+    enabled: open && step >= 2,
+    staleTime: 5 * 60_000,
+  });
 
   // Templates.
   const { data: templates = [] } = useQuery({
@@ -507,7 +641,7 @@ function CreateCampaignDialog({
       const { data, error } = await supabase.functions.invoke("campaign-runner", {
         body: { action: "preview", campaign: { filters } },
       });
-      if (error) throw error;
+      if (error) throw new Error(await functionErrorMessage(error, "Preview failed"));
       if (!data?.ok) throw new Error(data?.error || "Preview failed");
       setPreviewCount(data.count);
       setPreviewBreakdown({
@@ -576,9 +710,9 @@ function CreateCampaignDialog({
         const { data: runRes, error: runErr } = await supabase.functions.invoke("campaign-runner", {
           body: { action: "start", campaign_id: (created as any).id },
         });
-        if (runErr) throw runErr;
+        if (runErr) throw new Error(await functionErrorMessage(runErr, "Failed to start"));
         if (!runRes?.ok) throw new Error(runRes?.error || "Failed to start");
-        toast.success(`Campaign started — ${runRes.total} recipients`);
+        toast.success(`Campaign started: sending to ${runRes.total.toLocaleString()} recipients from the server`);
       } else {
         await (supabase as any).from("whatsapp_campaigns").update({ status: "scheduled" }).eq("id", (created as any).id);
         toast.success(`Campaign scheduled for ${format(new Date(scheduled_at!), "PPp")}`);
@@ -704,14 +838,14 @@ function CreateCampaignDialog({
 
               <FilterMultiSelect
                 label="Confirmation Status"
-                options={CONFIRMATION_STATUSES.map((s) => ({ value: s, label: s }))}
+                options={CONFIRMATION_STATUSES}
                 selected={filters.confirmation_status}
                 onChange={(v) => setFilters({ ...filters, confirmation_status: v })}
               />
 
               <FilterMultiSelect
                 label="Delivery Status"
-                options={DELIVERY_STATUSES.map((s) => ({ value: s, label: s }))}
+                options={DELIVERY_STATUSES}
                 selected={filters.delivery_status}
                 onChange={(v) => setFilters({ ...filters, delivery_status: v })}
               />
@@ -746,7 +880,7 @@ function CreateCampaignDialog({
                     <div>
                       <div className="text-xs text-muted-foreground">Unique recipients (1 per phone + product)</div>
                       <div className="text-2xl font-bold">
-                        {previewLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : previewCount ?? "—"}
+                        {previewLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : previewCount?.toLocaleString() ?? "—"}
                       </div>
                     </div>
                   </div>
@@ -759,15 +893,15 @@ function CreateCampaignDialog({
                   <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                     <div className="rounded-md bg-background/60 border p-2">
                       <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Orders matched</div>
-                      <div className="text-sm font-semibold">{previewBreakdown.total_orders}</div>
+                      <div className="text-sm font-semibold">{previewBreakdown.total_orders.toLocaleString()}</div>
                     </div>
                     <div className="rounded-md bg-background/60 border p-2">
                       <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Duplicate (same phone & product)</div>
-                      <div className="text-sm font-semibold">−{previewBreakdown.duplicates}</div>
+                      <div className="text-sm font-semibold">−{previewBreakdown.duplicates.toLocaleString()}</div>
                     </div>
                     <div className="rounded-md bg-background/60 border p-2">
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Empty phones</div>
-                      <div className="text-sm font-semibold">−{previewBreakdown.invalid_phones}</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Invalid phones</div>
+                      <div className="text-sm font-semibold">−{previewBreakdown.invalid_phones.toLocaleString()}</div>
                     </div>
                   </div>
                 )}
@@ -839,18 +973,58 @@ function CreateCampaignDialog({
               )}
 
               <div>
-                <Label>Throttle (messages per minute)</Label>
+                <Label>Sending speed</Label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Higher = faster, but risks WhatsApp rate limits. Recommended: 30-60.
+                  Messages are sent from the server, so you can close this page. WhatsApp allows up to 80 messages per
+                  second on this number. Lower speeds leave room for your automations and inbox replies.
                 </p>
-                <Input
-                  type="number"
-                  min={1}
-                  max={120}
-                  value={throttle}
-                  onChange={(e) => setThrottle(Math.max(1, Math.min(120, Number(e.target.value) || 30)))}
-                />
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {SPEED_PRESETS.map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setThrottle(p.value)}
+                      className={cn(
+                        "rounded-lg border p-2.5 text-left transition-colors",
+                        throttle === p.value
+                          ? "border-emerald-500 bg-emerald-500/10"
+                          : "hover:border-emerald-500/40",
+                      )}
+                    >
+                      <div className="text-sm font-semibold">{p.label}</div>
+                      <div className="text-[11px] text-muted-foreground">{p.hint}</div>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={MAX_PER_MINUTE}
+                    value={throttle}
+                    onChange={(e) => setThrottle(Math.max(1, Math.min(MAX_PER_MINUTE, Math.floor(Number(e.target.value)) || 1)))}
+                    className="w-32"
+                  />
+                  <span className="text-xs text-muted-foreground">messages per minute (max {MAX_PER_MINUTE.toLocaleString()})</span>
+                </div>
+                {previewCount !== null && previewCount > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {previewCount.toLocaleString()} recipients will take about{" "}
+                    <span className="font-medium text-foreground">{formatDuration((previewCount * 60) / throttle)}</span>.
+                  </p>
+                )}
               </div>
+
+              {limits?.daily_limit != null && previewCount !== null && previewCount > limits.daily_limit && (
+                <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 flex gap-2 items-start">
+                  <Zap className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    WhatsApp limits this number to {limits.daily_limit.toLocaleString()} customers per 24 hours
+                    ({(limits.tier || "").replace("TIER_", "tier ")}). This campaign targets {previewCount.toLocaleString()},
+                    so Meta will reject the messages beyond the limit. Narrow the audience, or send the rest the next day.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -860,18 +1034,32 @@ function CreateCampaignDialog({
                 <ReviewItem label="Name" value={name} />
                 {description && <ReviewItem label="Description" value={description} />}
                 <ReviewItem label="Template" value={selectedTemplate?.name ?? "—"} />
-                <ReviewItem label="Recipients" value={`${previewCount ?? 0} customers`} highlight />
+                <ReviewItem label="Recipients" value={`${(previewCount ?? 0).toLocaleString()} customers`} highlight />
                 <ReviewItem
                   label="Send"
                   value={sendMode === "immediate" ? "Immediately" : `Scheduled — ${scheduledDate ? format(scheduledDate, "PPP") : ""} at ${scheduledTime}`}
                 />
-                <ReviewItem label="Throttle" value={`${throttle} msg/min`} />
+                <ReviewItem
+                  label="Speed"
+                  value={`${throttle.toLocaleString()} msg/min · about ${formatDuration(((previewCount ?? 0) * 60) / throttle)}`}
+                />
               </Card>
+
+              {limits?.daily_limit != null && (previewCount ?? 0) > limits.daily_limit && (
+                <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3 flex gap-2 items-start">
+                  <Zap className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-destructive">
+                    Over the daily limit: this number can message {limits.daily_limit.toLocaleString()} customers per 24 hours,
+                    this campaign targets {(previewCount ?? 0).toLocaleString()}.
+                  </p>
+                </div>
+              )}
 
               <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 flex gap-2 items-start">
                 <Zap className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-amber-700 dark:text-amber-300">
-                  Once started, the campaign cannot be paused — only cancelled. Make sure your template and audience are correct.
+                  Messages are sent from the server and customers can't be un-messaged. You can pause or cancel the
+                  campaign at any time, and it pauses itself if sends start failing. Make sure your template and audience are correct.
                 </p>
               </div>
             </div>
@@ -941,7 +1129,9 @@ function SendModeCard({
 function DateField({
   label, value, onChange,
 }: { label: string; value: string | null; onChange: (v: string | null) => void }) {
-  const date = value ? new Date(value) : undefined;
+  // Stored as "YYYY-MM-DD": the server reads it as the whole day in Pakistan time, so "To date"
+  // includes orders from that entire day (a bare midnight timestamp used to cut it off).
+  const date = fromYmd(value);
   return (
     <div>
       <Label>{label}</Label>
@@ -949,7 +1139,7 @@ function DateField({
         <PopoverTrigger asChild>
           <Button variant="outline" className={cn("w-full justify-start mt-1.5", !date && "text-muted-foreground")}>
             <CalendarIcon className="h-4 w-4 mr-2" />
-            {date ? format(date, "PP") : "Any"}
+            {date ? date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "Any"}
             {date && (
               <X
                 className="h-3 w-3 ml-auto hover:text-destructive"
@@ -962,7 +1152,7 @@ function DateField({
           <Calendar
             mode="single"
             selected={date}
-            onSelect={(d) => onChange(d ? d.toISOString() : null)}
+            onSelect={(d) => onChange(d ? toYmd(d) : null)}
             initialFocus
             className={cn("p-3 pointer-events-auto")}
           />
@@ -1045,33 +1235,84 @@ function FilterMultiSelect({
  *  Campaign details dialog
  * ============================================================ */
 
-function CampaignDetailsDialog({ campaign, onClose }: { campaign: Campaign | null; onClose: () => void }) {
+// Same cumulative meaning as the campaign counters: "Delivered" includes read and replied, etc.
+const RECIPIENT_FILTERS: { value: string; label: string; statuses: string[] | null }[] = [
+  { value: "all", label: "All", statuses: null },
+  { value: "pending", label: "Pending", statuses: ["pending", "processing"] },
+  { value: "sent", label: "Sent", statuses: ["sent", "delivered", "read", "replied"] },
+  { value: "delivered", label: "Delivered", statuses: ["delivered", "read", "replied"] },
+  { value: "read", label: "Read", statuses: ["read", "replied"] },
+  { value: "replied", label: "Replied", statuses: ["replied"] },
+  { value: "failed", label: "Failed", statuses: ["failed"] },
+];
+const RECIPIENTS_PAGE = 200;
+
+function CampaignDetailsDialog({
+  campaign, onClose, onPause, onResume,
+}: {
+  campaign: Campaign | null;
+  onClose: () => void;
+  onPause: (id: string) => void;
+  onResume: (id: string) => void;
+}) {
   const open = !!campaign;
-  const { data: recipients = [] } = useQuery({
-    queryKey: ["campaign-recipients", campaign?.id],
+  const [recipientFilter, setRecipientFilter] = useState("all");
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
+  const [limit, setLimit] = useState(RECIPIENTS_PAGE);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(recipientSearch.trim()), 350);
+    return () => clearTimeout(t);
+  }, [recipientSearch]);
+
+  // Start from a clean view whenever another campaign is opened.
+  useEffect(() => {
+    setRecipientFilter("all");
+    setRecipientSearch("");
+    setLimit(RECIPIENTS_PAGE);
+  }, [campaign?.id]);
+  useEffect(() => { setLimit(RECIPIENTS_PAGE); }, [recipientFilter, searchDebounced]);
+
+  const { data: recipientPage } = useQuery({
+    queryKey: ["campaign-recipients", campaign?.id, recipientFilter, searchDebounced, limit],
     queryFn: async () => {
-      if (!campaign) return [];
-      const { data } = await (supabase as any)
+      if (!campaign) return { rows: [] as RecipientRow[], count: 0 };
+      let q = (supabase as any)
         .from("whatsapp_campaign_recipients")
-        .select("*")
-        .eq("campaign_id", campaign.id)
+        .select("*", { count: "exact" })
+        .eq("campaign_id", campaign.id);
+      const statuses = RECIPIENT_FILTERS.find((f) => f.value === recipientFilter)?.statuses;
+      if (statuses) q = q.in("status", statuses);
+      // Characters that would break PostgREST's or() syntax are not useful in a phone/name search.
+      const s = searchDebounced.replace(/[,()%*]/g, " ").trim();
+      if (s) q = q.or(`customer_phone.ilike.%${s}%,customer_name.ilike.%${s}%,order_id.ilike.%${s}%`);
+      const { data, count } = await q
         .order("created_at", { ascending: false })
-        .limit(500);
-      return data ?? [];
+        .order("id")
+        .range(0, limit - 1);
+      return { rows: (data ?? []) as RecipientRow[], count: count ?? 0 };
     },
     enabled: open,
-    refetchInterval: open && (campaign?.status === "sending") ? 3000 : false,
+    placeholderData: (prev) => prev,
+    refetchInterval: open && campaign?.status === "sending" ? 4000 : false,
   });
+  const recipients = recipientPage?.rows ?? [];
+  const recipientCount = recipientPage?.count ?? 0;
 
   if (!campaign) return null;
 
+  const total = campaign.total_recipients || 0;
+  const pending = Math.max(0, total - campaign.sent_count - campaign.failed_count);
+  const progress = total > 0 ? Math.round(((campaign.sent_count + campaign.failed_count) / total) * 100) : 0;
   const counters = [
-    { label: "Recipients", value: campaign.total_recipients, color: "text-foreground" },
+    { label: "Recipients", value: total, color: "text-foreground" },
     { label: "Sent", value: campaign.sent_count, color: "text-emerald-500" },
     { label: "Delivered", value: campaign.delivered_count, color: "text-blue-500" },
     { label: "Read", value: campaign.read_count, color: "text-purple-500" },
     { label: "Replied", value: campaign.replied_count, color: "text-amber-500" },
     { label: "Failed", value: campaign.failed_count, color: "text-destructive" },
+    { label: "Pending", value: pending, color: "text-muted-foreground" },
   ];
 
   return (
@@ -1093,14 +1334,51 @@ function CampaignDetailsDialog({ campaign, onClose }: { campaign: Campaign | nul
         <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="recipients">Recipients ({recipients.length})</TabsTrigger>
+            <TabsTrigger value="recipients">Recipients ({total.toLocaleString()})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="flex-1 overflow-auto space-y-4 mt-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {total > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{(campaign.sent_count + campaign.failed_count).toLocaleString()} / {total.toLocaleString()} processed</span>
+                  <span>{progress}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            )}
+
+            {campaign.last_error && (campaign.status === "paused" || campaign.status === "failed") && (
+              <div className="rounded-lg bg-orange-500/10 border border-orange-500/30 p-3 text-sm text-orange-700 dark:text-orange-300">
+                {campaign.last_error}
+                {campaign.status === "paused" && (
+                  <p className="text-xs mt-1 opacity-80">
+                    Messages that were not sent are kept. Fix the problem, then resume to continue.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {(campaign.status === "sending" || campaign.status === "paused") && (
+              <div className="flex gap-2">
+                {campaign.status === "sending" ? (
+                  <Button variant="outline" size="sm" onClick={() => onPause(campaign.id)} className="text-orange-500">
+                    Pause sending
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => onResume(campaign.id)} className="text-emerald-500">
+                    Resume sending
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {counters.map((c) => (
                 <Card key={c.label} className="p-3">
-                  <div className={cn("text-2xl font-bold", c.color)}>{c.value}</div>
+                  <div className={cn("text-2xl font-bold tabular-nums", c.color)}>{c.value.toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground">{c.label}</div>
                 </Card>
               ))}
@@ -1118,18 +1396,40 @@ function CampaignDetailsDialog({ campaign, onClose }: { campaign: Campaign | nul
               {campaign.completed_at && (
                 <DetailRow label="Completed" value={format(new Date(campaign.completed_at), "PPp")} />
               )}
-              <DetailRow label="Throttle" value={`${campaign.throttle_per_minute} msg/min`} />
+              <DetailRow label="Speed" value={`${campaign.throttle_per_minute.toLocaleString()} msg/min`} />
             </Card>
           </TabsContent>
 
-          <TabsContent value="recipients" className="flex-1 overflow-auto mt-4">
+          <TabsContent value="recipients" className="flex-1 overflow-auto mt-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={recipientFilter} onValueChange={setRecipientFilter}>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {RECIPIENT_FILTERS.map((f) => (
+                    <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search phone, name or order..."
+                  value={recipientSearch}
+                  onChange={(e) => setRecipientSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {recipientCount.toLocaleString()} match
+              </span>
+            </div>
             <Card className="overflow-hidden">
               <div className="divide-y">
                 {recipients.length === 0 ? (
                   <div className="p-6 text-center text-sm text-muted-foreground">
-                    No recipients yet.
+                    No recipients found.
                   </div>
-                ) : recipients.map((r: any) => (
+                ) : recipients.map((r) => (
                   <div key={r.id} className="p-3 flex flex-col gap-1.5 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0">
@@ -1171,6 +1471,13 @@ function CampaignDetailsDialog({ campaign, onClose }: { campaign: Campaign | nul
                 ))}
               </div>
             </Card>
+            {recipients.length < recipientCount && (
+              <div className="flex justify-center">
+                <Button variant="outline" size="sm" onClick={() => setLimit((l) => l + RECIPIENTS_PAGE)}>
+                  Load more ({recipients.length.toLocaleString()} of {recipientCount.toLocaleString()})
+                </Button>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -1272,6 +1579,7 @@ function parseFailure(raw?: string | null): FailureInfo {
 function RecipientStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     pending: "bg-muted text-muted-foreground",
+    processing: "bg-amber-500/15 text-amber-500 border-amber-500/30",
     sent: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
     delivered: "bg-blue-500/15 text-blue-500 border-blue-500/30",
     read: "bg-purple-500/15 text-purple-500 border-purple-500/30",
