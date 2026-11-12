@@ -21,6 +21,13 @@ For every relevant change, add an entry before pushing:
 
 ## Changes
 
+### 2026-11-12 - Anwar Bounasser
+- Commit: `5d684cc`
+- Area: Shipping / PostEx / Edge Functions
+- Change: `shipping-sync-retry` (the cron, every 5 minutes, that books confirmed orders with PostEx) no longer lets orders that fail on bad data starve new orders. Each run only handles 50 orders, sorted by the order's oldest `updated_at`. 48 orders with a city PostEx doesn't know (e.g. "Mirpur", "Bhimbar", "Hunza"; failing since 28 Aug) were retried and failed every 5 minutes, filling 48 of the 50 slots, so new confirmed orders got ~2 slots per run and 44 orders sat unbooked for hours. Now: orders that never got a shipment go first (oldest confirmation first), then retryable failures (oldest attempt first). A failure caused by data (city not found / not covered / empty, invalid items count, city not allowed) is only retried after the order was edited since the last attempt, e.g. an agent fixed the city. Also: the order query goes up to 1000 rows, 100 s time-box per run (leftovers go to the next run), one short retry on the per-trace rate limit, and a summary log line per run.
+- Reason: User asked why orders weren't going to PostEx today.
+- Notes: Deployed (function version 11). Simulated on live data first: old logic reached 2 of 44 unbooked orders, new logic 44 of 44. After deploy the 44 orders were booked within two runs and the queue went to 0. The 48 data-failure orders are still unbooked and need their city fixed (System Status → Failed sync modal). No schema changes. Seen in logs while investigating, not fixed: OpenAI has no credits (WhatsApp AI replies fail with 429); three Google Sheets (Youness Hamza "pakistan sheet" and "pakistan 3", Ayoub Mustapha "arjgey-vs_orders") have never imported, probably a wrong tab name in their config. The run that started at 12:25 booked 30 of the 44 and left 14 for the next run; I did not find why (the new logging should show it next time).
+
 ### 2026-11-10 - Anwar Bounasser
 - Commit: `4e94469`
 - Area: WhatsApp / Campaigns / Database
